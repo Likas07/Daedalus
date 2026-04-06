@@ -636,6 +636,7 @@ export class AgentDashboard extends Container {
 			modelRegistry,
 			settings,
 			model: selectedModel,
+			requestSource: "agent_architect",
 			systemPrompt,
 			hasUI: false,
 			enableLsp: false,

@@ -25,14 +25,22 @@ import { AsyncJobManager } from "./async";
 import { createAutoresearchExtension } from "./autoresearch";
 import { loadCapability } from "./capability";
 import { type Rule, ruleCapability } from "./capability/rule";
-import { ModelRegistry } from "./config/model-registry";
-import { formatModelString, parseModelPattern, parseModelString, resolveModelRoleValue } from "./config/model-resolver";
+import type { ModelRegistry } from "./config/model-registry";
+import {
+	classifyRoutingComplexity,
+	formatModelString,
+	inferPromptFamily,
+	resolveCanonicalModelSelection,
+	type ResolutionTrace,
+	type RoutingProfilePolicy,
+	type ScopedModel,
+} from "./config/model-resolver";
 import {
 	loadPromptTemplates as loadPromptTemplatesInternal,
 	type PromptTemplate,
 	renderPromptTemplate,
 } from "./config/prompt-templates";
-import { Settings, type SkillsSettings } from "./config/settings";
+import { Settings, type RequestEffectiveConfigSnapshot, type SkillsSettings, buildRequestEffectiveConfigSnapshot } from "./config/settings";
 import { CursorExecHandlers } from "./cursor";
 import "./discovery";
 import { resolveConfigValue } from "./config/resolve-config-value";
@@ -208,6 +216,18 @@ export interface CreateAgentSessionOptions {
 	requireSubmitResultTool?: boolean;
 	/** Task recursion depth (for subagent sessions). Default: 0 */
 	taskDepth?: number;
+	/** Optional control-plane profile identifier for canonical routing */
+	profileId?: string;
+	/** Optional request source label used in routing provenance */
+	requestSource?: string;
+	/** Optional environment-originated role overrides used in request-effective snapshots */
+	envModelRoleOverrides?: Record<string, string | undefined>;
+	/** Optional declarative routing profile policy */
+	profilePolicy?: RoutingProfilePolicy;
+	/** Optional precomputed request-effective config snapshot */
+	requestConfigSnapshot?: RequestEffectiveConfigSnapshot;
+	/** Optional routing provenance when model selection happened upstream */
+	resolutionTrace?: ResolutionTrace;
 	/** Parent task ID prefix for nested artifact naming (e.g., "6-Extensions") */
 	parentTaskPrefix?: string;
 
@@ -237,6 +257,10 @@ export interface CreateAgentSessionResult {
 	lspServers?: Array<{ name: string; status: "ready" | "error"; fileTypes: string[]; error?: string }>;
 	/** Shared event bus for tool/extension communication */
 	eventBus: EventBus;
+	/** Request-effective config snapshot used for canonical routing */
+	requestConfigSnapshot: RequestEffectiveConfigSnapshot;
+	/** Canonical routing provenance for this session */
+	resolutionTrace: ResolutionTrace;
 }
 
 // Re-exports
@@ -273,6 +297,81 @@ export {
 
 function getDefaultAgentDir(): string {
 	return getAgentDir();
+}
+
+interface PromptFamilyDirectives {
+	prepend?: string;
+	append?: string;
+	replace?: string;
+}
+
+function readPromptFamilyDirectives(value: unknown): PromptFamilyDirectives | undefined {
+	if (typeof value === "string") {
+		const trimmed = value.trim();
+		return trimmed.length > 0 ? { append: trimmed } : undefined;
+	}
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		return undefined;
+	}
+	const record = value as Record<string, unknown>;
+	const normalize = (candidate: unknown): string | undefined =>
+		typeof candidate === "string" && candidate.trim().length > 0 ? candidate.trim() : undefined;
+	const prepend = normalize(record.prepend ?? record.prependSystemPrompt);
+	const append = normalize(record.append ?? record.appendSystemPrompt);
+	const replace = normalize(record.replace ?? record.replaceSystemPrompt);
+	if (!prepend && !append && !replace) {
+		return undefined;
+	}
+	return { prepend, append, replace };
+}
+
+function mergePromptFamilyDirectives(
+	base: PromptFamilyDirectives | undefined,
+	override: PromptFamilyDirectives | undefined,
+): PromptFamilyDirectives | undefined {
+	if (!override) return base;
+	return {
+		prepend: override.prepend ?? base?.prepend,
+		append: override.append ?? base?.append,
+		replace: override.replace ?? base?.replace,
+	};
+}
+
+function resolvePromptFamilyDirectives(
+	requestConfigSnapshot: RequestEffectiveConfigSnapshot,
+	resolutionTrace: ResolutionTrace,
+): PromptFamilyDirectives | undefined {
+	const promptFamilies = requestConfigSnapshot.settings.promptFamilies;
+	if (!promptFamilies || typeof promptFamilies !== "object" || Array.isArray(promptFamilies)) {
+		return undefined;
+	}
+	const record = promptFamilies as Record<string, unknown>;
+	let directives = mergePromptFamilyDirectives(undefined, readPromptFamilyDirectives(record.default));
+	if (resolutionTrace.promptFamily) {
+		directives = mergePromptFamilyDirectives(
+			directives,
+			readPromptFamilyDirectives(record[resolutionTrace.promptFamily]),
+		);
+	}
+	const roleOverrides = record.roles;
+	if (roleOverrides && typeof roleOverrides === "object" && !Array.isArray(roleOverrides)) {
+		directives = mergePromptFamilyDirectives(
+			directives,
+			readPromptFamilyDirectives((roleOverrides as Record<string, unknown>)[resolutionTrace.role]),
+		);
+	}
+	return directives;
+}
+
+function applyPromptFamilyAdaptation(
+	prompt: string,
+	requestConfigSnapshot: RequestEffectiveConfigSnapshot,
+	resolutionTrace: ResolutionTrace,
+): string {
+	const directives = resolvePromptFamilyDirectives(requestConfigSnapshot, resolutionTrace);
+	if (!directives) return prompt;
+	const basePrompt = directives.replace ?? prompt;
+	return [directives.prepend, basePrompt, directives.append].filter(Boolean).join("\n\n");
 }
 
 // Discovery Functions
@@ -648,7 +747,11 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// Use provided or create AuthStorage and ModelRegistry
 	const { authStorage, modelRegistry } = await logger.timeAsync("discoverModels", async () => {
 		const authStorage = options.authStorage ?? (await discoverAuthStorage(agentDir));
-		const modelRegistry = options.modelRegistry ?? new ModelRegistry(authStorage);
+		if (options.modelRegistry) {
+			return { authStorage, modelRegistry: options.modelRegistry };
+		}
+		const { ModelRegistry: ModelRegistryCtor } = await import("./config/model-registry");
+		const modelRegistry = new ModelRegistryCtor(authStorage);
 		return { authStorage, modelRegistry };
 	});
 
@@ -722,53 +825,52 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const hasServiceTierEntry = existingBranch.some(entry => entry.type === "service_tier_change");
 
 	const hasExplicitModel = options.model !== undefined || options.modelPattern !== undefined;
-	const modelMatchPreferences = {
-		usageOrder: settings.getStorage()?.getModelUsageOrder(),
-	};
-	const defaultRoleSpec = resolveModelRoleValue(settings.getModelRole("default"), modelRegistry.getAvailable(), {
-		settings,
-		matchPreferences: modelMatchPreferences,
-	});
-	let model = options.model;
-	let modelFallbackMessage: string | undefined;
-	// If session has data, try to restore model from it.
-	// Skip restore when an explicit model was requested.
-	const defaultModelStr = existingSession.models.default;
-	if (!hasExplicitModel && !model && hasExistingSession && defaultModelStr) {
-		const parsedModel = parseModelString(defaultModelStr);
-		if (parsedModel) {
-			const restoredModel = modelRegistry.find(parsedModel.provider, parsedModel.id);
-			if (restoredModel && (await hasModelApiKey(restoredModel))) {
-				model = restoredModel;
-			}
-		}
-		if (!model) {
-			modelFallbackMessage = `Could not restore model ${defaultModelStr}`;
-		}
-	}
-
-	// If still no model, try settings default.
-	// Skip settings fallback when an explicit model was requested.
-	if (!hasExplicitModel && !model && defaultRoleSpec.model) {
-		if (await hasModelApiKey(defaultRoleSpec.model)) {
-			model = defaultRoleSpec.model;
-		}
-	}
-
 	const taskDepth = options.taskDepth ?? 0;
-
+	const canonicalScopedModels: ScopedModel[] = (options.scopedModels ?? []).map(scopedModel => ({
+		model: scopedModel.model,
+		thinkingLevel: scopedModel.thinkingLevel,
+		explicitThinkingLevel: scopedModel.thinkingLevel !== undefined,
+	}));
+	const requestConfigSnapshot =
+		options.requestConfigSnapshot ??
+		buildRequestEffectiveConfigSnapshot(settings, {
+			explicitModel: options.model ? formatModelString(options.model) : undefined,
+			explicitModelPattern: options.modelPattern,
+			explicitThinkingLevel: options.thinkingLevel,
+			profileId: options.profileId,
+			requestSource: options.requestSource ?? "session",
+			scopedModels: canonicalScopedModels.map(scopedModel => formatModelString(scopedModel.model)),
+			hasExistingSession,
+			taskDepth,
+			requireSubmitResultTool: options.requireSubmitResultTool ?? false,
+			hasOutputSchema: options.outputSchema !== undefined,
+			toolNames: options.toolNames,
+			envModelRoleOverrides: options.envModelRoleOverrides,
+		});
+	let resolutionTrace = options.resolutionTrace;
+	let model = options.model;
 	let thinkingLevel = options.thinkingLevel;
-
-	// If session has data and includes a thinking entry, restore it
-	if (thinkingLevel === undefined && hasExistingSession && hasThinkingEntry) {
-		thinkingLevel = parseThinkingLevel(existingSession.thinkingLevel);
+	let modelFallbackMessage: string | undefined;
+	const restoredThinkingLevel = hasExistingSession && hasThinkingEntry ? existingSession.thinkingLevel : undefined;
+	if (!resolutionTrace || !model) {
+		const canonicalResolution = await resolveCanonicalModelSelection({
+			settings,
+			modelRegistry,
+			requestConfig: requestConfigSnapshot,
+			hasModelApiKey,
+			explicitModel: options.model,
+			explicitModelPattern: options.modelPattern,
+			explicitThinkingLevel: options.thinkingLevel,
+			scopedModels: canonicalScopedModels,
+			restoredModelString: hasExplicitModel ? undefined : existingSession.models.default,
+			restoredThinkingLevel: hasExplicitModel ? undefined : restoredThinkingLevel,
+			profile: options.profilePolicy,
+		});
+		model = canonicalResolution.model;
+		thinkingLevel = canonicalResolution.thinkingLevel;
+		modelFallbackMessage = canonicalResolution.fallbackMessage;
+		resolutionTrace = canonicalResolution.trace;
 	}
-
-	if (thinkingLevel === undefined && !hasExplicitModel && !hasThinkingEntry && defaultRoleSpec.explicitThinkingLevel) {
-		thinkingLevel = defaultRoleSpec.thinkingLevel;
-	}
-
-	// Fall back to settings default
 	if (thinkingLevel === undefined) {
 		thinkingLevel = settings.get("defaultThinkingLevel");
 	}
@@ -1116,24 +1218,31 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		extensionsResult.runtime.pendingProviderRegistrations = [];
 	}
 
-	// Resolve deferred --model pattern now that extension models are registered.
-	if (!model && options.modelPattern) {
-		const availableModels = modelRegistry.getAll();
-		const matchPreferences = {
-			usageOrder: settings.getStorage()?.getModelUsageOrder(),
-		};
-		const { model: resolved } = parseModelPattern(options.modelPattern, availableModels, matchPreferences);
-		if (resolved) {
-			model = resolved;
-			modelFallbackMessage = undefined;
-		} else {
-			modelFallbackMessage = `Model "${options.modelPattern}" not found`;
-		}
+	// Re-run canonical routing after extension providers register so deferred patterns can resolve.
+	if (options.modelPattern && !options.model) {
+		const canonicalResolution = await resolveCanonicalModelSelection({
+			settings,
+			modelRegistry,
+			requestConfig: requestConfigSnapshot,
+			hasModelApiKey,
+			explicitModel: options.model,
+			explicitModelPattern: options.modelPattern,
+			explicitThinkingLevel: options.thinkingLevel,
+			scopedModels: canonicalScopedModels,
+			restoredModelString: hasExplicitModel ? undefined : existingSession.models.default,
+			restoredThinkingLevel: hasExplicitModel ? undefined : restoredThinkingLevel,
+			profile: options.profilePolicy,
+		});
+		model = canonicalResolution.model;
+		thinkingLevel = canonicalResolution.thinkingLevel;
+		modelFallbackMessage = canonicalResolution.fallbackMessage;
+		resolutionTrace = canonicalResolution.trace;
 	}
 
+	const hasUnresolvedExplicitPattern = Boolean(options.modelPattern && !options.model && !model);
+
 	// Fall back to first available model with a valid API key.
-	// Skip fallback if the user explicitly requested a model via --model that wasn't found.
-	if (!model && !options.modelPattern) {
+	if (!model && !hasUnresolvedExplicitPattern) {
 		const allModels = modelRegistry.getAll();
 		for (const candidate of allModels) {
 			if (await hasModelApiKey(candidate)) {
@@ -1142,14 +1251,44 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			}
 		}
 		if (model) {
-			if (modelFallbackMessage) {
-				modelFallbackMessage += `. Using ${model.provider}/${model.id}`;
+			thinkingLevel = resolveThinkingLevelForModel(model, thinkingLevel);
+			modelFallbackMessage = modelFallbackMessage ?? `Using ${model.provider}/${model.id}`;
+			if (resolutionTrace) {
+				resolutionTrace = {
+					...resolutionTrace,
+					source: "fallback_catalog",
+					selectedModel: formatModelString(model),
+					selectedThinkingLevel: thinkingLevel,
+					promptFamily: resolutionTrace.promptFamily || "generic",
+					notes: [...resolutionTrace.notes, "fell back to first available authenticated model after extension load"],
+					fallbackMessage: modelFallbackMessage,
+				};
 			}
 		} else {
 			modelFallbackMessage =
 				"No models available. Use /login or set an API key environment variable. Then use /model to select a model.";
 		}
 	}
+
+	const effectiveResolutionTrace =
+		resolutionTrace ?? {
+			version: 1 as const,
+			source: "fallback_catalog" as const,
+			complexity: classifyRoutingComplexity(requestConfigSnapshot),
+			role: options.profilePolicy?.role ?? "default",
+			selectedModel: model ? formatModelString(model) : undefined,
+			selectedThinkingLevel: thinkingLevel,
+			promptFamily: inferPromptFamily(model),
+			profileId: options.profilePolicy?.id ?? requestConfigSnapshot.request.profileId,
+			request: {
+				explicitModel: requestConfigSnapshot.request.explicitModel,
+				explicitModelPattern: requestConfigSnapshot.request.explicitModelPattern,
+				explicitThinkingLevel: requestConfigSnapshot.request.explicitThinkingLevel,
+			},
+			notes: ["constructed effective routing trace after model resolution"],
+			fallbackMessage: modelFallbackMessage,
+		};
+	resolutionTrace = effectiveResolutionTrace;
 
 	// Discover custom commands (TypeScript slash commands)
 	const customCommandsResult: CustomCommandsLoadResult = options.disableExtensionDiscovery
@@ -1264,6 +1403,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			search_tool_bm25: { description: renderSearchToolBm25Description(discoverableMCPTools) },
 		});
 		const memoryInstructions = await buildMemoryToolDeveloperInstructions(agentDir, settings);
+		const adaptPrompt = (prompt: string): string =>
+			applyPromptFamilyAdaptation(prompt, requestConfigSnapshot, effectiveResolutionTrace);
 
 		// Build combined append prompt: memory instructions + MCP server instructions
 		const serverInstructions = mcpManager?.getServerInstructions();
@@ -1303,29 +1444,31 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		});
 
 		if (options.systemPrompt === undefined) {
-			return defaultPrompt;
+			return adaptPrompt(defaultPrompt);
 		}
 		if (typeof options.systemPrompt === "string") {
-			return await buildSystemPromptInternal({
-				cwd,
-				skills,
-				contextFiles,
-				tools: promptTools,
-				toolNames,
-				rules: rulebookRules,
-				alwaysApplyRules,
-				skillsSettings: settings.getGroup("skills"),
-				customPrompt: options.systemPrompt,
-				appendSystemPrompt: appendPrompt,
-				repeatToolDescriptions,
-				intentField,
-				mcpDiscoveryMode: hasDiscoverableMCPTools,
-				mcpDiscoveryServerSummaries: discoverableMCPSummary.servers.map(formatDiscoverableMCPToolServerSummary),
-				eagerTasks,
-				secretsEnabled,
-			});
+			return adaptPrompt(
+				await buildSystemPromptInternal({
+					cwd,
+					skills,
+					contextFiles,
+					tools: promptTools,
+					toolNames,
+					rules: rulebookRules,
+					alwaysApplyRules,
+					skillsSettings: settings.getGroup("skills"),
+					customPrompt: options.systemPrompt,
+					appendSystemPrompt: appendPrompt,
+					repeatToolDescriptions,
+					intentField,
+					mcpDiscoveryMode: hasDiscoverableMCPTools,
+					mcpDiscoveryServerSummaries: discoverableMCPSummary.servers.map(formatDiscoverableMCPToolServerSummary),
+					eagerTasks,
+					secretsEnabled,
+				}),
+			);
 		}
-		return options.systemPrompt(defaultPrompt);
+		return adaptPrompt(options.systemPrompt(defaultPrompt));
 	};
 
 	const toolNamesFromRegistry = Array.from(toolRegistry.keys());
@@ -1564,7 +1707,14 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		asyncJobManager,
 		pendingActionStore,
 		searchDb,
+		requestConfigSnapshot,
+		resolutionTrace,
+		profilePolicy: options.profilePolicy,
 	});
+	sessionManager.appendRequestEffectiveConfig(requestConfigSnapshot);
+	if (resolutionTrace) {
+		sessionManager.appendResolutionTrace(resolutionTrace);
+	}
 
 	if (model?.api === "openai-codex-responses") {
 		try {
@@ -1654,5 +1804,15 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		modelFallbackMessage,
 		lspServers,
 		eventBus,
+		requestConfigSnapshot,
+		resolutionTrace:
+			resolutionTrace ?? {
+				version: 1,
+				source: "fallback_catalog",
+				complexity: "low",
+				role: "default",
+				promptFamily: "generic",
+				notes: ["routing trace was unavailable; using fallback metadata"],
+			},
 	};
 }

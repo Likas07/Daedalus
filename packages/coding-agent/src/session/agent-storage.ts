@@ -3,7 +3,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { type AuthCredential, AuthCredentialStore, type StoredAuthCredential } from "@oh-my-pi/pi-ai";
 import { getAgentDbPath, isRecord, logger } from "@oh-my-pi/pi-utils";
-import type { RawSettings as Settings } from "../config/settings";
+
+type StoredSettings = Record<string, unknown>;
 
 /** Row shape for settings table queries */
 type SettingsRow = {
@@ -241,7 +242,7 @@ FROM model_usage_legacy
 	 * @returns Settings object, or null if no settings are stored
 	 * @deprecated Use config.yml instead. This is only for migration.
 	 */
-	getSettings(): Settings | null {
+	getSettings(): StoredSettings | null {
 		const rows = (this.#listSettingsStmt.all() as SettingsRow[]) ?? [];
 		if (rows.length === 0) return null;
 		const settings: Record<string, unknown> = {};
@@ -255,14 +256,14 @@ FROM model_usage_legacy
 				});
 			}
 		}
-		return settings as Settings;
+		return settings as StoredSettings;
 	}
 
 	/**
 	 * @deprecated Settings are now stored in config.yml, not agent.db.
 	 * This method is kept for backward compatibility but does nothing.
 	 */
-	saveSettings(settings: Settings): void {
+	saveSettings(settings: StoredSettings): void {
 		logger.warn("AgentStorage.saveSettings is deprecated - settings are now stored in config.yml", {
 			keys: Object.keys(settings),
 		});

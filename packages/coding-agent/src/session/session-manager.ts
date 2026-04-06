@@ -26,6 +26,8 @@ import {
 	Snowflake,
 	toError,
 } from "@oh-my-pi/pi-utils";
+import type { RequestEffectiveConfigSnapshot } from "../config/settings";
+import type { ResolutionTrace } from "../config/model-resolver";
 import { ArtifactManager } from "./artifacts";
 import {
 	type BlobPutResult,
@@ -52,6 +54,18 @@ import type { SessionStorage, SessionStorageWriter } from "./session-storage";
 import { FileSessionStorage, MemorySessionStorage } from "./session-storage";
 
 export const CURRENT_SESSION_VERSION = 3;
+export const REQUEST_EFFECTIVE_CONFIG_ENTRY_TYPE = "control_plane.request_effective_config";
+export const RESOLUTION_TRACE_ENTRY_TYPE = "control_plane.resolution_trace";
+export const RUNTIME_MODEL_UPDATE_ENTRY_TYPE = "control_plane.runtime_model_update";
+
+export interface RuntimeModelUpdateEntryData {
+	reason: string;
+	role?: string;
+	selectedModel?: string;
+	selectedThinkingLevel?: string;
+	promptFamily?: string;
+	persisted: boolean;
+}
 
 export interface SessionHeader {
 	type: "session";
@@ -1859,9 +1873,11 @@ export class SessionManager {
 
 	/** Close the persistent writer after flushing all pending data. */
 	async close(): Promise<void> {
-		if (!this.#persistWriter) return;
+		if (!this.persist || !this.#sessionFile) return;
 		await this.#queuePersistTask(async () => {
-			await this.#closePersistWriterInternal();
+			if (this.#persistWriter) {
+				await this.#closePersistWriterInternal();
+			}
 			this.#flushed = true;
 		});
 		if (this.#persistError) throw this.#persistError;
@@ -2166,6 +2182,21 @@ export class SessionManager {
 		};
 		this.#appendEntry(entry);
 		return entry.id;
+	}
+
+	/** Append request-effective control-plane config as child of current leaf. Returns entry id. */
+	appendRequestEffectiveConfig(snapshot: RequestEffectiveConfigSnapshot): string {
+		return this.appendCustomEntry(REQUEST_EFFECTIVE_CONFIG_ENTRY_TYPE, snapshot);
+	}
+
+	/** Append canonical routing provenance as child of current leaf. Returns entry id. */
+	appendResolutionTrace(trace: ResolutionTrace): string {
+		return this.appendCustomEntry(RESOLUTION_TRACE_ENTRY_TYPE, trace);
+	}
+
+	/** Append a runtime model/routing update for auditability. Returns entry id. */
+	appendRuntimeModelUpdate(update: RuntimeModelUpdateEntryData): string {
+		return this.appendCustomEntry(RUNTIME_MODEL_UPDATE_ENTRY_TYPE, update);
 	}
 
 	/**

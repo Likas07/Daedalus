@@ -60,6 +60,7 @@ export async function runCommitAgentSession(input: CommitAgentInput): Promise<Co
 		settings: input.settings,
 		model: input.model,
 		thinkingLevel: input.thinkingLevel,
+		requestSource: "commit_agent",
 		systemPrompt,
 		customTools: tools,
 		enableLsp: false,

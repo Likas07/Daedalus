@@ -83,6 +83,35 @@ function createSessionResult(session: AgentSession): CreateAgentSessionResult {
 		extensionsResult: {} as unknown as LoadExtensionsResult,
 		setToolUIContext: () => {},
 		eventBus: new EventBus(),
+		requestConfigSnapshot: {
+			version: 1,
+			precedence: ["request", "env", "project", "user", "defaults"],
+			cwd: "/tmp",
+			agentDir: "/tmp/.omp/agent",
+			request: {
+				source: "test",
+				continueRequested: false,
+				resumeRequested: false,
+			},
+			env: { modelRoleOverrides: {} },
+			settings: { modelRoles: {} },
+			derived: {
+				hasExistingSession: false,
+				taskDepth: 0,
+				requireSubmitResultTool: true,
+				hasOutputSchema: false,
+				scopedModels: [],
+				toolNames: [],
+			},
+		},
+		resolutionTrace: {
+			version: 1,
+			source: "fallback_catalog",
+			complexity: "low",
+			role: "default",
+			promptFamily: "generic",
+			notes: ["test stub"],
+		},
 	};
 }
 

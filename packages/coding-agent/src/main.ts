@@ -21,7 +21,7 @@ import { listModels } from "./cli/list-models";
 import { selectSession } from "./cli/session-picker";
 import { findConfigFile } from "./config";
 import { ModelRegistry, ModelsConfigFile } from "./config/model-registry";
-import { resolveCliModel, resolveModelRoleValue, resolveModelScope, type ScopedModel } from "./config/model-resolver";
+import { resolveCliModel, resolveModelScope, type ScopedModel } from "./config/model-resolver";
 import { Settings, settings } from "./config/settings";
 import { initializeWithSettings } from "./discovery";
 import {
@@ -402,6 +402,13 @@ async function buildSessionOptions(
 		options.providerSessionId = parsed.providerSessionId;
 	}
 
+	options.requestSource = "cli";
+	options.envModelRoleOverrides = {
+		smol: parsed.smol ?? $env.PI_SMOL_MODEL,
+		slow: parsed.slow ?? $env.PI_SLOW_MODEL,
+		plan: parsed.plan ?? $env.PI_PLAN_MODEL,
+	};
+
 	// Model from CLI
 	// - supports --provider <name> --model <pattern>
 	// - supports --model <provider>/<pattern>
@@ -429,54 +436,18 @@ async function buildSessionOptions(
 			}
 		} else if (resolved.model) {
 			options.model = resolved.model;
-			settings.overrideModelRoles({ default: `${resolved.model.provider}/${resolved.model.id}` });
 			if (!parsed.thinking && resolved.thinkingLevel) {
 				options.thinkingLevel = resolved.thinkingLevel;
 			}
 		}
-	} else if (scopedModels.length > 0 && !parsed.continue && !parsed.resume) {
-		const remembered = settings.getModelRole("default");
-		if (remembered) {
-			const rememberedSpec = resolveModelRoleValue(
-				remembered,
-				scopedModels.map(scopedModel => scopedModel.model),
-				{
-					settings,
-					matchPreferences: modelMatchPreferences,
-				},
-			);
-			const rememberedResolvedModel = rememberedSpec.model;
-			const rememberedModel = rememberedResolvedModel
-				? scopedModels.find(
-						scopedModel =>
-							scopedModel.model.provider === rememberedResolvedModel.provider &&
-							scopedModel.model.id === rememberedResolvedModel.id,
-					)
-				: scopedModels.find(scopedModel => scopedModel.model.id.toLowerCase() === remembered.toLowerCase());
-			if (rememberedModel) {
-				options.model = rememberedModel.model;
-				// Apply explicit thinking level from remembered role value
-				if (!parsed.thinking && rememberedSpec.explicitThinkingLevel && rememberedSpec.thinkingLevel) {
-					options.thinkingLevel = rememberedSpec.thinkingLevel;
-				}
-			}
-		}
-		if (!options.model) options.model = scopedModels[0].model;
 	}
 
 	// Thinking level
 	if (parsed.thinking) {
 		options.thinkingLevel = parsed.thinking;
-	} else if (
-		scopedModels.length > 0 &&
-		scopedModels[0].explicitThinkingLevel === true &&
-		!parsed.continue &&
-		!parsed.resume
-	) {
-		options.thinkingLevel = scopedModels[0].thinkingLevel;
 	}
 
-	// Scoped models for Ctrl+P cycling - fill in default thinking levels when not explicit
+	// Scoped models for Ctrl+P cycling and canonical routing
 	if (scopedModels.length > 0) {
 		const defaultThinkingLevel = settings.get("defaultThinkingLevel");
 		options.scopedModels = scopedModels.map(scopedModel => ({
@@ -728,7 +699,7 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 
 	// Handle CLI --api-key as runtime override (not persisted)
 	if (parsedArgs.apiKey) {
-		if (!sessionOptions.model && !sessionOptions.modelPattern) {
+		if (!sessionOptions.model && !sessionOptions.modelPattern && !(sessionOptions.scopedModels && sessionOptions.scopedModels.length > 0)) {
 			process.stderr.write(
 				`${chalk.red("--api-key requires a model to be specified via --model, --provider/--model, or --models")}\n`,
 			);

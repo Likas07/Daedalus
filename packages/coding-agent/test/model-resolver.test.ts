@@ -5,12 +5,13 @@ import {
 	parseModelPattern,
 	parseModelString,
 	resolveAgentModelPatterns,
+	resolveCanonicalModelSelection,
 	resolveCliModel,
 	resolveModelFromString,
 	resolveModelOverride,
 	resolveModelRoleValue,
 } from "@oh-my-pi/pi-coding-agent/config/model-resolver";
-import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+import { Settings, buildRequestEffectiveConfigSnapshot } from "@oh-my-pi/pi-coding-agent/config/settings";
 
 // Mock models for testing
 const mockModels: Model<"anthropic-messages">[] = [
@@ -656,6 +657,66 @@ describe("parseModelString", () => {
 	});
 });
 
+describe("resolveCanonicalModelSelection", () => {
+	test("uses the default role for direct top-level sessions", async () => {
+		const settings = Settings.isolated();
+		settings.setModelRole("default", "openai/gpt-4o");
+		settings.setModelRole("smol", "anthropic/claude-sonnet-4-5");
+		const registry = {
+			getAvailable: () => mockModels,
+			getAll: () => mockModels,
+			find: (provider: string, id: string) => mockModels.find(model => model.provider === provider && model.id === id),
+			getApiKey: () => "TEST_KEY",
+		};
+
+		for (const requestSource of ["session", "cli"] as const) {
+			const requestConfig = buildRequestEffectiveConfigSnapshot(settings, {
+				requestSource,
+			});
+
+			const result = await resolveCanonicalModelSelection({
+				settings,
+				modelRegistry: registry,
+				requestConfig,
+			});
+
+			expect(result.trace.role).toBe("default");
+			expect(result.trace.source).toBe("role_config");
+			expect(result.model?.provider).toBe("openai");
+			expect(result.model?.id).toBe("gpt-4o");
+		}
+	});
+
+	test("keeps delegated sessions on routed task roles", async () => {
+		const settings = Settings.isolated();
+		settings.setModelRole("default", "openai/gpt-4o");
+		settings.setModelRole("task", "anthropic/claude-sonnet-4-5");
+		const requestConfig = buildRequestEffectiveConfigSnapshot(settings, {
+			requestSource: "subagent",
+			taskDepth: 1,
+			requireSubmitResultTool: true,
+		});
+		const registry = {
+			getAvailable: () => mockModels,
+			getAll: () => mockModels,
+			find: (provider: string, id: string) => mockModels.find(model => model.provider === provider && model.id === id),
+			getApiKey: () => "TEST_KEY",
+		};
+
+		const result = await resolveCanonicalModelSelection({
+			settings,
+			modelRegistry: registry,
+			requestConfig,
+		});
+
+		expect(result.trace.role).toBe("task");
+		expect(result.trace.complexity).toBe("high");
+		expect(result.trace.source).toBe("role_config");
+		expect(result.model?.provider).toBe("anthropic");
+		expect(result.model?.id).toBe("claude-sonnet-4-5");
+	});
+});
+
 describe("expandRoleAlias", () => {
 	test("expands pi/vision to configured vision role", () => {
 		const settings = Settings.isolated();
@@ -671,3 +732,4 @@ describe("expandRoleAlias", () => {
 		expect(expandRoleAlias("pi/vision", settings)).toBe("pi/vision");
 	});
 });
+

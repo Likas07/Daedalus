@@ -443,6 +443,30 @@ describe("SessionManager legacy session migration persistence", () => {
 		expect(persistedEntries[1].id).toBeDefined();
 		expect(persistedEntries[1].parentId).toBeNull();
 	});
+	it("finalizes deferred persistence on close even when no append writer exists", async () => {
+		const session = SessionManager.create(tempDir, tempDir);
+		const sessionFile = session.getSessionFile();
+		if (!sessionFile) throw new Error("Expected session file path");
+
+		session.appendMessage({ role: "user", content: "hello", timestamp: Date.now() - 1 });
+		session.appendMessage(makeAssistantMessage());
+
+		await session.close();
+
+		expect(fs.existsSync(sessionFile)).toBe(true);
+		expect(
+			fs
+				.readdirSync(path.dirname(sessionFile))
+				.filter(name => name.startsWith(`.${path.basename(sessionFile)}.`) && name.endsWith(".tmp")),
+		).toEqual([]);
+
+		const persistedEntries = await loadEntriesFromFile(sessionFile);
+		expect(persistedEntries).toHaveLength(3);
+		expect(persistedEntries[0]?.type).toBe("session");
+		expect(persistedEntries[1]?.type).toBe("message");
+		expect(persistedEntries[2]?.type).toBe("message");
+	});
+
 	it("keeps the last non-empty session resumable after starting a fresh session", async () => {
 		const session = SessionManager.create(tempDir, tempDir);
 		session.appendMessage({ role: "user", content: "hello", timestamp: Date.now() - 1 });

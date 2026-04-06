@@ -10,7 +10,10 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { getProjectDir, logger } from "@oh-my-pi/pi-utils";
 
-import type { Settings } from "../config/settings";
+interface SettingsLike {
+	get(path: string): any;
+	set(path: string, value: unknown): void;
+}
 import { clearCache as clearFsCache, findRepoRoot, cacheStats as fsCacheStats, invalidate as invalidateFs } from "./fs";
 import type {
 	Capability,
@@ -40,7 +43,7 @@ const providerMeta = new Map<string, { displayName: string; description: string 
 const disabledProviders = new Set<string>();
 
 /** Settings manager for persistence (if set) */
-let settings: Settings | null = null;
+let settings: SettingsLike | null = null;
 
 // =============================================================================
 // Registration API
@@ -246,7 +249,7 @@ export async function loadCapability<T>(capabilityId: string, options: LoadOptio
  * Initialize capability system with settings manager for persistence.
  * Call this once on startup to enable persistent provider state.
  */
-export function initializeWithSettings(activeSettings: Settings): void {
+export function initializeWithSettings(activeSettings: SettingsLike): void {
 	settings = activeSettings;
 	// Load disabled providers from settings
 	const disabled = settings.get("disabledProviders");

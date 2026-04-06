@@ -16,11 +16,323 @@ import chalk from "chalk";
 import MODEL_PRIO from "../priority.json" with { type: "json" };
 import { parseThinkingLevel, resolveThinkingLevelForModel } from "../thinking";
 import { fuzzyMatch } from "../utils/fuzzy";
-import { MODEL_ROLE_IDS, type ModelRegistry, type ModelRole } from "./model-registry";
-import type { Settings } from "./settings";
+import type { RequestEffectiveConfigSnapshot, Settings } from "./settings";
+
+export type ModelRole = "default" | "smol" | "slow" | "vision" | "plan" | "commit" | "task";
+
+interface ModelRegistryLike {
+	getAvailable(): Model<Api>[];
+	getAll(): Model<Api>[];
+	find(provider: string, id: string): Model<Api> | undefined;
+	getApiKey(model: Model<Api>, providerSessionId?: string): Promise<string | undefined> | string | undefined;
+}
 
 /** Default model IDs for each known provider */
 export const defaultModelPerProvider: Record<KnownProvider, string> = DEFAULT_MODEL_PER_PROVIDER;
+
+export type RoutingComplexity = "low" | "medium" | "high";
+export type ResolutionSource =
+	| "request_explicit_model"
+	| "request_explicit_pattern"
+	| "scoped_model"
+	| "session_restore"
+	| "profile_pin"
+	| "role_config"
+	| "fallback_catalog";
+
+export interface RoutingProfilePolicy {
+	id: string;
+	model?: string;
+	role?: string;
+	thinkingLevel?: ThinkingLevel;
+	permissions?: string[];
+	budgets?: Record<string, unknown>;
+	delegation?: Record<string, unknown>;
+	verification?: Record<string, unknown>;
+	compaction?: Record<string, unknown>;
+}
+
+export interface ResolutionTrace {
+	version: 1;
+	source: ResolutionSource;
+	complexity: RoutingComplexity;
+	role: string;
+	selectedModel?: string;
+	selectedThinkingLevel?: ThinkingLevel;
+	promptFamily: string;
+	profileId?: string;
+	request?: {
+		explicitModel?: string;
+		explicitModelPattern?: string;
+		explicitThinkingLevel?: string;
+	};
+	notes: string[];
+	fallbackMessage?: string;
+}
+
+export interface CanonicalModelResolutionResult {
+	model: Model<Api> | undefined;
+	thinkingLevel?: ThinkingLevel;
+	fallbackMessage?: string;
+	trace: ResolutionTrace;
+}
+
+export interface CanonicalModelResolutionOptions {
+	settings: Settings;
+	modelRegistry: ModelRegistryLike;
+	requestConfig: RequestEffectiveConfigSnapshot;
+	hasModelApiKey?: (candidate: Model<Api>) => Promise<boolean>;
+	explicitModel?: Model<Api>;
+	explicitModelPattern?: string;
+	explicitThinkingLevel?: ThinkingLevel;
+	scopedModels?: ScopedModel[];
+	restoredModelString?: string;
+	restoredThinkingLevel?: string;
+	profile?: RoutingProfilePolicy;
+}
+
+function normalizeConfiguredString(value: unknown): string | undefined {
+	return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+export function inferPromptFamily(model: Model<Api> | undefined): string {
+	if (!model) return "generic";
+	const provider = model.provider.toLowerCase();
+	const id = model.id.toLowerCase();
+	if (provider.includes("anthropic") || id.includes("claude")) return "anthropic";
+	if (provider.includes("gemini") || provider.includes("google") || id.includes("gemini")) return "gemini";
+	if (provider.includes("openai") || id.includes("gpt") || id.includes("o1") || id.includes("o3") || id.includes("o4")) {
+		return "openai";
+	}
+		if (provider.includes("xai") || id.includes("grok")) return "xai";
+	return provider || "generic";
+}
+
+export function classifyRoutingComplexity(requestConfig: RequestEffectiveConfigSnapshot): RoutingComplexity {
+	if (requestConfig.derived.taskDepth > 0 || requestConfig.derived.requireSubmitResultTool) {
+		return "high";
+	}
+	if (requestConfig.derived.hasOutputSchema || requestConfig.derived.toolNames.includes("task")) {
+		return "medium";
+	}
+	return "low";
+}
+
+function isDelegatedRoutingRequest(requestConfig: RequestEffectiveConfigSnapshot): boolean {
+	if (requestConfig.derived.taskDepth > 0 || requestConfig.derived.requireSubmitResultTool) {
+		return true;
+	}
+	return !["session", "cli"].includes(requestConfig.request.source);
+}
+
+function defaultRoleForComplexity(complexity: RoutingComplexity, requestConfig: RequestEffectiveConfigSnapshot): string {
+	if (!isDelegatedRoutingRequest(requestConfig)) {
+		return "default";
+	}
+	const configuredRole = normalizeConfiguredString(requestConfig.settings.routing && (requestConfig.settings.routing as any)?.defaultRoleByComplexity?.[complexity]);
+	if (configuredRole) return configuredRole;
+	if (requestConfig.derived.taskDepth > 0 || requestConfig.derived.requireSubmitResultTool) return "task";
+	if (complexity === "high") return "slow";
+	if (complexity === "low") return "smol";
+	return "default";
+}
+
+export async function resolveCanonicalModelSelection(
+	options: CanonicalModelResolutionOptions,
+): Promise<CanonicalModelResolutionResult> {
+	const {
+		settings,
+		modelRegistry,
+		requestConfig,
+		hasModelApiKey,
+		explicitModel,
+		explicitModelPattern,
+		explicitThinkingLevel,
+		scopedModels = [],
+		restoredModelString,
+		restoredThinkingLevel,
+		profile,
+	} = options;
+	const availableModels = modelRegistry.getAvailable();
+	const allModels = modelRegistry.getAll();
+	const matchPreferences = { usageOrder: settings.getStorage()?.getModelUsageOrder() };
+	const notes: string[] = [];
+	const complexity = classifyRoutingComplexity(requestConfig);
+	let source: ResolutionSource = "fallback_catalog";
+	let role = profile?.role ?? defaultRoleForComplexity(complexity, requestConfig);
+	let model = explicitModel;
+	let thinkingLevel = explicitThinkingLevel;
+	let fallbackMessage: string | undefined;
+
+	const canUseModel = async (candidate: Model<Api> | undefined): Promise<boolean> => {
+		if (!candidate) return false;
+		if (!hasModelApiKey) return true;
+		return await hasModelApiKey(candidate);
+	};
+
+	if (model) {
+		source = "request_explicit_model";
+		notes.push("resolved from explicit model input");
+	} else if (explicitModelPattern) {
+		const { model: patternModel, thinkingLevel: patternThinkingLevel } = parseModelPattern(
+			explicitModelPattern,
+			allModels,
+			matchPreferences,
+		);
+		source = "request_explicit_pattern";
+		if (patternModel) {
+			model = patternModel;
+			thinkingLevel ??= patternThinkingLevel;
+			notes.push("resolved from explicit model pattern");
+		} else {
+			fallbackMessage = `Model "${explicitModelPattern}" not found`;
+			notes.push("explicit model pattern was not found in current registry");
+			return {
+				model: undefined,
+				thinkingLevel: explicitThinkingLevel,
+				fallbackMessage,
+				trace: {
+					version: 1,
+					source,
+					complexity,
+					role,
+					selectedModel: undefined,
+					selectedThinkingLevel: explicitThinkingLevel,
+					promptFamily: "generic",
+					profileId: profile?.id ?? requestConfig.request.profileId,
+					request: {
+						explicitModel: requestConfig.request.explicitModel,
+						explicitModelPattern: requestConfig.request.explicitModelPattern,
+						explicitThinkingLevel: requestConfig.request.explicitThinkingLevel,
+					},
+					notes,
+					fallbackMessage,
+				},
+			};
+		}
+	}
+
+	if (!model && scopedModels.length > 0 && !requestConfig.request.continueRequested && !requestConfig.request.resumeRequested) {
+		const rememberedDefault = settings.getModelRole("default");
+		if (rememberedDefault) {
+			const rememberedSpec = resolveModelRoleValue(rememberedDefault, scopedModels.map(item => item.model), {
+				settings,
+				matchPreferences,
+			});
+			if (rememberedSpec.model) {
+				const rememberedScoped = scopedModels.find(scoped => modelsAreEqual(scoped.model, rememberedSpec.model!));
+				if (rememberedScoped) {
+					model = rememberedScoped.model;
+					thinkingLevel ??= rememberedSpec.thinkingLevel;
+					source = "scoped_model";
+					role = "default";
+					notes.push("reused remembered default role within scoped models");
+				}
+			}
+		}
+		if (!model) {
+			model = scopedModels[0]?.model;
+			thinkingLevel ??= scopedModels[0]?.thinkingLevel;
+			if (model) {
+				source = "scoped_model";
+				notes.push("fell back to first scoped model");
+			}
+		}
+	}
+
+	if (!model && restoredModelString) {
+		const restored = parseModelString(restoredModelString);
+		if (restored) {
+			const restoredModel = modelRegistry.find(restored.provider, restored.id);
+			if (await canUseModel(restoredModel)) {
+				model = restoredModel;
+				thinkingLevel ??= parseThinkingLevel(restoredThinkingLevel);
+				source = "session_restore";
+				notes.push("restored model from existing session state");
+			} else {
+				fallbackMessage = `Could not restore model ${restoredModelString}`;
+				notes.push("session model restore failed and required fallback");
+			}
+		}
+	}
+
+	if (!model && profile?.model) {
+		const { model: profileModel, thinkingLevel: profileThinkingLevel } = resolveModelRoleValue(profile.model, allModels, {
+			settings,
+			matchPreferences,
+		});
+		if (profileModel && (await canUseModel(profileModel))) {
+			model = profileModel;
+			thinkingLevel ??= profile.thinkingLevel ?? profileThinkingLevel;
+			source = "profile_pin";
+			role = profile.role ?? role;
+			notes.push("resolved from profile model pin");
+		}
+	}
+
+	if (!model) {
+		const configuredRoleValue = settings.getModelRole(role);
+		const resolvedRole = resolveModelRoleValue(configuredRoleValue, availableModels, {
+			settings,
+			matchPreferences,
+		});
+		if (resolvedRole.model && (await canUseModel(resolvedRole.model))) {
+			model = resolvedRole.model;
+			thinkingLevel ??= profile?.thinkingLevel ?? resolvedRole.thinkingLevel;
+			source = "role_config";
+			notes.push(`resolved from configured role "${role}"`);
+		}
+	}
+
+	if (!model) {
+		for (const candidate of availableModels) {
+			if (await canUseModel(candidate)) {
+				model = candidate;
+				source = "fallback_catalog";
+				notes.push("fell back to first available authenticated model");
+				break;
+			}
+		}
+		if (!model && allModels.length > 0) {
+			model = allModels[0];
+			source = "fallback_catalog";
+			notes.push("fell back to first registered model without auth validation");
+		}
+	}
+
+	if (thinkingLevel === undefined) {
+		thinkingLevel = profile?.thinkingLevel ?? parseThinkingLevel(restoredThinkingLevel) ?? settings.get("defaultThinkingLevel");
+	}
+	if (model) {
+		thinkingLevel = resolveThinkingLevelForModel(model, thinkingLevel);
+		if (fallbackMessage && source === "fallback_catalog") {
+			fallbackMessage += `. Using ${model.provider}/${model.id}`;
+		}
+	}
+
+	return {
+		model,
+		thinkingLevel,
+		fallbackMessage,
+		trace: {
+			version: 1,
+			source,
+			complexity,
+			role,
+			selectedModel: model ? formatModelString(model) : undefined,
+			selectedThinkingLevel: thinkingLevel,
+			promptFamily: inferPromptFamily(model),
+			profileId: profile?.id ?? requestConfig.request.profileId,
+			request: {
+				explicitModel: requestConfig.request.explicitModel,
+				explicitModelPattern: requestConfig.request.explicitModelPattern,
+				explicitThinkingLevel: requestConfig.request.explicitThinkingLevel,
+			},
+			notes,
+			fallbackMessage,
+		},
+	};
+}
 
 export interface ScopedModel {
 	model: Model<Api>;
@@ -365,13 +677,14 @@ export function parseModelPattern(
 
 const PREFIX_MODEL_ROLE = "pi/";
 const DEFAULT_MODEL_ROLE = "default";
+const CANONICAL_MODEL_ROLE_IDS: ModelRole[] = ["default", "smol", "slow", "vision", "plan", "commit", "task"];
 
 function getModelRoleAlias(value: string): ModelRole | undefined {
 	const normalized = value.trim();
 	if (!normalized.startsWith(PREFIX_MODEL_ROLE)) return undefined;
 
 	const candidate = normalized.slice(PREFIX_MODEL_ROLE.length);
-	for (const role of MODEL_ROLE_IDS) {
+	for (const role of CANONICAL_MODEL_ROLE_IDS) {
 		if (candidate === role) return role;
 	}
 	return undefined;
@@ -554,7 +867,7 @@ export function resolveModelFromSettings(options: {
 	roleOrder?: readonly ModelRole[];
 }): Model<Api> | undefined {
 	const { settings, availableModels, matchPreferences, roleOrder } = options;
-	const roles = roleOrder ?? MODEL_ROLE_IDS;
+	const roles = roleOrder ?? CANONICAL_MODEL_ROLE_IDS;
 	for (const role of roles) {
 		const configured = settings.getModelRole(role);
 		if (!configured) continue;
@@ -569,7 +882,7 @@ export function resolveModelFromSettings(options: {
  */
 export function resolveModelOverride(
 	modelPatterns: string[],
-	modelRegistry: ModelRegistry,
+	modelRegistry: ModelRegistryLike,
 	settings?: Settings,
 ): { model?: Model<Api>; thinkingLevel?: ThinkingLevel; explicitThinkingLevel: boolean } {
 	if (modelPatterns.length === 0) return { explicitThinkingLevel: false };
@@ -621,7 +934,7 @@ export function resolveRoleSelection(
  */
 export async function resolveModelScope(
 	patterns: string[],
-	modelRegistry: ModelRegistry,
+	modelRegistry: ModelRegistryLike,
 	preferences?: ModelMatchPreferences,
 ): Promise<ScopedModel[]> {
 	const availableModels = modelRegistry.getAvailable();
@@ -717,7 +1030,7 @@ export interface ResolveCliModelResult {
 export function resolveCliModel(options: {
 	cliProvider?: string;
 	cliModel?: string;
-	modelRegistry: ModelRegistry;
+	modelRegistry: ModelRegistryLike;
 	preferences?: ModelMatchPreferences;
 }): ResolveCliModelResult {
 	const { cliProvider, cliModel, modelRegistry, preferences } = options;
@@ -833,7 +1146,7 @@ export async function findInitialModel(options: {
 	defaultProvider?: string;
 	defaultModelId?: string;
 	defaultThinkingSelector?: Effort;
-	modelRegistry: ModelRegistry;
+	modelRegistry: ModelRegistryLike;
 }): Promise<InitialModelResult> {
 	const {
 		cliProvider,
@@ -915,7 +1228,7 @@ export async function restoreModelFromSession(
 	savedModelId: string,
 	currentModel: Model<Api> | undefined,
 	shouldPrintMessages: boolean,
-	modelRegistry: ModelRegistry,
+	modelRegistry: ModelRegistryLike,
 ): Promise<{ model: Model<Api> | undefined; fallbackMessage: string | undefined }> {
 	const restoredModel = modelRegistry.find(savedProvider, savedModelId);
 
@@ -990,7 +1303,7 @@ export async function restoreModelFromSession(
  * @returns The best available smol model, or undefined if none found
  */
 export async function findSmolModel(
-	modelRegistry: ModelRegistry,
+	modelRegistry: ModelRegistryLike,
 	savedModel?: string,
 ): Promise<Model<Api> | undefined> {
 	const availableModels = modelRegistry.getAvailable();
@@ -1033,7 +1346,7 @@ export async function findSmolModel(
  * @returns The best available slow model, or undefined if none found
  */
 export async function findSlowModel(
-	modelRegistry: ModelRegistry,
+	modelRegistry: ModelRegistryLike,
 	savedModel?: string,
 ): Promise<Model<Api> | undefined> {
 	const availableModels = modelRegistry.getAvailable();

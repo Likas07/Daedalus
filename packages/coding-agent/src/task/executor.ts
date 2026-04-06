@@ -958,6 +958,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				settings: subagentSettings,
 				model,
 				thinkingLevel: effectiveThinkingLevel,
+				requestSource: "subagent",
 				toolNames,
 				outputSchema,
 				requireSubmitResultTool: true,

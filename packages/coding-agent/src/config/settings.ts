@@ -24,7 +24,6 @@ import {
 } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 import { type Settings as SettingsCapabilityItem, settingsCapability } from "../capability/settings";
-import type { ModelRole } from "../config/model-registry";
 import { loadCapability } from "../discovery";
 import { isLightTheme, setAutoThemeMapping, setColorBlindMode, setSymbolPreset } from "../modes/theme/theme";
 import { type EditMode, normalizeEditMode } from "../patch";
@@ -53,6 +52,8 @@ export interface RawSettings {
 	[key: string]: unknown;
 }
 
+export type ModelRole = "default" | "smol" | "slow" | "vision" | "plan" | "commit" | "task";
+
 export interface SettingsOptions {
 	/** Current working directory for project settings discovery */
 	cwd?: string;
@@ -62,6 +63,57 @@ export interface SettingsOptions {
 	inMemory?: boolean;
 	/** Initial overrides */
 	overrides?: Partial<Record<SettingPath, unknown>>;
+}
+
+export interface RequestEffectiveConfigInput {
+	explicitModel?: string;
+	explicitModelPattern?: string;
+	explicitThinkingLevel?: string;
+	profileId?: string;
+	requestSource?: string;
+	scopedModels?: string[];
+	continueRequested?: boolean;
+	resumeRequested?: boolean;
+	hasExistingSession?: boolean;
+	taskDepth?: number;
+	requireSubmitResultTool?: boolean;
+	hasOutputSchema?: boolean;
+	toolNames?: string[];
+	envModelRoleOverrides?: Record<string, string | undefined>;
+}
+
+export interface RequestEffectiveConfigSnapshot {
+	version: 1;
+	precedence: ["request", "env", "project", "user", "defaults"];
+	cwd: string;
+	agentDir: string;
+	request: {
+		source: string;
+		explicitModel?: string;
+		explicitModelPattern?: string;
+		explicitThinkingLevel?: string;
+		profileId?: string;
+		continueRequested: boolean;
+		resumeRequested: boolean;
+	};
+	env: {
+		modelRoleOverrides: Record<string, string>;
+	};
+	settings: {
+		modelRoles: ReadOnlyDict<string>;
+		defaultThinkingLevel?: string;
+		enabledModels?: string[];
+		routing?: unknown;
+		promptFamilies?: unknown;
+	};
+	derived: {
+		hasExistingSession: boolean;
+		taskDepth: number;
+		requireSubmitResultTool: boolean;
+		hasOutputSchema: boolean;
+		scopedModels: string[];
+		toolNames: string[];
+	};
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -302,6 +354,14 @@ export class Settings {
 	getShellConfig() {
 		const shell = this.get("shellPath");
 		return procmgr.getShellConfig(shell);
+	}
+
+	/**
+	 * Get an untyped merged config value by dotted path.
+	 * Useful for fork-owned config domains that are intentionally not part of the legacy typed schema yet.
+	 */
+	getCustom(path: string): unknown {
+		return getByPath(this.#merged, parsePath(path));
 	}
 
 	/**
@@ -668,8 +728,53 @@ const SETTING_HOOKS: Partial<Record<SettingPath, SettingHook<any>>> = {
 // Global Singleton
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Global singleton state
 let globalInstance: Settings | null = null;
 let globalInstancePromise: Promise<Settings> | null = null;
+
+export function buildRequestEffectiveConfigSnapshot(
+	settings: Settings,
+	input: RequestEffectiveConfigInput = {},
+): RequestEffectiveConfigSnapshot {
+	const envModelRoleOverrides = Object.fromEntries(
+		Object.entries(input.envModelRoleOverrides ?? {}).filter(
+			(entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0,
+		),
+	);
+	return {
+		version: 1,
+		precedence: ["request", "env", "project", "user", "defaults"],
+		cwd: settings.getCwd(),
+		agentDir: settings.getAgentDir(),
+		request: {
+			source: input.requestSource ?? "session",
+			explicitModel: input.explicitModel,
+			explicitModelPattern: input.explicitModelPattern,
+			explicitThinkingLevel: input.explicitThinkingLevel,
+			profileId: input.profileId,
+			continueRequested: input.continueRequested ?? false,
+			resumeRequested: input.resumeRequested ?? false,
+		},
+		env: {
+			modelRoleOverrides: envModelRoleOverrides,
+		},
+		settings: {
+			modelRoles: { ...settings.getModelRoles() },
+			defaultThinkingLevel: settings.get("defaultThinkingLevel"),
+			enabledModels: [...(settings.get("enabledModels") ?? [])],
+			routing: settings.getCustom("routing"),
+			promptFamilies: settings.getCustom("promptFamilies"),
+		},
+		derived: {
+			hasExistingSession: input.hasExistingSession ?? false,
+			taskDepth: input.taskDepth ?? 0,
+			requireSubmitResultTool: input.requireSubmitResultTool ?? false,
+			hasOutputSchema: input.hasOutputSchema ?? false,
+			scopedModels: [...(input.scopedModels ?? [])],
+			toolNames: [...(input.toolNames ?? [])],
+		},
+	};
+}
 
 /**
  * Reset the global singleton for testing.

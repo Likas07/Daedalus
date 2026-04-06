@@ -58,12 +58,15 @@ import { MODEL_ROLE_IDS, type ModelRegistry } from "../config/model-registry";
 import {
 	extractExplicitThinkingSelector,
 	formatModelString,
+	inferPromptFamily,
 	parseModelString,
+	type ResolutionTrace,
 	type ResolvedModelRoleValue,
+	type RoutingProfilePolicy,
 	resolveModelRoleValue,
 } from "../config/model-resolver";
 import { expandPromptTemplate, type PromptTemplate, renderPromptTemplate } from "../config/prompt-templates";
-import type { Settings, SkillsSettings } from "../config/settings";
+import type { RequestEffectiveConfigSnapshot, Settings, SkillsSettings } from "../config/settings";
 import { type BashResult, executeBash as executeBashCommand } from "../exec/bash-executor";
 import { exportSessionToHtml } from "../export/html";
 import type { TtsrManager, TtsrMatchContext } from "../export/ttsr";
@@ -248,6 +251,12 @@ export interface AgentSessionConfig {
 	pendingActionStore?: PendingActionStore;
 	/** Shared native search DB for grep/glob/fuzzyFind-backed workflows. */
 	searchDb?: SearchDb;
+	/** Request-effective control-plane snapshot for this session. */
+	requestConfigSnapshot?: RequestEffectiveConfigSnapshot;
+	/** Canonical routing provenance captured during session creation. */
+	resolutionTrace?: ResolutionTrace;
+	/** Optional declarative routing profile policy attached to the session. */
+	profilePolicy?: RoutingProfilePolicy;
 }
 
 /** Options for AgentSession.prompt() */
@@ -402,6 +411,10 @@ export class AgentSession {
 	readonly searchDb: SearchDb | undefined;
 	readonly configWarnings: string[] = [];
 
+	#requestConfigSnapshot: RequestEffectiveConfigSnapshot;
+	#resolutionTrace: ResolutionTrace | undefined;
+	#profilePolicy: RoutingProfilePolicy | undefined;
+
 	#asyncJobManager: AsyncJobManager | undefined = undefined;
 	#scopedModels: Array<{ model: Model; thinkingLevel?: ThinkingLevel }>;
 	#thinkingLevel: ThinkingLevel | undefined;
@@ -516,6 +529,35 @@ export class AgentSession {
 		this.sessionManager = config.sessionManager;
 		this.settings = config.settings;
 		this.searchDb = config.searchDb;
+		this.#requestConfigSnapshot = config.requestConfigSnapshot ?? {
+			version: 1,
+			precedence: ["request", "env", "project", "user", "defaults"],
+			cwd: this.settings.getCwd(),
+			agentDir: this.settings.getAgentDir(),
+			request: {
+				source: "session",
+				continueRequested: false,
+				resumeRequested: false,
+			},
+			env: { modelRoleOverrides: {} },
+			settings: {
+				modelRoles: { ...this.settings.getModelRoles() },
+				defaultThinkingLevel: this.settings.get("defaultThinkingLevel"),
+				enabledModels: [...(this.settings.get("enabledModels") ?? [])],
+				routing: this.settings.getCustom("routing"),
+				promptFamilies: this.settings.getCustom("promptFamilies"),
+			},
+			derived: {
+				hasExistingSession: this.sessionManager.getBranch().length > 0,
+				taskDepth: 0,
+				requireSubmitResultTool: false,
+				hasOutputSchema: false,
+				scopedModels: [],
+				toolNames: [],
+			},
+		};
+		this.#resolutionTrace = config.resolutionTrace;
+		this.#profilePolicy = config.profilePolicy;
 		this.#asyncJobManager = config.asyncJobManager;
 		this.#scopedModels = config.scopedModels ?? [];
 		this.#thinkingLevel = config.thinkingLevel;
@@ -1718,6 +1760,42 @@ export class AgentSession {
 	/** Current thinking level */
 	get thinkingLevel(): ThinkingLevel | undefined {
 		return this.#thinkingLevel;
+	}
+
+	/** Request-effective control-plane snapshot for this session. */
+	get requestConfigSnapshot(): RequestEffectiveConfigSnapshot {
+		return {
+			...this.#requestConfigSnapshot,
+			env: {
+				modelRoleOverrides: { ...this.#requestConfigSnapshot.env.modelRoleOverrides },
+			},
+			settings: {
+				...this.#requestConfigSnapshot.settings,
+				modelRoles: { ...this.#requestConfigSnapshot.settings.modelRoles },
+				enabledModels: [...(this.#requestConfigSnapshot.settings.enabledModels ?? [])],
+			},
+			derived: {
+				...this.#requestConfigSnapshot.derived,
+				scopedModels: [...this.#requestConfigSnapshot.derived.scopedModels],
+				toolNames: [...this.#requestConfigSnapshot.derived.toolNames],
+			},
+		};
+	}
+
+	/** Canonical routing provenance associated with the current session. */
+	get resolutionTrace(): ResolutionTrace | undefined {
+		return this.#resolutionTrace
+			? {
+				...this.#resolutionTrace,
+				request: this.#resolutionTrace.request ? { ...this.#resolutionTrace.request } : undefined,
+				notes: [...this.#resolutionTrace.notes],
+			}
+			: undefined;
+	}
+
+	/** Declarative routing profile policy attached to this session, if any. */
+	get profilePolicy(): RoutingProfilePolicy | undefined {
+		return this.#profilePolicy ? { ...this.#profilePolicy } : undefined;
 	}
 
 	get serviceTier(): ServiceTier | undefined {
@@ -3199,11 +3277,14 @@ export class AgentSession {
 		this.#clearActiveRetryFallback();
 		this.#setModelWithProviderSessionReset(model);
 		this.sessionManager.appendModelChange(`${model.provider}/${model.id}`, role);
-		this.settings.setModelRole(role, this.#formatRoleModelValue(role, model));
+		const formattedRoleValue = this.#formatRoleModelValue(role, model);
+		this.settings.setModelRole(role, formattedRoleValue);
+		this.#updateRequestConfigRoleModel(role, formattedRoleValue);
 		this.settings.getStorage()?.recordModelUsage(`${model.provider}/${model.id}`);
 
 		// Re-apply the current thinking level for the newly selected model
 		this.setThinkingLevel(this.thinkingLevel);
+		this.#recordRuntimeModelUpdate(`runtime model changed for role \"${role}\"`, role, true);
 	}
 
 	/**
@@ -3224,6 +3305,7 @@ export class AgentSession {
 
 		// Apply explicit thinking level, or re-clamp current level to new model's capabilities
 		this.setThinkingLevel(thinkingLevel ?? this.thinkingLevel);
+		this.#recordRuntimeModelUpdate("temporary runtime model change applied", "temporary", false);
 	}
 
 	/**
@@ -3263,10 +3345,7 @@ export class AgentSession {
 		}> = [];
 
 		for (const role of roleOrder) {
-			const roleModelStr =
-				role === "default"
-					? (this.settings.getModelRole("default") ?? `${currentModel.provider}/${currentModel.id}`)
-					: this.settings.getModelRole(role);
+			const roleModelStr = this.#getConfiguredRoleModelValue(role, currentModel);
 			if (!roleModelStr) continue;
 
 			const resolved = resolveModelRoleValue(roleModelStr, availableModels, {
@@ -3345,11 +3424,14 @@ export class AgentSession {
 		this.#clearActiveRetryFallback();
 		this.#setModelWithProviderSessionReset(next.model);
 		this.sessionManager.appendModelChange(`${next.model.provider}/${next.model.id}`);
-		this.settings.setModelRole("default", this.#formatRoleModelValue("default", next.model));
+		const formattedRoleValue = this.#formatRoleModelValue("default", next.model);
+		this.settings.setModelRole("default", formattedRoleValue);
+		this.#updateRequestConfigRoleModel("default", formattedRoleValue);
 		this.settings.getStorage()?.recordModelUsage(`${next.model.provider}/${next.model.id}`);
 
 		// Apply the scoped model's configured thinking level
 		this.setThinkingLevel(next.thinkingLevel);
+		this.#recordRuntimeModelUpdate("scoped model cycle applied", "default", true);
 
 		return { model: next.model, thinkingLevel: this.thinkingLevel, isScoped: true };
 	}
@@ -3374,10 +3456,13 @@ export class AgentSession {
 		this.#clearActiveRetryFallback();
 		this.#setModelWithProviderSessionReset(nextModel);
 		this.sessionManager.appendModelChange(`${nextModel.provider}/${nextModel.id}`);
-		this.settings.setModelRole("default", this.#formatRoleModelValue("default", nextModel));
+		const formattedRoleValue = this.#formatRoleModelValue("default", nextModel);
+		this.settings.setModelRole("default", formattedRoleValue);
+		this.#updateRequestConfigRoleModel("default", formattedRoleValue);
 		this.settings.getStorage()?.recordModelUsage(`${nextModel.provider}/${nextModel.id}`);
 		// Re-apply the current thinking level for the newly selected model
 		this.setThinkingLevel(this.thinkingLevel);
+		this.#recordRuntimeModelUpdate("available model cycle applied", "default", true);
 
 		return { model: nextModel, thinkingLevel: this.thinkingLevel, isScoped: false };
 	}
@@ -4376,9 +4461,58 @@ export class AgentSession {
 		return `${model.provider}/${model.id}`;
 	}
 
+	#getConfiguredRoleModelValue(role: string, currentModel: Model | undefined): string | undefined {
+		const snapshotValue = this.#requestConfigSnapshot.settings.modelRoles[role];
+		const liveValue = this.settings.getModelRole(role);
+		const configuredValue =
+			typeof liveValue === "string" && liveValue.trim().length > 0
+				? liveValue
+				: typeof snapshotValue === "string" && snapshotValue.trim().length > 0
+					? snapshotValue
+					: undefined;
+		if (role === "default") {
+			return configuredValue ?? (currentModel ? formatModelString(currentModel) : undefined);
+		}
+		return configuredValue;
+	}
+
+	#updateRequestConfigRoleModel(role: string, value: string): void {
+		this.#requestConfigSnapshot.settings = {
+			...this.#requestConfigSnapshot.settings,
+			modelRoles: {
+				...this.#requestConfigSnapshot.settings.modelRoles,
+				[role]: value,
+			},
+		};
+	}
+
+	#recordRuntimeModelUpdate(reason: string, role: string | undefined, persisted: boolean): void {
+		const model = this.model;
+		const selectedModel = model ? formatModelString(model) : undefined;
+		const promptFamily = inferPromptFamily(model);
+		if (this.#resolutionTrace) {
+			this.#resolutionTrace = {
+				...this.#resolutionTrace,
+				role: role ?? this.#resolutionTrace.role,
+				selectedModel,
+				selectedThinkingLevel: this.#thinkingLevel,
+				promptFamily,
+				notes: [...this.#resolutionTrace.notes, reason],
+			};
+		}
+		this.sessionManager.appendRuntimeModelUpdate({
+			reason,
+			role,
+			selectedModel,
+			selectedThinkingLevel: this.#thinkingLevel,
+			promptFamily,
+			persisted,
+		});
+	}
+
 	#formatRoleModelValue(role: string, model: Model): string {
 		const modelKey = `${model.provider}/${model.id}`;
-		const existingRoleValue = this.settings.getModelRole(role);
+		const existingRoleValue = this.#getConfiguredRoleModelValue(role, model);
 		if (!existingRoleValue) return modelKey;
 
 		const thinkingLevel = extractExplicitThinkingSelector(existingRoleValue, this.settings);
@@ -4403,11 +4537,7 @@ export class AgentSession {
 		availableModels: Model[],
 		currentModel: Model | undefined,
 	): ResolvedModelRoleValue {
-		const roleModelStr =
-			role === "default"
-				? (this.settings.getModelRole("default") ??
-					(currentModel ? `${currentModel.provider}/${currentModel.id}` : undefined))
-				: this.settings.getModelRole(role);
+		const roleModelStr = this.#getConfiguredRoleModelValue(role, currentModel);
 
 		if (!roleModelStr) {
 			return { model: undefined, thinkingLevel: undefined, explicitThinkingLevel: false, warning: undefined };
@@ -4927,7 +5057,7 @@ export class AgentSession {
 	}
 
 	#getRetryFallbackPrimarySelector(role: string): RetryFallbackSelector | undefined {
-		const configuredSelector = this.settings.getModelRole(role);
+		const configuredSelector = this.#getConfiguredRoleModelValue(role, this.model);
 		return configuredSelector ? parseRetryFallbackSelector(configuredSelector) : undefined;
 	}
 
@@ -5010,6 +5140,7 @@ export class AgentSession {
 		this.sessionManager.appendModelChange(`${candidate.provider}/${candidate.id}`, "temporary");
 		this.settings.getStorage()?.recordModelUsage(`${candidate.provider}/${candidate.id}`);
 		this.setThinkingLevel(nextThinkingLevel);
+		this.#recordRuntimeModelUpdate(`retry fallback applied for role \"${role}\"`, role, false);
 		if (!this.#activeRetryFallback) {
 			this.#activeRetryFallback = {
 				role,
@@ -5083,6 +5214,7 @@ export class AgentSession {
 		this.sessionManager.appendModelChange(`${primaryModel.provider}/${primaryModel.id}`, "temporary");
 		this.settings.getStorage()?.recordModelUsage(`${primaryModel.provider}/${primaryModel.id}`);
 		this.setThinkingLevel(thinkingToApply);
+		this.#recordRuntimeModelUpdate("retry fallback primary restored", this.#activeRetryFallback?.role, false);
 		this.#clearActiveRetryFallback();
 	}
 
