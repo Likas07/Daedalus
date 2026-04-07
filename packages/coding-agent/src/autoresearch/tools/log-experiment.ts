@@ -225,6 +225,7 @@ export function createLogExperimentTool(
 				segment: state.currentSegment,
 				confidence: null,
 				asi: mergedAsi,
+				attribution: pendingRun.attribution,
 			};
 
 			const activeBranch = await getCurrentAutoresearchBranch(options.pi, workDir);

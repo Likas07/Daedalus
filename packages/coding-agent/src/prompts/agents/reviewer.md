@@ -1,11 +1,15 @@
 ---
 name: reviewer
 description: "Code review specialist for quality/security analysis"
-tools: read, grep, find, bash, lsp, web_search, ast_grep, report_finding
-spawns: explore
+allowedTools: [read, grep, find, bash, lsp, web_search, ast_grep, report_finding]
 model: pi/slow
 thinking-level: high
 blocking: true
+orchestrationRole: worker
+readOnly: true
+canSpawnAgents: false
+turnBudget: 50
+useWorktree: false
 output:
   properties:
     overall_correctness:

@@ -1401,7 +1401,7 @@ export const SETTINGS_SCHEMA = {
 			tab: "tasks",
 			label: "Isolation Mode",
 			description:
-				"Isolation mode for subagents (none, git worktree, fuse-overlayfs on Unix, or ProjFS on Windows via fuse-projfs; unsupported modes fall back to worktree)",
+				"Default isolation backend for subagents. `none` disables automatic isolation; explicit task/profile requests still use worktree unless another backend is selected.",
 			submenu: true,
 		},
 	},
@@ -1458,6 +1458,52 @@ export const SETTINGS_SCHEMA = {
 			tab: "tasks",
 			label: "Max Task Recursion",
 			description: "How many levels deep subagents can spawn their own subagents",
+			submenu: true,
+		},
+	},
+
+	"task.overlapPolicy": {
+		type: "enum",
+		values: ["allow", "warn", "deny"] as const,
+		default: "deny",
+		ui: {
+			tab: "tasks",
+			label: "Task Overlap Policy",
+			description: "How delegated task execution handles overlapping ownedPaths between child tasks",
+			submenu: true,
+		},
+	},
+
+	"task.profiles.enforceReadOnly": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "tasks",
+			label: "Enforce Read-Only Profiles",
+			description: "Strip write-capable tools from subagents marked readOnly before they execute",
+			submenu: true,
+		},
+	},
+
+	"task.profiles.enforceEditScopes": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "tasks",
+			label: "Enforce Edit Scopes",
+			description:
+				"Restrict scoped delegated workers to specialized file tools and deny paths outside their ownership scopes",
+			submenu: true,
+		},
+	},
+
+	"task.profiles.orchestratorDefaultReadOnly": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "tasks",
+			label: "Default Orchestrators to Read-Only",
+			description: "Treat orchestrator profiles as read-only unless they explicitly opt into writes",
 			submenu: true,
 		},
 	},

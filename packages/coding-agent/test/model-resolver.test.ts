@@ -11,7 +11,7 @@ import {
 	resolveModelOverride,
 	resolveModelRoleValue,
 } from "@oh-my-pi/pi-coding-agent/config/model-resolver";
-import { Settings, buildRequestEffectiveConfigSnapshot } from "@oh-my-pi/pi-coding-agent/config/settings";
+import { buildRequestEffectiveConfigSnapshot, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 
 // Mock models for testing
 const mockModels: Model<"anthropic-messages">[] = [
@@ -665,7 +665,8 @@ describe("resolveCanonicalModelSelection", () => {
 		const registry = {
 			getAvailable: () => mockModels,
 			getAll: () => mockModels,
-			find: (provider: string, id: string) => mockModels.find(model => model.provider === provider && model.id === id),
+			find: (provider: string, id: string) =>
+				mockModels.find(model => model.provider === provider && model.id === id),
 			getApiKey: () => "TEST_KEY",
 		};
 
@@ -699,7 +700,8 @@ describe("resolveCanonicalModelSelection", () => {
 		const registry = {
 			getAvailable: () => mockModels,
 			getAll: () => mockModels,
-			find: (provider: string, id: string) => mockModels.find(model => model.provider === provider && model.id === id),
+			find: (provider: string, id: string) =>
+				mockModels.find(model => model.provider === provider && model.id === id),
 			getApiKey: () => "TEST_KEY",
 		};
 
@@ -732,4 +734,3 @@ describe("expandRoleAlias", () => {
 		expect(expandRoleAlias("pi/vision", settings)).toBe("pi/vision");
 	});
 });
-

@@ -43,4 +43,23 @@ describe("renderTemplate", () => {
 		});
 		expect(result.task).toBe("just the assignment");
 	});
+
+	test("includes ownership and wave metadata when provided", () => {
+		const result = renderTemplate(
+			"Shared constraints here",
+			{
+				id: "TaskScoped",
+				description: "Scoped task",
+				assignment: "Update only the delegated files.",
+				ownedPaths: ["src/task/**", "src/config/**"],
+			},
+			{ id: "wave-2", goal: "Finish the scoped execution wave." },
+		);
+
+		expect(result.task).toContain('<wave id="wave-2">');
+		expect(result.task).toContain("Finish the scoped execution wave.");
+		expect(result.task).toContain("You own the following paths for this task:");
+		expect(result.task).toContain("`src/task/**`");
+		expect(result.task).toContain("`src/config/**`");
+	});
 });

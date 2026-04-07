@@ -34,7 +34,7 @@ import compactionTurnPrefixPrompt from "../../prompts/compaction/compaction-turn
 import compactionUpdateSummaryPrompt from "../../prompts/compaction/compaction-update-summary.md" with { type: "text" };
 import { convertToLlm, createBranchSummaryMessage, createCustomMessage } from "../../session/messages";
 import type { CompactionEntry, SessionEntry } from "../../session/session-manager";
-
+import { DEFAULT_PRUNE_CONFIG, type PruneResult, pruneToolOutputs } from "./pruning";
 import {
 	computeFileLists,
 	createFileOps,
@@ -49,10 +49,28 @@ import {
 // File Operation Tracking
 // ============================================================================
 
-/** Details stored in CompactionEntry.details for file tracking */
+/** Details stored in CompactionEntry.details for file tracking and execution metadata */
+export type CompactionThresholdSource = "fixed_tokens" | "percent" | "reserve";
+export type CompactionSummaryMethod = "local" | "remote-http" | "synthetic";
+export interface CompactionMetadata {
+	mode: "full" | "micro";
+	thresholdSource: CompactionThresholdSource;
+	thresholdTokens: number;
+	effectiveKeepRecentTokens: number;
+	splitTurn: boolean;
+	usedPreviousSummary: boolean;
+	historySummaryMethod: CompactionSummaryMethod;
+	shortSummaryMethod: CompactionSummaryMethod;
+	remoteArtifactMethod: "none" | "openai";
+	remoteArtifactAttempted: boolean;
+	remoteArtifactFallbackUsed: boolean;
+	prunedToolResults: number;
+	prunedToolResultTokensSaved: number;
+}
 export interface CompactionDetails {
 	readFiles: string[];
 	modifiedFiles: string[];
+	metadata: CompactionMetadata;
 }
 
 /**
@@ -217,6 +235,18 @@ export function shouldCompact(contextTokens: number, contextWindow: number, sett
 	if (!settings.enabled || settings.strategy === "off" || contextWindow <= 0) return false;
 	const thresholdTokens = resolveThresholdTokens(contextWindow, settings);
 	return contextTokens > thresholdTokens;
+}
+
+function resolveThresholdSource(settings: CompactionSettings): CompactionThresholdSource {
+	const thresholdTokens = settings.thresholdTokens;
+	if (typeof thresholdTokens === "number" && Number.isFinite(thresholdTokens) && thresholdTokens > 0) {
+		return "fixed_tokens";
+	}
+	const thresholdPercent = settings.thresholdPercent;
+	if (typeof thresholdPercent === "number" && Number.isFinite(thresholdPercent) && thresholdPercent > 0) {
+		return "percent";
+	}
+	return "reserve";
 }
 
 function resolveThresholdTokens(contextWindow: number, settings: CompactionSettings): number {
@@ -1085,6 +1115,7 @@ export interface CompactionPreparation {
 	recentMessages: AgentMessage[];
 	/** Whether this is a split turn (cut point in middle of turn) */
 	isSplitTurn: boolean;
+	effectiveKeepRecentTokens: number;
 	tokensBefore: number;
 	/** Summary from previous compaction, for iterative update */
 	previousSummary?: string;
@@ -1092,6 +1123,8 @@ export interface CompactionPreparation {
 	previousPreserveData?: Record<string, unknown>;
 	/** File operations extracted from messagesToSummarize */
 	fileOps: FileOperations;
+	/** Pre-summary tool output pruning applied within the compaction boundary. */
+	pruning: PruneResult;
 	/** Compaction settions from settings.jsonl	*/
 	settings: CompactionSettings;
 }
@@ -1113,6 +1146,8 @@ export function prepareCompaction(
 	}
 	const boundaryStart = prevCompactionIndex + 1;
 	const boundaryEnd = pathEntries.length;
+	const workingEntries = structuredClone(pathEntries);
+	const pruning = pruneToolOutputs(workingEntries.slice(boundaryStart, boundaryEnd), DEFAULT_PRUNE_CONFIG);
 
 	const lastUsage = getLastAssistantUsage(pathEntries);
 	const tokensBefore = lastUsage ? calculateContextTokens(lastUsage) : 0;
@@ -1137,18 +1172,27 @@ export function prepareCompaction(
 
 	const historyEnd = cutPoint.isSplitTurn ? cutPoint.turnStartIndex : cutPoint.firstKeptEntryIndex;
 
+	const originalMessagesToSummarize: AgentMessage[] = [];
+	for (let i = boundaryStart; i < historyEnd; i++) {
+		const msg = getMessageFromEntry(pathEntries[i]);
+		if (msg) originalMessagesToSummarize.push(msg);
+	}
+
 	// Messages to summarize (will be discarded after summary)
 	const messagesToSummarize: AgentMessage[] = [];
 	for (let i = boundaryStart; i < historyEnd; i++) {
-		const msg = getMessageFromEntry(pathEntries[i]);
+		const msg = getMessageFromEntry(workingEntries[i]);
 		if (msg) messagesToSummarize.push(msg);
 	}
 
 	// Messages for turn prefix summary (if splitting a turn)
 	const turnPrefixMessages: AgentMessage[] = [];
+	const originalTurnPrefixMessages: AgentMessage[] = [];
 	if (cutPoint.isSplitTurn) {
 		for (let i = cutPoint.turnStartIndex; i < cutPoint.firstKeptEntryIndex; i++) {
-			const msg = getMessageFromEntry(pathEntries[i]);
+			const originalMessage = getMessageFromEntry(pathEntries[i]);
+			if (originalMessage) originalTurnPrefixMessages.push(originalMessage);
+			const msg = getMessageFromEntry(workingEntries[i]);
 			if (msg) turnPrefixMessages.push(msg);
 		}
 	}
@@ -1156,7 +1200,7 @@ export function prepareCompaction(
 	// Messages kept after compaction (recent history)
 	const recentMessages: AgentMessage[] = [];
 	for (let i = cutPoint.firstKeptEntryIndex; i < boundaryEnd; i++) {
-		const msg = getMessageFromEntry(pathEntries[i]);
+		const msg = getMessageFromEntry(workingEntries[i]);
 		if (msg) recentMessages.push(msg);
 	}
 	// Nothing to summarize means compaction would be a no-op.
@@ -1173,12 +1217,12 @@ export function prepareCompaction(
 		previousPreserveData = prevCompaction.preserveData;
 	}
 
-	// Extract file operations from messages and previous compaction
-	const fileOps = extractFileOperations(messagesToSummarize, pathEntries, prevCompactionIndex);
+	// Extract file operations from unpruned messages and previous compaction
+	const fileOps = extractFileOperations(originalMessagesToSummarize, pathEntries, prevCompactionIndex);
 
-	// Also extract file ops from turn prefix if splitting
+	// Also extract file ops from the original turn prefix if splitting
 	if (cutPoint.isSplitTurn) {
-		for (const msg of turnPrefixMessages) {
+		for (const msg of originalTurnPrefixMessages) {
 			extractFileOpsFromMessage(msg, fileOps);
 		}
 	}
@@ -1193,13 +1237,23 @@ export function prepareCompaction(
 		previousSummary,
 		previousPreserveData,
 		fileOps,
+		pruning,
 		settings,
+		effectiveKeepRecentTokens: keepRecentTokens,
 	};
 }
 
 // ============================================================================
 // Main compaction function
 // ============================================================================
+
+function buildMicroCompactionSummary(pruning: PruneResult): { summary: string; shortSummary: string } {
+	const plural = pruning.prunedCount === 1 ? "output" : "outputs";
+	return {
+		summary: `Older tool outputs were reduced during compaction. ${pruning.prunedCount} tool ${plural} were replaced with truncated placeholders before the session summary was refreshed. Re-run the relevant tool if you need the full original output again.`,
+		shortSummary: `Reduced ${pruning.prunedCount} older tool ${plural}`,
+	};
+}
 
 const TURN_PREFIX_SUMMARIZATION_PROMPT = renderPromptTemplate(compactionTurnPrefixPrompt);
 
@@ -1224,10 +1278,12 @@ export async function compact(
 		turnPrefixMessages,
 		recentMessages,
 		isSplitTurn,
+		effectiveKeepRecentTokens,
 		tokensBefore,
 		previousSummary,
 		previousPreserveData,
 		fileOps,
+		pruning,
 		settings,
 	} = preparation;
 
@@ -1239,7 +1295,39 @@ export async function compact(
 		initiatorOverride: options?.initiatorOverride,
 	};
 
+	const useMicroCompaction =
+		!isSplitTurn &&
+		pruning.prunedCount > 0 &&
+		messagesToSummarize.length > 0 &&
+		messagesToSummarize.every(message => message.role === "toolResult");
+	const metadata: CompactionMetadata = {
+		mode: useMicroCompaction ? "micro" : "full",
+		thresholdSource: resolveThresholdSource(settings),
+		thresholdTokens: resolveThresholdTokens(model.contextWindow, settings),
+		effectiveKeepRecentTokens,
+		splitTurn: isSplitTurn,
+		usedPreviousSummary: Boolean(previousSummary),
+		historySummaryMethod: useMicroCompaction ? "synthetic" : summaryOptions.remoteEndpoint ? "remote-http" : "local",
+		shortSummaryMethod: useMicroCompaction ? "synthetic" : summaryOptions.remoteEndpoint ? "remote-http" : "local",
+		remoteArtifactMethod: "none",
+		remoteArtifactAttempted: false,
+		remoteArtifactFallbackUsed: false,
+		prunedToolResults: pruning.prunedCount,
+		prunedToolResultTokensSaved: pruning.tokensSaved,
+	};
+
 	let preserveData = withOpenAiRemoteCompactionPreserveData(previousPreserveData, undefined);
+	if (useMicroCompaction) {
+		const { summary, shortSummary } = buildMicroCompactionSummary(pruning);
+		return {
+			summary,
+			shortSummary,
+			firstKeptEntryId,
+			tokensBefore,
+			details: { ...computeFileLists(fileOps), metadata },
+			preserveData,
+		};
+	}
 	if (settings.remoteEnabled !== false && shouldUseOpenAiRemoteCompaction(model)) {
 		const previousRemoteCompaction = getPreservedOpenAiRemoteCompactionData(previousPreserveData);
 		const remoteMessages = [...messagesToSummarize, ...turnPrefixMessages, ...recentMessages];
@@ -1249,6 +1337,7 @@ export async function compact(
 				: undefined;
 		const remoteHistory = buildOpenAiNativeHistory(remoteMessages, model, previousReplacementHistory);
 		if (remoteHistory.length > 0) {
+			metadata.remoteArtifactAttempted = true;
 			try {
 				const remote = await requestOpenAiRemoteCompaction(
 					model,
@@ -1256,8 +1345,10 @@ export async function compact(
 					remoteHistory,
 					summaryOptions.remoteInstructions ?? SUMMARIZATION_SYSTEM_PROMPT,
 				);
+				metadata.remoteArtifactMethod = "openai";
 				preserveData = withOpenAiRemoteCompactionPreserveData(previousPreserveData, remote);
 			} catch (err) {
+				metadata.remoteArtifactFallbackUsed = true;
 				logger.warn("OpenAI remote compaction failed, falling back to local summarization", {
 					error: err instanceof Error ? err.message : String(err),
 					model: model.id,
@@ -1343,7 +1434,7 @@ export async function compact(
 		shortSummary,
 		firstKeptEntryId,
 		tokensBefore,
-		details: { readFiles, modifiedFiles } as CompactionDetails,
+		details: { readFiles, modifiedFiles, metadata } as CompactionDetails,
 		preserveData,
 	};
 }

@@ -96,8 +96,8 @@ function createDashboardStub() {
 	};
 }
 
-function createContext(cwd: string): ExtensionContext {
-	return { cwd, hasUI: false } as ExtensionContext;
+function createContext(cwd: string, branchEntries: unknown[] = []): ExtensionContext {
+	return { cwd, hasUI: false, sessionManager: { getBranch: () => branchEntries } } as ExtensionContext;
 }
 
 function createGitApi(): ExtensionAPI {
@@ -185,7 +185,36 @@ describe("autoresearch tools", () => {
 			{ command: "bash autoresearch.sh", timeout_seconds: 5, checks_timeout_seconds: 5 },
 			undefined,
 			undefined,
-			createContext(dir),
+			createContext(dir, [
+				{
+					type: "compaction",
+					id: "compaction-1",
+					parentId: null,
+					timestamp: new Date().toISOString(),
+					summary: "summary",
+					firstKeptEntryId: "message-1",
+					tokensBefore: 1200,
+					preserveData: { phase2RetainedState: { activeObjective: "Execution" } },
+				},
+				{
+					type: "message",
+					id: "task-result-1",
+					parentId: "compaction-1",
+					timestamp: new Date().toISOString(),
+					message: {
+						role: "toolResult",
+						toolName: "task",
+						content: [{ type: "text", text: "ok" }],
+						details: {
+							wave: { id: "wave-3", goal: "Benchmark scoped workers", totalTasks: 2, completedTasks: 2 },
+							results: [
+								{ agent: "plan", ownedPaths: ["src/task/**"] },
+								{ agent: "reviewer", ownedPaths: ["src/config/**"] },
+							],
+						},
+					},
+				},
+			]),
 		);
 		const details = expectRunDetails(result.details);
 
@@ -194,15 +223,24 @@ describe("autoresearch tools", () => {
 		expect(details.parsedMetrics).toEqual({ memory_mb: 32, runtime_ms: 10 });
 		expect(details.benchmarkLogPath).toBe(path.join(details.runDirectory, "benchmark.log"));
 		expect(fs.existsSync(details.benchmarkLogPath)).toBe(true);
+		expect(details.attribution).toEqual({
+			workerProfiles: ["plan", "reviewer"],
+			overlapPolicy: "scoped",
+			compactionRetainedState: true,
+			waveId: "wave-3",
+			waveGoal: "Benchmark scoped workers",
+		});
 		expect(fs.existsSync(details.checksLogPath ?? "")).toBe(true);
 
 		const runJson = JSON.parse(fs.readFileSync(path.join(details.runDirectory, "run.json"), "utf8")) as {
 			completedAt?: string;
 			parsedPrimary?: number;
 			checks?: { passed?: boolean };
+			attribution?: RunDetails["attribution"];
 		};
 		expect(runJson.completedAt).toEqual(expect.any(String));
 		expect(runJson.parsedPrimary).toBe(10);
+		expect(runJson.attribution?.overlapPolicy).toBe("scoped");
 		expect(runJson.checks?.passed).toBe(true);
 	});
 

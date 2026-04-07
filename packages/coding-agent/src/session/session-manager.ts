@@ -26,8 +26,8 @@ import {
 	Snowflake,
 	toError,
 } from "@oh-my-pi/pi-utils";
-import type { RequestEffectiveConfigSnapshot } from "../config/settings";
 import type { ResolutionTrace } from "../config/model-resolver";
+import type { RequestEffectiveConfigSnapshot } from "../config/settings";
 import { ArtifactManager } from "./artifacts";
 import {
 	type BlobPutResult,

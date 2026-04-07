@@ -69,6 +69,12 @@ export const taskItemSchema = Type.Object({
 		description:
 			"Complete per-task instructions the subagent executes. Must follow the Target/Change/Edge Cases/Acceptance structure. Only include per-task deltas — shared background belongs in `context`.",
 	}),
+	ownedPaths: Type.Optional(
+		Type.Array(Type.String(), {
+			description:
+				"Optional delegated ownership paths/globs for this task. When present, write-capable tools are restricted to these paths.",
+		}),
+	),
 });
 export type TaskItem = Static<typeof taskItemSchema>;
 
@@ -79,6 +85,13 @@ const createTaskSchema = (options: { isolationEnabled: boolean }) => {
 			Type.String({
 				description:
 					"Shared background prepended to every task's assignment. Put goal, non-goals, constraints, conventions, reference paths, API contracts, and global acceptance commands here once — instead of duplicating across assignments.",
+			}),
+		),
+		waveId: Type.Optional(Type.String({ description: "Optional orchestration wave identifier for this batch" })),
+		waveGoal: Type.Optional(
+			Type.String({
+				description:
+					"Optional orchestrator-visible goal for the current wave; used in summaries and retained state.",
 			}),
 		),
 		schema: Type.Optional(
@@ -139,16 +152,33 @@ export interface ReviewData {
 }
 
 /** Agent definition (bundled or discovered) */
+export type AgentOrchestrationRole = "orchestrator" | "worker";
+export interface AgentCompactionOverrides {
+	bufferTokens?: number;
+	keepRecentTokens?: number;
+}
 export interface AgentDefinition {
 	name: string;
 	description: string;
 	systemPrompt: string;
+	allowedTools?: string[];
+	deniedTools?: string[];
+	canSpawnAgents?: boolean;
+	turnBudget?: number;
+	useWorktree?: boolean;
+	compactionOverrides?: AgentCompactionOverrides;
+	/** Legacy execution alias until runtime enforcement fully migrates to allowedTools. */
 	tools?: string[];
+	/** Legacy spawn allowlist until runtime enforcement fully migrates to canSpawnAgents. */
 	spawns?: string[] | "*";
 	model?: string[];
 	thinkingLevel?: ThinkingLevel;
 	output?: unknown;
 	blocking?: boolean;
+	role?: string;
+	orchestrationRole?: AgentOrchestrationRole;
+	readOnly?: boolean;
+	editScopes?: string[];
 	source: AgentSource;
 	filePath?: string;
 }
@@ -197,6 +227,8 @@ export interface SingleResult {
 	error?: string;
 	aborted?: boolean;
 	abortReason?: string;
+	/** Declared task ownership scopes, if any. */
+	ownedPaths?: string[];
 	/** Aggregated usage from the subprocess, accumulated incrementally from message_end events. */
 	usage?: Usage;
 	/** Output path for the task result */
@@ -213,6 +245,13 @@ export interface SingleResult {
 	outputMeta?: { lineCount: number; charCount: number };
 }
 
+export interface TaskWaveDetails {
+	id: string;
+	goal?: string;
+	totalTasks: number;
+	completedTasks: number;
+}
+
 /** Tool details for TUI rendering */
 export interface TaskToolDetails {
 	projectAgentsDir: string | null;
@@ -221,6 +260,7 @@ export interface TaskToolDetails {
 	/** Aggregated usage across all subagents. */
 	usage?: Usage;
 	outputPaths?: string[];
+	wave?: TaskWaveDetails;
 	progress?: AgentProgress[];
 	async?: {
 		state: "running" | "completed" | "failed";

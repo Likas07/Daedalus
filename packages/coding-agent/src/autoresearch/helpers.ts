@@ -6,6 +6,7 @@ import type {
 	ASIData,
 	ASIValue,
 	AutoresearchConfig,
+	ExperimentAttribution,
 	MetricDirection,
 	NumericMetricMap,
 	PendingRunSummary,
@@ -326,6 +327,7 @@ function parsePendingRunSummary(
 ): PendingRunSummary | null {
 	if (typeof value !== "object" || value === null) return null;
 	const candidate = value as {
+		attribution?: unknown;
 		checks?: { durationSeconds?: unknown; passed?: unknown; timedOut?: unknown };
 		completedAt?: unknown;
 		command?: unknown;
@@ -389,6 +391,7 @@ function parsePendingRunSummary(
 			: null;
 	const checksTimedOut = candidate.checks?.timedOut === true;
 
+	const attribution = cloneExperimentAttribution(candidate.attribution);
 	return {
 		checksDurationSeconds,
 		checksPass,
@@ -401,7 +404,28 @@ function parsePendingRunSummary(
 		passed: exitCode === 0 && !timedOut && checksPass !== false,
 		runDirectory,
 		runNumber,
+		attribution,
 	};
+}
+
+export function cloneExperimentAttribution(value: unknown): ExperimentAttribution | undefined {
+	if (typeof value !== "object" || value === null) return undefined;
+	const candidate = value as Record<string, unknown>;
+	const workerProfiles = Array.isArray(candidate.workerProfiles)
+		? candidate.workerProfiles.filter((entry): entry is string => typeof entry === "string")
+		: undefined;
+	const overlapPolicy =
+		candidate.overlapPolicy === "scoped" || candidate.overlapPolicy === "unscoped"
+			? candidate.overlapPolicy
+			: undefined;
+	const compactionRetainedState =
+		typeof candidate.compactionRetainedState === "boolean" ? candidate.compactionRetainedState : undefined;
+	const waveId = typeof candidate.waveId === "string" ? candidate.waveId : undefined;
+	const waveGoal = typeof candidate.waveGoal === "string" ? candidate.waveGoal : undefined;
+	if (!workerProfiles && !overlapPolicy && compactionRetainedState === undefined && !waveId && !waveGoal) {
+		return undefined;
+	}
+	return { workerProfiles, overlapPolicy, compactionRetainedState, waveId, waveGoal };
 }
 
 function cloneNumericMetricMap(value: unknown): NumericMetricMap | null {

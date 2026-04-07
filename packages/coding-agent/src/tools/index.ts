@@ -157,6 +157,10 @@ export interface ToolSession {
 	settings: Settings;
 	/** Shared native search DB for grep/glob/fuzzyFind-backed workflows. */
 	searchDb?: SearchDb;
+	/** Allowed delegated edit scopes relative to cwd. Empty/undefined means unrestricted. */
+	allowedEditScopes?: string[];
+	/** Optional per-tool delegated scopes keyed by tool name. */
+	allowedToolScopes?: Record<string, string[]>;
 	/** Plan mode state (if active) */
 	getPlanModeState?: () => PlanModeState | undefined;
 	/** Get compact conversation context for subagents (excludes tool results, system prompts) */

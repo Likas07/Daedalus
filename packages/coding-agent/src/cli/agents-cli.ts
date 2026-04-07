@@ -58,12 +58,20 @@ function toFrontmatter(agent: AgentDefinition): Record<string, unknown> {
 		description: agent.description,
 	};
 
-	if (agent.tools && agent.tools.length > 0) frontmatter.tools = agent.tools;
-	if (agent.spawns !== undefined) frontmatter.spawns = agent.spawns;
+	if (agent.allowedTools && agent.allowedTools.length > 0) frontmatter.allowedTools = agent.allowedTools;
+	if (agent.deniedTools && agent.deniedTools.length > 0) frontmatter.deniedTools = agent.deniedTools;
+	if (agent.canSpawnAgents !== undefined) frontmatter.canSpawnAgents = agent.canSpawnAgents;
+	if (agent.turnBudget) frontmatter.turnBudget = agent.turnBudget;
+	if (agent.useWorktree !== undefined) frontmatter.useWorktree = agent.useWorktree;
+	if (agent.compactionOverrides) frontmatter.compactionOverrides = agent.compactionOverrides;
 	if (agent.model && agent.model.length > 0) frontmatter.model = agent.model;
 	if (agent.thinkingLevel) frontmatter.thinkingLevel = agent.thinkingLevel;
 	if (agent.output !== undefined) frontmatter.output = agent.output;
 	if (agent.blocking) frontmatter.blocking = true;
+	if (agent.role) frontmatter.role = agent.role;
+	if (agent.orchestrationRole) frontmatter.orchestrationRole = agent.orchestrationRole;
+	if (agent.readOnly !== undefined) frontmatter.readOnly = agent.readOnly;
+	if (agent.editScopes && agent.editScopes.length > 0) frontmatter.editScopes = agent.editScopes;
 
 	return frontmatter;
 }

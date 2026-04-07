@@ -14,6 +14,7 @@ interface SettingsLike {
 	get(path: string): any;
 	set(path: string, value: unknown): void;
 }
+
 import { clearCache as clearFsCache, findRepoRoot, cacheStats as fsCacheStats, invalidate as invalidateFs } from "./fs";
 import type {
 	Capability,

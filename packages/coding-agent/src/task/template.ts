@@ -16,16 +16,28 @@ interface RenderResult {
  *
  * If context is provided, it is prepended with a separator.
  */
-export function renderTemplate(context: string | undefined, task: TaskItem): RenderResult {
-	let { id, description, assignment } = task;
+export function renderTemplate(
+	context: string | undefined,
+	task: TaskItem,
+	wave?: { id?: string; goal?: string },
+): RenderResult {
+	let { id, description, assignment, ownedPaths } = task;
 	assignment = assignment.trim();
 	context = context?.trim();
+	ownedPaths = ownedPaths?.filter(Boolean) ?? [];
+	const hasStructuredContext = Boolean(context) || Boolean(wave?.id) || Boolean(wave?.goal) || ownedPaths.length > 0;
 
-	if (!context || !assignment) {
+	if (!hasStructuredContext || !assignment) {
 		return { task: assignment || context!, assignment: assignment || context!, id, description };
 	}
 	return {
-		task: renderPromptTemplate(subagentUserPromptTemplate, { context, assignment }),
+		task: renderPromptTemplate(subagentUserPromptTemplate, {
+			context,
+			assignment,
+			ownedPaths,
+			waveId: wave?.id,
+			waveGoal: wave?.goal,
+		}),
 		assignment,
 		id,
 		description,

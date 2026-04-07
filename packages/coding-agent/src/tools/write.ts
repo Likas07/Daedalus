@@ -35,6 +35,7 @@ import {
 	replaceTabs,
 	shortenPath,
 } from "./render-utils";
+import { enforceDelegatedToolScope } from "./task-scope-guard";
 import { ToolError } from "./tool-errors";
 
 const writeSchema = Type.Object({
@@ -278,6 +279,7 @@ export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails
 				enforcePlanModeWrite(this.session, resolvedArchivePath.archivePath, {
 					op: resolvedArchivePath.exists ? "update" : "create",
 				});
+				enforceDelegatedToolScope(this.session, "write", resolvedArchivePath.absolutePath, { resolved: true });
 
 				const archiveResult = await this.#writeArchiveEntry(path, cleanContent, resolvedArchivePath);
 				if (stripped) {
@@ -294,6 +296,7 @@ export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails
 
 			enforcePlanModeWrite(this.session, path, { op: "create" });
 			const absolutePath = resolvePlanPath(this.session, path);
+			enforceDelegatedToolScope(this.session, "write", absolutePath, { resolved: true });
 			const batchRequest = getLspBatchRequest(context?.toolCall);
 
 			// Check if file exists and is auto-generated before overwriting

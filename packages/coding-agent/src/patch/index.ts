@@ -33,6 +33,7 @@ import {
 } from "../tools/fs-cache-invalidation";
 import { outputMeta } from "../tools/output-meta";
 import { enforcePlanModeWrite, resolvePlanPath } from "../tools/plan-mode-guard";
+import { enforceDelegatedToolScope } from "../tools/task-scope-guard";
 import { applyPatch } from "./applicator";
 import { generateDiffString, generateUnifiedDiffString, replaceText } from "./diff";
 import { findMatch } from "./fuzzy";
@@ -519,6 +520,10 @@ export class EditTool implements AgentTool<TInput> {
 
 			const absolutePath = resolvePlanPath(this.session, path);
 			const resolvedMove = move ? resolvePlanPath(this.session, move) : undefined;
+			enforceDelegatedToolScope(this.session, "edit", absolutePath, { resolved: true });
+			if (resolvedMove) {
+				enforceDelegatedToolScope(this.session, "edit", resolvedMove, { resolved: true });
+			}
 			if (resolvedMove === absolutePath) {
 				throw new Error("move path is the same as source path");
 			}
@@ -718,6 +723,10 @@ export class EditTool implements AgentTool<TInput> {
 			enforcePlanModeWrite(this.session, path, { op, move: rename });
 			const resolvedPath = resolvePlanPath(this.session, path);
 			const resolvedRename = rename ? resolvePlanPath(this.session, rename) : undefined;
+			enforceDelegatedToolScope(this.session, "edit", resolvedPath, { resolved: true });
+			if (resolvedRename) {
+				enforceDelegatedToolScope(this.session, "edit", resolvedRename, { resolved: true });
+			}
 
 			if (path.endsWith(".ipynb")) {
 				throw new Error("Cannot edit Jupyter notebooks with the Edit tool. Use the NotebookEdit tool instead.");
@@ -813,6 +822,7 @@ export class EditTool implements AgentTool<TInput> {
 		}
 
 		const absolutePath = resolvePlanPath(this.session, path);
+		enforceDelegatedToolScope(this.session, "edit", absolutePath, { resolved: true });
 
 		if (!(await fs.exists(absolutePath))) {
 			throw new Error(`File not found: ${path}`);

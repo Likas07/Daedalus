@@ -404,6 +404,45 @@ describe("remote compaction setting", () => {
 		expect(completeSpy).toHaveBeenCalledTimes(3);
 		expect(result.summary).toContain("Local history summary");
 		expect(result.shortSummary).toBe("Local short summary");
+		expect(result.details).toMatchObject({
+			metadata: {
+				thresholdSource: "reserve",
+				historySummaryMethod: "local",
+				shortSummaryMethod: "local",
+				remoteArtifactMethod: "none",
+				remoteArtifactAttempted: false,
+				remoteArtifactFallbackUsed: false,
+				splitTurn: true,
+				usedPreviousSummary: false,
+			},
+		});
+	});
+	it("records fixed-threshold compaction metadata", async () => {
+		const model = getBundledModel("anthropic", "claude-sonnet-4-5")!;
+		const entries: SessionEntry[] = [
+			createMessageEntry(createUserMessage("Turn 1")),
+			createMessageEntry(createAssistantMessage("Answer 1", createMockUsage(0, 100, 9000, 0))),
+			createMessageEntry(createUserMessage("Turn 2")),
+			createMessageEntry(createAssistantMessage("Answer 2", createMockUsage(0, 100, 9000, 0))),
+		];
+		const preparation = prepareCompaction(entries, {
+			...DEFAULT_COMPACTION_SETTINGS,
+			keepRecentTokens: 1000,
+			thresholdTokens: 12_345,
+			remoteEnabled: false,
+		});
+		if (!preparation) throw new Error("Expected compaction preparation");
+		vi.spyOn(ai, "completeSimple")
+			.mockResolvedValueOnce(createAssistantMessage("History summary"))
+			.mockResolvedValueOnce(createAssistantMessage("Short summary"));
+		const result = await compact(preparation, model, "test-api-key");
+		expect(result.details).toMatchObject({
+			metadata: {
+				thresholdSource: "fixed_tokens",
+				thresholdTokens: 12_345,
+				effectiveKeepRecentTokens: preparation.effectiveKeepRecentTokens,
+			},
+		});
 	});
 
 	it("preserves prior compaction items and encrypted reasoning for OpenAI remote compaction", async () => {
@@ -501,6 +540,15 @@ describe("remote compaction setting", () => {
 				provider: "openai",
 				replacementHistory: remoteOutput,
 				compactionItem: { type: "compaction", encrypted_content: "new_encrypted" },
+			},
+		});
+		expect(result.details).toMatchObject({
+			metadata: {
+				historySummaryMethod: "local",
+				shortSummaryMethod: "local",
+				remoteArtifactMethod: "openai",
+				remoteArtifactAttempted: true,
+				remoteArtifactFallbackUsed: false,
 			},
 		});
 	});

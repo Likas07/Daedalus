@@ -4,8 +4,6 @@
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { ToolResultMessage } from "@oh-my-pi/pi-ai";
 import type { SessionEntry, SessionMessageEntry } from "../session-manager";
-import { estimateTokens } from "./compaction";
-
 export interface PruneConfig {
 	/** Keep the most recent tool output tokens intact. */
 	protectTokens: number;
@@ -37,6 +35,18 @@ function getToolResultMessage(entry: SessionEntry): ToolResultMessage | undefine
 	return message as ToolResultMessage;
 }
 
+function estimateToolResultTokens(message: ToolResultMessage): number {
+	let chars = 0;
+	for (const block of message.content) {
+		if (block.type === "text") {
+			chars += block.text.length;
+		} else {
+			chars += 4_800;
+		}
+	}
+	return Math.ceil(chars / 4);
+}
+
 function estimatePrunedSavings(tokens: number): number {
 	const noticeTokens = Math.ceil(createPrunedNotice(tokens).length / 4);
 	return Math.max(0, tokens - noticeTokens);
@@ -54,7 +64,7 @@ export function pruneToolOutputs(entries: SessionEntry[], config: PruneConfig = 
 		const message = getToolResultMessage(entry);
 		if (!message) continue;
 
-		const tokens = estimateTokens(message as AgentMessage);
+		const tokens = estimateToolResultTokens(message);
 		const isProtected = config.protectedTools.includes(message.toolName);
 
 		if (message.prunedAt !== undefined) {

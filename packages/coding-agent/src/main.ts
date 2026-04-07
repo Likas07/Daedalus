@@ -699,7 +699,11 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 
 	// Handle CLI --api-key as runtime override (not persisted)
 	if (parsedArgs.apiKey) {
-		if (!sessionOptions.model && !sessionOptions.modelPattern && !(sessionOptions.scopedModels && sessionOptions.scopedModels.length > 0)) {
+		if (
+			!sessionOptions.model &&
+			!sessionOptions.modelPattern &&
+			!(sessionOptions.scopedModels && sessionOptions.scopedModels.length > 0)
+		) {
 			process.stderr.write(
 				`${chalk.red("--api-key requires a model to be specified via --model, --provider/--model, or --models")}\n`,
 			);

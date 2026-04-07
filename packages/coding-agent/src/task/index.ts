@@ -32,8 +32,14 @@ import { generateCommitMessage } from "../utils/commit-message-generator";
 import * as git from "../utils/git";
 import { discoverAgents, getAgent } from "./discovery";
 import { runSubprocess } from "./executor";
-import { resolveIsolationBackendForTaskExecution } from "./isolation-backend";
+import { resolveIsolationBackendForTaskExecution, type TaskIsolationMode } from "./isolation-backend";
+import { resolveTaskIsolationRequest } from "./isolation-policy";
 import { AgentOutputManager } from "./output-manager";
+import {
+	detectTaskOwnershipOverlaps,
+	formatTaskOwnershipOverlapMessage,
+	type TaskOverlapPolicy,
+} from "./overlap-policy";
 import { mapWithConcurrencyLimit, Semaphore } from "./parallel";
 import { renderCall, renderResult } from "./render";
 import { renderTemplate } from "./template";
@@ -45,7 +51,6 @@ import {
 	type TaskSchema,
 	type TaskToolDetails,
 	taskSchema,
-	taskSchemaNoIsolation,
 } from "./types";
 import {
 	applyBaseline,
@@ -168,11 +173,10 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 	get description(): string {
 		const disabledAgents = this.session.settings.get("task.disabledAgents") as string[];
 		const maxConcurrency = this.session.settings.get("task.maxConcurrency");
-		const isolationMode = this.session.settings.get("task.isolation.mode");
 		return renderDescription(
 			this.#discoveredAgents,
 			maxConcurrency,
-			isolationMode !== "none",
+			true,
 			this.session.settings.get("async.enabled"),
 			disabledAgents,
 		);
@@ -180,9 +184,8 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 	private constructor(
 		private readonly session: ToolSession,
 		discoveredAgents: AgentDefinition[],
-		isolationEnabled: boolean,
 	) {
-		this.parameters = isolationEnabled ? taskSchema : taskSchemaNoIsolation;
+		this.parameters = taskSchema;
 		this.#blockedAgent = $env.PI_BLOCKED_AGENT;
 		this.#discoveredAgents = discoveredAgents;
 	}
@@ -191,9 +194,8 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 	 * Create a TaskTool instance with async agent discovery.
 	 */
 	static async create(session: ToolSession): Promise<TaskTool> {
-		const isolationMode = session.settings.get("task.isolation.mode");
 		const { agents } = await discoverAgents(session.cwd);
-		return new TaskTool(session, agents, isolationMode !== "none");
+		return new TaskTool(session, agents);
 	}
 
 	async execute(
@@ -220,13 +222,31 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 		if (taskItems.length === 0) {
 			return this.#executeSync(_toolCallId, params, signal, onUpdate);
 		}
+		const overlapPolicy = this.session.settings.get("task.overlapPolicy") as TaskOverlapPolicy;
+		const overlaps = detectTaskOwnershipOverlaps(taskItems);
+		const overlapMessage = overlaps.length > 0 ? formatTaskOwnershipOverlapMessage(overlaps) : undefined;
+		if (overlapMessage && overlapPolicy === "deny") {
+			return {
+				content: [{ type: "text", text: `Task execution blocked. ${overlapMessage}` }],
+				details: { projectAgentsDir: null, results: [], totalDurationMs: 0 },
+			};
+		}
 
 		const outputManager =
 			this.session.agentOutputManager ?? new AgentOutputManager(this.session.getArtifactsDir ?? (() => null));
 		const uniqueIds = await outputManager.allocateBatch(taskItems.map(t => t.id));
 		const fallbackAgentSource =
 			this.#discoveredAgents.find(agent => agent.name === params.agent)?.source ?? "bundled";
-		const renderedTasks = taskItems.map(taskItem => renderTemplate(params.context, taskItem));
+		const asyncWave = params.waveId
+			? { id: params.waveId, goal: params.waveGoal, totalTasks: taskItems.length, completedTasks: 0 }
+			: undefined;
+		const asyncContext =
+			overlapMessage && overlapPolicy === "warn"
+				? [params.context, `<system-notification>${overlapMessage}</system-notification>`]
+						.filter(Boolean)
+						.join("\n\n")
+				: params.context;
+		const renderedTasks = taskItems.map(taskItem => renderTemplate(asyncContext, taskItem, asyncWave));
 		const progressByTaskId = new Map<string, AgentProgress>();
 		for (let index = 0; index < renderedTasks.length; index++) {
 			const renderedTask = renderedTasks[index];
@@ -257,12 +277,20 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 				.sort((a, b) => a.index - b.index)
 				.map(progress => structuredClone(progress));
 		};
+		const getWaveSnapshot = () =>
+			asyncWave
+				? {
+						...asyncWave,
+						completedTasks: getProgressSnapshot().filter(progress => progress.status === "completed").length,
+					}
+				: undefined;
 
 		const buildAsyncDetails = (state: "running" | "completed" | "failed", jobId: string): TaskToolDetails => ({
 			projectAgentsDir: null,
 			results: [],
 			totalDurationMs: 0,
 			progress: getProgressSnapshot(),
+			wave: getWaveSnapshot(),
 			async: { state, jobId, type: "task" },
 		});
 
@@ -445,30 +473,12 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 	): Promise<AgentToolResult<TaskToolDetails>> {
 		const startTime = Date.now();
 		const { agents, projectAgentsDir } = await discoverAgents(this.session.cwd);
-		const { agent: agentName, context, schema: outputSchema } = params;
-		const isolationMode = this.session.settings.get("task.isolation.mode");
-		const isolationRequested = "isolated" in params ? params.isolated === true : false;
-		const isIsolated = isolationMode !== "none" && isolationRequested;
+		const { agent: agentName, context: baseContext, schema: outputSchema } = params;
+		const configuredIsolationMode = this.session.settings.get("task.isolation.mode") as TaskIsolationMode;
 		const mergeMode = this.session.settings.get("task.isolation.merge");
 		const commitStyle = this.session.settings.get("task.isolation.commits");
 		const maxConcurrency = this.session.settings.get("task.maxConcurrency");
 		const taskDepth = this.session.taskDepth ?? 0;
-
-		if (isolationMode === "none" && "isolated" in params) {
-			return {
-				content: [
-					{
-						type: "text",
-						text: "Task isolation is disabled. Remove the isolated argument or set task.isolation.mode to 'worktree', 'fuse-overlay', or 'fuse-projfs'.",
-					},
-				],
-				details: {
-					projectAgentsDir,
-					results: [],
-					totalDurationMs: 0,
-				},
-			};
-		}
 
 		// Validate agent exists
 		const agent = getAgent(agents, agentName);
@@ -515,9 +525,17 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 					...agent,
 					systemPrompt: `${planModeSubagentPrompt}\n\n${agent.systemPrompt}`,
 					tools: planModeTools,
+					allowedTools: planModeTools,
 					spawns: undefined,
+					canSpawnAgents: false,
 				}
 			: agent;
+		const { isolationRequested, effectiveIsolationMode: requestedIsolationMode } = resolveTaskIsolationRequest(
+			configuredIsolationMode,
+			"isolated" in params ? params.isolated === true : undefined,
+			effectiveAgent.useWorktree,
+		);
+		const isIsolated = requestedIsolationMode !== "none" && isolationRequested;
 
 		// Apply per-agent model override from settings (highest priority)
 		const agentModelOverrides = this.session.settings.get("task.agentModelOverrides");
@@ -552,6 +570,19 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 		}
 
 		const tasks = params.tasks;
+		const overlapPolicy = this.session.settings.get("task.overlapPolicy") as TaskOverlapPolicy;
+		const overlaps = detectTaskOwnershipOverlaps(tasks);
+		const overlapMessage = overlaps.length > 0 ? formatTaskOwnershipOverlapMessage(overlaps) : undefined;
+		if (overlapMessage && overlapPolicy === "deny") {
+			return {
+				content: [{ type: "text", text: `Task execution blocked. ${overlapMessage}` }],
+				details: { projectAgentsDir, results: [], totalDurationMs: 0 },
+			};
+		}
+		const context =
+			overlapMessage && overlapPolicy === "warn"
+				? [baseContext, `<system-notification>${overlapMessage}</system-notification>`].filter(Boolean).join("\n\n")
+				: baseContext;
 		const missingTaskIndexes: number[] = [];
 		const idIndexes = new Map<string, number[]>();
 
@@ -623,10 +654,14 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 			}
 		}
 
-		let effectiveIsolationMode = isolationMode;
+		let effectiveIsolationMode = requestedIsolationMode;
 		let isolationBackendWarning = "";
 		try {
-			const resolvedIsolation = await resolveIsolationBackendForTaskExecution(isolationMode, isIsolated, repoRoot);
+			const resolvedIsolation = await resolveIsolationBackendForTaskExecution(
+				requestedIsolationMode,
+				isIsolated,
+				repoRoot,
+			);
 			effectiveIsolationMode = resolvedIsolation.effectiveIsolationMode;
 			isolationBackendWarning = resolvedIsolation.warning;
 		} catch (err) {
@@ -665,6 +700,17 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 					results: [],
 					totalDurationMs: Date.now() - startTime,
 					progress,
+					wave: params.waveId
+						? {
+								id: params.waveId,
+
+								goal: params.waveGoal,
+
+								totalTasks: params.tasks.length,
+
+								completedTasks: progress.filter(item => item.status === "completed").length,
+							}
+						: undefined,
 				},
 			});
 		};
@@ -728,9 +774,15 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 				uniqueIds = await outputManager.allocateBatch(tasks.map(t => t.id));
 			}
 			const tasksWithUniqueIds = tasks.map((t, i) => ({ ...t, id: uniqueIds[i] }));
+			const syncWave = params.waveId
+				? { id: params.waveId, goal: params.waveGoal, totalTasks: tasksWithUniqueIds.length, completedTasks: 0 }
+				: undefined;
 
 			// Build full prompts with context prepended
-			const tasksWithContext = tasksWithUniqueIds.map(t => renderTemplate(context, t));
+			const tasksWithContext = tasksWithUniqueIds.map(taskItem => ({
+				...renderTemplate(context, taskItem, syncWave),
+				ownedPaths: taskItem.ownedPaths,
+			}));
 			const availableSkills = [...(this.session.skills ?? [])];
 			const contextFiles = this.session.contextFiles?.filter(
 				file => path.basename(file.path).toLowerCase() !== "agents.md",
@@ -757,13 +809,22 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 					description: t.description,
 				});
 			}
-			emitProgress();
+			const getSyncWaveSnapshot = () =>
+				syncWave
+					? {
+							...syncWave,
+							completedTasks: Array.from(progressMap.values()).filter(
+								progress => progress.status === "completed",
+							).length,
+						}
+					: undefined;
 
 			const runTask = async (task: (typeof tasksWithContext)[number], index: number) => {
+				const taskAgent = task.ownedPaths?.length ? { ...agent, editScopes: [...task.ownedPaths] } : agent;
 				if (!isIsolated) {
-					return runSubprocess({
+					const result = await runSubprocess({
 						cwd: this.session.cwd,
-						agent,
+						agent: taskAgent,
 						task: task.task,
 						assignment: task.assignment,
 						description: task.description,
@@ -795,6 +856,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 						skills: availableSkills,
 						promptTemplates,
 					});
+					return { ...result, ownedPaths: task.ownedPaths };
 				}
 
 				const taskStart = Date.now();
@@ -817,7 +879,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 					const result = await runSubprocess({
 						cwd: this.session.cwd,
 						worktree: isolationDir,
-						agent,
+						agent: taskAgent,
 						task: task.task,
 						assignment: task.assignment,
 						description: task.description,
@@ -873,6 +935,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 								...result,
 								branchName: commitResult?.branchName,
 								nestedPatches: commitResult?.nestedPatches,
+								ownedPaths: task.ownedPaths,
 							};
 						} catch (mergeErr) {
 							// Agent succeeded but branch commit failed — clean up stale branch
@@ -891,20 +954,21 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 								...result,
 								patchPath,
 								nestedPatches: delta.nestedPatches,
+								ownedPaths: task.ownedPaths,
 							};
 						} catch (patchErr) {
 							const msg = patchErr instanceof Error ? patchErr.message : String(patchErr);
 							return { ...result, error: `Patch capture failed: ${msg}` };
 						}
 					}
-					return result;
+					return { ...result, ownedPaths: task.ownedPaths };
 				} catch (err) {
 					const message = err instanceof Error ? err.message : String(err);
 					return {
 						index,
 						id: task.id,
-						agent: agent.name,
-						agentSource: agent.source,
+						agent: taskAgent.name,
+						agentSource: taskAgent.source,
 						task: task.task,
 						assignment: task.assignment,
 						description: task.description,
@@ -916,6 +980,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 						tokens: 0,
 						modelOverride,
 						error: message,
+						ownedPaths: task.ownedPaths,
 					};
 				} finally {
 					if (isolationDir) {
@@ -1167,6 +1232,8 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 				outputIds,
 				agentName,
 				mergeSummary: `${backendSummaryPrefix}${mergeSummary}`,
+				waveId: syncWave?.id,
+				waveGoal: syncWave?.goal,
 			});
 
 			// Cleanup temp directory if used
@@ -1184,6 +1251,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 					totalDurationMs: totalDuration,
 					usage: hasAggregatedUsage ? aggregatedUsage : undefined,
 					outputPaths,
+					wave: getSyncWaveSnapshot(),
 				},
 			};
 		} catch (err) {

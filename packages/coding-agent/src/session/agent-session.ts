@@ -143,6 +143,11 @@ import {
 } from "./compaction";
 import { DEFAULT_PRUNE_CONFIG, pruneToolOutputs } from "./compaction/pruning";
 import {
+	appendRetainedStateToSummary,
+	buildCompactionRetainedState,
+	COMPACTION_RETAINED_STATE_KEY,
+} from "./compaction/retained-state";
+import {
 	type BashExecutionMessage,
 	type BranchSummaryMessage,
 	bashExecutionToText,
@@ -159,6 +164,7 @@ import type {
 	CompactionEntry,
 	NewSessionOptions,
 	SessionContext,
+	SessionEntry,
 	SessionManager,
 } from "./session-manager";
 import { getLatestCompactionEntry } from "./session-manager";
@@ -1786,10 +1792,10 @@ export class AgentSession {
 	get resolutionTrace(): ResolutionTrace | undefined {
 		return this.#resolutionTrace
 			? {
-				...this.#resolutionTrace,
-				request: this.#resolutionTrace.request ? { ...this.#resolutionTrace.request } : undefined,
-				notes: [...this.#resolutionTrace.notes],
-			}
+					...this.#resolutionTrace,
+					request: this.#resolutionTrace.request ? { ...this.#resolutionTrace.request } : undefined,
+					notes: [...this.#resolutionTrace.notes],
+				}
 			: undefined;
 	}
 
@@ -3284,7 +3290,7 @@ export class AgentSession {
 
 		// Re-apply the current thinking level for the newly selected model
 		this.setThinkingLevel(this.thinkingLevel);
-		this.#recordRuntimeModelUpdate(`runtime model changed for role \"${role}\"`, role, true);
+		this.#recordRuntimeModelUpdate(`runtime model changed for role "${role}"`, role, true);
 	}
 
 	/**
@@ -3593,6 +3599,21 @@ export class AgentSession {
 		return result;
 	}
 
+	#mergeCompactionRetainedState(
+		summary: string,
+		preserveData: Record<string, unknown> | undefined,
+		pathEntries: SessionEntry[],
+	): { summary: string; preserveData: Record<string, unknown> | undefined } {
+		const retainedState = buildCompactionRetainedState(pathEntries, this.getTodoPhases(), this.getPlanModeState());
+		if (!retainedState) {
+			return { summary, preserveData };
+		}
+		return {
+			summary: appendRetainedStateToSummary(summary, retainedState),
+			preserveData: { ...(preserveData ?? {}), [COMPACTION_RETAINED_STATE_KEY]: retainedState },
+		};
+	}
+
 	/**
 	 * Manually compact the session context.
 	 * Aborts current agent operation first.
@@ -3697,6 +3718,7 @@ export class AgentSession {
 				details = result.details;
 				preserveData = { ...(preserveData ?? {}), ...(result.preserveData ?? {}) };
 			}
+			({ summary, preserveData } = this.#mergeCompactionRetainedState(summary, preserveData, pathEntries));
 
 			if (this.#compactionAbortController.signal.aborted) {
 				throw new Error("Compaction cancelled");
@@ -4842,6 +4864,7 @@ export class AgentSession {
 				details = compactResult.details;
 				preserveData = { ...(preserveData ?? {}), ...(compactResult.preserveData ?? {}) };
 			}
+			({ summary, preserveData } = this.#mergeCompactionRetainedState(summary, preserveData, pathEntries));
 
 			if (autoCompactionSignal.aborted) {
 				await this.#emitSessionEvent({
@@ -5140,7 +5163,7 @@ export class AgentSession {
 		this.sessionManager.appendModelChange(`${candidate.provider}/${candidate.id}`, "temporary");
 		this.settings.getStorage()?.recordModelUsage(`${candidate.provider}/${candidate.id}`);
 		this.setThinkingLevel(nextThinkingLevel);
-		this.#recordRuntimeModelUpdate(`retry fallback applied for role \"${role}\"`, role, false);
+		this.#recordRuntimeModelUpdate(`retry fallback applied for role "${role}"`, role, false);
 		if (!this.#activeRetryFallback) {
 			this.#activeRetryFallback = {
 				role,

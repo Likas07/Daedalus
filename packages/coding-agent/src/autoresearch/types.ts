@@ -36,6 +36,14 @@ export interface AutoresearchContract {
 	constraints: string[];
 }
 
+export interface ExperimentAttribution {
+	workerProfiles?: string[];
+	overlapPolicy?: "scoped" | "unscoped";
+	compactionRetainedState?: boolean;
+	waveId?: string;
+	waveGoal?: string;
+}
+
 export interface ExperimentResult {
 	runNumber: number | null;
 	commit: string;
@@ -47,6 +55,7 @@ export interface ExperimentResult {
 	segment: number;
 	confidence: number | null;
 	asi?: ASIData;
+	attribution?: ExperimentAttribution;
 }
 
 export interface ExperimentState {
@@ -98,6 +107,7 @@ export interface RunDetails {
 	metricUnit: string;
 	truncation?: TruncationResult;
 	fullOutputPath?: string;
+	attribution?: ExperimentAttribution;
 }
 
 export interface LogDetails {
@@ -124,6 +134,7 @@ export interface PendingRunSummary {
 	passed: boolean;
 	runDirectory: string;
 	runNumber: number;
+	attribution?: ExperimentAttribution;
 }
 
 export interface RunningExperiment {
@@ -178,6 +189,7 @@ export interface AutoresearchJsonRunEntry {
 	timestamp?: number;
 	confidence?: number | null;
 	asi?: ASIData;
+	attribution?: ExperimentAttribution;
 }
 
 export interface ReconstructedExperimentData {

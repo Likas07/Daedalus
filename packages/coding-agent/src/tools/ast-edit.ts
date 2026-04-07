@@ -31,6 +31,7 @@ import {
 	PARSE_ERRORS_LIMIT,
 	PREVIEW_LIMITS,
 } from "./render-utils";
+import { enforceDelegatedToolScope } from "./task-scope-guard";
 import { ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
 
@@ -148,6 +149,7 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 			} catch {
 				throw new ToolError(`Path not found: ${scopePath}`);
 			}
+			enforceDelegatedToolScope(this.session, "ast_edit", resolvedSearchPath, { resolved: true });
 
 			const result = await astEdit({
 				rewrites: normalizedRewrites,

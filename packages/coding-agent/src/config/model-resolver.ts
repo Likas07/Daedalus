@@ -101,10 +101,16 @@ export function inferPromptFamily(model: Model<Api> | undefined): string {
 	const id = model.id.toLowerCase();
 	if (provider.includes("anthropic") || id.includes("claude")) return "anthropic";
 	if (provider.includes("gemini") || provider.includes("google") || id.includes("gemini")) return "gemini";
-	if (provider.includes("openai") || id.includes("gpt") || id.includes("o1") || id.includes("o3") || id.includes("o4")) {
+	if (
+		provider.includes("openai") ||
+		id.includes("gpt") ||
+		id.includes("o1") ||
+		id.includes("o3") ||
+		id.includes("o4")
+	) {
 		return "openai";
 	}
-		if (provider.includes("xai") || id.includes("grok")) return "xai";
+	if (provider.includes("xai") || id.includes("grok")) return "xai";
 	return provider || "generic";
 }
 
@@ -125,11 +131,16 @@ function isDelegatedRoutingRequest(requestConfig: RequestEffectiveConfigSnapshot
 	return !["session", "cli"].includes(requestConfig.request.source);
 }
 
-function defaultRoleForComplexity(complexity: RoutingComplexity, requestConfig: RequestEffectiveConfigSnapshot): string {
+function defaultRoleForComplexity(
+	complexity: RoutingComplexity,
+	requestConfig: RequestEffectiveConfigSnapshot,
+): string {
 	if (!isDelegatedRoutingRequest(requestConfig)) {
 		return "default";
 	}
-	const configuredRole = normalizeConfiguredString(requestConfig.settings.routing && (requestConfig.settings.routing as any)?.defaultRoleByComplexity?.[complexity]);
+	const configuredRole = normalizeConfiguredString(
+		requestConfig.settings.routing && (requestConfig.settings.routing as any)?.defaultRoleByComplexity?.[complexity],
+	);
 	if (configuredRole) return configuredRole;
 	if (requestConfig.derived.taskDepth > 0 || requestConfig.derived.requireSubmitResultTool) return "task";
 	if (complexity === "high") return "slow";
@@ -212,13 +223,22 @@ export async function resolveCanonicalModelSelection(
 		}
 	}
 
-	if (!model && scopedModels.length > 0 && !requestConfig.request.continueRequested && !requestConfig.request.resumeRequested) {
+	if (
+		!model &&
+		scopedModels.length > 0 &&
+		!requestConfig.request.continueRequested &&
+		!requestConfig.request.resumeRequested
+	) {
 		const rememberedDefault = settings.getModelRole("default");
 		if (rememberedDefault) {
-			const rememberedSpec = resolveModelRoleValue(rememberedDefault, scopedModels.map(item => item.model), {
-				settings,
-				matchPreferences,
-			});
+			const rememberedSpec = resolveModelRoleValue(
+				rememberedDefault,
+				scopedModels.map(item => item.model),
+				{
+					settings,
+					matchPreferences,
+				},
+			);
 			if (rememberedSpec.model) {
 				const rememberedScoped = scopedModels.find(scoped => modelsAreEqual(scoped.model, rememberedSpec.model!));
 				if (rememberedScoped) {
@@ -257,10 +277,14 @@ export async function resolveCanonicalModelSelection(
 	}
 
 	if (!model && profile?.model) {
-		const { model: profileModel, thinkingLevel: profileThinkingLevel } = resolveModelRoleValue(profile.model, allModels, {
-			settings,
-			matchPreferences,
-		});
+		const { model: profileModel, thinkingLevel: profileThinkingLevel } = resolveModelRoleValue(
+			profile.model,
+			allModels,
+			{
+				settings,
+				matchPreferences,
+			},
+		);
 		if (profileModel && (await canUseModel(profileModel))) {
 			model = profileModel;
 			thinkingLevel ??= profile.thinkingLevel ?? profileThinkingLevel;
@@ -301,7 +325,8 @@ export async function resolveCanonicalModelSelection(
 	}
 
 	if (thinkingLevel === undefined) {
-		thinkingLevel = profile?.thinkingLevel ?? parseThinkingLevel(restoredThinkingLevel) ?? settings.get("defaultThinkingLevel");
+		thinkingLevel =
+			profile?.thinkingLevel ?? parseThinkingLevel(restoredThinkingLevel) ?? settings.get("defaultThinkingLevel");
 	}
 	if (model) {
 		thinkingLevel = resolveThinkingLevelForModel(model, thinkingLevel);

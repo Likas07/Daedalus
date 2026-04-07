@@ -30,9 +30,9 @@ import {
 	classifyRoutingComplexity,
 	formatModelString,
 	inferPromptFamily,
-	resolveCanonicalModelSelection,
 	type ResolutionTrace,
 	type RoutingProfilePolicy,
+	resolveCanonicalModelSelection,
 	type ScopedModel,
 } from "./config/model-resolver";
 import {
@@ -40,7 +40,12 @@ import {
 	type PromptTemplate,
 	renderPromptTemplate,
 } from "./config/prompt-templates";
-import { Settings, type RequestEffectiveConfigSnapshot, type SkillsSettings, buildRequestEffectiveConfigSnapshot } from "./config/settings";
+import {
+	buildRequestEffectiveConfigSnapshot,
+	type RequestEffectiveConfigSnapshot,
+	Settings,
+	type SkillsSettings,
+} from "./config/settings";
 import { CursorExecHandlers } from "./cursor";
 import "./discovery";
 import { resolveConfigValue } from "./config/resolve-config-value";
@@ -110,7 +115,7 @@ import {
 	loadProjectContextFiles as loadContextFilesInternal,
 } from "./system-prompt";
 import { AgentOutputManager } from "./task/output-manager";
-import { parseThinkingLevel, resolveThinkingLevelForModel, toReasoningEffort } from "./thinking";
+import { resolveThinkingLevelForModel, toReasoningEffort } from "./thinking";
 import {
 	BashTool,
 	BUILTIN_TOOLS,
@@ -1037,6 +1042,10 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				return {};
 			}
 		},
+		allowedEditScopes: Array.isArray(options.profilePolicy?.delegation?.editScopes)
+			? (options.profilePolicy?.delegation?.editScopes as string[])
+			: undefined,
+		allowedToolScopes: options.profilePolicy?.delegation?.toolScopes as Record<string, string[]> | undefined,
 		settings,
 		authStorage,
 		modelRegistry,
@@ -1260,7 +1269,10 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					selectedModel: formatModelString(model),
 					selectedThinkingLevel: thinkingLevel,
 					promptFamily: resolutionTrace.promptFamily || "generic",
-					notes: [...resolutionTrace.notes, "fell back to first available authenticated model after extension load"],
+					notes: [
+						...resolutionTrace.notes,
+						"fell back to first available authenticated model after extension load",
+					],
 					fallbackMessage: modelFallbackMessage,
 				};
 			}
@@ -1270,24 +1282,23 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		}
 	}
 
-	const effectiveResolutionTrace =
-		resolutionTrace ?? {
-			version: 1 as const,
-			source: "fallback_catalog" as const,
-			complexity: classifyRoutingComplexity(requestConfigSnapshot),
-			role: options.profilePolicy?.role ?? "default",
-			selectedModel: model ? formatModelString(model) : undefined,
-			selectedThinkingLevel: thinkingLevel,
-			promptFamily: inferPromptFamily(model),
-			profileId: options.profilePolicy?.id ?? requestConfigSnapshot.request.profileId,
-			request: {
-				explicitModel: requestConfigSnapshot.request.explicitModel,
-				explicitModelPattern: requestConfigSnapshot.request.explicitModelPattern,
-				explicitThinkingLevel: requestConfigSnapshot.request.explicitThinkingLevel,
-			},
-			notes: ["constructed effective routing trace after model resolution"],
-			fallbackMessage: modelFallbackMessage,
-		};
+	const effectiveResolutionTrace = resolutionTrace ?? {
+		version: 1 as const,
+		source: "fallback_catalog" as const,
+		complexity: classifyRoutingComplexity(requestConfigSnapshot),
+		role: options.profilePolicy?.role ?? "default",
+		selectedModel: model ? formatModelString(model) : undefined,
+		selectedThinkingLevel: thinkingLevel,
+		promptFamily: inferPromptFamily(model),
+		profileId: options.profilePolicy?.id ?? requestConfigSnapshot.request.profileId,
+		request: {
+			explicitModel: requestConfigSnapshot.request.explicitModel,
+			explicitModelPattern: requestConfigSnapshot.request.explicitModelPattern,
+			explicitThinkingLevel: requestConfigSnapshot.request.explicitThinkingLevel,
+		},
+		notes: ["constructed effective routing trace after model resolution"],
+		fallbackMessage: modelFallbackMessage,
+	};
 	resolutionTrace = effectiveResolutionTrace;
 
 	// Discover custom commands (TypeScript slash commands)
@@ -1805,14 +1816,13 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		lspServers,
 		eventBus,
 		requestConfigSnapshot,
-		resolutionTrace:
-			resolutionTrace ?? {
-				version: 1,
-				source: "fallback_catalog",
-				complexity: "low",
-				role: "default",
-				promptFamily: "generic",
-				notes: ["routing trace was unavailable; using fallback metadata"],
-			},
+		resolutionTrace: resolutionTrace ?? {
+			version: 1,
+			source: "fallback_catalog",
+			complexity: "low",
+			role: "default",
+			promptFamily: "generic",
+			notes: ["routing trace was unavailable; using fallback metadata"],
+		},
 	};
 }

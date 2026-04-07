@@ -11,6 +11,8 @@ import { Hasher, type RenderCache, renderCodeCell, renderStatusLine } from "../t
 import { resolveToCwd } from "./path-utils";
 import { formatCount, formatErrorMessage, PREVIEW_LIMITS } from "./render-utils";
 
+import { enforceDelegatedToolScope } from "./task-scope-guard";
+
 const notebookSchema = Type.Object({
 	action: StringEnum(["edit", "insert", "delete"], {
 		description: "Action to perform on the notebook cell",
@@ -79,6 +81,7 @@ export class NotebookTool implements AgentTool<typeof notebookSchema, NotebookTo
 	): Promise<AgentToolResult<NotebookToolDetails>> {
 		const { action, notebook_path, cell_index, content, cell_type } = params;
 		const absolutePath = resolveToCwd(notebook_path, this.session.cwd);
+		enforceDelegatedToolScope(this.session, "notebook", absolutePath, { resolved: true });
 
 		return untilAborted(signal, async () => {
 			// Read and parse notebook

@@ -29,7 +29,9 @@ import { jtdToJsonSchema } from "../tools/jtd-to-json-schema";
 import { ToolAbortError } from "../tools/tool-errors";
 import type { EventBus } from "../utils/event-bus";
 import { buildNamedToolChoice } from "../utils/tool-choice";
+import { buildAgentRoutingProfile, filterAgentToolNames, resolveAgentReadOnly } from "./profile-policy";
 import { subprocessToolRegistry } from "./subprocess-tool-registry";
+import { getAgentToolNames } from "./tool-permissions";
 import {
 	type AgentDefinition,
 	type AgentProgress,
@@ -513,13 +515,14 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	const parentDepth = options.taskDepth ?? 0;
 	const childDepth = parentDepth + 1;
 	const atMaxDepth = maxRecursionDepth >= 0 && childDepth >= maxRecursionDepth;
+	const agentReadOnly = resolveAgentReadOnly(agent, settings);
+	const profilePolicy = buildAgentRoutingProfile(agent, settings);
 
 	// Add tools if specified
-	let toolNames: string[] | undefined;
-	if (agent.tools && agent.tools.length > 0) {
-		toolNames = agent.tools;
-		// Auto-include task tool if spawns defined but task not in tools
-		if (agent.spawns !== undefined && !toolNames.includes("task") && !atMaxDepth) {
+	let toolNames = getAgentToolNames(agent.allowedTools ?? agent.tools);
+	if (toolNames) {
+		const canDelegate = agent.canSpawnAgents ?? agent.spawns !== undefined;
+		if (canDelegate && !toolNames.includes("task") && !atMaxDepth) {
 			toolNames = [...toolNames, "task"];
 		}
 	}
@@ -539,6 +542,12 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 		}
 		toolNames = Array.from(new Set(expanded));
 	}
+	if (toolNames) {
+		toolNames = filterAgentToolNames(agent, toolNames, settings);
+		if (toolNames.length === 0) {
+			toolNames = ["submit_result"];
+		}
+	}
 
 	const modelPatterns = normalizeModelPatterns(modelOverride ?? agent.model);
 	const sessionFile = subtaskSessionFile ?? null;
@@ -552,7 +561,6 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 
 	const lspEnabled = enableLsp ?? true;
 	const skipPythonPreflight = Array.isArray(toolNames) && !toolNames.includes("python");
-
 	const outputChunks: string[] = [];
 	const finalOutputChunks: string[] = [];
 	const RECENT_OUTPUT_TAIL_BYTES = 8 * 1024;
@@ -958,6 +966,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				settings: subagentSettings,
 				model,
 				thinkingLevel: effectiveThinkingLevel,
+				profileId: agent.name,
 				requestSource: "subagent",
 				toolNames,
 				outputSchema,
@@ -965,10 +974,21 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				contextFiles: options.contextFiles,
 				skills: options.skills,
 				promptTemplates: options.promptTemplates,
+				profilePolicy,
 				systemPrompt: defaultPrompt =>
 					renderPromptTemplate(subagentSystemPromptTemplate, {
 						base: defaultPrompt,
 						agent: agent.systemPrompt,
+						agentProfile: {
+							readOnly: agentReadOnly,
+							orchestrationRole: agent.orchestrationRole,
+							budgets: profilePolicy?.budgets ?? {},
+							delegation: {
+								...(profilePolicy?.delegation ?? {}),
+								editScopes:
+									(profilePolicy?.delegation?.editScopes as string[] | undefined) ?? agent.editScopes ?? [],
+							},
+						},
 						worktree: worktree ?? "",
 						outputSchema: normalizedOutputSchema,
 						contextFile: options.contextFile,
@@ -1001,7 +1021,11 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 
 			const subagentToolNames = session.getActiveToolNames();
 			const parentOwnedToolNames = new Set(["todo_write"]);
-			const filteredSubagentTools = subagentToolNames.filter(name => !parentOwnedToolNames.has(name));
+			const filteredSubagentTools = filterAgentToolNames(
+				agent,
+				subagentToolNames.filter(name => !parentOwnedToolNames.has(name)),
+				settings,
+			);
 			if (filteredSubagentTools.length !== subagentToolNames.length) {
 				await session.setActiveToolsByName(filteredSubagentTools);
 			}

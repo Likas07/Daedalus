@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { SessionEntry } from "../session/session-manager";
 import { normalizeAutoresearchList, normalizeContractPathSpec } from "./contract";
-import { inferMetricUnitFromName, isBetter } from "./helpers";
+import { cloneExperimentAttribution, inferMetricUnitFromName, isBetter } from "./helpers";
 import type {
 	AutoresearchControlEntryData,
 	AutoresearchJsonConfigEntry,
@@ -222,6 +222,7 @@ export function reconstructStateFromJsonl(workDir: string): ReconstructedExperim
 			confidence:
 				typeof parsed.confidence === "number" && Number.isFinite(parsed.confidence) ? parsed.confidence : null,
 			asi: cloneAsi(parsed.asi),
+			attribution: cloneExperimentAttribution(parsed.attribution),
 		};
 		state.results.push(result);
 		if (segment !== state.currentSegment) continue;

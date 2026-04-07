@@ -8,6 +8,7 @@ import type { ToolDefinition } from "../../extensibility/extensions";
 import type { Theme } from "../../modes/theme/theme";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, truncateTail } from "../../session/streaming-output";
 import { replaceTabs, shortenPath, truncateToWidth } from "../../tools/render-utils";
+import { buildExperimentAttribution } from "../attribution";
 import { getAutoresearchFingerprintMismatchError } from "../contract";
 import {
 	EXPERIMENT_MAX_BYTES,
@@ -265,7 +266,7 @@ export function createRunExperimentTool(
 			const parsedPrimary = parsedMetricsMap.get(state.metricName) ?? null;
 			const parsedAsi = parseAsiLines(execution.output);
 			runtime.lastRunAsi = parsedAsi;
-
+			const attribution = buildExperimentAttribution(ctx.sessionManager.getBranch());
 			const resultDetails: RunDetails = {
 				runNumber,
 				runDirectory,
@@ -289,6 +290,7 @@ export function createRunExperimentTool(
 				metricUnit: state.metricUnit,
 				truncation: llmTruncation.truncated ? llmTruncation : undefined,
 				fullOutputPath: execution.logPath,
+				attribution,
 			};
 			runtime.lastRunSummary = {
 				checksDurationSeconds: checksDuration,
@@ -302,6 +304,7 @@ export function createRunExperimentTool(
 				passed: resultDetails.passed,
 				runDirectory,
 				runNumber,
+				attribution,
 			};
 			runtime.autoResumeArmed = true;
 			runtime.lastAutoResumePendingRunNumber = null;
@@ -331,6 +334,7 @@ export function createRunExperimentTool(
 						parsedAsi,
 						truncation: resultDetails.truncation,
 						fullOutputPath: resultDetails.fullOutputPath,
+						attribution,
 					},
 					null,
 					2,

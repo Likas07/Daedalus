@@ -1,14 +1,12 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { FileType, glob } from "@oh-my-pi/pi-natives";
 import { CONFIG_DIR_NAME, getConfigDirName, getProjectDir, tryParseJson } from "@oh-my-pi/pi-utils";
 import { readDirEntries, readFile } from "../capability/fs";
 import { parseRuleConditionAndScope, type Rule, type RuleFrontmatter } from "../capability/rule";
 import type { Skill, SkillFrontmatter } from "../capability/skill";
 import type { LoadContext, LoadResult, SourceMeta } from "../capability/types";
-import { parseThinkingLevel } from "../thinking";
 import { parseFrontmatter } from "../utils/frontmatter";
 import { buildPluginDirRoot } from "./plugin-dir-roots";
 
@@ -105,42 +103,6 @@ export function createSourceMeta(provider: string, filePath: string, level: "use
 	};
 }
 
-export function parseBoolean(value: unknown): boolean | undefined {
-	if (typeof value === "boolean") return value;
-	if (typeof value === "string") {
-		const normalized = value.trim().toLowerCase();
-		if (normalized === "true") return true;
-		if (normalized === "false") return false;
-	}
-	return undefined;
-}
-
-/**
- * Parse a comma-separated string into an array of trimmed, non-empty strings.
- */
-export function parseCSV(value: string): string[] {
-	return value
-		.split(",")
-		.map(s => s.trim())
-		.filter(Boolean);
-}
-
-/**
- * Parse a value that may be an array of strings or a comma-separated string.
- * Returns undefined if the result would be empty.
- */
-export function parseArrayOrCSV(value: unknown): string[] | undefined {
-	if (Array.isArray(value)) {
-		const filtered = value.filter((item): item is string => typeof item === "string");
-		return filtered.length > 0 ? filtered : undefined;
-	}
-	if (typeof value === "string") {
-		const parsed = parseCSV(value);
-		return parsed.length > 0 ? parsed : undefined;
-	}
-	return undefined;
-}
-
 /**
  * Build a canonical rule item from a markdown/markdown-frontmatter document.
  */
@@ -182,81 +144,6 @@ export function buildRuleFromMarkdown(
 		interruptMode,
 		_source: source,
 	};
-}
-
-/**
- * Parse model field into a prioritized list.
- */
-export function parseModelList(value: unknown): string[] | undefined {
-	const parsed = parseArrayOrCSV(value);
-	if (!parsed) return undefined;
-	const normalized = parsed.map(entry => entry.trim()).filter(Boolean);
-	return normalized.length > 0 ? normalized : undefined;
-}
-
-/** Parsed agent fields from frontmatter (excludes source/filePath/systemPrompt) */
-export interface ParsedAgentFields {
-	name: string;
-	description: string;
-	tools?: string[];
-	spawns?: string[] | "*";
-	model?: string[];
-	output?: unknown;
-	thinkingLevel?: ThinkingLevel;
-	blocking?: boolean;
-}
-
-/**
- * Parse agent fields from frontmatter.
- * Returns null if required fields (name, description) are missing.
- */
-export function parseAgentFields(frontmatter: Record<string, unknown>): ParsedAgentFields | null {
-	const name = typeof frontmatter.name === "string" ? frontmatter.name : undefined;
-	const description = typeof frontmatter.description === "string" ? frontmatter.description : undefined;
-
-	if (!name || !description) {
-		return null;
-	}
-
-	let tools = parseArrayOrCSV(frontmatter.tools)?.map(tool => tool.toLowerCase());
-
-	// Subagents with explicit tool lists always need submit_result
-	if (tools && !tools.includes("submit_result")) {
-		tools = [...tools, "submit_result"];
-	}
-
-	// Parse spawns field (array, "*", or CSV)
-	let spawns: string[] | "*" | undefined;
-	if (frontmatter.spawns === "*") {
-		spawns = "*";
-	} else if (typeof frontmatter.spawns === "string") {
-		const trimmed = frontmatter.spawns.trim();
-		if (trimmed === "*") {
-			spawns = "*";
-		} else {
-			spawns = parseArrayOrCSV(trimmed);
-		}
-	} else {
-		spawns = parseArrayOrCSV(frontmatter.spawns);
-	}
-
-	// Backward compat: infer spawns: "*" when tools includes "task"
-	if (spawns === undefined && tools?.includes("task")) {
-		spawns = "*";
-	}
-
-	const output = frontmatter.output !== undefined ? frontmatter.output : undefined;
-	const rawThinkingLevel =
-		typeof frontmatter.thinkingLevel === "string"
-			? frontmatter.thinkingLevel
-			: typeof frontmatter.thinking === "string"
-				? frontmatter.thinking
-				: undefined;
-
-	const thinkingLevel = parseThinkingLevel(rawThinkingLevel);
-	const model = parseModelList(frontmatter.model);
-	const blocking = parseBoolean(frontmatter.blocking);
-	return { name, description, tools, spawns, model, output, thinkingLevel, blocking };
 }
 
 async function globIf(

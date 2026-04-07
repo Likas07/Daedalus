@@ -5,27 +5,38 @@
  */
 import { Effort } from "@oh-my-pi/pi-ai";
 import { renderPromptTemplate } from "../config/prompt-templates";
-import { parseAgentFields } from "../discovery/helpers";
+import { parseAgentFields } from "../discovery/agent-fields";
 import designerMd from "../prompts/agents/designer.md" with { type: "text" };
 import exploreMd from "../prompts/agents/explore.md" with { type: "text" };
 // Embed agent markdown files at build time
 import agentFrontmatterTemplate from "../prompts/agents/frontmatter.md" with { type: "text" };
 import librarianMd from "../prompts/agents/librarian.md" with { type: "text" };
 import oracleMd from "../prompts/agents/oracle.md" with { type: "text" };
+import orchestratorMd from "../prompts/agents/orchestrator.md" with { type: "text" };
 import planMd from "../prompts/agents/plan.md" with { type: "text" };
 import reviewerMd from "../prompts/agents/reviewer.md" with { type: "text" };
 import taskMd from "../prompts/agents/task.md" with { type: "text" };
 import { parseFrontmatter } from "../utils/frontmatter";
-import type { AgentDefinition, AgentSource } from "./types";
+import type { AgentCompactionOverrides, AgentDefinition, AgentSource } from "./types";
 
 interface AgentFrontmatter {
 	name: string;
 	description: string;
-	tools?: string[];
+	allowedTools?: string[];
+	deniedTools?: string[];
+	canSpawnAgents?: boolean;
+	turnBudget?: number;
+	useWorktree?: boolean;
+	compactionOverrides?: AgentCompactionOverrides;
 	spawns?: string;
 	model?: string | string[];
 	thinkingLevel?: string;
 	blocking?: boolean;
+	role?: string;
+	orchestrationRole?: "orchestrator" | "worker";
+	readOnly?: boolean;
+	editScopes?: string[];
+	output?: unknown;
 }
 
 interface EmbeddedAgentDef {
@@ -41,6 +52,7 @@ function buildAgentContent(def: EmbeddedAgentDef): string {
 }
 
 const EMBEDDED_AGENT_DEFS: EmbeddedAgentDef[] = [
+	{ fileName: "orchestrator.md", template: orchestratorMd },
 	{ fileName: "explore.md", template: exploreMd },
 	{ fileName: "plan.md", template: planMd },
 	{ fileName: "designer.md", template: designerMd },
@@ -52,9 +64,10 @@ const EMBEDDED_AGENT_DEFS: EmbeddedAgentDef[] = [
 		frontmatter: {
 			name: "task",
 			description: "General-purpose subagent with full capabilities for delegated multi-step tasks",
-			spawns: "*",
+			canSpawnAgents: true,
 			model: "pi/task",
 			thinkingLevel: Effort.Medium,
+			orchestrationRole: "worker",
 		},
 		template: taskMd,
 	},
@@ -65,6 +78,7 @@ const EMBEDDED_AGENT_DEFS: EmbeddedAgentDef[] = [
 			description: "Low-reasoning agent for strictly mechanical updates or data collection only",
 			model: "pi/smol",
 			thinkingLevel: Effort.Minimal,
+			orchestrationRole: "worker",
 		},
 		template: taskMd,
 	},
@@ -117,6 +131,8 @@ export function parseAgent(
 	}
 	return {
 		...fields,
+		tools: fields.allowedTools ? [...fields.allowedTools] : undefined,
+		spawns: fields.spawns ?? (fields.canSpawnAgents ? "*" : undefined),
 		systemPrompt: body,
 		source,
 		filePath,
