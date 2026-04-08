@@ -1,8 +1,0 @@
-{
-	"extends": "./tsconfig.base.json",
-	"compilerOptions": {
-		"noEmit": true
-	},
-	"include": ["packages/*/src/**/*", "packages/*/test/**/*"],
-	"exclude": ["packages/coding-agent/examples/**/*", "packages/stats/src/client/**/*", "packages/web-ui/**/*", "**/dist/**"]
-}
