@@ -1,6 +1,6 @@
 # Settings
 
-Pi uses JSON settings files with project settings overriding global settings.
+Daedalus uses JSON settings files with project settings overriding global settings.
 
 | Location | Scope |
 |----------|-------|
@@ -125,7 +125,7 @@ When a provider requests a retry delay longer than `maxDelayMs` (e.g., Google's 
 }
 ```
 
-`npmCommand` is used for all npm package-manager operations, including `npm root -g`, installs, uninstalls, and `npm install` inside git packages. Use argv-style entries exactly as the process should be launched.
+`npmCommand` is used for all npm package-manager operations, including `npm root -g`, installs, uninstalls, and `bun install` inside git packages. Use argv-style entries exactly as the process should be launched.
 
 ### Sessions
 

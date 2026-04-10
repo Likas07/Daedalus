@@ -1,14 +1,14 @@
 > daedalus can help you create daedalus packages. Ask it to bundle your extensions, skills, prompt templates, or themes.
 
-# Pi Packages
+# Daedalus Packages
 
-Pi packages bundle extensions, skills, prompt templates, and themes so you can share them through npm or git. A package can declare resources in `package.json` under the `daedalus` key, or use conventional directories.
+Daedalus packages bundle extensions, skills, prompt templates, and themes so you can share them through npm or git. A package can declare resources in `package.json` under the `daedalus` key, or use conventional directories.
 
 ## Table of Contents
 
 - [Install and Manage](#install-and-manage)
 - [Package Sources](#package-sources)
-- [Creating a Pi Package](#creating-a-pi-package)
+- [Creating a Daedalus Package](#creating-a-pi-package)
 - [Package Structure](#package-structure)
 - [Dependencies](#dependencies)
 - [Package Filtering](#package-filtering)
@@ -17,18 +17,18 @@ Pi packages bundle extensions, skills, prompt templates, and themes so you can s
 
 ## Install and Manage
 
-> **Security:** Pi packages run with full system access. Extensions execute arbitrary code, and skills can instruct the model to perform any action including running executables. Review source code before installing third-party packages.
+> **Security:** Daedalus packages run with full system access. Extensions execute arbitrary code, and skills can instruct the model to perform any action including running executables. Review source code before installing third-party packages.
 
 ```bash
-pi install npm:@foo/bar@1.0.0
-pi install git:github.com/user/repo@v1
-pi install https://github.com/user/repo  # raw URLs work too
-pi install /absolute/path/to/package
-pi install ./relative/path/to/package
+daedalus install npm:@foo/bar@1.0.0
+daedalus install git:github.com/user/repo@v1
+daedalus install https://github.com/user/repo  # raw URLs work too
+daedalus install /absolute/path/to/package
+daedalus install ./relative/path/to/package
 
-pi remove npm:@foo/bar
-pi list    # show installed packages from settings
-pi update  # update all non-pinned packages
+daedalus remove npm:@foo/bar
+daedalus list    # show installed packages from settings
+daedalus update  # update all non-pinned packages
 ```
 
 By default, `install` and `remove` write to global settings (`~/.daedalus/agent/settings.json`). Use `-l` to write to project settings (`.daedalus/settings.json`) instead. Project settings can be shared with your team, and daedalus installs any missing packages automatically on startup.
@@ -36,13 +36,13 @@ By default, `install` and `remove` write to global settings (`~/.daedalus/agent/
 To try a package without installing it, use `--extension` or `-e`. This installs to a temporary directory for the current run only:
 
 ```bash
-pi -e npm:@foo/bar
-pi -e git:github.com/user/repo
+daedalus -e npm:@foo/bar
+daedalus -e git:github.com/user/repo
 ```
 
 ## Package Sources
 
-Pi accepts three source types in settings and `daedalus install`.
+Daedalus accepts three source types in settings and `daedalus install`.
 
 ### npm
 
@@ -52,7 +52,7 @@ npm:pkg
 ```
 
 - Versioned specs are pinned and skipped by `daedalus update`.
-- Global installs use `npm install -g`.
+- Global installs use `bun install -g`.
 - Project installs go under `.daedalus/npm/`.
 - Set `npmCommand` in `settings.json` to pin npm package lookup and install operations to a specific wrapper command such as `mise` or `asdf`.
 
@@ -80,18 +80,18 @@ ssh://git@github.com/user/repo@v1
 - For non-interactive runs (for example CI), you can set `GIT_TERMINAL_PROMPT=0` to disable credential prompts and set `GIT_SSH_COMMAND` (for example `ssh -o BatchMode=yes -o ConnectTimeout=5`) to fail fast.
 - Refs pin the package and skip `daedalus update`.
 - Cloned to `~/.daedalus/agent/git/<host>/<path>` (global) or `.daedalus/git/<host>/<path>` (project).
-- Runs `npm install` after clone or pull if `package.json` exists.
+- Runs `bun install` after clone or pull if `package.json` exists.
 
 **SSH examples:**
 ```bash
 # git@host:path shorthand (requires git: prefix)
-pi install git:git@github.com:user/repo
+daedalus install git:git@github.com:user/repo
 
 # ssh:// protocol format
-pi install ssh://git@github.com/user/repo
+daedalus install ssh://git@github.com/user/repo
 
 # With version ref
-pi install git:git@github.com:user/repo@v1.0.0
+daedalus install git:git@github.com:user/repo@v1.0.0
 ```
 
 ### Local Paths
@@ -103,7 +103,7 @@ pi install git:git@github.com:user/repo@v1.0.0
 
 Local paths point to files or directories on disk and are added to settings without copying. Relative paths are resolved against the settings file they appear in. If the path is a file, it loads as a single extension. If it is a directory, daedalus loads resources using package rules.
 
-## Creating a Pi Package
+## Creating a Daedalus Package
 
 Add a `daedalus` manifest to `package.json` or use conventional directories. Include the `pi-package` keyword for discoverability.
 
@@ -156,11 +156,11 @@ If no `daedalus` manifest is present, daedalus auto-discovers resources from the
 
 ## Dependencies
 
-Third party runtime dependencies belong in `dependencies` in `package.json`. Dependencies that do not register extensions, skills, prompt templates, or themes also belong in `dependencies`. When daedalus installs a package from npm or git, it runs `npm install`, so those dependencies are installed automatically.
+Third party runtime dependencies belong in `dependencies` in `package.json`. Dependencies that do not register extensions, skills, prompt templates, or themes also belong in `dependencies`. When daedalus installs a package from npm or git, it runs `bun install`, so those dependencies are installed automatically.
 
-Pi bundles core packages for extensions and skills. If you import any of these, list them in `peerDependencies` with a `"*"` range and do not bundle them: `@daedalus-pi/ai`, `@daedalus-pi/agent-core`, `@daedalus-pi/coding-agent`, `@daedalus-pi/tui`, `@sinclair/typebox`.
+Daedalus bundles core packages for extensions and skills. If you import any of these, list them in `peerDependencies` with a `"*"` range and do not bundle them: `@daedalus-pi/ai`, `@daedalus-pi/agent-core`, `@daedalus-pi/coding-agent`, `@daedalus-pi/tui`, `@sinclair/typebox`.
 
-Other daedalus packages must be bundled in your tarball. Add them to `dependencies` and `bundledDependencies`, then reference their resources through `node_modules/` paths. Pi loads packages with separate module roots, so separate installs do not collide or share modules.
+Other daedalus packages must be bundled in your tarball. Add them to `dependencies` and `bundledDependencies`, then reference their resources through `node_modules/` paths. Daedalus loads packages with separate module roots, so separate installs do not collide or share modules.
 
 Example:
 

@@ -14,7 +14,7 @@ Where `<path>` is the working directory with `/` replaced by `-`.
 
 Sessions can be removed by deleting their `.jsonl` files under `~/.daedalus/agent/sessions/`.
 
-Pi also supports deleting sessions interactively from `/resume` (select a session and press `Ctrl+D`, then confirm). When available, daedalus uses the `trash` CLI to avoid permanent deletion.
+Daedalus also supports deleting sessions interactively from `/resume` (select a session and press `Ctrl+D`, then confirm). When available, daedalus uses the `trash` CLI to avoid permanent deletion.
 
 ## Session Version
 
@@ -28,11 +28,11 @@ Existing sessions are automatically migrated to the current version (v3) when lo
 
 ## Source Files
 
-Source on GitHub ([pi-mono](https://github.com/badlogic/pi-mono)):
-- [`packages/coding-agent/src/core/session-manager.ts`](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/src/core/session-manager.ts) - Session entry types and SessionManager
-- [`packages/coding-agent/src/core/messages.ts`](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/src/core/messages.ts) - Extended message types (BashExecutionMessage, CustomMessage, etc.)
-- [`packages/ai/src/types.ts`](https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/types.ts) - Base message types (UserMessage, AssistantMessage, ToolResultMessage)
-- [`packages/agent/src/types.ts`](https://github.com/badlogic/pi-mono/blob/main/packages/agent/src/types.ts) - AgentMessage union type
+Source on GitHub ([pi-mono](https://github.com/Likas07/Daedalus)):
+- [`packages/coding-agent/src/core/session-manager.ts`](https://github.com/Likas07/Daedalus/blob/main/packages/coding-agent/src/core/session-manager.ts) - Session entry types and SessionManager
+- [`packages/coding-agent/src/core/messages.ts`](https://github.com/Likas07/Daedalus/blob/main/packages/coding-agent/src/core/messages.ts) - Extended message types (BashExecutionMessage, CustomMessage, etc.)
+- [`packages/ai/src/types.ts`](https://github.com/Likas07/Daedalus/blob/main/packages/ai/src/types.ts) - Base message types (UserMessage, AssistantMessage, ToolResultMessage)
+- [`packages/agent/src/types.ts`](https://github.com/Likas07/Daedalus/blob/main/packages/agent/src/types.ts) - AgentMessage union type
 
 For TypeScript definitions in your project, inspect `node_modules/@daedalus-pi/coding-agent/dist/` and `node_modules/@daedalus-pi/ai/dist/`.
 

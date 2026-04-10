@@ -40,7 +40,7 @@ await session.prompt("What files are in the current directory?");
 ## Installation
 
 ```bash
-npm install @daedalus-pi/coding-agent
+bun install @daedalus-pi/coding-agent
 ```
 
 The SDK is included in the main package. No separate installation needed.
@@ -1056,7 +1056,7 @@ See [RPC documentation](rpc.md) for the JSON protocol.
 For subprocess-based integration without building with the SDK, use the CLI directly:
 
 ```bash
-pi --mode rpc --no-session
+daedalus --mode rpc --no-session
 ```
 
 See [RPC documentation](rpc.md) for the JSON protocol.

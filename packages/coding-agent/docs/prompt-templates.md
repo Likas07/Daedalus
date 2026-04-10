@@ -6,7 +6,7 @@ Prompt templates are Markdown snippets that expand into full prompts. Type `/nam
 
 ## Locations
 
-Pi loads prompt templates from:
+Daedalus loads prompt templates from:
 
 - Global: `~/.daedalus/agent/prompts/*.md`
 - Project: `.daedalus/prompts/*.md`

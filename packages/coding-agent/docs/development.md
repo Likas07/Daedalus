@@ -5,10 +5,10 @@ See [AGENTS.md](../../../AGENTS.md) for additional guidelines.
 ## Setup
 
 ```bash
-git clone https://github.com/badlogic/pi-mono
+git clone https://github.com/Likas07/Daedalus
 cd pi-mono
-npm install
-npm run build
+bun install
+bun run build
 ```
 
 Run from source:
@@ -17,7 +17,7 @@ Run from source:
 /path/to/pi-mono/pi-test.sh
 ```
 
-The script can be run from any directory. Pi keeps the caller's current working directory.
+The script can be run from any directory. Daedalus keeps the caller's current working directory.
 
 ## Forking / Rebranding
 
@@ -25,8 +25,8 @@ Configure via `package.json`:
 
 ```json
 {
-  "piConfig": {
-    "name": "pi",
+  "daedalusConfig": {
+    "name": "daedalus",
     "configDir": ".pi"
   }
 }
@@ -36,7 +36,7 @@ Change `name`, `configDir`, and `bin` field for your fork. Affects CLI banner, c
 
 ## Path Resolution
 
-Three execution modes: npm install, standalone binary, tsx from source.
+Three execution modes: bun install, standalone binary, tsx from source.
 
 **Always use `src/config.ts`** for package assets:
 

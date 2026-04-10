@@ -101,7 +101,7 @@ export default function (pi: ExtensionAPI) {
 Test with `--extension` (or `-e`) flag:
 
 ```bash
-pi -e ./my-extension.ts
+daedalus -e ./my-extension.ts
 ```
 
 ## Extension Locations
@@ -143,7 +143,7 @@ To share extensions via npm or git as daedalus packages, see [packages.md](packa
 | `@daedalus-pi/ai` | AI utilities (`StringEnum` for Google-compatible enums) |
 | `@daedalus-pi/tui` | TUI components for custom rendering |
 
-npm dependencies work too. Add a `package.json` next to your extension (or in a parent directory), run `npm install`, and imports from `node_modules/` are resolved automatically.
+npm dependencies work too. Add a `package.json` next to your extension (or in a parent directory), run `bun install`, and imports from `node_modules/` are resolved automatically.
 
 Node.js built-ins (`node:fs`, `node:path`, etc.) are also available.
 
@@ -200,7 +200,7 @@ Extensions are loaded via [jiti](https://github.com/unjs/jiti), so TypeScript wo
 └── my-extension/
     ├── package.json    # Declares dependencies and entry points
     ├── package-lock.json
-    ├── node_modules/   # After npm install
+    ├── node_modules/   # After bun install
     └── src/
         └── index.ts
 ```
@@ -219,14 +219,14 @@ Extensions are loaded via [jiti](https://github.com/unjs/jiti), so TypeScript wo
 }
 ```
 
-Run `npm install` in the extension directory, then imports from `node_modules/` work automatically.
+Run `bun install` in the extension directory, then imports from `node_modules/` work automatically.
 
 ## Events
 
 ### Lifecycle Overview
 
 ```
-pi starts
+daedalus starts
   │
   ├─► session_start { reason: "startup" }
   └─► resources_discover { reason: "startup" }
@@ -1614,13 +1614,13 @@ Extensions can override built-in tools (`read`, `bash`, `edit`, `write`, `grep`,
 
 ```bash
 # Extension's read tool replaces built-in read
-pi -e ./tool-override.ts
+daedalus -e ./tool-override.ts
 ```
 
 Alternatively, use `--no-tools` to start without any built-in tools:
 ```bash
 # No built-in tools, only extension tools
-pi --no-tools -e ./my-extension.ts
+daedalus --no-tools -e ./my-extension.ts
 ```
 
 See [examples/extensions/tool-override.ts](../examples/extensions/tool-override.ts) for a complete example that overrides `read` with logging and access control.
@@ -1632,13 +1632,13 @@ See [examples/extensions/tool-override.ts](../examples/extensions/tool-override.
 **Your implementation must match the exact result shape**, including the `details` type. The UI and session logic depend on these shapes for rendering and state tracking.
 
 Built-in tool implementations:
-- [read.ts](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/src/core/tools/read.ts) - `ReadToolDetails`
-- [bash.ts](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/src/core/tools/bash.ts) - `BashToolDetails`
-- [edit.ts](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/src/core/tools/edit.ts)
-- [write.ts](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/src/core/tools/write.ts)
-- [grep.ts](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/src/core/tools/grep.ts) - `GrepToolDetails`
-- [find.ts](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/src/core/tools/find.ts) - `FindToolDetails`
-- [ls.ts](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/src/core/tools/ls.ts) - `LsToolDetails`
+- [read.ts](https://github.com/Likas07/Daedalus/blob/main/packages/coding-agent/src/core/tools/read.ts) - `ReadToolDetails`
+- [bash.ts](https://github.com/Likas07/Daedalus/blob/main/packages/coding-agent/src/core/tools/bash.ts) - `BashToolDetails`
+- [edit.ts](https://github.com/Likas07/Daedalus/blob/main/packages/coding-agent/src/core/tools/edit.ts)
+- [write.ts](https://github.com/Likas07/Daedalus/blob/main/packages/coding-agent/src/core/tools/write.ts)
+- [grep.ts](https://github.com/Likas07/Daedalus/blob/main/packages/coding-agent/src/core/tools/grep.ts) - `GrepToolDetails`
+- [find.ts](https://github.com/Likas07/Daedalus/blob/main/packages/coding-agent/src/core/tools/find.ts) - `FindToolDetails`
+- [ls.ts](https://github.com/Likas07/Daedalus/blob/main/packages/coding-agent/src/core/tools/ls.ts) - `LsToolDetails`
 
 ### Remote Execution
 
@@ -1761,7 +1761,7 @@ export default function (pi: ExtensionAPI) {
 
 ### Custom Rendering
 
-Tools can provide `renderCall` and `renderResult` for custom TUI display. See [tui.md](tui.md) for the full component API and [tool-execution.ts](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/src/modes/interactive/components/tool-execution.ts) for how tool rows are composed.
+Tools can provide `renderCall` and `renderResult` for custom TUI display. See [tui.md](tui.md) for the full component API and [tool-execution.ts](https://github.com/Likas07/Daedalus/blob/main/packages/coding-agent/src/modes/interactive/components/tool-execution.ts) for how tool rows are composed.
 
 Tool output is wrapped in a `Box` that handles padding and background. A defined `renderCall` or `renderResult` must return a `Component`. If a slot renderer is not defined, `tool-execution.ts` uses fallback rendering for that slot.
 

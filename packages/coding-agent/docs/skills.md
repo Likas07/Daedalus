@@ -4,7 +4,7 @@
 
 Skills are self-contained capability packages that the agent loads on-demand. A skill provides specialized workflows, setup instructions, helper scripts, and reference documentation for specific tasks.
 
-Pi implements the [Agent Skills standard](https://agentskills.io/specification), warning about violations but remaining lenient.
+Daedalus implements the [Agent Skills standard](https://agentskills.io/specification), warning about violations but remaining lenient.
 
 ## Table of Contents
 
@@ -21,7 +21,7 @@ Pi implements the [Agent Skills standard](https://agentskills.io/specification),
 
 > **Security:** Skills can instruct the model to perform any action and may include executable code the model invokes. Review skill content before use.
 
-Pi loads skills from:
+Daedalus loads skills from:
 
 - Global:
   - `~/.daedalus/agent/skills/`
@@ -118,7 +118,7 @@ description: What this skill does and when to use it. Be specific.
 
 Run once before first use:
 \`\`\`bash
-cd /path/to/skill && npm install
+cd /path/to/skill && bun install
 \`\`\`
 
 ## Usage
@@ -175,7 +175,7 @@ description: Helps with PDFs.
 
 ## Validation
 
-Pi validates skills against the Agent Skills standard. Most issues produce warnings but still load the skill:
+Daedalus validates skills against the Agent Skills standard. Most issues produce warnings but still load the skill:
 
 - Name doesn't match parent directory
 - Name exceeds 64 characters or contains invalid characters
@@ -209,7 +209,7 @@ description: Web search and content extraction via Brave Search API. Use for sea
 ## Setup
 
 \`\`\`bash
-cd /path/to/brave-search && npm install
+cd /path/to/brave-search && bun install
 \`\`\`
 
 ## Search

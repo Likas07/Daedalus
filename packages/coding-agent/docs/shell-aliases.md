@@ -1,6 +1,6 @@
 # Shell Aliases
 
-Pi runs bash in non-interactive mode (`bash -c`), which doesn't expand aliases by default.
+Daedalus runs bash in non-interactive mode (`bash -c`), which doesn't expand aliases by default.
 
 To enable your shell aliases, add to `~/.daedalus/agent/settings.json`:
 

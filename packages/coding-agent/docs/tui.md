@@ -4,7 +4,51 @@
 
 Extensions and custom tools can render custom TUI components for interactive user interfaces. This page covers the component system and available building blocks.
 
-**Source:** [`@daedalus-pi/tui`](https://github.com/badlogic/pi-mono/tree/main/packages/tui)
+**Source:** [`@daedalus-pi/tui`](https://github.com/Likas07/Daedalus/tree/main/packages/tui)
+
+## Architecture
+
+Daedalus runs as a **full-screen terminal application** using the alternate screen buffer. This is a key difference from upstream pi-mono, which renders inline in the primary terminal buffer.
+
+### Display Model
+
+- **Alternate screen buffer**: Daedalus activates the alternate screen (`alternateScreen: true`) on startup and restores the original terminal content on exit. The application owns the entire terminal viewport.
+- **Fixed frame mode**: The TUI operates in fixed-frame mode (`setFixedFrameMode(true)`), meaning the viewport always starts at row 0. Content never scrolls the terminal buffer itself — all scrolling is handled by a virtual viewport.
+- **Virtual viewport with scrollbar**: The main content area (header, chat messages, tool output) is wrapped in a `Viewport` component that provides virtual scrolling with a visible scrollbar indicator. Users can scroll through history with mouse wheel.
+- **Fixed bottom panel**: The editor, widgets, and footer are rendered in a fixed `bottomContainer` that stays pinned to the bottom of the screen regardless of scroll position. This ensures the input area and status footer are always visible.
+- **Mouse wheel scrolling**: Mouse wheel events (SGR extended mouse protocol) scroll the history viewport up/down by 3 lines per tick. When scrolled above the bottom, a "Viewing history" indicator appears.
+
+### Layout Structure
+
+```
+┌──────────────────────────────────────┐
+│  Viewport (scrollable)               │  ← header + chat messages + tool output
+│  ┌────────────────────────────────┐  │
+│  │ Welcome screen / header        │  │
+│  │ Chat messages                  │  │
+│  │ Tool executions                │  │
+│  │ Assistant responses            │  │
+│  └────────────────────────────────┘  │
+│                                      │
+├──────────────────────────────────────┤  ← history detached indicator (when scrolled up)
+│  Pending messages                    │
+│  Status container                    │  ← fixed bottom panel
+│  Widgets (above editor)              │
+│  Editor (input)                      │
+│  Widgets (below editor)              │
+│  Footer (pwd, tokens, model)         │
+└──────────────────────────────────────┘
+```
+
+The `HistoryLayoutComponent` dynamically calculates how much vertical space to allocate to the scrollable viewport vs the fixed bottom panel, ensuring the editor and footer are always visible.
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `DAEDALUS_HARDWARE_CURSOR=1` | Show the hardware terminal cursor (for IME input positioning) |
+| `DAEDALUS_CLEAR_ON_SHRINK=1` | Clear empty rows when content shrinks (default: off) |
+| `DAEDALUS_DEBUG_REDRAW=1` | Log redraw reasons to `~/.daedalus/agent/daedalus-debug.log` |
 
 ## Component Interface
 
@@ -448,7 +492,7 @@ interface MyTheme {
 Set `PI_TUI_WRITE_LOG` to capture the raw ANSI stream written to stdout.
 
 ```bash
-PI_TUI_WRITE_LOG=/tmp/tui-ansi.log npx tsx packages/tui/test/chat-simple.ts
+PI_TUI_WRITE_LOG=/tmp/tui-ansi.log bunx tsx packages/tui/test/chat-simple.ts
 ```
 
 ## Performance
