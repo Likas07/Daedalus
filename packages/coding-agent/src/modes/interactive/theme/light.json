@@ -1,0 +1,83 @@
+{
+	"name": "light",
+	"vars": {
+		"gold": "#8B6914",
+		"brightGold": "#A07818",
+		"amber": "#9A7326",
+		"bronze": "#705210",
+		"darkBronze": "#C4A86C",
+		"warmGray": "#6B5D4F",
+		"dustyGray": "#8A7D6E",
+		"lightGray": "#C8BDA8",
+		"parchment": "#F5F0E6",
+		"parchmentDark": "#EBE4D4",
+		"terracotta": "#A04830",
+		"laurel": "#4A6B2A",
+		"dustyBlue": "#4A6F8A",
+		"clay": "#8B5E3C"
+	},
+	"colors": {
+		"accent": "gold",
+		"border": "bronze",
+		"borderAccent": "brightGold",
+		"borderMuted": "lightGray",
+		"success": "laurel",
+		"error": "terracotta",
+		"warning": "amber",
+		"muted": "warmGray",
+		"dim": "dustyGray",
+		"text": "",
+		"thinkingText": "warmGray",
+
+		"selectedBg": "#E8E0D0",
+		"userMessageBg": "parchmentDark",
+		"userMessageText": "",
+		"customMessageBg": "#E8E2D8",
+		"customMessageText": "",
+		"customMessageLabel": "clay",
+		"toolPendingBg": "#EEEADF",
+		"toolSuccessBg": "#E4ECDA",
+		"toolErrorBg": "#F0E0D8",
+		"toolTitle": "",
+		"toolOutput": "warmGray",
+
+		"mdHeading": "brightGold",
+		"mdLink": "dustyBlue",
+		"mdLinkUrl": "dustyGray",
+		"mdCode": "gold",
+		"mdCodeBlock": "#3A4A28",
+		"mdCodeBlockBorder": "lightGray",
+		"mdQuote": "warmGray",
+		"mdQuoteBorder": "lightGray",
+		"mdHr": "lightGray",
+		"mdListBullet": "gold",
+
+		"toolDiffAdded": "laurel",
+		"toolDiffRemoved": "terracotta",
+		"toolDiffContext": "dustyGray",
+
+		"syntaxComment": "#6B7A52",
+		"syntaxKeyword": "#8B6914",
+		"syntaxFunction": "#5C4A1E",
+		"syntaxVariable": "#2A5070",
+		"syntaxString": "#A04830",
+		"syntaxNumber": "#4A6B2A",
+		"syntaxType": "#3A6A4A",
+		"syntaxOperator": "#4A3F34",
+		"syntaxPunctuation": "#6B5D4F",
+
+		"thinkingOff": "lightGray",
+		"thinkingMinimal": "dustyGray",
+		"thinkingLow": "bronze",
+		"thinkingMedium": "gold",
+		"thinkingHigh": "brightGold",
+		"thinkingXhigh": "#705210",
+
+		"bashMode": "laurel"
+	},
+	"export": {
+		"pageBg": "#FAF6EE",
+		"cardBg": "#FFFFFF",
+		"infoBg": "#F5EDD8"
+	}
+}

@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 .npm/
+bun.lock
 
 # Build output
 dist/
@@ -57,3 +58,4 @@ pi-*.html
 
 # Generated files
 packages/coding-agent/src/internal-urls/docs-index.generated.ts
+packages/coding-agent/src/core/export-html/template.generated.ts

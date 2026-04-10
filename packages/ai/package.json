@@ -1,0 +1,108 @@
+{
+	"name": "@daedalus-pi/ai",
+	"version": "0.1.0",
+	"description": "Unified LLM API with automatic model discovery and provider configuration",
+	"type": "module",
+	"main": "./src/index.ts",
+	"types": "./src/index.ts",
+	"exports": {
+		".": {
+			"types": "./src/index.ts",
+			"import": "./src/index.ts"
+		},
+		"./*": {
+			"types": "./src/*.ts",
+			"import": "./src/*.ts"
+		},
+		"./anthropic": {
+			"types": "./src/providers/anthropic.ts",
+			"import": "./src/providers/anthropic.ts"
+		},
+		"./azure-openai-responses": {
+			"types": "./src/providers/azure-openai-responses.ts",
+			"import": "./src/providers/azure-openai-responses.ts"
+		},
+		"./google": {
+			"types": "./src/providers/google.ts",
+			"import": "./src/providers/google.ts"
+		},
+		"./google-gemini-cli": {
+			"types": "./src/providers/google-gemini-cli.ts",
+			"import": "./src/providers/google-gemini-cli.ts"
+		},
+		"./google-vertex": {
+			"types": "./src/providers/google-vertex.ts",
+			"import": "./src/providers/google-vertex.ts"
+		},
+		"./mistral": {
+			"types": "./src/providers/mistral.ts",
+			"import": "./src/providers/mistral.ts"
+		},
+		"./openai-codex-responses": {
+			"types": "./src/providers/openai-codex-responses.ts",
+			"import": "./src/providers/openai-codex-responses.ts"
+		},
+		"./openai-completions": {
+			"types": "./src/providers/openai-completions.ts",
+			"import": "./src/providers/openai-completions.ts"
+		},
+		"./openai-responses": {
+			"types": "./src/providers/openai-responses.ts",
+			"import": "./src/providers/openai-responses.ts"
+		},
+		"./oauth": {
+			"types": "./src/oauth.ts",
+			"import": "./src/oauth.ts"
+		},
+		"./bedrock-provider": {
+			"types": "./src/bedrock-provider.ts",
+			"import": "./src/bedrock-provider.ts"
+		}
+	},
+	"bin": {
+		"daedalus-ai": "./src/cli.ts"
+	},
+	"scripts": {
+		"check": "tsgo -p tsconfig.json",
+		"generate-models": "bun scripts/generate-models.ts",
+		"test": "bun test"
+	},
+	"dependencies": {
+		"@anthropic-ai/sdk": "^0.73.0",
+		"@aws-sdk/client-bedrock-runtime": "^3.983.0",
+		"@smithy/node-http-handler": "^4.4.0",
+		"@google/genai": "^1.40.0",
+		"@mistralai/mistralai": "1.14.1",
+		"@sinclair/typebox": "^0.34.41",
+		"ajv": "^8.17.1",
+		"ajv-formats": "^3.0.1",
+		"chalk": "^5.6.2",
+		"openai": "6.26.0",
+		"partial-json": "^0.1.7",
+		"proxy-agent": "^6.5.0",
+		"undici": "^7.19.1",
+		"zod-to-json-schema": "^3.24.6"
+	},
+	"keywords": [
+		"ai",
+		"llm",
+		"openai",
+		"anthropic",
+		"gemini",
+		"bedrock",
+		"unified",
+		"api"
+	],
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Likas07/Daedalus.git",
+		"directory": "packages/ai"
+	},
+	"engines": {
+		"bun": ">=1.3.7"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.3"
+	}
+}

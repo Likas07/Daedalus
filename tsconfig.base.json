@@ -1,0 +1,39 @@
+{
+	"compilerOptions": {
+		"target": "ES2024",
+		"module": "ESNext",
+		"lib": ["ES2024", "DOM.AsyncIterable"],
+		"strict": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+		"declaration": true,
+		"declarationMap": true,
+		"sourceMap": true,
+		"inlineSources": true,
+		"inlineSourceMap": false,
+		"moduleResolution": "Bundler",
+		"resolveJsonModule": true,
+		"allowArbitraryExtensions": true,
+		"allowImportingTsExtensions": false,
+		"experimentalDecorators": true,
+		"emitDecoratorMetadata": true,
+		"useDefineForClassFields": false,
+		"types": ["bun"],
+		"paths": {
+			"@daedalus-pi/ai": ["./packages/ai/src/index.ts"],
+			"@daedalus-pi/ai/*": ["./packages/ai/src/*"],
+			"@daedalus-pi/agent-core": ["./packages/agent/src/index.ts"],
+			"@daedalus-pi/agent-core/*": ["./packages/agent/src/*"],
+			"@daedalus-pi/coding-agent": ["./packages/coding-agent/src/index.ts"],
+			"@daedalus-pi/coding-agent/hooks": ["./packages/coding-agent/src/core/hooks/index.ts"],
+			"@daedalus-pi/coding-agent/*": ["./packages/coding-agent/src/*"],
+			"@daedalus-pi/tui": ["./packages/tui/src/index.ts"],
+			"@daedalus-pi/tui/*": ["./packages/tui/src/*"],
+			"@daedalus-pi/web-ui": ["./packages/web-ui/src/index.ts"],
+			"@daedalus-pi/web-ui/*": ["./packages/web-ui/src/*"],
+			"@sinclair/typebox": ["./node_modules/@sinclair/typebox/build/esm/index.d.mts"],
+			"@sinclair/typebox/*": ["./node_modules/@sinclair/typebox/build/esm/*"]
+		}
+	}
+}
