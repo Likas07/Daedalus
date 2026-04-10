@@ -40,8 +40,7 @@ coverage/
 packages/ai/test/.temp-images/
 
 # Project specific
-!.omp/
-.omp/plugins/
+.omp/
 .pi_config/
 .omx/
 .opencode/
