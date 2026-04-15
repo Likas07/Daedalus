@@ -21,6 +21,7 @@ export interface SshExecOptions {
 	signal?: AbortSignal;
 	onStdout?: (chunk: Buffer) => void;
 	onStderr?: (chunk: Buffer) => void;
+	stdin?: string | Buffer;
 }
 
 export interface SshExecResult {
@@ -45,8 +46,12 @@ export function parseSshArg(arg: string): { remote: string; path?: string } {
 	return { remote: arg };
 }
 
+/**
+ * POSIX shell quoting for a single argument.
+ * Keep this as real shell escaping, not JSON escaping.
+ */
 export function shellQuote(value: string): string {
-	return JSON.stringify(value);
+	return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
 export function buildShellCommand(args: string[]): string {
@@ -57,6 +62,13 @@ export function toSshBashCommand(script: string): string {
 	return `bash -lc ${shellQuote(script)}`;
 }
 
+function combineSshBashOptions(script: string, options?: SshExecOptions): SshExecOptions {
+	if (options?.stdin !== undefined) {
+		throw new Error("sshBash does not support custom stdin because the script itself is sent over stdin");
+	}
+	return { ...options, stdin: script };
+}
+
 export function sshExecDetailed(remote: string, command: string, options?: SshExecOptions): Promise<SshExecResult> {
 	return new Promise((resolve, reject) => {
 		if (options?.signal?.aborted) {
@@ -64,14 +76,26 @@ export function sshExecDetailed(remote: string, command: string, options?: SshEx
 			return;
 		}
 
-		const child = spawn("ssh", [remote, command], { stdio: ["ignore", "pipe", "pipe"] });
+		const child = spawn("ssh", [remote, command], { stdio: ["pipe", "pipe", "pipe"] });
 		const stdoutChunks: Buffer[] = [];
 		const stderrChunks: Buffer[] = [];
+		let settled = false;
+		let stdinError: Error | undefined;
 
 		const cleanup = () => {
 			options?.signal?.removeEventListener("abort", onAbort);
+			child.stdin?.removeListener("error", onStdinError);
+		};
+		const settle = (fn: () => void) => {
+			if (settled) return;
+			settled = true;
+			cleanup();
+			fn();
 		};
 		const onAbort = () => child.kill();
+		const onStdinError = (error: Error) => {
+			stdinError = error;
+		};
 		options?.signal?.addEventListener("abort", onAbort, { once: true });
 
 		child.stdout.on("data", (data: Buffer) => {
@@ -82,22 +106,37 @@ export function sshExecDetailed(remote: string, command: string, options?: SshEx
 			stderrChunks.push(data);
 			options?.onStderr?.(data);
 		});
+		child.stdin?.on("error", onStdinError);
 		child.on("error", (error) => {
-			cleanup();
-			reject(error);
+			settle(() => reject(error));
 		});
 		child.on("close", (code) => {
-			cleanup();
-			if (options?.signal?.aborted) {
-				reject(new Error("Operation aborted"));
-				return;
-			}
-			resolve({
-				stdout: Buffer.concat(stdoutChunks),
-				stderr: Buffer.concat(stderrChunks),
-				exitCode: code ?? -1,
+			settle(() => {
+				if (options?.signal?.aborted) {
+					reject(new Error("Operation aborted"));
+					return;
+				}
+				if ((code ?? -1) === 0 && stdinError) {
+					reject(stdinError);
+					return;
+				}
+				resolve({
+					stdout: Buffer.concat(stdoutChunks),
+					stderr: Buffer.concat(stderrChunks),
+					exitCode: code ?? -1,
+				});
 			});
 		});
+
+		try {
+			if (options?.stdin !== undefined) {
+				child.stdin?.end(options.stdin);
+			} else {
+				child.stdin?.end();
+			}
+		} catch (error) {
+			settle(() => reject(error instanceof Error ? error : new Error(String(error))));
+		}
 	});
 }
 
@@ -114,11 +153,11 @@ export async function sshExecText(remote: string, command: string, options?: Ssh
 }
 
 export async function sshBash(remote: string, script: string, options?: SshExecOptions): Promise<Buffer> {
-	return sshExec(remote, toSshBashCommand(script), options);
+	return sshExec(remote, "bash -se", combineSshBashOptions(script, options));
 }
 
 export async function sshBashText(remote: string, script: string, options?: SshExecOptions): Promise<string> {
-	return sshExecText(remote, toSshBashCommand(script), options);
+	return sshExecText(remote, "bash -se", combineSshBashOptions(script, options));
 }
 
 function isSubpath(root: string, value: string): boolean {
@@ -128,6 +167,24 @@ function isSubpath(root: string, value: string): boolean {
 
 function toPosixPath(value: string): string {
 	return value.split(nodePath.sep).join("/");
+}
+
+async function readRemoteFile(remote: string, remotePath: string): Promise<Buffer> {
+	return sshExec(remote, buildShellCommand(["cat", remotePath]));
+}
+
+async function verifyRemoteWrite(
+	remote: string,
+	remotePath: string,
+	expected: Buffer,
+	displayPath: string,
+): Promise<void> {
+	const actual = await readRemoteFile(remote, remotePath);
+	if (!actual.equals(expected)) {
+		throw new Error(
+			`Remote write verification failed for ${displayPath}: expected ${expected.length} bytes, got ${actual.length}`,
+		);
+	}
 }
 
 export function toRemotePath(localCwd: string, remoteCwd: string, inputPath: string): string {
@@ -167,7 +224,7 @@ export async function getRemotePathInfo(remote: string, remotePath: string): Pro
 export function createRemoteReadOps(remote: string, remoteCwd: string, localCwd: string): ReadOperations {
 	const remap = (p: string) => toRemotePath(localCwd, remoteCwd, p);
 	return {
-		readFile: (p) => sshExec(remote, buildShellCommand(["cat", remap(p)])),
+		readFile: (p) => readRemoteFile(remote, remap(p)),
 		access: async (p) => {
 			const info = await getRemotePathInfo(remote, remap(p));
 			if (!info.exists) throw new Error(`Path not found: ${p}`);
@@ -188,8 +245,13 @@ export function createRemoteWriteOps(remote: string, remoteCwd: string, localCwd
 	const remap = (p: string) => toRemotePath(localCwd, remoteCwd, p);
 	return {
 		writeFile: async (p, content) => {
-			const base64Content = Buffer.from(content).toString("base64");
-			await sshBash(remote, `base64 -d > ${shellQuote(remap(p))} <<'__DAEDALUS_EOF__'\n${base64Content}\n__DAEDALUS_EOF__`);
+			const remotePath = remap(p);
+			const expected = Buffer.from(content, "utf-8");
+			// Do not embed payload bytes in the remote command string; stream them via stdin and verify after write.
+			await sshExec(remote, toSshBashCommand(`cat > ${shellQuote(remotePath)}`), {
+				stdin: expected,
+			});
+			await verifyRemoteWrite(remote, remotePath, expected, p);
 		},
 		mkdir: (dir) => sshExec(remote, buildShellCommand(["mkdir", "-p", remap(dir)])).then(() => {}),
 	};
@@ -233,7 +295,7 @@ export function createRemoteLsOps(remote: string, remoteCwd: string, localCwd: s
 		readdir: async (absolutePath) => {
 			const output = await sshBashText(
 				remote,
-				`cd ${shellQuote(remap(absolutePath))} && find . -mindepth 1 -maxdepth 1 -printf '%P\\t%y\\n'`,
+				`cd ${shellQuote(remap(absolutePath))} && find . -mindepth 1 -maxdepth 1 -printf '%P\t%y\n'`,
 			);
 			const entries: string[] = [];
 			for (const line of output.split(/\r?\n/)) {
@@ -343,9 +405,13 @@ export function createRemoteAstBackend(remote: string, remoteCwd: string, localC
 			if (request.selector?.trim()) args.push("--selector", request.selector.trim());
 			if (request.glob?.trim()) args.push("--globs", request.glob.trim());
 			args.push(...remotePaths);
-			const result = await sshExecDetailed(remote, toSshBashCommand(`cd ${shellQuote(remoteRequestCwd)} && ${buildShellCommand(args)}`), {
-				signal: request.signal,
-			});
+			const result = await sshExecDetailed(
+				remote,
+				toSshBashCommand(`cd ${shellQuote(remoteRequestCwd)} && ${buildShellCommand(args)}`),
+				{
+					signal: request.signal,
+				},
+			);
 			const stdout = result.stdout.toString();
 			const stderr = result.stderr.toString().trim();
 			if (result.exitCode !== 0 && stdout.trim().length === 0) {

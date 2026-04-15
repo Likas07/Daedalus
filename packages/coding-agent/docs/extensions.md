@@ -1646,14 +1646,14 @@ Built-in tool implementations:
 Built-in tools support pluggable operations for delegating to remote systems (SSH, containers, etc.):
 
 ```typescript
-import { createReadTool, createBashTool, type ReadOperations } from "@daedalus-pi/coding-agent";
+import { buildShellCommand, createReadTool, createBashTool, type ReadOperations } from "@daedalus-pi/coding-agent";
 
 // Create tool with custom operations
 const remoteRead = createReadTool(cwd, {
   operations: {
-    readFile: (path) => sshExec(remote, `cat ${path}`),
-    access: (path) => sshExec(remote, `test -r ${path}`).then(() => {}),
-  }
+    readFile: (path) => sshExec(remote, buildShellCommand(["cat", path])),
+    access: (path) => sshExec(remote, buildShellCommand(["test", "-r", path])).then(() => {}),
+  },
 });
 
 // Register, checking flag at execution time
@@ -1669,6 +1669,8 @@ pi.registerTool({
   },
 });
 ```
+
+Use shell argument builders for command arguments, and stream payload bytes over stdin for remote writes instead of embedding file contents in command strings or heredocs.
 
 **Operations interfaces:** `ReadOperations`, `WriteOperations`, `EditOperations`, `HashlineEditOperations`, `BashOperations`, `LsOperations`, `GrepOperations`, `FindOperations`
 
