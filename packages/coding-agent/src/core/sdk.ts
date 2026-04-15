@@ -10,7 +10,6 @@ import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefi
 import { convertToLlm } from "./messages.js";
 import { ModelRegistry } from "./model-registry.js";
 import { findInitialModel } from "./model-resolver.js";
-import type { IntentGateRuntimeOptions } from "./intent-policy.js";
 import type { ResourceLoader } from "./resource-loader.js";
 import { DefaultResourceLoader } from "./resource-loader.js";
 import { getDefaultSessionDir, SessionManager } from "./session-manager.js";
@@ -78,9 +77,6 @@ export interface CreateAgentSessionOptions {
 	/** Session manager. Default: SessionManager.create(cwd) */
 	sessionManager?: SessionManager;
 
-	/** Intent Gate runtime options for metadata parsing, persistence, and mutation policy. */
-	intentGate?: IntentGateRuntimeOptions;
-
 	/** Settings manager. Default: SettingsManager.create(cwd, agentDir) */
 	settingsManager?: SettingsManager;
 	/** Session start event metadata for extension runtime startup. */
@@ -109,8 +105,6 @@ export type {
 	SlashCommandSource,
 	ToolDefinition,
 } from "./extensions/index.js";
-export type { MutationScope, PlanningArtifactKind, IntentGateType, IntentMetadata } from "./intent-gate.js";
-export type { IntentGateRuntimeOptions, IntentToolPolicyMode } from "./intent-policy.js";
 export type { PromptTemplate } from "./prompt-templates.js";
 export type { Skill } from "./skills.js";
 export type { Tool } from "./tools/index.js";
@@ -376,7 +370,6 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		initialActiveToolNames,
 		extensionRunnerRef,
 		sessionStartEvent: options.sessionStartEvent,
-		intentGate: options.intentGate,
 	});
 	const extensionsResult = resourceLoader.getExtensions();
 

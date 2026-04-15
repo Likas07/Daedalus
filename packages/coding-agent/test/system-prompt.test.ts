@@ -1,5 +1,4 @@
 import { describe, expect, test } from "vitest";
-import { INTENT_GATE_LINE_FORMAT } from "../src/core/intent-gate.js";
 import { buildSystemPrompt } from "../src/core/system-prompt.js";
 
 describe("buildSystemPrompt", () => {
@@ -100,31 +99,4 @@ describe("buildSystemPrompt", () => {
 		});
 	});
 
-	describe("intent gate", () => {
-		test("includes intent gate in the default system prompt", () => {
-			const prompt = buildSystemPrompt({
-				contextFiles: [],
-				skills: [],
-			});
-
-			expect(prompt).toContain("## Intent Gate (per user request)");
-			expect(prompt).toContain(INTENT_GATE_LINE_FORMAT);
-			expect(prompt).toContain("planning: inspect relevant context and write/update planning markdown only");
-			expect(prompt).toContain("investigation: inspect and report only unless user explicitly asked you to resolve it");
-			expect(prompt).toContain("evaluation: assess and propose only unless user explicitly asked you to execute");
-			expect(prompt).toContain("surface form");
-			expect(prompt).toContain("read-only behavior");
-		});
-
-		test("does not inject intent gate into full custom prompts", () => {
-			const prompt = buildSystemPrompt({
-				customPrompt: "You are a pirate.",
-				contextFiles: [],
-				skills: [],
-			});
-
-			expect(prompt).not.toContain("## Intent Gate (per user request)");
-			expect(prompt).not.toContain(INTENT_GATE_LINE_FORMAT);
-		});
-	});
 });

@@ -17,8 +17,6 @@ export { default as ssh } from "./tools/ssh.js";
 export { default as qna } from "./workflow/qna.js";
 export { default as handoff } from "./workflow/handoff.js";
 export { default as planMode } from "./workflow/plan-mode/index.js";
-export { default as intentCollect } from "./workflow/intent-collect.js";
-export { default as intentReview } from "./workflow/intent-review.js";
 
 // UI extensions
 export { default as statusLine } from "./ui/status-line.js";

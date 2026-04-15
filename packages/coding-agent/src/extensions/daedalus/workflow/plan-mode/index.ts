@@ -249,7 +249,7 @@ After completing a step, include a [DONE:n] tag in your response.`,
 					: "Execute the plan you just created.";
 			pi.sendMessage(
 				{ customType: "plan-mode-execute", content: execMessage, display: true },
-				{ triggerTurn: true, startsRequest: true, requestText: execMessage },
+				{ triggerTurn: true },
 			);
 		} else if (choice === "Refine the plan") {
 			const refinement = await ctx.ui.editor("Refine the plan:", "");

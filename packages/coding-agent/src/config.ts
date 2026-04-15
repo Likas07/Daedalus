@@ -205,21 +205,6 @@ export function getSettingsPath(): string {
 	return join(getAgentDir(), "settings.json");
 }
 
-/** Get path to intent learning aggregate stats */
-export function getIntentStatsPath(): string {
-	return join(getAgentDir(), "intent-stats.json");
-}
-
-/** Get path to learned intent heuristic preferences */
-export function getIntentHeuristicsPath(): string {
-	return join(getAgentDir(), "intent-heuristics.json");
-}
-
-/** Get path to project-local learned intent heuristic preferences */
-export function getProjectIntentHeuristicsPath(cwd: string = process.cwd()): string {
-	return join(cwd, CONFIG_DIR_NAME, "intent-heuristics.json");
-}
-
 /** Get path to tools directory */
 export function getToolsDir(): string {
 	return join(getAgentDir(), "tools");

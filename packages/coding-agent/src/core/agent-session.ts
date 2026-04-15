@@ -13,7 +13,6 @@
  * Modes use this class and add their own I/O layer on top.
  */
 
-import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import type {
@@ -44,23 +43,6 @@ import {
 import { DEFAULT_THINKING_LEVEL } from "./defaults.js";
 import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.js";
 import { createToolHtmlRenderer } from "./export-html/tool-renderer.js";
-import {
-	chooseMoreRestrictiveMutationScope,
-	extractFirstTextLine,
-	inferIntentMetadataFromUserText,
-	inferSurfaceForm,
-	parseIntentLine,
-	stripLeadingIntentLineFromAssistantMessage,
-	type IntentMetadata,
-} from "./intent-gate.js";
-import {
-	evaluateToolCallAgainstIntent,
-	resolveIntentGateRuntimeOptions,
-	routePlanningWritePathIfNeeded,
-	type IntentGateRuntimeOptions,
-	type ResolvedIntentGateRuntimeOptions,
-} from "./intent-policy.js";
-import { loadMergedIntentHeuristicRules } from "../extensions/daedalus/workflow/intent-learning/preferences.js";
 import {
 	type ContextUsage,
 	type ExtensionCommandContextActions,
@@ -179,8 +161,6 @@ export interface AgentSessionConfig {
 	extensionRunnerRef?: { current?: ExtensionRunner };
 	/** Session start event metadata emitted when extensions bind to this runtime. */
 	sessionStartEvent?: SessionStartEvent;
-	/** Intent Gate runtime options for parsing, persistence, and tool policy enforcement. */
-	intentGate?: IntentGateRuntimeOptions;
 }
 
 export interface ExtensionBindings {
@@ -233,18 +213,6 @@ export interface SessionStats {
 interface ToolDefinitionEntry {
 	definition: ToolDefinition;
 	sourceInfo: SourceInfo;
-}
-
-interface ActiveRequestState {
-	requestId: string;
-	requestText?: string;
-	userMessageId?: string;
-	synthetic: boolean;
-	intent: IntentMetadata;
-	pendingConfirmation: boolean;
-	persisted: boolean;
-	assistantMessageId?: string;
-	confirmationTurnIndex?: number;
 }
 
 // ============================================================================
@@ -325,14 +293,6 @@ export class AgentSession {
 	private _toolPromptSnippets: Map<string, string> = new Map();
 	private _toolPromptGuidelines: Map<string, string[]> = new Map();
 
-	// Intent Gate runtime state
-	private _intentGate: ResolvedIntentGateRuntimeOptions;
-	private _activeRequest?: ActiveRequestState;
-	private _currentTurnIntent?: IntentMetadata;
-	private _lastTurnIntent?: IntentMetadata;
-	private _currentTurnAssistantMessageId?: string;
-	private _lastUserMessageText?: string;
-
 	// Base system prompt (without extension appends) - used to apply fresh appends each turn
 	private _baseSystemPrompt = "";
 
@@ -349,7 +309,6 @@ export class AgentSession {
 		this._initialActiveToolNames = config.initialActiveToolNames;
 		this._baseToolsOverride = config.baseToolsOverride;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
-		this._intentGate = resolveIntentGateRuntimeOptions(config.intentGate);
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, extensions, auto-compaction, retry logic)
@@ -403,29 +362,6 @@ export class AgentSession {
 	 */
 	private _installAgentToolHooks(): void {
 		this.agent.beforeToolCall = async ({ toolCall, args }) => {
-			await this._agentEventQueue;
-
-			const toolInput = args as Record<string, unknown>;
-			routePlanningWritePathIfNeeded({
-				toolName: toolCall.name,
-				input: toolInput,
-				intent: this._currentTurnIntent,
-				cwd: this._cwd,
-			});
-			const intentDecision = evaluateToolCallAgainstIntent({
-				toolName: toolCall.name,
-				input: toolInput,
-				intent: this._currentTurnIntent,
-				cwd: this._cwd,
-				mode: this._intentGate.toolPolicyMode,
-			});
-			if (!intentDecision.allow) {
-				return {
-					block: true,
-					reason: intentDecision.reason ?? "Blocked by Intent Gate policy.",
-				};
-			}
-
 			const runner = this._extensionRunner;
 			if (!runner?.hasHandlers("tool_call")) {
 				return undefined;
@@ -436,7 +372,7 @@ export class AgentSession {
 					type: "tool_call",
 					toolName: toolCall.name,
 					toolCallId: toolCall.id,
-					input: toolInput,
+					input: args as Record<string, unknown>,
 				});
 			} catch (err) {
 				if (err instanceof Error) {
@@ -544,14 +480,11 @@ export class AgentSession {
 	}
 
 	private async _processAgentEvent(event: AgentEvent): Promise<void> {
-		const completedTurnIndex = event.type === "turn_end" ? this._turnIndex : undefined;
-
 		// When a user message starts, check if it's from either queue and remove it BEFORE emitting
 		// This ensures the UI sees the updated queue state
 		if (event.type === "message_start" && event.message.role === "user") {
 			this._overflowRecoveryAttempted = false;
 			const messageText = this._getUserMessageText(event.message);
-			this._startRequest(messageText, { synthetic: false });
 			if (messageText) {
 				// Check steering queue first
 				const steeringIndex = this._steeringMessages.indexOf(messageText);
@@ -569,13 +502,6 @@ export class AgentSession {
 			}
 		}
 
-		if (event.type === "turn_start") {
-			this._clearCurrentTurnIntentState();
-		}
-		if (event.type === "message_update" && event.message.role === "assistant") {
-			this._updateIntentFromAssistantMessage(event.message as AssistantMessage);
-		}
-
 		// Emit to extensions first
 		await this._emitExtensionEvent(event);
 
@@ -584,11 +510,10 @@ export class AgentSession {
 
 		// Handle session persistence
 		if (event.type === "message_end") {
-			let entryId: string | undefined;
 			// Check if this is a custom message from extensions
 			if (event.message.role === "custom") {
 				// Persist as CustomMessageEntry
-				entryId = this.sessionManager.appendCustomMessageEntry(
+				this.sessionManager.appendCustomMessageEntry(
 					event.message.customType,
 					event.message.content,
 					event.message.display,
@@ -600,29 +525,13 @@ export class AgentSession {
 				event.message.role === "toolResult"
 			) {
 				// Regular LLM message - persist as SessionMessageEntry
-				entryId = this.sessionManager.appendMessage(event.message);
+				this.sessionManager.appendMessage(event.message);
 			}
 			// Other message types (bashExecution, compactionSummary, branchSummary) are persisted elsewhere
 
-			if (event.message.role === "user") {
-				if (this._activeRequest) {
-					this._activeRequest.userMessageId = entryId;
-					this._activeRequest.requestText = this._getUserMessageText(event.message);
-				}
-				this._lastUserMessageText = this._getUserMessageText(event.message);
-			}
-
 			// Track assistant message for auto-compaction (checked on agent_end)
 			if (event.message.role === "assistant") {
-				this._currentTurnAssistantMessageId = entryId;
 				this._lastAssistantMessage = event.message;
-				this._updateIntentFromAssistantMessage(event.message as AssistantMessage);
-				if (this._activeRequest && !this._activeRequest.assistantMessageId) {
-					this._activeRequest.assistantMessageId = entryId;
-				}
-				if (this._activeRequest?.pendingConfirmation) {
-					this._lockActiveRequestIntent(entryId, this._turnIndex);
-				}
 
 				const assistantMsg = event.message as AssistantMessage;
 				if (assistantMsg.stopReason !== "error") {
@@ -640,12 +549,6 @@ export class AgentSession {
 					this._retryAttempt = 0;
 				}
 			}
-		}
-
-		if (event.type === "turn_end") {
-			this._lastTurnIntent = this._currentTurnIntent;
-			this._persistLockedActiveRequest(completedTurnIndex ?? this._turnIndex);
-			this._currentTurnAssistantMessageId = undefined;
 		}
 
 		// Check auto-retry and auto-compaction after agent completes
@@ -682,108 +585,6 @@ export class AgentSession {
 		return textBlocks.map((c) => (c as TextContent).text).join("");
 	}
 
-	private _getCustomMessageText(content: string | (TextContent | ImageContent)[]): string {
-		if (typeof content === "string") {
-			return content;
-		}
-		return content
-			.filter((block): block is TextContent => block.type === "text")
-			.map((block) => block.text)
-			.join("\n");
-	}
-
-	private _syncCurrentTurnIntentFromActiveRequest(): void {
-		this._currentTurnIntent = this._activeRequest?.intent;
-	}
-
-	private _clearCurrentTurnIntentState(): void {
-		this._syncCurrentTurnIntentFromActiveRequest();
-		this._currentTurnAssistantMessageId = undefined;
-	}
-
-	private _startRequest(userText: string | undefined, options?: { synthetic?: boolean }): void {
-		if (!userText || userText.trim().length === 0) {
-			return;
-		}
-		this._activeRequest = {
-			requestId: randomUUID(),
-			requestText: userText,
-			synthetic: options?.synthetic ?? false,
-			intent: inferIntentMetadataFromUserText(userText, {
-				learnedRules: loadMergedIntentHeuristicRules(this._cwd),
-			}),
-			pendingConfirmation: true,
-			persisted: false,
-		};
-		this._lastUserMessageText = userText;
-		this._syncCurrentTurnIntentFromActiveRequest();
-	}
-
-	private _lockActiveRequestIntent(assistantMessageId?: string, confirmationTurnIndex?: number): void {
-		if (!this._activeRequest) {
-			return;
-		}
-		this._activeRequest.pendingConfirmation = false;
-		if (assistantMessageId) {
-			this._activeRequest.assistantMessageId = assistantMessageId;
-		}
-		if (typeof confirmationTurnIndex === "number") {
-			this._activeRequest.confirmationTurnIndex = confirmationTurnIndex;
-		}
-		this._syncCurrentTurnIntentFromActiveRequest();
-	}
-
-	private _persistLockedActiveRequest(turnIndex: number): void {
-		if (!this._intentGate.persistMetadata || !this._activeRequest || this._activeRequest.persisted || this._activeRequest.pendingConfirmation) {
-			return;
-		}
-		this.sessionManager.appendIntent({
-			requestId: this._activeRequest.requestId,
-			turnIndex,
-			metadata: this._activeRequest.intent,
-			userMessageId: this._activeRequest.userMessageId,
-			requestText: this._activeRequest.requestText,
-			synthetic: this._activeRequest.synthetic,
-			assistantMessageId: this._activeRequest.assistantMessageId ?? this._currentTurnAssistantMessageId,
-			locked: true,
-		});
-		this._activeRequest.persisted = true;
-	}
-
-	private _stripRepeatedIntentLineIfNeeded(message: AssistantMessage): void {
-		if (!this._activeRequest || this._activeRequest.pendingConfirmation) {
-			return;
-		}
-		stripLeadingIntentLineFromAssistantMessage(message);
-	}
-
-	private _updateIntentFromAssistantMessage(message: AssistantMessage): void {
-		if (!this._activeRequest) {
-			return;
-		}
-		if (!this._intentGate.parseVisibleLine || !this._activeRequest.pendingConfirmation) {
-			this._stripRepeatedIntentLineIfNeeded(message);
-			return;
-		}
-		const firstLine = extractFirstTextLine(message);
-		if (!firstLine) {
-			return;
-		}
-		const parsed = parseIntentLine(firstLine, {
-			userText: this._activeRequest.requestText ?? this._lastUserMessageText,
-			surfaceForm: inferSurfaceForm(this._activeRequest.requestText ?? this._lastUserMessageText),
-			source: "assistant-line",
-		});
-		if (parsed) {
-			const current = this._activeRequest.intent;
-			if (current?.source === "inferred" || current?.source === "learned") {
-				parsed.readOnly = current.readOnly || parsed.readOnly;
-				parsed.mutationScope = chooseMoreRestrictiveMutationScope(current.mutationScope, parsed.mutationScope);
-			}
-			this._activeRequest.intent = parsed;
-			this._syncCurrentTurnIntentFromActiveRequest();
-		}
-	}
 
 	/** Find the last assistant message in agent state (including aborted ones) */
 	private _findLastAssistantMessage(): AssistantMessage | undefined {
@@ -946,21 +747,6 @@ export class AgentSession {
 		return this.agent.state.systemPrompt;
 	}
 
-	/** Current turn Intent Gate metadata, if parsed. */
-	getCurrentTurnIntent(): IntentMetadata | undefined {
-		return this._currentTurnIntent;
-	}
-
-	/** Last completed turn Intent Gate metadata, if parsed. */
-	getLastTurnIntent(): IntentMetadata | undefined {
-		return this._lastTurnIntent;
-	}
-
-	/** Persisted Intent Gate metadata on the current branch. */
-	getIntentHistory(limit?: number) {
-		const entries = this.sessionManager.getIntentEntries();
-		return typeof limit === "number" ? entries.slice(Math.max(0, entries.length - limit)) : entries;
-	}
 
 	/** Current retry attempt (0 if not retrying) */
 	get retryAttempt(): number {
@@ -1444,17 +1230,10 @@ export class AgentSession {
 	 * @param message Custom message with customType, content, display, details
 	 * @param options.triggerTurn If true and not streaming, triggers a new LLM turn
 	 * @param options.deliverAs Delivery mode: "steer", "followUp", or "nextTurn"
-	 * @param options.startsRequest If true, starts a synthetic request boundary before triggered turn
-	 * @param options.requestText Optional synthetic request text; falls back to custom message text
 	 */
 	async sendCustomMessage<T = unknown>(
 		message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details">,
-		options?: {
-			triggerTurn?: boolean;
-			deliverAs?: "steer" | "followUp" | "nextTurn";
-			startsRequest?: boolean;
-			requestText?: string;
-		},
+		options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
 	): Promise<void> {
 		const appMessage = {
 			role: "custom" as const,
@@ -1464,9 +1243,6 @@ export class AgentSession {
 			details: message.details,
 			timestamp: Date.now(),
 		} satisfies CustomMessage<T>;
-		if (options?.startsRequest && options.deliverAs && options.deliverAs !== "nextTurn") {
-			throw new Error("startsRequest is only supported for immediate triggerTurn calls or explicit nextTurn handling.");
-		}
 		if (options?.deliverAs === "nextTurn") {
 			this._pendingNextTurnMessages.push(appMessage);
 		} else if (this.isStreaming) {
@@ -1476,10 +1252,6 @@ export class AgentSession {
 				this.agent.steer(appMessage);
 			}
 		} else if (options?.triggerTurn) {
-			if (options.startsRequest) {
-				const syntheticText = options.requestText?.trim() || this._getCustomMessageText(message.content).trim();
-				this._startRequest(syntheticText, { synthetic: true });
-			}
 			await this.agent.prompt(appMessage);
 		} else {
 			this.agent.state.messages.push(appMessage);
@@ -2411,8 +2183,6 @@ export class AgentSession {
 					this._extensionShutdownHandler?.();
 				},
 				getContextUsage: () => this.getContextUsage(),
-				getCurrentTurnIntent: () => this.getCurrentTurnIntent(),
-				getLastTurnIntent: () => this.getLastTurnIntent(),
 				compact: (options) => {
 					void (async () => {
 						try {

@@ -44,7 +44,6 @@ import type { CompactionPreparation, CompactionResult } from "../compaction/inde
 import type { EventBus } from "../event-bus.js";
 import type { ExecOptions, ExecResult } from "../exec.js";
 import type { ReadonlyFooterDataProvider } from "../footer-data-provider.js";
-import type { IntentMetadata } from "../intent-gate.js";
 import type { KeybindingsManager } from "../keybindings.js";
 import type { CustomMessage } from "../messages.js";
 import type { ModelRegistry } from "../model-registry.js";
@@ -288,10 +287,6 @@ export interface ExtensionContext {
 	shutdown(): void;
 	/** Get current context usage for the active model. */
 	getContextUsage(): ContextUsage | undefined;
-	/** Current turn Intent Gate metadata, if parsed. */
-	getCurrentTurnIntent(): IntentMetadata | undefined;
-	/** Last completed turn Intent Gate metadata, if parsed. */
-	getLastTurnIntent(): IntentMetadata | undefined;
 	/** Trigger compaction without awaiting completion. */
 	compact(options?: CompactOptions): void;
 	/** Get the current effective system prompt. */
@@ -1079,15 +1074,10 @@ export interface ExtensionAPI {
 	// Actions
 	// =========================================================================
 
-	/** Send a custom message to the session. Use startsRequest/requestText to explicitly create a synthetic request boundary when needed. */
+	/** Send a custom message to the session. */
 	sendMessage<T = unknown>(
 		message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details">,
-		options?: {
-			triggerTurn?: boolean;
-			deliverAs?: "steer" | "followUp" | "nextTurn";
-			startsRequest?: boolean;
-			requestText?: string;
-		},
+		options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
 	): void;
 
 	/**
@@ -1310,12 +1300,7 @@ type HandlerFn = (...args: unknown[]) => Promise<unknown>;
 
 export type SendMessageHandler = <T = unknown>(
 	message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details">,
-	options?: {
-		triggerTurn?: boolean;
-		deliverAs?: "steer" | "followUp" | "nextTurn";
-		startsRequest?: boolean;
-		requestText?: string;
-	},
+	options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
 ) => void;
 
 export type SendUserMessageHandler = (
@@ -1403,8 +1388,6 @@ export interface ExtensionContextActions {
 	hasPendingMessages: () => boolean;
 	shutdown: () => void;
 	getContextUsage: () => ContextUsage | undefined;
-	getCurrentTurnIntent: () => IntentMetadata | undefined;
-	getLastTurnIntent: () => IntentMetadata | undefined;
 	compact: (options?: CompactOptions) => void;
 	getSystemPrompt: () => string;
 }

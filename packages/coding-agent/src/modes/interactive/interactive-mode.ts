@@ -1475,8 +1475,6 @@ export class InteractiveMode {
 				this.shutdownRequested = true;
 			},
 			getContextUsage: () => this.session.getContextUsage(),
-			getCurrentTurnIntent: () => this.session.getCurrentTurnIntent(),
-			getLastTurnIntent: () => this.session.getLastTurnIntent(),
 			compact: (options) => {
 				void (async () => {
 					try {

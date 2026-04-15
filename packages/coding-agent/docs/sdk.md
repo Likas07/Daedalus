@@ -429,8 +429,6 @@ const simpleRegistry = ModelRegistry.inMemory(authStorage);
 
 Use a `ResourceLoader` to override the system prompt.
 
-The default system prompt includes an Intent Gate. It tells the assistant to begin first assistant turn for each new user request with one brief visible line like `Intent: investigation — inspect relevant files and report only.` before tools or substantive answers. Later assistant turns for same request should not repeat it.
-
 ```typescript
 import { createAgentSession, DefaultResourceLoader } from "@daedalus-pi/coding-agent";
 
@@ -441,36 +439,6 @@ await loader.reload();
 
 const { session } = await createAgentSession({ resourceLoader: loader });
 ```
-
-A full `systemPromptOverride` replaces the built-in Intent Gate. `appendSystemPromptOverride` or append-only project files keep it.
-
-IntentGate v2 also has runtime support:
-
-```typescript
-const { session } = await createAgentSession({
-  intentGate: {
-    parseVisibleLine: true,
-    persistMetadata: true,
-    toolPolicyMode: "enforce", // off | warn | enforce
-  },
-});
-
-session.getCurrentTurnIntent();
-session.getLastTurnIntent();
-session.getIntentHistory();
-```
-
-Planning intent is special-cased by runtime: it may only mutate markdown planning artifacts under `docs/`, `plans/`, `specs/`, or `design/`. `write` calls are auto-routed into those directories when assistant chooses invalid planning path. `bash` is also intent-aware: non-mutating intents only allow clearly read-only shell commands, while planning additionally allows safe `mkdir` for planning directories. Runtime treats intent as request-level authorization, not drifting per-turn execution mode.
-
-The default Daedalus bundle also ships an approval-based learning workflow on top of IntentGate metadata:
-- `/intent-collect` aggregates user phrasing + final intent labels into `~/.daedalus/agent/intent-stats.json`
-- `/intent-review` reviews those aggregate stats with the current model and can apply approved rules into:
-  - `~/.daedalus/agent/intent-heuristics.json` (global)
-  - `.daedalus/intent-heuristics.json` (project-local override)
-
-Runtime inference uses learned preferences before built-in heuristics, while still honoring explicit read-only overrides.
-
-Extensions can inspect the current or last turn intent from `ctx.getCurrentTurnIntent()` / `ctx.getLastTurnIntent()`. Current-turn intent is available before the first mutation tool call because the runtime seeds a provisional intent from the user message, then refines it from the visible assistant `Intent:` line later in the turn.
 
 > See [examples/sdk/03-custom-prompt.ts](../examples/sdk/03-custom-prompt.ts)
 

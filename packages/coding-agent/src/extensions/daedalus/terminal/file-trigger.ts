@@ -23,7 +23,7 @@ export default function (pi: ExtensionAPI) {
 								content: `External trigger: ${content}`,
 								display: true,
 							},
-							{ triggerTurn: true, startsRequest: true, requestText: content },
+							{ triggerTurn: true },
 						);
 						fs.writeFileSync(triggerFile, "");
 					}

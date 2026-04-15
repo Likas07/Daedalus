@@ -3,7 +3,6 @@
  */
 
 import { getDocsPath, getExamplesPath, getReadmePath } from "../config.js";
-import { buildIntentGatePromptBlock } from "./intent-gate.js";
 import { formatSkillsForPrompt, type Skill } from "./skills.js";
 
 export interface BuildSystemPromptOptions {
@@ -134,8 +133,6 @@ In addition to the tools above, you may have access to other custom tools depend
 
 Guidelines:
 ${guidelines}
-
-${buildIntentGatePromptBlock()}
 
 Daedalus documentation (read only when the user asks about Daedalus itself, its SDK, extensions, themes, skills, or TUI):
 - Main documentation: ${readmePath}

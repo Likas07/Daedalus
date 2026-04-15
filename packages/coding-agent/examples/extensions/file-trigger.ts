@@ -25,11 +25,7 @@ export default function (pi: ExtensionAPI) {
 							content: `External trigger: ${content}`,
 							display: true,
 						},
-						{
-							triggerTurn: true,
-							startsRequest: true,
-							requestText: content,
-						}, // explicit synthetic request
+						{ triggerTurn: true }, // triggerTurn - get LLM to respond
 					);
 					fs.writeFileSync(triggerFile, ""); // Clear after reading
 				}

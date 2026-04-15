@@ -13,8 +13,6 @@ import tools from "./tools/tools.js";
 import qna from "./workflow/qna.js";
 import handoff from "./workflow/handoff.js";
 import planMode from "./workflow/plan-mode/index.js";
-import intentCollect from "./workflow/intent-collect.js";
-import intentReview from "./workflow/intent-review.js";
 import statusLine from "./ui/status-line.js";
 import dynamicResources from "./resources/dynamic-resources.js";
 
@@ -35,8 +33,6 @@ export default function daedalusBundle(pi: ExtensionAPI) {
 	qna(pi);
 	handoff(pi);
 	planMode(pi);
-	intentCollect(pi);
-	intentReview(pi);
 	statusLine(pi);
 	dynamicResources(pi);
 }

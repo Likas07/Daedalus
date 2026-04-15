@@ -1,13 +1,7 @@
 // Core session management
 
 // Config paths
-export {
-	getAgentDir,
-	getIntentHeuristicsPath,
-	getIntentStatsPath,
-	getProjectIntentHeuristicsPath,
-	VERSION,
-} from "./config.js";
+export { getAgentDir, VERSION } from "./config.js";
 export {
 	AgentSession,
 	type AgentSessionConfig,
@@ -199,8 +193,6 @@ export {
 	type CustomMessageEntry,
 	type FileEntry,
 	getLatestCompactionEntry,
-	getLatestIntentEntry,
-	type IntentEntry,
 	type ModelChangeEntry,
 	migrateSessionEntries,
 	type NewSessionOptions,
@@ -223,8 +215,6 @@ export {
 	SettingsManager,
 } from "./core/settings-manager.js";
 // Skills
-export type { MutationScope, PlanningArtifactKind, IntentGateType, IntentHeuristicRule, IntentMetadata } from "./core/intent-gate.js";
-export type { IntentGateRuntimeOptions, IntentToolPolicyMode } from "./core/intent-policy.js";
 export {
 	formatSkillsForPrompt,
 	type LoadSkillsFromDirOptions,
