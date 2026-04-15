@@ -94,7 +94,7 @@ pi
 /login  # Then select provider
 ```
 
-Then just talk to pi. By default, pi gives the model four tools: `read`, `write`, `edit`, and `bash`. The model uses these to fulfill your requests. Add capabilities via [skills](#skills), [prompt templates](#prompt-templates), [extensions](#extensions), or [daedalus packages](#daedalus-packages).
+Then just talk to pi. By default, pi gives the model these built-in tools: `read`, `bash`, `hashline_edit`, `fetch`, `ast_grep`, `ast_edit`, `write`, `grep`, `find`, and `ls`. The model uses these to fulfill your requests. The default system prompt also includes an Intent Gate, so each assistant turn should start with a brief visible `Intent:` line before tools or substantive answers. Add capabilities via [skills](#skills), [prompt templates](#prompt-templates), [extensions](#extensions), or [daedalus packages](#daedalus-packages).
 
 **Platform notes:** [Windows](docs/windows.md) | [Termux (Android)](docs/termux.md) | [tmux](docs/tmux.md) | [Terminal setup](docs/terminal-setup.md) | [Shell aliases](docs/shell-aliases.md)
 
@@ -287,6 +287,16 @@ Use for project instructions, conventions, common commands. All matching files a
 ### System Prompt
 
 Replace the default system prompt with `.pi/SYSTEM.md` (project) or `~/.pi/agent/SYSTEM.md` (global). Append without replacing via `APPEND_SYSTEM.md`.
+
+The default system prompt includes an Intent Gate. It tells the assistant to begin each turn with one brief visible line like:
+
+```text
+Intent: investigation — inspect relevant files and report only.
+```
+
+IntentGate v2 also parses that line at runtime, stores per-turn intent metadata, exposes it through the SDK/extensions, and enforces mutation policy for built-in mutation tools. Planning intent is limited to markdown artifacts under `docs/`, `plans/`, `specs/`, or `design/`.
+
+If you fully replace the system prompt, this built-in Intent Gate is removed unless you add your own version. If you append to the default prompt, the built-in Intent Gate stays in place.
 
 ---
 
@@ -518,10 +528,12 @@ cat README.md | pi -p "Summarize this text"
 
 | Option | Description |
 |--------|-------------|
-| `--tools <list>` | Enable specific built-in tools (default: `read,bash,edit,write`) |
+| `--tools <list>` | Enable specific built-in tools (default: `read,bash,hashline_edit,fetch,ast_grep,ast_edit,write,grep,find,ls`) |
 | `--no-tools` | Disable all built-in tools (extension tools still work) |
 
-Available built-in tools: `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`
+Available built-in tools: `read`, `bash`, `edit`, `hashline_edit`, `fetch`, `ast_grep`, `ast_edit`, `write`, `grep`, `find`, `ls`
+
+`hashline_edit` is experimental and enabled in the default coding tool set. It pairs with `read` using `format: "hashline"`. Exact-text `edit` remains available, but is no longer in the default tool set. `fetch`, `ast_grep`, and `ast_edit` are also enabled in the default coding tool set.
 
 ### Resource Options
 

@@ -12,13 +12,21 @@
  */
 
 import {
+	astEditTool,
+	astGrepTool,
 	bashTool,
 	createAgentSession,
+	createAstEditTool,
+	createAstGrepTool,
 	createBashTool,
 	createCodingTools,
+	createFetchTool,
 	createGrepTool,
+	createHashlineEditTool,
 	createReadTool,
+	fetchTool,
 	grepTool,
+	hashlineEditTool,
 	readOnlyTools,
 	readTool,
 	SessionManager,
@@ -38,6 +46,19 @@ await createAgentSession({
 });
 console.log("Custom tools session created");
 
+// codingTools already includes hashline_edit, fetch, ast_grep, and ast_edit by default. Exact-text edit remains available separately.
+await createAgentSession({
+	tools: [readTool, hashlineEditTool],
+	sessionManager: SessionManager.inMemory(),
+});
+console.log("Hashline tools session created");
+
+await createAgentSession({
+	tools: [readTool, fetchTool, astGrepTool, astEditTool],
+	sessionManager: SessionManager.inMemory(),
+});
+console.log("Fetch/AST tools session created");
+
 // With custom cwd - MUST use factory functions!
 const customCwd = "/path/to/project";
 await createAgentSession({
@@ -54,3 +75,17 @@ await createAgentSession({
 	sessionManager: SessionManager.inMemory(),
 });
 console.log("Specific tools with custom cwd session created");
+
+await createAgentSession({
+	cwd: customCwd,
+	tools: [createReadTool(customCwd), createHashlineEditTool(customCwd)],
+	sessionManager: SessionManager.inMemory(),
+});
+console.log("Specific hashline tools with custom cwd session created");
+
+await createAgentSession({
+	cwd: customCwd,
+	tools: [createReadTool(customCwd), createFetchTool(customCwd), createAstGrepTool(customCwd), createAstEditTool(customCwd)],
+	sessionManager: SessionManager.inMemory(),
+});
+console.log("Specific fetch/AST tools with custom cwd session created");

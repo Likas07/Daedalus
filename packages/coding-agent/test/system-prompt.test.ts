@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { INTENT_GATE_LINE_FORMAT } from "../src/core/intent-gate.js";
 import { buildSystemPrompt } from "../src/core/system-prompt.js";
 
 describe("buildSystemPrompt", () => {
@@ -25,13 +26,16 @@ describe("buildSystemPrompt", () => {
 	});
 
 	describe("default tools", () => {
-		test("includes all default tools when snippets are provided", () => {
+		test("includes current default coding tools when snippets are provided", () => {
 			const prompt = buildSystemPrompt({
 				toolSnippets: {
 					read: "Read file contents",
 					bash: "Execute bash commands",
-					edit: "Make surgical edits",
+					hashline_edit: "Apply stale-safe hashline edits",
 					write: "Create or overwrite files",
+					grep: "Search file contents",
+					find: "Find files",
+					ls: "List directory contents",
 				},
 				contextFiles: [],
 				skills: [],
@@ -39,8 +43,11 @@ describe("buildSystemPrompt", () => {
 
 			expect(prompt).toContain("- read:");
 			expect(prompt).toContain("- bash:");
-			expect(prompt).toContain("- edit:");
+			expect(prompt).toContain("- hashline_edit:");
 			expect(prompt).toContain("- write:");
+			expect(prompt).toContain("- grep:");
+			expect(prompt).toContain("- find:");
+			expect(prompt).toContain("- ls:");
 		});
 	});
 
@@ -90,6 +97,34 @@ describe("buildSystemPrompt", () => {
 			});
 
 			expect(prompt.match(/- Use dynamic_tool for summaries\./g)).toHaveLength(1);
+		});
+	});
+
+	describe("intent gate", () => {
+		test("includes intent gate in the default system prompt", () => {
+			const prompt = buildSystemPrompt({
+				contextFiles: [],
+				skills: [],
+			});
+
+			expect(prompt).toContain("## Intent Gate (every turn)");
+			expect(prompt).toContain(INTENT_GATE_LINE_FORMAT);
+			expect(prompt).toContain("planning: inspect relevant context and write/update planning markdown only");
+			expect(prompt).toContain("investigation: inspect and report only unless the user explicitly asked you to resolve it");
+			expect(prompt).toContain("evaluation: assess and propose only unless the user explicitly asked you to execute");
+			expect(prompt).toContain("surface form");
+			expect(prompt).toContain("read-only behavior");
+		});
+
+		test("does not inject intent gate into full custom prompts", () => {
+			const prompt = buildSystemPrompt({
+				customPrompt: "You are a pirate.",
+				contextFiles: [],
+				skills: [],
+			});
+
+			expect(prompt).not.toContain("## Intent Gate (every turn)");
+			expect(prompt).not.toContain(INTENT_GATE_LINE_FORMAT);
 		});
 	});
 });

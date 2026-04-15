@@ -7,6 +7,7 @@
 import { createAgentSession, DefaultResourceLoader, SessionManager } from "@daedalus-pi/coding-agent";
 
 // Option 1: Replace prompt entirely
+// Note: this removes the built-in Intent Gate unless you add your own version.
 const loader1 = new DefaultResourceLoader({
 	systemPromptOverride: () => `You are a helpful assistant that speaks like a pirate.
 Always end responses with "Arrr!"`,
@@ -31,6 +32,7 @@ await session1.prompt("What is 2 + 2?");
 console.log("\n");
 
 // Option 2: Append instructions to the default prompt
+// Note: this keeps the built-in Intent Gate from the default system prompt.
 const loader2 = new DefaultResourceLoader({
 	appendSystemPromptOverride: (base) => [
 		...base,

@@ -105,12 +105,10 @@ export function streamProxy(model: Model<any>, context: Context, options: ProxyS
 			timestamp: Date.now(),
 		};
 
-		let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+		let cancelReader: (() => void) | undefined;
 
 		const abortHandler = () => {
-			if (reader) {
-				reader.cancel("Request aborted by user").catch(() => {});
-			}
+			cancelReader?.();
 		};
 
 		if (options.signal) {
@@ -149,7 +147,15 @@ export function streamProxy(model: Model<any>, context: Context, options: ProxyS
 				throw new Error(errorMessage);
 			}
 
-			reader = response.body!.getReader();
+			const body = response.body;
+			if (!body) {
+				throw new Error("Proxy response body is empty");
+			}
+
+			const reader = body.getReader();
+			cancelReader = () => {
+				reader.cancel("Request aborted by user").catch(() => {});
+			};
 			const decoder = new TextDecoder();
 			let buffer = "";
 

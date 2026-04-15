@@ -7,6 +7,7 @@ import type { ImageContent, Model } from "@daedalus-pi/ai";
 import type { KeyId } from "@daedalus-pi/tui";
 import { type Theme, theme } from "../../modes/interactive/theme/theme.js";
 import type { ResourceDiagnostic } from "../diagnostics.js";
+import type { IntentMetadata } from "../intent-gate.js";
 import type { KeybindingsConfig } from "../keybindings.js";
 import type { ModelRegistry } from "../model-registry.js";
 import type { SessionManager } from "../session-manager.js";
@@ -214,6 +215,8 @@ export class ExtensionRunner {
 	private abortFn: () => void = () => {};
 	private hasPendingMessagesFn: () => boolean = () => false;
 	private getContextUsageFn: () => ContextUsage | undefined = () => undefined;
+	private getCurrentTurnIntentFn: () => IntentMetadata | undefined = () => undefined;
+	private getLastTurnIntentFn: () => IntentMetadata | undefined = () => undefined;
 	private compactFn: (options?: CompactOptions) => void = () => {};
 	private getSystemPromptFn: () => string = () => "";
 	private newSessionHandler: NewSessionHandler = async () => ({ cancelled: false });
@@ -272,6 +275,8 @@ export class ExtensionRunner {
 		this.hasPendingMessagesFn = contextActions.hasPendingMessages;
 		this.shutdownHandler = contextActions.shutdown;
 		this.getContextUsageFn = contextActions.getContextUsage;
+		this.getCurrentTurnIntentFn = contextActions.getCurrentTurnIntent;
+		this.getLastTurnIntentFn = contextActions.getLastTurnIntent;
 		this.compactFn = contextActions.compact;
 		this.getSystemPromptFn = contextActions.getSystemPrompt;
 
@@ -549,6 +554,8 @@ export class ExtensionRunner {
 			hasPendingMessages: () => this.hasPendingMessagesFn(),
 			shutdown: () => this.shutdownHandler(),
 			getContextUsage: () => this.getContextUsageFn(),
+			getCurrentTurnIntent: () => this.getCurrentTurnIntentFn(),
+			getLastTurnIntent: () => this.getLastTurnIntentFn(),
 			compact: (options) => this.compactFn(options),
 			getSystemPrompt: () => this.getSystemPromptFn(),
 		};

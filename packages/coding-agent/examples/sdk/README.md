@@ -42,7 +42,7 @@ import {
   SettingsManager,
   codingTools,
   readOnlyTools,
-  readTool, bashTool, editTool, writeTool,
+  readTool, bashTool, editTool, hashlineEditTool, fetchTool, astGrepTool, astEditTool, writeTool,
 } from "@daedalus-pi/coding-agent";
 
 // Auth and models setup

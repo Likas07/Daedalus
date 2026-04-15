@@ -26,6 +26,23 @@ function formatTokens(count: number): string {
 	return `${Math.round(count / 1000000)}M`;
 }
 
+function formatIntentBadge(session: AgentSession): string | undefined {
+	const intent = session.getCurrentTurnIntent() ?? session.getLastTurnIntent();
+	if (!intent) {
+		return undefined;
+	}
+	const scopeSuffix =
+		intent.readOnly ? "/ro" : intent.mutationScope === "docs-only" ? "/docs" : intent.mutationScope === "code-allowed" ? "/code" : "";
+	const badgeText = `[${intent.trueIntent}${scopeSuffix}]`;
+	if (intent.readOnly || intent.mutationScope === "none") {
+		return theme.fg("dim", badgeText);
+	}
+	if (intent.mutationScope === "docs-only") {
+		return theme.fg("warning", badgeText);
+	}
+	return theme.fg("success", badgeText);
+}
+
 /**
  * Footer component that shows pwd, token stats, and context usage.
  * Computes token/context stats from session, gets git branch and extension statuses from provider.
@@ -107,6 +124,7 @@ export class FooterComponent implements Component {
 		if (sessionName) {
 			pwd = `${pwd} • ${sessionName}`;
 		}
+		const intentBadge = formatIntentBadge(this.session);
 
 		// Build stats line
 		const statsParts = [];
@@ -201,7 +219,8 @@ export class FooterComponent implements Component {
 		const remainder = statsLine.slice(statsLeft.length); // padding + rightSide
 		const dimRemainder = theme.fg("dim", remainder);
 
-		const pwdLine = truncateToWidth(theme.fg("dim", pwd), width, theme.fg("dim", "..."));
+		const pwdDisplay = intentBadge ? `${theme.fg("dim", pwd)}${theme.fg("dim", " • ")}${intentBadge}` : theme.fg("dim", pwd);
+		const pwdLine = truncateToWidth(pwdDisplay, width, theme.fg("dim", "..."));
 		const lines = [pwdLine, dimStatsLeft + dimRemainder];
 
 		// Add extension statuses on a single line, sorted by key alphabetically

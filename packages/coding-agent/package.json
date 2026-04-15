@@ -30,14 +30,15 @@
 	"scripts": {
 		"check": "tsgo -p tsconfig.json",
 		"test": "bun test",
+		"benchmark:hashline": "bun scripts/hashline-benchmark.ts",
 		"generate-template": "bun scripts/generate-template.ts",
 		"build:binary": "bun run generate-template && bun build --compile --external mupdf --root ../.. ./src/bun/cli.ts --outfile dist/daedalus"
 	},
 	"dependencies": {
-		"@mariozechner/jiti": "^2.6.2",
 		"@daedalus-pi/agent-core": "workspace:*",
 		"@daedalus-pi/ai": "workspace:*",
 		"@daedalus-pi/tui": "workspace:*",
+		"@mariozechner/jiti": "^2.6.2",
 		"@silvia-odwyer/photon-node": "^0.3.4",
 		"ajv": "^8.17.1",
 		"chalk": "^5.5.0",
@@ -48,6 +49,7 @@
 		"glob": "^13.0.1",
 		"hosted-git-info": "^9.0.2",
 		"ignore": "^7.0.5",
+		"linkedom": "0.18.12",
 		"marked": "^15.0.12",
 		"minimatch": "^10.2.3",
 		"proper-lockfile": "^4.1.2",

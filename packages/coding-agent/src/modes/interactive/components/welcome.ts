@@ -39,8 +39,8 @@ export class WelcomeComponent implements Component {
 		}
 
 		const dualContentWidth = boxWidth - 3; // 3 = │ + │ + │
-		const preferredLeftCol = 24;
-		const minLeftCol = 16;
+		const preferredLeftCol = 26;
+		const minLeftCol = 22;
 		const minRightCol = 20;
 
 		const desiredLeftCol = Math.min(
@@ -58,20 +58,20 @@ export class WelcomeComponent implements Component {
 
 		// Hammer logo — block characters with gold gradient
 		const hammerArt = [
-			" ▄███████▄ ",
-			" ████████████",
-			"    ▐██▌    ",
-			"    ▐██▌    ",
-			"    ▐██▌    ",
-			"   ▄████▄   ",
+			"  ▄██████████████▄  ",
+			"  ██████████████████",
+			"  ▀██████████████▀  ",
+			"        ████        ",
+			"        ████        ",
+			"        ████        ",
+			"        ████        ",
+			"       ▄████▄       ",
 		];
 
-		const logoColored = hammerArt.map((line) => this.#gradientLine(line));
+		const logoColored = hammerArt.map((line, i) => this.#hammerLine(line, i < 3));
 
 		// Left column — centered content
 		const leftLines = [
-			"",
-			this.#centerText(theme.bold("Welcome, craftsman."), leftCol),
 			"",
 			...logoColored.map((l) => this.#centerText(l, leftCol)),
 			"",
@@ -83,8 +83,15 @@ export class WelcomeComponent implements Component {
 		const separatorWidth = Math.max(0, rightCol - 2);
 		const separator = ` ${theme.fg("borderMuted", "\u2500".repeat(separatorWidth))}`;
 
+		// Big DAEDALUS title
+		const titleArt = [
+			` ${theme.bold(theme.fg("accent", "D A E D A L U S"))}`,
+			` ${theme.fg("dim", "Welcome, craftsman.")}`,
+		];
+
 		// Tips
 		const tips = [
+			"",
 			` ${theme.bold(theme.fg("accent", "Tips"))}`,
 			` ${theme.fg("dim", "?")} ${theme.fg("muted", "keyboard shortcuts")}`,
 			` ${theme.fg("dim", "/")} ${theme.fg("muted", "commands")}`,
@@ -97,52 +104,38 @@ export class WelcomeComponent implements Component {
 			separator,
 			` ${theme.bold(theme.fg("accent", "Extensions"))}`,
 			` ${theme.fg("muted", `${this.extensionCount} extensions active`)}`,
-		];
-
-		// Recent sessions
-		const sessionLines: string[] = [];
-		if (this.recentSessions.length === 0) {
-			sessionLines.push(` ${theme.fg("dim", "No recent sessions")}`);
-		} else {
-			for (const session of this.recentSessions.slice(0, 3)) {
-				const bullet = theme.fg("dim", "\u2022 ");
-				const name = theme.fg("muted", session.name);
-				const ago = theme.fg("dim", ` (${session.timeAgo})`);
-				sessionLines.push(` ${bullet}${name}${ago}`);
-			}
-		}
-
-		const rightLines = [
-			...tips,
-			...extSection,
-			separator,
-			` ${theme.bold(theme.fg("accent", "Recent sessions"))}`,
-			...sessionLines,
 			"",
 		];
 
-		// Box drawing
+		const rightLines = [
+			"",
+			...titleArt,
+			...tips,
+			...extSection,
+		];
+
+		// Box drawing — gold borders
 		const hChar = "\u2500";
-		const h = theme.fg("borderMuted", hChar);
-		const v = theme.fg("borderMuted", "\u2502");
-		const tl = theme.fg("borderMuted", "\u256d");
-		const tr = theme.fg("borderMuted", "\u256e");
-		const bl = theme.fg("borderMuted", "\u2570");
-		const br = theme.fg("borderMuted", "\u256f");
+		const h = theme.fg("border", hChar);
+		const v = theme.fg("border", "\u2502");
+		const tl = theme.fg("border", "\u256d");
+		const tr = theme.fg("border", "\u256e");
+		const bl = theme.fg("border", "\u2570");
+		const br = theme.fg("border", "\u256f");
 
 		const lines: string[] = [];
 
 		// Top border with embedded title
 		const title = ` ${APP_NAME} v${this.version} `;
 		const titlePrefixRaw = hChar.repeat(3);
-		const titleStyled = theme.fg("borderMuted", titlePrefixRaw) + theme.fg("dim", title);
+		const titleStyled = theme.fg("border", titlePrefixRaw) + theme.fg("dim", title);
 		const titleVisLen = visibleWidth(titlePrefixRaw) + visibleWidth(title);
 		const titleSpace = boxWidth - 2;
 		if (titleVisLen >= titleSpace) {
 			lines.push(tl + truncateToWidth(titleStyled, titleSpace) + tr);
 		} else {
 			const afterTitle = titleSpace - titleVisLen;
-			lines.push(tl + titleStyled + theme.fg("borderMuted", hChar.repeat(afterTitle)) + tr);
+			lines.push(tl + titleStyled + theme.fg("border", hChar.repeat(afterTitle)) + tr);
 		}
 
 		// Content rows
@@ -164,7 +157,7 @@ export class WelcomeComponent implements Component {
 			lines.push(
 				bl +
 					h.repeat(leftCol) +
-					theme.fg("borderMuted", "\u2534") +
+					theme.fg("border", "\u2534") +
 					h.repeat(rightCol) +
 					br,
 			);
@@ -186,16 +179,23 @@ export class WelcomeComponent implements Component {
 		return " ".repeat(leftPad) + text + " ".repeat(rightPad);
 	}
 
-	/** Apply gold→bronze gradient to a hammer line */
-	#gradientLine(line: string): string {
-		const colors = [
-			"\x1b[38;2;232;197;71m", // bright gold #E8C547
-			"\x1b[38;2;210;178;50m", // gold
-			"\x1b[38;2;201;162;39m", // #C9A227
-			"\x1b[38;2;170;135;30m", // darker gold
-			"\x1b[38;2;139;105;20m", // bronze #8B6914
-			"\x1b[38;2;110;85;20m", // dark bronze
+	/** Apply gradient to a hammer line — gold for head, cyan for handle */
+	#hammerLine(line: string, isHead: boolean): string {
+		const goldColors = [
+			"\x1b[38;2;232;200;48m", // bright #E8C830
+			"\x1b[38;2;220;185;15m",
+			"\x1b[38;2;212;170;0m", // gold #D4AA00
+			"\x1b[38;2;185;148;0m",
+			"\x1b[38;2;144;112;16m", // dark gold #907010
 		];
+		const handleColors = [
+			"\x1b[38;2;160;125;20m", // medium dark gold
+			"\x1b[38;2;144;112;16m", // #907010
+			"\x1b[38;2;125;96;12m",
+			"\x1b[38;2;108;82;10m",
+			"\x1b[38;2;90;68;8m", // deep burnished gold
+		];
+		const colors = isHead ? goldColors : handleColors;
 		const reset = "\x1b[0m";
 
 		let result = "";

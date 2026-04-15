@@ -16,6 +16,7 @@ import {
 import { readdir, readFile, stat } from "fs/promises";
 import { join, resolve } from "path";
 import { getAgentDir as getDefaultAgentDir, getSessionsDir } from "../config.js";
+import type { IntentMetadata } from "./intent-gate.js";
 import {
 	type BashExecutionMessage,
 	type CustomMessage,
@@ -24,7 +25,7 @@ import {
 	createCustomMessage,
 } from "./messages.js";
 
-export const CURRENT_SESSION_VERSION = 3;
+export const CURRENT_SESSION_VERSION = 4;
 
 export interface SessionHeader {
 	type: "session";
@@ -84,6 +85,14 @@ export interface BranchSummaryEntry<T = unknown> extends SessionEntryBase {
 	fromHook?: boolean;
 }
 
+export interface IntentEntry extends SessionEntryBase {
+	type: "intent";
+	turnIndex: number;
+	userMessageId?: string;
+	assistantMessageId?: string;
+	metadata: IntentMetadata;
+}
+
 /**
  * Custom entry for extensions to store extension-specific data in the session.
  * Use customType to identify your extension's entries.
@@ -140,6 +149,7 @@ export type SessionEntry =
 	| ModelChangeEntry
 	| CompactionEntry
 	| BranchSummaryEntry
+	| IntentEntry
 	| CustomEntry
 	| CustomMessageEntry
 	| LabelEntry
@@ -254,6 +264,15 @@ function migrateV2ToV3(entries: FileEntry[]): void {
 	}
 }
 
+/** Migrate v3 → v4: reserve version for Intent Gate entries. Mutates in place. */
+function migrateV3ToV4(entries: FileEntry[]): void {
+	for (const entry of entries) {
+		if (entry.type === "session") {
+			entry.version = 4;
+		}
+	}
+}
+
 /**
  * Run all necessary migrations to bring entries to current version.
  * Mutates entries in place. Returns true if any migration was applied.
@@ -266,6 +285,7 @@ function migrateToCurrentVersion(entries: FileEntry[]): boolean {
 
 	if (version < 2) migrateV1ToV2(entries);
 	if (version < 3) migrateV2ToV3(entries);
+	if (version < 4) migrateV3ToV4(entries);
 
 	return true;
 }
@@ -297,6 +317,15 @@ export function getLatestCompactionEntry(entries: SessionEntry[]): CompactionEnt
 	for (let i = entries.length - 1; i >= 0; i--) {
 		if (entries[i].type === "compaction") {
 			return entries[i] as CompactionEntry;
+		}
+	}
+	return null;
+}
+
+export function getLatestIntentEntry(entries: SessionEntry[]): IntentEntry | null {
+	for (let i = entries.length - 1; i >= 0; i--) {
+		if (entries[i].type === "intent") {
+			return entries[i] as IntentEntry;
 		}
 	}
 	return null;
@@ -915,6 +944,27 @@ export class SessionManager {
 		return entry.id;
 	}
 
+	/** Append Intent Gate metadata for a completed turn. Returns entry id. */
+	appendIntent(
+		turnIndex: number,
+		metadata: IntentMetadata,
+		userMessageId?: string,
+		assistantMessageId?: string,
+	): string {
+		const entry: IntentEntry = {
+			type: "intent",
+			id: generateId(this.byId),
+			parentId: this.leafId,
+			timestamp: new Date().toISOString(),
+			turnIndex,
+			userMessageId,
+			assistantMessageId,
+			metadata,
+		};
+		this._appendEntry(entry);
+		return entry.id;
+	}
+
 	/** Get the current session name from the latest session_info entry, if any. */
 	getSessionName(): string | undefined {
 		// Walk entries in reverse to find the latest session_info entry.
@@ -1035,6 +1085,11 @@ export class SessionManager {
 			current = current.parentId ? this.byId.get(current.parentId) : undefined;
 		}
 		return path;
+	}
+
+	/** Get Intent Gate metadata entries on the current branch or a specific branch. */
+	getIntentEntries(fromId?: string): IntentEntry[] {
+		return this.getBranch(fromId).filter((entry): entry is IntentEntry => entry.type === "intent");
 	}
 
 	/**

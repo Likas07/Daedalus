@@ -427,7 +427,9 @@ const simpleRegistry = ModelRegistry.inMemory(authStorage);
 
 ### System Prompt
 
-Use a `ResourceLoader` to override the system prompt:
+Use a `ResourceLoader` to override the system prompt.
+
+The default system prompt includes an Intent Gate. It tells the assistant to begin each turn with one brief visible line like `Intent: investigation — inspect relevant files and report only.` before tools or substantive answers.
 
 ```typescript
 import { createAgentSession, DefaultResourceLoader } from "@daedalus-pi/coding-agent";
@@ -440,15 +442,37 @@ await loader.reload();
 const { session } = await createAgentSession({ resourceLoader: loader });
 ```
 
+A full `systemPromptOverride` replaces the built-in Intent Gate. `appendSystemPromptOverride` or append-only project files keep it.
+
+IntentGate v2 also has runtime support:
+
+```typescript
+const { session } = await createAgentSession({
+  intentGate: {
+    parseVisibleLine: true,
+    persistMetadata: true,
+    toolPolicyMode: "enforce", // off | warn | enforce
+  },
+});
+
+session.getCurrentTurnIntent();
+session.getLastTurnIntent();
+session.getIntentHistory();
+```
+
+Planning intent is special-cased by the runtime: it may only mutate markdown planning artifacts under `docs/`, `plans/`, `specs/`, or `design/`. `write` calls are auto-routed into those directories when the assistant chooses an invalid planning path. `bash` is also intent-aware: non-mutating intents only allow clearly read-only shell commands, while planning additionally allows safe `mkdir` for planning directories.
+
+Extensions can inspect the current or last turn intent from `ctx.getCurrentTurnIntent()` / `ctx.getLastTurnIntent()`. Current-turn intent is available before the first mutation tool call because the runtime seeds a provisional intent from the user message, then refines it from the visible assistant `Intent:` line later in the turn.
+
 > See [examples/sdk/03-custom-prompt.ts](../examples/sdk/03-custom-prompt.ts)
 
 ### Tools
 
 ```typescript
 import {
-  codingTools,   // read, bash, edit, write (default)
+  codingTools,   // read, bash, hashline_edit, fetch, ast_grep, ast_edit, write, grep, find, ls (default)
   readOnlyTools, // read, grep, find, ls
-  readTool, bashTool, editTool, writeTool,
+  readTool, bashTool, editTool, hashlineEditTool, fetchTool, astGrepTool, astEditTool, writeTool,
   grepTool, findTool, lsTool,
 } from "@daedalus-pi/coding-agent";
 
@@ -461,6 +485,12 @@ const { session } = await createAgentSession({
 const { session } = await createAgentSession({
   tools: [readTool, bashTool, grepTool],
 });
+
+// Opt into hashline editing explicitly
+const { session: hashlineSession } = await createAgentSession({
+  tools: [readTool, hashlineEditTool, writeTool],
+});
+// Agent workflow: read({ path, format: "hashline" }) -> hashline_edit({ path, edits })
 ```
 
 #### Tools with Custom cwd
@@ -469,11 +499,15 @@ const { session } = await createAgentSession({
 
 ```typescript
 import {
-  createCodingTools,    // Creates [read, bash, edit, write] for specific cwd
+  createCodingTools,    // Creates [read, bash, hashline_edit, fetch, ast_grep, ast_edit, write, grep, find, ls] for specific cwd
   createReadOnlyTools,  // Creates [read, grep, find, ls] for specific cwd
   createReadTool,
   createBashTool,
   createEditTool,
+  createHashlineEditTool,
+  createFetchTool,
+  createAstGrepTool,
+  createAstEditTool,
   createWriteTool,
   createGrepTool,
   createFindTool,
@@ -492,6 +526,18 @@ const { session } = await createAgentSession({
 const { session } = await createAgentSession({
   cwd,
   tools: [createReadTool(cwd), createBashTool(cwd), createGrepTool(cwd)],
+});
+
+// Hashline editing with explicit opt-in
+const { session: hashlineSession2 } = await createAgentSession({
+  cwd,
+  tools: [createReadTool(cwd), createHashlineEditTool(cwd), createWriteTool(cwd)],
+});
+
+// Explicit custom selection including fetch + AST tools
+const { session: astSession } = await createAgentSession({
+  cwd,
+  tools: [createReadTool(cwd), createAstGrepTool(cwd), createAstEditTool(cwd), createFetchTool(cwd)],
 });
 ```
 
@@ -1101,13 +1147,14 @@ SettingsManager
 // Built-in tools (use process.cwd())
 codingTools
 readOnlyTools
-readTool, bashTool, editTool, writeTool
+readTool, bashTool, editTool, hashlineEditTool, fetchTool, astGrepTool, astEditTool, writeTool
 grepTool, findTool, lsTool
+// codingTools defaults to hashline_edit, fetch, ast_grep, and ast_edit instead of exact-text edit
 
 // Tool factories (for custom cwd)
 createCodingTools
 createReadOnlyTools
-createReadTool, createBashTool, createEditTool, createWriteTool
+createReadTool, createBashTool, createEditTool, createHashlineEditTool, createFetchTool, createAstGrepTool, createAstEditTool, createWriteTool
 createGrepTool, createFindTool, createLsTool
 
 // Types

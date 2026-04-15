@@ -11,6 +11,7 @@ import { detectSupportedImageMimeTypeFromFile } from "../../utils/mime.js";
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.js";
 import { resolveReadPath } from "./path-utils.js";
 import { getTextOutput, invalidArgText, replaceTabs, shortenPath, str } from "./render-utils.js";
+import { formatHashLines } from "./hashline/index.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, type TruncationResult, truncateHead } from "./truncate.js";
 
@@ -18,6 +19,11 @@ const readSchema = Type.Object({
 	path: Type.String({ description: "Path to the file to read (relative or absolute)" }),
 	offset: Type.Optional(Type.Number({ description: "Line number to start reading from (1-indexed)" })),
 	limit: Type.Optional(Type.Number({ description: "Maximum number of lines to read" })),
+	format: Type.Optional(
+		Type.Union([Type.Literal("plain"), Type.Literal("hashline")], {
+			description: 'Output format. Use "hashline" to return LINE#ID:content anchors for hashline_edit.',
+		}),
+	),
 });
 
 export type ReadToolInput = Static<typeof readSchema>;
@@ -53,7 +59,7 @@ export interface ReadToolOptions {
 }
 
 function formatReadCall(
-	args: { path?: string; file_path?: string; offset?: number; limit?: number } | undefined,
+	args: { path?: string; file_path?: string; offset?: number; limit?: number; format?: string } | undefined,
 	theme: typeof import("../../modes/interactive/theme/theme.js").theme,
 ): string {
 	const rawPath = str(args?.file_path ?? args?.path);
@@ -67,6 +73,9 @@ function formatReadCall(
 		const endLine = limit !== undefined ? startLine + limit - 1 : "";
 		pathDisplay += theme.fg("warning", `:${startLine}${endLine ? `-${endLine}` : ""}`);
 	}
+	if (args?.format === "hashline") {
+		pathDisplay += theme.fg("muted", " [hashline]");
+	}
 	return `${theme.fg("toolTitle", theme.bold("read"))} ${pathDisplay}`;
 }
 
@@ -79,7 +88,7 @@ function trimTrailingEmptyLines(lines: string[]): string[] {
 }
 
 function formatReadResult(
-	args: { path?: string; file_path?: string; offset?: number; limit?: number } | undefined,
+	args: { path?: string; file_path?: string; offset?: number; limit?: number; format?: string } | undefined,
 	result: { content: (TextContent | ImageContent)[]; details?: ReadToolDetails },
 	options: ToolRenderResultOptions,
 	theme: typeof import("../../modes/interactive/theme/theme.js").theme,
@@ -87,7 +96,7 @@ function formatReadResult(
 ): string {
 	const rawPath = str(args?.file_path ?? args?.path);
 	const output = getTextOutput(result as any, showImages);
-	const lang = rawPath ? getLanguageFromPath(rawPath) : undefined;
+	const lang = args?.format === "hashline" ? undefined : rawPath ? getLanguageFromPath(rawPath) : undefined;
 	const renderedLines = lang ? highlightCode(replaceTabs(output), lang) : output.split("\n");
 	const lines = trimTrailingEmptyLines(renderedLines);
 	const maxLines = options.expanded ? lines.length : 10;
@@ -126,7 +135,7 @@ export function createReadToolDefinition(
 		parameters: readSchema,
 		async execute(
 			_toolCallId,
-			{ path, offset, limit }: { path: string; offset?: number; limit?: number },
+			{ path, offset, limit, format = "plain" }: { path: string; offset?: number; limit?: number; format?: "plain" | "hashline" },
 			signal?: AbortSignal,
 			_onUpdate?,
 			_ctx?,
@@ -207,32 +216,37 @@ export function createReadToolDefinition(
 								}
 								// Apply truncation, respecting both line and byte limits.
 								const truncation = truncateHead(selectedContent);
-								let outputText: string;
+								let bodyText: string;
+								let noteText = "";
 								if (truncation.firstLineExceedsLimit) {
 									// First line alone exceeds the byte limit. Point the model at a bash fallback.
 									const firstLineSize = formatSize(Buffer.byteLength(allLines[startLine], "utf-8"));
-									outputText = `[Line ${startLineDisplay} is ${firstLineSize}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Use bash: sed -n '${startLineDisplay}p' ${path} | head -c ${DEFAULT_MAX_BYTES}]`;
+									bodyText = `[Line ${startLineDisplay} is ${firstLineSize}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Use bash: sed -n '${startLineDisplay}p' ${path} | head -c ${DEFAULT_MAX_BYTES}]`;
 									details = { truncation };
 								} else if (truncation.truncated) {
 									// Truncation occurred. Build an actionable continuation notice.
 									const endLineDisplay = startLineDisplay + truncation.outputLines - 1;
 									const nextOffset = endLineDisplay + 1;
-									outputText = truncation.content;
-									if (truncation.truncatedBy === "lines") {
-										outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines}. Use offset=${nextOffset} to continue.]`;
-									} else {
-										outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines} (${formatSize(DEFAULT_MAX_BYTES)} limit). Use offset=${nextOffset} to continue.]`;
-									}
+									bodyText = truncation.content;
+									noteText =
+										truncation.truncatedBy === "lines"
+											? `[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines}. Use offset=${nextOffset} to continue.]`
+											: `[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines} (${formatSize(DEFAULT_MAX_BYTES)} limit). Use offset=${nextOffset} to continue.]`;
 									details = { truncation };
 								} else if (userLimitedLines !== undefined && startLine + userLimitedLines < allLines.length) {
 									// User-specified limit stopped early, but the file still has more content.
 									const remaining = allLines.length - (startLine + userLimitedLines);
 									const nextOffset = startLine + userLimitedLines + 1;
-									outputText = `${truncation.content}\n\n[${remaining} more lines in file. Use offset=${nextOffset} to continue.]`;
+									bodyText = truncation.content;
+									noteText = `[${remaining} more lines in file. Use offset=${nextOffset} to continue.]`;
 								} else {
 									// No truncation and no remaining user-limited content.
-									outputText = truncation.content;
+									bodyText = truncation.content;
 								}
+								if (format === "hashline" && !truncation.firstLineExceedsLimit) {
+									bodyText = formatHashLines(bodyText, startLineDisplay);
+								}
+								const outputText = noteText ? `${bodyText}\n\n${noteText}` : bodyText;
 								content = [{ type: "text", text: outputText }];
 							}
 

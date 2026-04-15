@@ -1,9 +1,7 @@
 import type { AgentTool } from "@daedalus-pi/agent-core";
-import { Container, Text } from "@daedalus-pi/tui";
 import { type Static, Type } from "@sinclair/typebox";
 import { constants } from "fs";
 import { access as fsAccess, readFile as fsReadFile, writeFile as fsWriteFile } from "fs/promises";
-import { renderDiff } from "../../modes/interactive/components/diff.js";
 import type { ToolDefinition } from "../extensions/types.js";
 import {
 	applyEditsToNormalizedContent,
@@ -16,7 +14,7 @@ import {
 } from "./edit-diff.js";
 import { withFileMutationQueue } from "./file-mutation-queue.js";
 import { resolveToCwd } from "./path-utils.js";
-import { invalidArgText, shortenPath, str } from "./render-utils.js";
+import { createPathEditCallRenderer, createPathEditResultRenderer } from "./edit-render.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 
 type EditRenderState = Record<string, never>;
@@ -103,52 +101,8 @@ function validateEditInput(input: EditToolInput): { path: string; edits: Edit[] 
 	return { path: input.path, edits: input.edits };
 }
 
-type RenderableEditArgs = {
-	path?: string;
-	file_path?: string;
-	edits?: Edit[];
-	oldText?: string;
-	newText?: string;
-};
-
-function formatEditCall(
-	args: RenderableEditArgs | undefined,
-	theme: typeof import("../../modes/interactive/theme/theme.js").theme,
-): string {
-	const invalidArg = invalidArgText(theme);
-	const rawPath = str(args?.file_path ?? args?.path);
-	const path = rawPath !== null ? shortenPath(rawPath) : null;
-	const pathDisplay = path === null ? invalidArg : path ? theme.fg("accent", path) : theme.fg("toolOutput", "...");
-	return `${theme.fg("toolTitle", theme.bold("edit"))} ${pathDisplay}`;
-}
-
-function formatEditResult(
-	args: RenderableEditArgs | undefined,
-	result: {
-		content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
-		details?: EditToolDetails;
-	},
-	theme: typeof import("../../modes/interactive/theme/theme.js").theme,
-	isError: boolean,
-): string | undefined {
-	const rawPath = str(args?.file_path ?? args?.path);
-	if (isError) {
-		const errorText = result.content
-			.filter((c) => c.type === "text")
-			.map((c) => c.text || "")
-			.join("\n");
-		if (!errorText) {
-			return undefined;
-		}
-		return `\n${theme.fg("error", errorText)}`;
-	}
-
-	const resultDiff = result.details?.diff;
-	if (!resultDiff) {
-		return undefined;
-	}
-	return `\n${renderDiff(resultDiff, { filePath: rawPath ?? undefined })}`;
-}
+const renderEditCall = createPathEditCallRenderer("edit");
+const renderEditResult = createPathEditResultRenderer();
 
 export function createEditToolDefinition(
 	cwd: string,
@@ -279,22 +233,8 @@ export function createEditToolDefinition(
 					}),
 			);
 		},
-		renderCall(args, theme, context) {
-			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			text.setText(formatEditCall(args, theme));
-			return text;
-		},
-		renderResult(result, _options, theme, context) {
-			const output = formatEditResult(context.args, result as any, theme, context.isError);
-			if (!output) {
-				const component = (context.lastComponent as Container | undefined) ?? new Container();
-				component.clear();
-				return component;
-			}
-			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			text.setText(output);
-			return text;
-		},
+		renderCall: renderEditCall,
+		renderResult: renderEditResult,
 	};
 }
 

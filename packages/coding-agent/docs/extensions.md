@@ -1610,7 +1610,7 @@ pi.registerTool({
 
 ### Overriding Built-in Tools
 
-Extensions can override built-in tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`) by registering a tool with the same name. Interactive mode displays a warning when this happens.
+Extensions can override built-in tools (`read`, `bash`, `edit`, `hashline_edit`, `fetch`, `ast_grep`, `ast_edit`, `write`, `grep`, `find`, `ls`) by registering a tool with the same name. Interactive mode displays a warning when this happens.
 
 ```bash
 # Extension's read tool replaces built-in read
@@ -1635,6 +1635,7 @@ Built-in tool implementations:
 - [read.ts](https://github.com/Likas07/Daedalus/blob/main/packages/coding-agent/src/core/tools/read.ts) - `ReadToolDetails`
 - [bash.ts](https://github.com/Likas07/Daedalus/blob/main/packages/coding-agent/src/core/tools/bash.ts) - `BashToolDetails`
 - [edit.ts](https://github.com/Likas07/Daedalus/blob/main/packages/coding-agent/src/core/tools/edit.ts)
+- [hashline-edit.ts](https://github.com/Likas07/Daedalus/blob/main/packages/coding-agent/src/core/tools/hashline-edit.ts)
 - [write.ts](https://github.com/Likas07/Daedalus/blob/main/packages/coding-agent/src/core/tools/write.ts)
 - [grep.ts](https://github.com/Likas07/Daedalus/blob/main/packages/coding-agent/src/core/tools/grep.ts) - `GrepToolDetails`
 - [find.ts](https://github.com/Likas07/Daedalus/blob/main/packages/coding-agent/src/core/tools/find.ts) - `FindToolDetails`
@@ -1669,7 +1670,7 @@ pi.registerTool({
 });
 ```
 
-**Operations interfaces:** `ReadOperations`, `WriteOperations`, `EditOperations`, `BashOperations`, `LsOperations`, `GrepOperations`, `FindOperations`
+**Operations interfaces:** `ReadOperations`, `WriteOperations`, `EditOperations`, `HashlineEditOperations`, `BashOperations`, `LsOperations`, `GrepOperations`, `FindOperations`
 
 For `user_bash`, extensions can reuse pi's local shell backend via `createLocalBashOperations()` instead of reimplementing local process spawning, shell resolution, and process-tree termination.
 

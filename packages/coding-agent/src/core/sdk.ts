@@ -10,6 +10,7 @@ import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefi
 import { convertToLlm } from "./messages.js";
 import { ModelRegistry } from "./model-registry.js";
 import { findInitialModel } from "./model-resolver.js";
+import type { IntentGateRuntimeOptions } from "./intent-policy.js";
 import type { ResourceLoader } from "./resource-loader.js";
 import { DefaultResourceLoader } from "./resource-loader.js";
 import { getDefaultSessionDir, SessionManager } from "./session-manager.js";
@@ -17,19 +18,27 @@ import { SettingsManager } from "./settings-manager.js";
 import { time } from "./timings.js";
 import {
 	allTools,
+	astEditTool,
+	astGrepTool,
 	bashTool,
 	codingTools,
+	createAstEditTool,
+	createAstGrepTool,
 	createBashTool,
 	createCodingTools,
 	createEditTool,
+	createFetchTool,
 	createFindTool,
+	createHashlineEditTool,
 	createGrepTool,
 	createLsTool,
 	createReadOnlyTools,
 	createReadTool,
 	createWriteTool,
 	editTool,
+	fetchTool,
 	findTool,
+	hashlineEditTool,
 	grepTool,
 	lsTool,
 	readOnlyTools,
@@ -58,7 +67,7 @@ export interface CreateAgentSessionOptions {
 	/** Models available for cycling (Ctrl+P in interactive mode) */
 	scopedModels?: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
 
-	/** Built-in tools to use. Default: codingTools [read, bash, edit, write] */
+	/** Built-in tools to use. Default: codingTools [read, bash, hashline_edit, fetch, ast_grep, ast_edit, write, grep, find, ls] */
 	tools?: Tool[];
 	/** Custom tools to register (in addition to built-in tools). */
 	customTools?: ToolDefinition[];
@@ -68,6 +77,9 @@ export interface CreateAgentSessionOptions {
 
 	/** Session manager. Default: SessionManager.create(cwd) */
 	sessionManager?: SessionManager;
+
+	/** Intent Gate runtime options for metadata parsing, persistence, and mutation policy. */
+	intentGate?: IntentGateRuntimeOptions;
 
 	/** Settings manager. Default: SettingsManager.create(cwd, agentDir) */
 	settingsManager?: SettingsManager;
@@ -97,6 +109,8 @@ export type {
 	SlashCommandSource,
 	ToolDefinition,
 } from "./extensions/index.js";
+export type { MutationScope, PlanningArtifactKind, IntentGateType, IntentMetadata } from "./intent-gate.js";
+export type { IntentGateRuntimeOptions, IntentToolPolicyMode } from "./intent-policy.js";
 export type { PromptTemplate } from "./prompt-templates.js";
 export type { Skill } from "./skills.js";
 export type { Tool } from "./tools/index.js";
@@ -106,6 +120,10 @@ export {
 	readTool,
 	bashTool,
 	editTool,
+	hashlineEditTool,
+	fetchTool,
+	astGrepTool,
+	astEditTool,
 	writeTool,
 	grepTool,
 	findTool,
@@ -120,6 +138,10 @@ export {
 	createReadTool,
 	createBashTool,
 	createEditTool,
+	createHashlineEditTool,
+	createFetchTool,
+	createAstGrepTool,
+	createAstEditTool,
 	createWriteTool,
 	createGrepTool,
 	createFindTool,
@@ -243,7 +265,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		thinkingLevel = "off";
 	}
 
-	const defaultActiveToolNames: ToolName[] = ["read", "bash", "edit", "write"];
+	const defaultActiveToolNames: ToolName[] = ["read", "bash", "edit", "write", "grep", "find", "ls"];
 	const initialActiveToolNames: ToolName[] = options.tools
 		? options.tools.map((t) => t.name).filter((n): n is ToolName => n in allTools)
 		: defaultActiveToolNames;
@@ -354,6 +376,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		initialActiveToolNames,
 		extensionRunnerRef,
 		sessionStartEvent: options.sessionStartEvent,
+		intentGate: options.intentGate,
 	});
 	const extensionsResult = resourceLoader.getExtensions();
 
