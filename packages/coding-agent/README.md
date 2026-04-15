@@ -94,7 +94,7 @@ pi
 /login  # Then select provider
 ```
 
-Then just talk to pi. By default, pi gives the model these built-in tools: `read`, `bash`, `hashline_edit`, `fetch`, `ast_grep`, `ast_edit`, `write`, `grep`, `find`, and `ls`. The model uses these to fulfill your requests. The default system prompt also includes an Intent Gate, so each assistant turn should start with a brief visible `Intent:` line before tools or substantive answers. Add capabilities via [skills](#skills), [prompt templates](#prompt-templates), [extensions](#extensions), or [daedalus packages](#daedalus-packages).
+Then just talk to pi. By default, pi gives the model these built-in tools: `read`, `bash`, `hashline_edit`, `fetch`, `ast_grep`, `ast_edit`, `write`, `grep`, `find`, and `ls`. The model uses these to fulfill your requests. The default system prompt also includes an Intent Gate, so first assistant turn after each new user request should start with one brief visible `Intent:` line before tools or substantive answers. Follow-up assistant turns for same request should not repeat it. Add capabilities via [skills](#skills), [prompt templates](#prompt-templates), [extensions](#extensions), or [daedalus packages](#daedalus-packages).
 
 **Platform notes:** [Windows](docs/windows.md) | [Termux (Android)](docs/termux.md) | [tmux](docs/tmux.md) | [Terminal setup](docs/terminal-setup.md) | [Shell aliases](docs/shell-aliases.md)
 
@@ -179,6 +179,8 @@ Type `/` in the editor to trigger commands. [Extensions](#extensions) can regist
 | `/tree` | Jump to any point in the session and continue from there |
 | `/fork` | Create a new session from the current branch |
 | `/compact [prompt]` | Manually compact context, optional custom instructions |
+| `/intent-collect` | Aggregate current-branch user phrasing + final intent labels into the global intent stats store |
+| `/intent-review` | Review aggregate intent stats, then optionally approve/apply learned heuristic suggestions |
 | `/copy` | Copy last assistant message to clipboard |
 | `/export [file]` | Export session to HTML file |
 | `/share` | Upload as private GitHub gist with shareable HTML link |
@@ -288,13 +290,21 @@ Use for project instructions, conventions, common commands. All matching files a
 
 Replace the default system prompt with `.pi/SYSTEM.md` (project) or `~/.pi/agent/SYSTEM.md` (global). Append without replacing via `APPEND_SYSTEM.md`.
 
-The default system prompt includes an Intent Gate. It tells the assistant to begin each turn with one brief visible line like:
+The default system prompt includes an Intent Gate. It tells the assistant to begin first assistant turn for each new user request with one brief visible line like:
 
 ```text
 Intent: investigation — inspect relevant files and report only.
 ```
 
-IntentGate v2 also parses that line at runtime, stores per-turn intent metadata, exposes it through the SDK/extensions, and enforces mutation policy for built-in mutation tools. Planning intent is limited to markdown artifacts under `docs/`, `plans/`, `specs/`, or `design/`.
+IntentGate v2 also parses that line at runtime, stores request-level intent metadata, exposes it through the SDK/extensions, and enforces mutation policy for built-in mutation tools. Planning intent is limited to markdown artifacts under `docs/`, `plans/`, `specs/`, or `design/`.
+
+Daedalus also includes an approval-based intent-learning workflow:
+- `/intent-collect` deterministically aggregates **user messages + final intent entries only** into `~/.daedalus/agent/intent-stats.json`
+- `/intent-review` sends only those aggregate stats (not raw transcripts or tool output) to the current model for heuristic suggestions
+- approved learned rules are written separately from built-in heuristics:
+  - global: `~/.daedalus/agent/intent-heuristics.json`
+  - project-local override: `.daedalus/intent-heuristics.json`
+- runtime precedence is: explicit read-only override → learned preferences → built-in defaults → fallback
 
 If you fully replace the system prompt, this built-in Intent Gate is removed unless you add your own version. If you append to the default prompt, the built-in Intent Gate stays in place.
 

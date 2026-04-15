@@ -13,6 +13,7 @@
  * Modes use this class and add their own I/O layer on top.
  */
 
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import type {
@@ -49,6 +50,7 @@ import {
 	inferIntentMetadataFromUserText,
 	inferSurfaceForm,
 	parseIntentLine,
+	stripLeadingIntentLineFromAssistantMessage,
 	type IntentMetadata,
 } from "./intent-gate.js";
 import {
@@ -58,6 +60,7 @@ import {
 	type IntentGateRuntimeOptions,
 	type ResolvedIntentGateRuntimeOptions,
 } from "./intent-policy.js";
+import { loadMergedIntentHeuristicRules } from "../extensions/daedalus/workflow/intent-learning/preferences.js";
 import {
 	type ContextUsage,
 	type ExtensionCommandContextActions,
@@ -232,6 +235,18 @@ interface ToolDefinitionEntry {
 	sourceInfo: SourceInfo;
 }
 
+interface ActiveRequestState {
+	requestId: string;
+	requestText?: string;
+	userMessageId?: string;
+	synthetic: boolean;
+	intent: IntentMetadata;
+	pendingConfirmation: boolean;
+	persisted: boolean;
+	assistantMessageId?: string;
+	confirmationTurnIndex?: number;
+}
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -312,9 +327,9 @@ export class AgentSession {
 
 	// Intent Gate runtime state
 	private _intentGate: ResolvedIntentGateRuntimeOptions;
+	private _activeRequest?: ActiveRequestState;
 	private _currentTurnIntent?: IntentMetadata;
 	private _lastTurnIntent?: IntentMetadata;
-	private _currentTurnUserMessageId?: string;
 	private _currentTurnAssistantMessageId?: string;
 	private _lastUserMessageText?: string;
 
@@ -536,7 +551,7 @@ export class AgentSession {
 		if (event.type === "message_start" && event.message.role === "user") {
 			this._overflowRecoveryAttempted = false;
 			const messageText = this._getUserMessageText(event.message);
-			this._seedCurrentTurnIntentFromUserText(messageText);
+			this._startRequest(messageText, { synthetic: false });
 			if (messageText) {
 				// Check steering queue first
 				const steeringIndex = this._steeringMessages.indexOf(messageText);
@@ -590,7 +605,10 @@ export class AgentSession {
 			// Other message types (bashExecution, compactionSummary, branchSummary) are persisted elsewhere
 
 			if (event.message.role === "user") {
-				this._currentTurnUserMessageId = entryId;
+				if (this._activeRequest) {
+					this._activeRequest.userMessageId = entryId;
+					this._activeRequest.requestText = this._getUserMessageText(event.message);
+				}
 				this._lastUserMessageText = this._getUserMessageText(event.message);
 			}
 
@@ -599,6 +617,12 @@ export class AgentSession {
 				this._currentTurnAssistantMessageId = entryId;
 				this._lastAssistantMessage = event.message;
 				this._updateIntentFromAssistantMessage(event.message as AssistantMessage);
+				if (this._activeRequest && !this._activeRequest.assistantMessageId) {
+					this._activeRequest.assistantMessageId = entryId;
+				}
+				if (this._activeRequest?.pendingConfirmation) {
+					this._lockActiveRequestIntent(entryId, this._turnIndex);
+				}
 
 				const assistantMsg = event.message as AssistantMessage;
 				if (assistantMsg.stopReason !== "error") {
@@ -620,15 +644,7 @@ export class AgentSession {
 
 		if (event.type === "turn_end") {
 			this._lastTurnIntent = this._currentTurnIntent;
-			if (this._intentGate.persistMetadata && this._currentTurnIntent) {
-				this.sessionManager.appendIntent(
-					completedTurnIndex ?? this._turnIndex,
-					this._currentTurnIntent,
-					this._currentTurnUserMessageId,
-					this._currentTurnAssistantMessageId,
-				);
-			}
-			this._currentTurnUserMessageId = undefined;
+			this._persistLockedActiveRequest(completedTurnIndex ?? this._turnIndex);
 			this._currentTurnAssistantMessageId = undefined;
 		}
 
@@ -666,20 +682,87 @@ export class AgentSession {
 		return textBlocks.map((c) => (c as TextContent).text).join("");
 	}
 
+	private _getCustomMessageText(content: string | (TextContent | ImageContent)[]): string {
+		if (typeof content === "string") {
+			return content;
+		}
+		return content
+			.filter((block): block is TextContent => block.type === "text")
+			.map((block) => block.text)
+			.join("\n");
+	}
+
+	private _syncCurrentTurnIntentFromActiveRequest(): void {
+		this._currentTurnIntent = this._activeRequest?.intent;
+	}
+
 	private _clearCurrentTurnIntentState(): void {
-		this._currentTurnIntent = undefined;
+		this._syncCurrentTurnIntentFromActiveRequest();
 		this._currentTurnAssistantMessageId = undefined;
 	}
 
-	private _seedCurrentTurnIntentFromUserText(userText: string | undefined): void {
-		if (!userText || this._currentTurnIntent?.source === "assistant-line") {
+	private _startRequest(userText: string | undefined, options?: { synthetic?: boolean }): void {
+		if (!userText || userText.trim().length === 0) {
 			return;
 		}
-		this._currentTurnIntent = inferIntentMetadataFromUserText(userText);
+		this._activeRequest = {
+			requestId: randomUUID(),
+			requestText: userText,
+			synthetic: options?.synthetic ?? false,
+			intent: inferIntentMetadataFromUserText(userText, {
+				learnedRules: loadMergedIntentHeuristicRules(this._cwd),
+			}),
+			pendingConfirmation: true,
+			persisted: false,
+		};
+		this._lastUserMessageText = userText;
+		this._syncCurrentTurnIntentFromActiveRequest();
+	}
+
+	private _lockActiveRequestIntent(assistantMessageId?: string, confirmationTurnIndex?: number): void {
+		if (!this._activeRequest) {
+			return;
+		}
+		this._activeRequest.pendingConfirmation = false;
+		if (assistantMessageId) {
+			this._activeRequest.assistantMessageId = assistantMessageId;
+		}
+		if (typeof confirmationTurnIndex === "number") {
+			this._activeRequest.confirmationTurnIndex = confirmationTurnIndex;
+		}
+		this._syncCurrentTurnIntentFromActiveRequest();
+	}
+
+	private _persistLockedActiveRequest(turnIndex: number): void {
+		if (!this._intentGate.persistMetadata || !this._activeRequest || this._activeRequest.persisted || this._activeRequest.pendingConfirmation) {
+			return;
+		}
+		this.sessionManager.appendIntent({
+			requestId: this._activeRequest.requestId,
+			turnIndex,
+			metadata: this._activeRequest.intent,
+			userMessageId: this._activeRequest.userMessageId,
+			requestText: this._activeRequest.requestText,
+			synthetic: this._activeRequest.synthetic,
+			assistantMessageId: this._activeRequest.assistantMessageId ?? this._currentTurnAssistantMessageId,
+			locked: true,
+		});
+		this._activeRequest.persisted = true;
+	}
+
+	private _stripRepeatedIntentLineIfNeeded(message: AssistantMessage): void {
+		if (!this._activeRequest || this._activeRequest.pendingConfirmation) {
+			return;
+		}
+		stripLeadingIntentLineFromAssistantMessage(message);
 	}
 
 	private _updateIntentFromAssistantMessage(message: AssistantMessage): void {
-		if (!this._intentGate.parseVisibleLine) {
+		if (!this._activeRequest) {
+			return;
+		}
+		if (!this._intentGate.parseVisibleLine || !this._activeRequest.pendingConfirmation) {
+			this._stripRepeatedIntentLineIfNeeded(message);
 			return;
 		}
 		const firstLine = extractFirstTextLine(message);
@@ -687,17 +770,18 @@ export class AgentSession {
 			return;
 		}
 		const parsed = parseIntentLine(firstLine, {
-			userText: this._lastUserMessageText,
-			surfaceForm: inferSurfaceForm(this._lastUserMessageText),
+			userText: this._activeRequest.requestText ?? this._lastUserMessageText,
+			surfaceForm: inferSurfaceForm(this._activeRequest.requestText ?? this._lastUserMessageText),
 			source: "assistant-line",
 		});
 		if (parsed) {
-			const current = this._currentTurnIntent;
-			if (current?.source === "inferred") {
+			const current = this._activeRequest.intent;
+			if (current?.source === "inferred" || current?.source === "learned") {
 				parsed.readOnly = current.readOnly || parsed.readOnly;
 				parsed.mutationScope = chooseMoreRestrictiveMutationScope(current.mutationScope, parsed.mutationScope);
 			}
-			this._currentTurnIntent = parsed;
+			this._activeRequest.intent = parsed;
+			this._syncCurrentTurnIntentFromActiveRequest();
 		}
 	}
 
@@ -1360,10 +1444,17 @@ export class AgentSession {
 	 * @param message Custom message with customType, content, display, details
 	 * @param options.triggerTurn If true and not streaming, triggers a new LLM turn
 	 * @param options.deliverAs Delivery mode: "steer", "followUp", or "nextTurn"
+	 * @param options.startsRequest If true, starts a synthetic request boundary before triggered turn
+	 * @param options.requestText Optional synthetic request text; falls back to custom message text
 	 */
 	async sendCustomMessage<T = unknown>(
 		message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details">,
-		options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
+		options?: {
+			triggerTurn?: boolean;
+			deliverAs?: "steer" | "followUp" | "nextTurn";
+			startsRequest?: boolean;
+			requestText?: string;
+		},
 	): Promise<void> {
 		const appMessage = {
 			role: "custom" as const,
@@ -1373,6 +1464,9 @@ export class AgentSession {
 			details: message.details,
 			timestamp: Date.now(),
 		} satisfies CustomMessage<T>;
+		if (options?.startsRequest && options.deliverAs && options.deliverAs !== "nextTurn") {
+			throw new Error("startsRequest is only supported for immediate triggerTurn calls or explicit nextTurn handling.");
+		}
 		if (options?.deliverAs === "nextTurn") {
 			this._pendingNextTurnMessages.push(appMessage);
 		} else if (this.isStreaming) {
@@ -1382,6 +1476,10 @@ export class AgentSession {
 				this.agent.steer(appMessage);
 			}
 		} else if (options?.triggerTurn) {
+			if (options.startsRequest) {
+				const syntheticText = options.requestText?.trim() || this._getCustomMessageText(message.content).trim();
+				this._startRequest(syntheticText, { synthetic: true });
+			}
 			await this.agent.prompt(appMessage);
 		} else {
 			this.agent.state.messages.push(appMessage);

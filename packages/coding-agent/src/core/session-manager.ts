@@ -25,7 +25,7 @@ import {
 	createCustomMessage,
 } from "./messages.js";
 
-export const CURRENT_SESSION_VERSION = 4;
+export const CURRENT_SESSION_VERSION = 5;
 
 export interface SessionHeader {
 	type: "session";
@@ -87,9 +87,13 @@ export interface BranchSummaryEntry<T = unknown> extends SessionEntryBase {
 
 export interface IntentEntry extends SessionEntryBase {
 	type: "intent";
+	requestId: string;
 	turnIndex: number;
 	userMessageId?: string;
+	requestText?: string;
+	synthetic?: boolean;
 	assistantMessageId?: string;
+	locked: boolean;
 	metadata: IntentMetadata;
 }
 
@@ -273,6 +277,15 @@ function migrateV3ToV4(entries: FileEntry[]): void {
 	}
 }
 
+/** Migrate v4 → v5: reserve version for request-level intent entries. Mutates in place. */
+function migrateV4ToV5(entries: FileEntry[]): void {
+	for (const entry of entries) {
+		if (entry.type === "session") {
+			entry.version = 5;
+		}
+	}
+}
+
 /**
  * Run all necessary migrations to bring entries to current version.
  * Mutates entries in place. Returns true if any migration was applied.
@@ -286,6 +299,7 @@ function migrateToCurrentVersion(entries: FileEntry[]): boolean {
 	if (version < 2) migrateV1ToV2(entries);
 	if (version < 3) migrateV2ToV3(entries);
 	if (version < 4) migrateV3ToV4(entries);
+	if (version < 5) migrateV4ToV5(entries);
 
 	return true;
 }
@@ -944,22 +958,30 @@ export class SessionManager {
 		return entry.id;
 	}
 
-	/** Append Intent Gate metadata for a completed turn. Returns entry id. */
-	appendIntent(
-		turnIndex: number,
-		metadata: IntentMetadata,
-		userMessageId?: string,
-		assistantMessageId?: string,
-	): string {
+	/** Append locked request-level Intent Gate metadata. Returns entry id. */
+	appendIntent(options: {
+		requestId: string;
+		turnIndex: number;
+		metadata: IntentMetadata;
+		userMessageId?: string;
+		requestText?: string;
+		synthetic?: boolean;
+		assistantMessageId?: string;
+		locked?: boolean;
+	}): string {
 		const entry: IntentEntry = {
 			type: "intent",
 			id: generateId(this.byId),
 			parentId: this.leafId,
 			timestamp: new Date().toISOString(),
-			turnIndex,
-			userMessageId,
-			assistantMessageId,
-			metadata,
+			requestId: options.requestId,
+			turnIndex: options.turnIndex,
+			userMessageId: options.userMessageId,
+			requestText: options.requestText,
+			synthetic: options.synthetic,
+			assistantMessageId: options.assistantMessageId,
+			locked: options.locked ?? true,
+			metadata: options.metadata,
 		};
 		this._appendEntry(entry);
 		return entry.id;

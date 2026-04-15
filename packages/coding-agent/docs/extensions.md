@@ -1077,6 +1077,17 @@ pi.sendMessage({
   triggerTurn: true,
   deliverAs: "steer",
 });
+
+// Explicit synthetic request boundary
+pi.sendMessage({
+  customType: "plan-execute",
+  content: "Execute approved plan starting at step 1",
+  display: true,
+}, {
+  triggerTurn: true,
+  startsRequest: true,
+  requestText: "Execute approved plan starting at step 1",
+});
 ```
 
 **Options:**
@@ -1085,6 +1096,12 @@ pi.sendMessage({
   - `"followUp"` - Waits for agent to finish. Delivered only when agent has no more tool calls.
   - `"nextTurn"` - Queued for next user prompt. Does not interrupt or trigger anything.
 - `triggerTurn: true` - If agent is idle, trigger an LLM response immediately. Only applies to `"steer"` and `"followUp"` modes (ignored for `"nextTurn"`).
+- `startsRequest: true` - Explicitly start a new synthetic request boundary for this custom triggered turn. Use this when extension is semantically starting new user-level task, not merely continuing prior one.
+- `requestText` - Optional text used to classify synthetic request. Recommended whenever `startsRequest: true` is set.
+
+By default, `sendMessage(..., { triggerTurn: true })` continues current request. It does **not** create a new user request boundary unless `startsRequest: true` is provided.
+
+Use `pi.sendUserMessage(...)` when you want actual user-message semantics.
 
 ### pi.sendUserMessage(content, options?)
 

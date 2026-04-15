@@ -7,7 +7,7 @@ Status: implemented.
 IntentGate now has two layers:
 
 1. **Prompt contract**
-   - every assistant turn begins with one visible line:
+   - first assistant turn after each new user request begins with one visible line:
 
 ```text
 Intent: <research|planning|implementation|investigation|evaluation|fix|open-ended> — <brief approach>
@@ -15,7 +15,7 @@ Intent: <research|planning|implementation|investigation|evaluation|fix|open-ende
 
 2. **Harness runtime feature**
    - Daedalus parses the visible line
-   - records per-turn intent metadata
+   - records request-level intent metadata
    - exposes that metadata to the SDK and extensions
    - enforces mutation policy for built-in mutation tools
 
@@ -39,9 +39,10 @@ Allowed classes:
 ## Routing rules
 
 Before selecting the final intent class, the assistant should:
-- identify the user's **surface form**
-- infer the likely **true intent**
-- choose the visible intent line from the **true intent**
+- identify user's **surface form**
+- infer likely **true intent**
+- choose visible intent line from **true intent**
+- emit that line once for request, not once per later assistant substep
 
 Conservative routing rules:
 - `research`: inspect and explain only
@@ -99,7 +100,7 @@ Default fallback when unsure:
 
 ## Runtime behavior
 
-The runtime now seeds a provisional intent from the current user message before tool execution, then refines it when the visible assistant `Intent:` line arrives. It stores metadata like:
+The runtime now seeds a provisional request intent from current user message before tool execution, then refines it when first visible assistant `Intent:` line for that request arrives. It stores metadata like:
 - `surfaceForm`
 - `trueIntent`
 - `approach`
@@ -110,9 +111,10 @@ The runtime now seeds a provisional intent from the current user message before 
 - `valid`
 
 That metadata is:
-- available during the current turn before the first mutation tool call
-- refined by the visible `Intent:` line later in the same turn
-- persisted to the session as `intent` entries
+- available during current request before first mutation tool call
+- refined once by first visible `Intent:` line for request
+- locked for later assistant turns in same request
+- persisted to session as `intent` entries
 - available to SDK callers and extensions
 
 ## Tool policy hooks
@@ -156,3 +158,46 @@ Default behavior in v2:
 - full system prompt override: replaces default prompt, so users must add their own IntentGate line contract if they still want parsing and enforcement to work reliably
 
 If a custom prompt omits the visible `Intent:` line and tool policy enforcement remains enabled, mutation tools can be blocked because no valid intent line was parsed.
+
+## Intent learning workflow
+
+IntentGate v2 intent metadata also powers two explicit learning commands:
+
+- `/intent-collect`
+  - deterministic only
+  - analyzes the **current branch only**
+  - uses **user messages + final persisted intent entries only**
+  - ignores tool calls, tool results, bash output, compaction summaries, and long assistant prose
+  - merges aggregate phrase stats into `~/.daedalus/agent/intent-stats.json`
+
+- `/intent-review`
+  - model-assisted, explicit, and occasional
+  - reads only the aggregate stats file
+  - proposes heuristic additions/strengthenings and flags ambiguous phrases
+  - supports explicit approval/apply into learned preference files
+
+Current collector behavior:
+- extracts leading 1-3 word phrases and a small set of explicit high-signal phrase patterns
+- tracks counts by final intent, distinct session count, mismatch count, dominant intent, and confidence
+- stores only capped sanitized example snippets per feature/intent bucket
+- dedupes already-collected turn samples so rerunning `/intent-collect` on the same branch does not double-count
+
+## Learned heuristic preferences
+
+Approved rules are stored separately from built-in heuristics.
+
+Default files:
+- global learned rules: `~/.daedalus/agent/intent-heuristics.json`
+- project-local learned overrides: `.daedalus/intent-heuristics.json`
+
+Runtime precedence:
+1. explicit read-only / no-change override
+2. learned project/global heuristic preferences
+3. built-in default heuristics
+4. fallback behavior
+
+Current apply flow:
+- `/intent-review` shows structured candidate suggestions with stable ids
+- interactive mode can approve selected ids into the global or project-local preference file
+- non-interactive usage can call `/intent-review apply-global all`, `/intent-review apply-project all`, or pass specific ids
+- applying suggestions updates preference files only; it does not mutate shipped source heuristics

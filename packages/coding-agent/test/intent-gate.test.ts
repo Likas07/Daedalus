@@ -7,6 +7,7 @@ import {
 	INTENT_GATE_LINE_FORMAT,
 	INTENT_GATE_TYPES,
 	parseIntentLine,
+	stripLeadingIntentLineFromAssistantMessage,
 } from "../src/core/intent-gate.js";
 
 describe("intent gate helper", () => {
@@ -27,12 +28,13 @@ describe("intent gate helper", () => {
 
 	test("prompt block includes contract and examples remain brief", () => {
 		const block = buildIntentGatePromptBlock();
-		expect(block).toContain("## Intent Gate (every turn)");
+		expect(block).toContain("## Intent Gate (per user request)");
 		expect(block).toContain(INTENT_GATE_LINE_FORMAT);
 		expect(block).toContain("surface form");
 		expect(block).toContain("docs/, plans/, specs/, or design/");
 		expect(block).toContain("read-only behavior");
 		expect(block).toContain('read(format: "hashline") before hashline_edit');
+		expect(block).toContain("emit this line only once for that user request");
 		const inferred = inferIntentMetadataFromUserText("Fix footer cost formatting to BRL and verify");
 		expect(inferred).toMatchObject({
 			trueIntent: "fix",
@@ -55,6 +57,32 @@ describe("intent gate helper", () => {
 		});
 		for (const example of INTENT_GATE_EXAMPLES) {
 			expect(example.startsWith("Intent: ")).toBe(true);
+		}
+	});
+
+	test("strips repeated leading intent line from assistant message content", () => {
+		const message = {
+			role: "assistant" as const,
+			content: [{ type: "text" as const, text: "Intent: fix — diagnose root cause\nActual answer" }],
+			api: "anthropic-messages" as const,
+			provider: "anthropic",
+			model: "test",
+			usage: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 0,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "stop" as const,
+			timestamp: Date.now(),
+		};
+
+		expect(stripLeadingIntentLineFromAssistantMessage(message)).toBe(true);
+		expect(message.content[0]?.type).toBe("text");
+		if (message.content[0]?.type === "text") {
+			expect(message.content[0].text).toBe("Actual answer");
 		}
 	});
 });

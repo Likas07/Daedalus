@@ -107,11 +107,11 @@ describe("buildSystemPrompt", () => {
 				skills: [],
 			});
 
-			expect(prompt).toContain("## Intent Gate (every turn)");
+			expect(prompt).toContain("## Intent Gate (per user request)");
 			expect(prompt).toContain(INTENT_GATE_LINE_FORMAT);
 			expect(prompt).toContain("planning: inspect relevant context and write/update planning markdown only");
-			expect(prompt).toContain("investigation: inspect and report only unless the user explicitly asked you to resolve it");
-			expect(prompt).toContain("evaluation: assess and propose only unless the user explicitly asked you to execute");
+			expect(prompt).toContain("investigation: inspect and report only unless user explicitly asked you to resolve it");
+			expect(prompt).toContain("evaluation: assess and propose only unless user explicitly asked you to execute");
 			expect(prompt).toContain("surface form");
 			expect(prompt).toContain("read-only behavior");
 		});
@@ -123,7 +123,7 @@ describe("buildSystemPrompt", () => {
 				skills: [],
 			});
 
-			expect(prompt).not.toContain("## Intent Gate (every turn)");
+			expect(prompt).not.toContain("## Intent Gate (per user request)");
 			expect(prompt).not.toContain(INTENT_GATE_LINE_FORMAT);
 		});
 	});

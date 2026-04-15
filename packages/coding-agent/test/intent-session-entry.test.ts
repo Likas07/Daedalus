@@ -7,9 +7,10 @@ describe("session manager intent entries", () => {
 		const session = SessionManager.inMemory("/repo");
 		session.appendMessage(userMsg("Plan this"));
 		session.appendMessage(assistantMsg("Intent: planning — inspect context and write plan docs only."));
-		session.appendIntent(
-			0,
-			{
+		session.appendIntent({
+			requestId: "request-1",
+			turnIndex: 0,
+			metadata: {
 				trueIntent: "planning",
 				approach: "inspect context and write plan docs only.",
 				readOnly: false,
@@ -18,9 +19,11 @@ describe("session manager intent entries", () => {
 				source: "assistant-line",
 				valid: true,
 			},
-			"user-1",
-			"assistant-1",
-		);
+			userMessageId: "user-1",
+			requestText: "Plan this",
+			assistantMessageId: "assistant-1",
+			locked: true,
+		});
 
 		const branch = session.getBranch();
 		expect(getLatestIntentEntry(branch)?.metadata.trueIntent).toBe("planning");

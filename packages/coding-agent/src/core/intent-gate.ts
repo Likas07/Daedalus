@@ -19,6 +19,14 @@ export type MutationScope = (typeof MUTATION_SCOPES)[number];
 export const PLANNING_ARTIFACT_KINDS = ["docs", "plan", "spec", "design"] as const;
 export type PlanningArtifactKind = (typeof PLANNING_ARTIFACT_KINDS)[number];
 
+export interface IntentHeuristicRule {
+	feature: string;
+	kind: "leading-1" | "leading-2" | "leading-3" | "pattern";
+	intent: IntentGateType;
+	approach?: string;
+	planningArtifactKind?: PlanningArtifactKind;
+}
+
 export interface IntentMetadata {
 	surfaceForm?: string;
 	trueIntent: IntentGateType;
@@ -26,7 +34,7 @@ export interface IntentMetadata {
 	readOnly: boolean;
 	mutationScope: MutationScope;
 	planningArtifactKind?: PlanningArtifactKind;
-	source: "assistant-line" | "sdk" | "inferred";
+	source: "assistant-line" | "sdk" | "inferred" | "learned";
 	valid: boolean;
 }
 
@@ -62,6 +70,21 @@ function normalizeInlineWhitespace(text: string): string {
 	return text.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function normalizeIntentText(text: string | undefined): string {
+	return normalizeInlineWhitespace(text ?? "").toLowerCase();
+}
+
+function extractIntentWords(text: string | undefined): string[] {
+	return normalizeIntentText(text).match(/[a-z0-9]+(?:['-][a-z0-9]+)*/g) ?? [];
+}
+
+function getLeadingPhrase(words: string[], count: 1 | 2 | 3): string | undefined {
+	if (words.length < count) {
+		return undefined;
+	}
+	return words.slice(0, count).join(" ");
+}
+
 function extractTextBlocks(content: unknown): string[] {
 	if (typeof content === "string") {
 		return [content];
@@ -74,8 +97,8 @@ function extractTextBlocks(content: unknown): string[] {
 		.map((block) => block.text);
 }
 
-function inferIntentTypeFromUserText(userText: string | undefined): IntentGateType {
-	const text = normalizeInlineWhitespace(userText ?? "").toLowerCase();
+function inferIntentTypeFromBuiltInHeuristics(userText: string | undefined): IntentGateType {
+	const text = normalizeIntentText(userText);
 	if (!text) {
 		return "research";
 	}
@@ -101,6 +124,53 @@ function inferIntentTypeFromUserText(userText: string | undefined): IntentGateTy
 		return "open-ended";
 	}
 	return text.endsWith("?") ? "evaluation" : "research";
+}
+
+function getIntentRuleSpecificity(rule: IntentHeuristicRule): number {
+	switch (rule.kind) {
+		case "pattern":
+			return 100 + rule.feature.split(/\s+/u).length;
+		case "leading-3":
+			return 30;
+		case "leading-2":
+			return 20;
+		case "leading-1":
+		default:
+			return 10;
+	}
+}
+
+function findMatchingIntentRule(userText: string | undefined, learnedRules: IntentHeuristicRule[] | undefined): IntentHeuristicRule | undefined {
+	if (!learnedRules || learnedRules.length === 0) {
+		return undefined;
+	}
+
+	const normalized = normalizeIntentText(userText);
+	const words = extractIntentWords(userText);
+	if (!normalized) {
+		return undefined;
+	}
+
+	const sortedRules = [...learnedRules].sort((a, b) => getIntentRuleSpecificity(b) - getIntentRuleSpecificity(a));
+	for (const rule of sortedRules) {
+		const feature = normalizeIntentText(rule.feature);
+		if (!feature) {
+			continue;
+		}
+		if (rule.kind === "pattern") {
+			if (normalized.startsWith(feature)) {
+				return rule;
+			}
+			continue;
+		}
+
+		const count = rule.kind === "leading-3" ? 3 : rule.kind === "leading-2" ? 2 : 1;
+		if (getLeadingPhrase(words, count) === feature) {
+			return rule;
+		}
+	}
+
+	return undefined;
 }
 
 function defaultApproachForIntent(intent: IntentGateType): string {
@@ -196,9 +266,13 @@ export function inferSurfaceForm(userText: string | undefined): string | undefin
 	return "request";
 }
 
-export function inferIntentMetadataFromUserText(userText: string | undefined): IntentMetadata {
-	const trueIntent = inferIntentTypeFromUserText(userText);
-	const approach = defaultApproachForIntent(trueIntent);
+export function inferIntentMetadataFromUserText(
+	userText: string | undefined,
+	options?: { learnedRules?: IntentHeuristicRule[] },
+): IntentMetadata {
+	const matchedRule = findMatchingIntentRule(userText, options?.learnedRules);
+	const trueIntent = matchedRule?.intent ?? inferIntentTypeFromBuiltInHeuristics(userText);
+	const approach = matchedRule?.approach ?? defaultApproachForIntent(trueIntent);
 	const readOnly = inferReadOnlyOverride(userText, approach);
 	return {
 		surfaceForm: inferSurfaceForm(userText),
@@ -206,8 +280,11 @@ export function inferIntentMetadataFromUserText(userText: string | undefined): I
 		approach,
 		readOnly,
 		mutationScope: inferMutationScope(trueIntent, readOnly),
-		planningArtifactKind: trueIntent === "planning" ? inferPlanningArtifactKind(userText) ?? "plan" : undefined,
-		source: "inferred",
+		planningArtifactKind:
+			trueIntent === "planning"
+				? matchedRule?.planningArtifactKind ?? inferPlanningArtifactKind(userText) ?? "plan"
+				: undefined,
+		source: matchedRule ? "learned" : "inferred",
 		valid: true,
 	};
 }
@@ -242,24 +319,53 @@ export function parseIntentLine(
 	};
 }
 
-export function buildIntentGatePromptBlock(): string {
-	return `## Intent Gate (every turn)
+export function stripLeadingIntentLineFromAssistantMessage(message: AssistantMessage): boolean {
+	if (!Array.isArray(message.content)) {
+		return false;
+	}
 
-Before any tool call or substantive answer, begin with exactly one short line in this format:
+	for (let index = 0; index < message.content.length; index++) {
+		const block = message.content[index];
+		if (block.type !== "text") {
+			continue;
+		}
+		const match = block.text.match(/^(Intent:\s*(?:research|planning|implementation|investigation|evaluation|fix|open-ended)\s+—\s+.*?)(\r?\n|$)([\s\S]*)$/u);
+		if (!match) {
+			return false;
+		}
+		const rest = match[3] ?? "";
+		if (rest.trim().length > 0) {
+			block.text = rest.replace(/^\s*\n/u, "");
+		} else {
+			message.content.splice(index, 1);
+		}
+		return true;
+	}
+
+	return false;
+}
+
+export function buildIntentGatePromptBlock(): string {
+	return `## Intent Gate (per user request)
+
+On first assistant turn after a new user request, begin with exactly one short line in this format:
 
 ${INTENT_GATE_LINE_FORMAT}
 
 Rules:
-- first identify surface form, then infer likely true intent, then choose final intent class from the true intent
+- classify user request, not your own changing subtask
+- emit this line only once for that user request
+- do not repeat or revise it on later assistant turns for same request
+- first identify surface form, then infer likely true intent, then choose final intent class from true intent
 - research: inspect and explain only
 - planning: inspect relevant context and write/update planning markdown only; if you write a planning artifact, keep it under docs/, plans/, specs/, or design/
-- investigation: inspect and report only unless the user explicitly asked you to resolve it
-- evaluation: assess and propose only unless the user explicitly asked you to execute
-- fix: diagnose first, then make the smallest correct change
+- investigation: inspect and report only unless user explicitly asked you to resolve it
+- evaluation: assess and propose only unless user explicitly asked you to execute
+- fix: diagnose first, then make smallest correct change
 - implementation: inspect relevant context first, then implement
 - open-ended: inspect first; ask one clarifying question only if needed
-- if the user explicitly asked for read-only behavior, no changes, or explanation only, that overrides everything else; say so in the approach and do not mutate files
-- when editing is needed, prefer the current safe workflow for active tools (for example read(format: "hashline") before hashline_edit)
+- if user explicitly asked for read-only behavior, no changes, or explanation only, that overrides everything else; say so in approach and do not mutate files
+- when editing is needed, prefer current safe workflow for active tools (for example read(format: "hashline") before hashline_edit)
 
-Keep this line brief and do not repeat it more than once per assistant turn.`;
+Keep this line brief. One line per user request, not per assistant turn.`;
 }
