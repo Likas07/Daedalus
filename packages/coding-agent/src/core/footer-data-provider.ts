@@ -243,10 +243,7 @@ export class FooterDataProvider {
 			this.cachedBranch = nextBranch;
 		} finally {
 			this.refreshInFlight = false;
-			if (this.refreshPending && !this.disposed) {
-				this.refreshPending = false;
-				this.scheduleRefresh();
-			}
+			this.refreshPending = false;
 		}
 	}
 
