@@ -3,6 +3,14 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import lockfile from "proper-lockfile";
 import { CONFIG_DIR_NAME, getAgentDir } from "../config.js";
+import type {
+	SubagentBranchIsolationThreshold,
+	SubagentDelegationAggressiveness,
+	SubagentExecutionModePreference,
+	SubagentIsolationPreference,
+	SubagentRoleOverride,
+	SubagentSettings,
+} from "./settings-schema.js";
 
 export interface CompactionSettings {
 	enabled?: boolean; // default: true
@@ -41,19 +49,6 @@ export interface ThinkingBudgetsSettings {
 
 export interface MarkdownSettings {
 	codeBlockIndent?: string; // default: "  "
-}
-
-export interface SubagentRoleOverride {
-	model?: string;
-	thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
-}
-
-export interface SubagentSettings {
-	enabled?: boolean;
-	defaultPrimary?: "standard" | "orchestrator";
-	maxDepth?: number;
-	maxConcurrency?: number;
-	agents?: Record<string, SubagentRoleOverride>;
 }
 
 export type TransportSetting = Transport;
@@ -551,15 +546,22 @@ export class SettingsManager {
 	}
 
 	getSubagentSettings(): Required<
-		Pick<SubagentSettings, "enabled" | "defaultPrimary" | "maxDepth" | "maxConcurrency">
+		Pick<SubagentSettings, "delegationAggressiveness" | "maxDepth" | "maxConcurrency" | "backgroundRoles">
 	> & {
+		branchIsolation: Required<NonNullable<SubagentSettings["branchIsolation"]>>;
 		agents: Record<string, SubagentRoleOverride>;
 	} {
 		return {
-			enabled: this.settings.subagents?.enabled ?? false,
-			defaultPrimary: this.settings.subagents?.defaultPrimary ?? "standard",
+			delegationAggressiveness: this.settings.subagents?.delegationAggressiveness ?? "balanced",
 			maxDepth: this.settings.subagents?.maxDepth ?? 2,
 			maxConcurrency: this.settings.subagents?.maxConcurrency ?? 4,
+			backgroundRoles: [...(this.settings.subagents?.backgroundRoles ?? ["explore", "reviewer"])],
+			branchIsolation: {
+				enabled: this.settings.subagents?.branchIsolation?.enabled ?? true,
+				mutationThreshold: this.settings.subagents?.branchIsolation?.mutationThreshold ?? "high-risk",
+				namingTemplate:
+					this.settings.subagents?.branchIsolation?.namingTemplate ?? "subagent/{parentBranch}/{agent}/{runId}",
+			},
 			agents: { ...(this.settings.subagents?.agents ?? {}) },
 		};
 	}
@@ -570,6 +572,9 @@ export class SettingsManager {
 		}
 		if (!this.globalSettings.subagents.agents) {
 			this.globalSettings.subagents.agents = {};
+		}
+		if (!this.globalSettings.subagents.branchIsolation) {
+			this.globalSettings.subagents.branchIsolation = {};
 		}
 		return this.globalSettings.subagents;
 	}
@@ -582,20 +587,30 @@ export class SettingsManager {
 			delete subagents.agents;
 		}
 
+		if (subagents.branchIsolation && Object.keys(subagents.branchIsolation).length === 0) {
+			delete subagents.branchIsolation;
+		}
+
 		if (Object.keys(subagents).length === 0) {
 			delete this.globalSettings.subagents;
 		}
 	}
 
-	setSubagentsEnabled(enabled: boolean): void {
-		this.ensureGlobalSubagents().enabled = enabled;
-		this.markModified("subagents", "enabled");
+	setSubagentDelegationAggressiveness(value: SubagentDelegationAggressiveness): void {
+		this.ensureGlobalSubagents().delegationAggressiveness = value;
+		this.markModified("subagents", "delegationAggressiveness");
 		this.save();
 	}
 
-	setSubagentDefaultPrimary(value: "standard" | "orchestrator"): void {
-		this.ensureGlobalSubagents().defaultPrimary = value;
-		this.markModified("subagents", "defaultPrimary");
+	setSubagentBackgroundRoles(roles: string[]): void {
+		this.ensureGlobalSubagents().backgroundRoles = [...roles];
+		this.markModified("subagents", "backgroundRoles");
+		this.save();
+	}
+
+	setSubagentBranchIsolationThreshold(value: SubagentBranchIsolationThreshold): void {
+		this.ensureGlobalSubagents().branchIsolation!.mutationThreshold = value;
+		this.markModified("subagents", "branchIsolation");
 		this.save();
 	}
 
@@ -644,6 +659,52 @@ export class SettingsManager {
 		}
 
 		if (next.model || next.thinkingLevel) {
+			subagents.agents![agentName] = next;
+		} else {
+			delete subagents.agents?.[agentName];
+			this.cleanupGlobalSubagents();
+		}
+
+		this.markModified("subagents", "agents");
+		this.save();
+	}
+
+	setSubagentRoleExecutionModePreference(
+		agentName: string,
+		executionModePreference: SubagentExecutionModePreference | undefined,
+	): void {
+		const subagents = this.ensureGlobalSubagents();
+		const next = subagents.agents?.[agentName] ?? {};
+		if (executionModePreference) {
+			next.executionModePreference = executionModePreference;
+		} else {
+			delete next.executionModePreference;
+		}
+
+		if (next.model || next.thinkingLevel || next.executionModePreference || next.isolationPreference) {
+			subagents.agents![agentName] = next;
+		} else {
+			delete subagents.agents?.[agentName];
+			this.cleanupGlobalSubagents();
+		}
+
+		this.markModified("subagents", "agents");
+		this.save();
+	}
+
+	setSubagentRoleIsolationPreference(
+		agentName: string,
+		isolationPreference: SubagentIsolationPreference | undefined,
+	): void {
+		const subagents = this.ensureGlobalSubagents();
+		const next = subagents.agents?.[agentName] ?? {};
+		if (isolationPreference) {
+			next.isolationPreference = isolationPreference;
+		} else {
+			delete next.isolationPreference;
+		}
+
+		if (next.model || next.thinkingLevel || next.executionModePreference || next.isolationPreference) {
 			subagents.agents![agentName] = next;
 		} else {
 			delete subagents.agents?.[agentName];

@@ -110,8 +110,9 @@ describe("SettingsManager", () => {
 			writeFileSync(sandbox.globalSettingsPath, JSON.stringify({ theme: "dark", extensions: ["/tmp/ext.ts"] }));
 
 			const manager = SettingsManager.create(sandbox.projectDir, sandbox.agentDir);
-			manager.setSubagentsEnabled(true);
-			manager.setSubagentDefaultPrimary("orchestrator");
+			manager.setSubagentDelegationAggressiveness("aggressive");
+			manager.setSubagentBackgroundRoles(["explore"]);
+			manager.setSubagentBranchIsolationThreshold("always");
 			manager.setSubagentRoleThinkingLevel("scout", "low");
 			await manager.flush();
 
@@ -119,8 +120,9 @@ describe("SettingsManager", () => {
 			expect(saved.theme).toBe("dark");
 			expect(saved.extensions).toEqual(["/tmp/ext.ts"]);
 			expect(saved.subagents).toEqual({
-				enabled: true,
-				defaultPrimary: "orchestrator",
+				delegationAggressiveness: "aggressive",
+				backgroundRoles: ["explore"],
+				branchIsolation: { mutationThreshold: "always" },
 				agents: { scout: { thinkingLevel: "low" } },
 			});
 		});
