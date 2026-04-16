@@ -1,11 +1,13 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.js";
 import { ExtensionRunner } from "../src/core/extensions/runner.js";
 import { ModelRegistry } from "../src/core/model-registry.js";
 import { SessionManager } from "../src/core/session-manager.js";
+import { createSyntheticSourceInfo } from "../src/core/source-info.js";
 import { computeLineHash } from "../src/core/tools/hashline/index.js";
+import daedalusBundle from "../src/extensions/daedalus/bundle.js";
 import sshExtension from "../src/extensions/daedalus/tools/ssh.js";
 import { clearFakeSshBehavior, createFakeSshEnvironment, type FakeSshEnvironment } from "./helpers/fake-ssh.js";
 import { createTestExtensionsResult } from "./utilities.js";
@@ -60,6 +62,8 @@ async function createRunner(env: FakeSshEnvironment): Promise<ExtensionRunner> {
 			getContextUsage: () => undefined,
 			compact: () => {},
 			getSystemPrompt: () => "You are a test assistant.",
+
+			getSkills: () => [],
 		} as any,
 	);
 	return runner;
@@ -87,21 +91,33 @@ describe.skipIf(process.platform === "win32")("SSH extension wiring", () => {
 		expect(editTool).toBeUndefined();
 		expect(hashlineTool).toBeDefined();
 
-		await writeTool!.execute("tool-1", { path: "write.txt", content: "via extension\n" });
-		await hashlineTool!.execute("tool-2", {
-			path: "hashline.txt",
-			edits: [
-				{
-					loc: {
-						range: {
-							pos: `2#${computeLineHash(2, "beta")}`,
-							end: `2#${computeLineHash(2, "beta")}`,
+		await writeTool!.execute(
+			"tool-1",
+			{ path: "write.txt", content: "via extension\n" },
+			undefined,
+			undefined,
+			runner.createContext(),
+		);
+		await hashlineTool!.execute(
+			"tool-2",
+			{
+				path: "hashline.txt",
+				edits: [
+					{
+						loc: {
+							range: {
+								pos: `2#${computeLineHash(2, "beta")}`,
+								end: `2#${computeLineHash(2, "beta")}`,
+							},
 						},
+						content: ["BETA"],
 					},
-					content: ["BETA"],
-				},
-			],
-		});
+				],
+			},
+			undefined,
+			undefined,
+			runner.createContext(),
+		);
 
 		expect(await readFile(join(env.remoteCwd, "write.txt"), "utf8")).toBe("via extension\n");
 		expect(await readFile(join(env.remoteCwd, "hashline.txt"), "utf8")).toBe("alpha\nBETA\n");
@@ -120,5 +136,96 @@ describe.skipIf(process.platform === "win32")("SSH extension wiring", () => {
 		);
 
 		expect(result?.systemPrompt).toContain(`Current working directory: ${env.remoteCwd} (via SSH: ${env.remote})`);
+	});
+
+	test("skill tool stays local while SSH mode rewrites file tools to remote", async () => {
+		const env = await setupFakeSsh("skill-tool-ssh");
+		const extensionsResult = await createTestExtensionsResult(
+			[
+				{ factory: daedalusBundle, path: "<daedalus-bundle>" },
+				{ factory: sshExtension, path: "<ssh-extension>" },
+			],
+			env.localCwd,
+		);
+		const runner = new ExtensionRunner(
+			extensionsResult.extensions,
+			extensionsResult.runtime,
+			env.localCwd,
+			SessionManager.inMemory(),
+			ModelRegistry.inMemory(AuthStorage.inMemory()),
+		);
+
+		const skillDir = join(env.localCwd, "local-skill");
+		await mkdir(skillDir, { recursive: true });
+		await writeFile(
+			join(skillDir, "SKILL.md"),
+			`---
+name: local-skill
+description: Local SSH-safe test skill.
+---
+
+# Local Skill
+
+Loaded from the host machine.
+`,
+			"utf8",
+		);
+
+		const skill = {
+			name: "local-skill",
+			description: "Local SSH-safe test skill.",
+			filePath: join(skillDir, "SKILL.md"),
+			baseDir: skillDir,
+			sourceInfo: createSyntheticSourceInfo(join(skillDir, "SKILL.md"), { source: "test" }),
+			disableModelInvocation: false,
+		};
+
+		runner.bindCore(
+			{
+				sendMessage: () => {},
+				sendUserMessage: () => {},
+				appendEntry: () => {},
+				setSessionName: () => {},
+				getSessionName: () => undefined,
+				setLabel: () => {},
+				getActiveTools: () => [],
+				getAllTools: () => [],
+				setActiveTools: () => {},
+				refreshTools: () => {},
+				getCommands: () => [],
+				setModel: async () => false,
+				getThinkingLevel: () => "off",
+				setThinkingLevel: () => {},
+			} as any,
+			{
+				getModel: () => undefined,
+				isIdle: () => true,
+				getSignal: () => undefined,
+				abort: () => {},
+				hasPendingMessages: () => false,
+				shutdown: () => {},
+				getContextUsage: () => undefined,
+				compact: () => {},
+				getSystemPrompt: () => "",
+				getSkills: () => [skill],
+			} as any,
+		);
+
+		runner.setFlagValue("ssh", `${env.remote}:${env.remoteCwd}`);
+		await runner.emit({ type: "session_start", reason: "startup" });
+
+		const definition = runner.getToolDefinition("skill");
+		expect(definition).toBeDefined();
+
+		const result = await definition!.execute(
+			"tool-ssh",
+			{ action: "load", name: "local-skill" },
+			undefined,
+			undefined,
+			runner.createContext(),
+		);
+		const first = result.content[0];
+		const text = first?.type === "text" ? first.text : "";
+		expect(text).toContain("Loaded from the host machine.");
 	});
 });

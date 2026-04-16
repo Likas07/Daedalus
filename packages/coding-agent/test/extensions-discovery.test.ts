@@ -58,7 +58,6 @@ function toolExtensionCode(toolName: string): string {
 	`;
 }
 
-
 afterEach(() => {
 	for (const dir of tempDirs.splice(0)) {
 		fs.rmSync(dir, { recursive: true, force: true });
@@ -218,7 +217,11 @@ describe("extensions discovery", () => {
 	it("surfaces extension load errors for invalid code, thrown initialization, and missing default export", async () => {
 		const sandbox = createSandbox();
 		writeLocalExtension(sandbox, "invalid.ts", "this is not valid typescript export");
-		writeLocalExtension(sandbox, "throws.ts", `export default function() { throw new Error("Initialization failed!"); }`);
+		writeLocalExtension(
+			sandbox,
+			"throws.ts",
+			`export default function() { throw new Error("Initialization failed!"); }`,
+		);
 		writeLocalExtension(sandbox, "no-default.ts", `export function notDefault() {}`);
 
 		const result = await discoverLocalExtensions(sandbox);
@@ -227,7 +230,9 @@ describe("extensions discovery", () => {
 		expect(result.errors).toHaveLength(3);
 		expect(result.errors.some((entry) => entry.path.includes("invalid.ts"))).toBe(true);
 		expect(result.errors.some((entry) => entry.error.includes("Initialization failed!"))).toBe(true);
-		expect(result.errors.some((entry) => entry.error.includes("does not export a valid factory function"))).toBe(true);
+		expect(result.errors.some((entry) => entry.error.includes("does not export a valid factory function"))).toBe(
+			true,
+		);
 	});
 
 	it("handles explicitly configured files and directories", async () => {

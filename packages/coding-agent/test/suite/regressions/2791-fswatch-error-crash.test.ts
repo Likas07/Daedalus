@@ -21,9 +21,7 @@ describe("issue #2791 fs.watch error event crashes process", () => {
 		const themesDir = join(agentDir, "themes");
 		mkdirSync(themesDir, { recursive: true });
 
-		const darkThemePath = fileURLToPath(
-			new URL("../../../src/modes/interactive/theme/dark.json", import.meta.url),
-		);
+		const darkThemePath = fileURLToPath(new URL("../../../src/modes/interactive/theme/dark.json", import.meta.url));
 		const darkTheme = JSON.parse(readFileSync(darkThemePath, "utf-8"));
 		darkTheme.name = "custom-test";
 		writeFileSync(join(themesDir, "custom-test.json"), JSON.stringify(darkTheme, null, 2));
@@ -99,6 +97,9 @@ process.exit(0);
 
 		const stdout = result.stdout ?? "";
 		const stderr = result.stderr ?? "";
-		expect(result.status, `Child crashed (exit ${result.status}). stdout: ${stdout.trim()} stderr: ${stderr.trim()}`).toBe(0);
+		expect(
+			result.status,
+			`Child crashed (exit ${result.status}). stdout: ${stdout.trim()} stderr: ${stderr.trim()}`,
+		).toBe(0);
 	});
 });

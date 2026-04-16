@@ -1,8 +1,8 @@
 import { complete, type Message } from "@daedalus-pi/ai";
 import type { ExtensionAPI, SessionEntry } from "@daedalus-pi/coding-agent";
 import { BorderedLoader, convertToLlm, serializeConversation } from "@daedalus-pi/coding-agent";
-import { requireModel, requireUI } from "../shared/ui.js";
 import { resolveModelAuth } from "../shared/model-auth.js";
+import { requireModel, requireUI } from "../shared/ui.js";
 
 const SYSTEM_PROMPT = `You are a context transfer assistant. Given a conversation history and the user's goal for a new thread, generate a focused prompt that:
 

@@ -116,7 +116,9 @@ describe("issue #2781 skill collision precedence: user skills should override pa
 		await loader.reload();
 
 		const { diagnostics } = loader.getSkills();
-		const collision = diagnostics.find((diagnostic) => diagnostic.type === "collision" && diagnostic.collision?.name === "web-fetch");
+		const collision = diagnostics.find(
+			(diagnostic) => diagnostic.type === "collision" && diagnostic.collision?.name === "web-fetch",
+		);
 		expect(collision).toBeDefined();
 		expect(collision!.collision!.loserPath).toContain("fake-package");
 	});

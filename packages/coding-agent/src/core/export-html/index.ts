@@ -1,5 +1,5 @@
 import type { AgentState } from "@daedalus-pi/agent-core";
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, writeFileSync } from "fs";
 import { basename } from "path";
 import { APP_NAME } from "../../config.js";
 import { getResolvedThemeColors, getThemeExportColors } from "../../modes/interactive/theme/theme.js";

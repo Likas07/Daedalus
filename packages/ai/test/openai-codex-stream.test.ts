@@ -147,7 +147,7 @@ describe("openai-codex streaming", () => {
 			return new Response("not found", { status: 404 });
 		});
 
-		global.fetch = fetchMock as typeof fetch;
+		global.fetch = fetchMock as unknown as typeof fetch;
 
 		const model: Model<"openai-codex-responses"> = {
 			id: "gpt-5.1-codex",
@@ -213,7 +213,7 @@ describe("openai-codex streaming", () => {
 				});
 			}
 			return new Response("not found", { status: 404 });
-		}) as typeof fetch;
+		}) as unknown as typeof fetch;
 
 		const model: Model<"openai-codex-responses"> = {
 			id: "gpt-5.1-codex",
@@ -272,7 +272,7 @@ describe("openai-codex streaming", () => {
 				});
 			}
 			return new Response("not found", { status: 404 });
-		}) as typeof fetch;
+		}) as unknown as typeof fetch;
 
 		const model: Model<"openai-codex-responses"> = {
 			id: "gpt-5.1-codex",
@@ -380,7 +380,7 @@ describe("openai-codex streaming", () => {
 			return new Response("not found", { status: 404 });
 		});
 
-		global.fetch = fetchMock as typeof fetch;
+		global.fetch = fetchMock as unknown as typeof fetch;
 
 		const model: Model<"openai-codex-responses"> = {
 			id: "gpt-5.1-codex",
@@ -404,7 +404,7 @@ describe("openai-codex streaming", () => {
 		await streamResult.result();
 	});
 
-	it.each(["gpt-5.3-codex", "gpt-5.4"])("clamps %s minimal reasoning effort to low", async (modelId) => {
+	it.each(["gpt-5.3-codex", "gpt-5.4"])("clamps %s minimal reasoning effort to low", async (modelId: string) => {
 		const tempDir = mkdtempSync(join(tmpdir(), "pi-codex-stream-"));
 		process.env.DAEDALUS_CODING_AGENT_DIR = tempDir;
 
@@ -473,7 +473,7 @@ describe("openai-codex streaming", () => {
 			return new Response("not found", { status: 404 });
 		});
 
-		global.fetch = fetchMock as typeof fetch;
+		global.fetch = fetchMock as unknown as typeof fetch;
 
 		const model: Model<"openai-codex-responses"> = {
 			id: modelId,
@@ -571,7 +571,7 @@ describe("openai-codex streaming", () => {
 			return new Response("not found", { status: 404 });
 		});
 
-		global.fetch = fetchMock as typeof fetch;
+		global.fetch = fetchMock as unknown as typeof fetch;
 
 		const model: Model<"openai-codex-responses"> = {
 			id: "gpt-5.1-codex",

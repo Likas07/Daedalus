@@ -2,9 +2,9 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
+import { computeLineHash, HashlineMismatchError } from "../src/core/tools/hashline/index.js";
 import { createHashlineEditToolDefinition } from "../src/core/tools/hashline-edit.js";
 import { allTools, codingTools } from "../src/core/tools/index.js";
-import { computeLineHash, HashlineMismatchError } from "../src/core/tools/hashline/index.js";
 
 const tempDirs: string[] = [];
 
@@ -24,21 +24,28 @@ describe("hashline_edit tool", () => {
 		const filePath = join(dir, "file.ts");
 		await writeFile(filePath, "function a() {\n  old();\n}\n", "utf8");
 		const tool = createHashlineEditToolDefinition(dir);
-		const result = await tool.execute("tool-1", {
-			path: "file.ts",
-			edits: [
-				{
-					loc: {
-						range: {
-							pos: `2#${computeLineHash(2, "  old();")}`,
-							end: `2#${computeLineHash(2, "  old();")}`,
+		const result = await tool.execute(
+			"tool-1",
+			{
+				path: "file.ts",
+				edits: [
+					{
+						loc: {
+							range: {
+								pos: `2#${computeLineHash(2, "  old();")}`,
+								end: `2#${computeLineHash(2, "  old();")}`,
+							},
 						},
+						content: ["  next();"],
 					},
-					content: ["  next();"],
-				},
-			],
-		});
-		expect(result.content[0]?.text).toContain("Updated file.ts");
+				],
+			},
+			undefined,
+			undefined,
+			{} as any,
+		);
+		const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+		expect(text).toContain("Updated file.ts");
 		expect(await readFile(filePath, "utf8")).toBe("function a() {\n  next();\n}\n");
 		expect(result.details?.diff).toContain("next();");
 	});
@@ -49,16 +56,23 @@ describe("hashline_edit tool", () => {
 		await writeFile(filePath, "alpha\nbeta\n", "utf8");
 		const tool = createHashlineEditToolDefinition(dir);
 		await expect(
-			tool.execute("tool-2", {
-				path: "file.txt",
-				edits: [
-					{
-						loc: { range: { pos: "2#ZZ", end: "2#ZZ" } },
-						content: ["BETA"],
-					},
-				],
-			}),
+			tool.execute(
+				"tool-2",
+				{
+					path: "file.txt",
+					edits: [
+						{
+							loc: { range: { pos: "2#ZZ", end: "2#ZZ" } },
+							content: ["BETA"],
+						},
+					],
+				},
+				undefined,
+				undefined,
+				{} as any,
+			),
 		).rejects.toBeInstanceOf(HashlineMismatchError);
+
 		expect(await readFile(filePath, "utf8")).toBe("alpha\nbeta\n");
 	});
 
@@ -67,20 +81,26 @@ describe("hashline_edit tool", () => {
 		const filePath = join(dir, "file.txt");
 		await writeFile(filePath, "\uFEFFfirst\r\nsecond\r\n", "utf8");
 		const tool = createHashlineEditToolDefinition(dir);
-		await tool.execute("tool-3", {
-			path: "file.txt",
-			edits: [
-				{
-					loc: {
-						range: {
-							pos: `2#${computeLineHash(2, "second")}`,
-							end: `2#${computeLineHash(2, "second")}`,
+		await tool.execute(
+			"tool-3",
+			{
+				path: "file.txt",
+				edits: [
+					{
+						loc: {
+							range: {
+								pos: `2#${computeLineHash(2, "second")}`,
+								end: `2#${computeLineHash(2, "second")}`,
+							},
 						},
+						content: ["SECOND"],
 					},
-					content: ["SECOND"],
-				},
-			],
-		});
+				],
+			},
+			undefined,
+			undefined,
+			{} as any,
+		);
 		expect(await readFile(filePath, "utf8")).toBe("\uFEFFfirst\r\nSECOND\r\n");
 	});
 

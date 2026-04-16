@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionContext, ToolInfo } from "@daedalus-pi/coding-agent";
 import { getSettingsListTheme } from "@daedalus-pi/coding-agent";
-import { logToolDebug } from "../../../core/tool-debug.js";
 import { Container, type SettingItem, SettingsList } from "@daedalus-pi/tui";
+import { logToolDebug } from "../../../core/tool-debug.js";
 import { requireUI } from "../shared/ui.js";
 
 interface ToolsState {
@@ -55,7 +55,8 @@ export default function toolsExtension(pi: ExtensionAPI) {
 		if (savedTools) {
 			const migratedTools = migrateLegacyEnabledTools(savedTools);
 			const didMigrate =
-				migratedTools.length !== savedTools.length || migratedTools.some((tool, index) => tool !== savedTools[index]);
+				migratedTools.length !== savedTools.length ||
+				migratedTools.some((tool, index) => tool !== savedTools[index]);
 			const allToolNames = new Set(allTools.map((t) => t.name));
 			enabledTools = new Set(migratedTools.filter((tool) => allToolNames.has(tool)));
 			logToolDebug("daedalus/tools.restoreFromBranch", "restoring saved tool state", {

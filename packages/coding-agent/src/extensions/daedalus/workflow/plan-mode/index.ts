@@ -43,7 +43,8 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			const lines = todoItems.map((item) => {
 				if (item.completed) {
 					return (
-						ctx.ui.theme.fg("success", "\u2611 ") + ctx.ui.theme.fg("muted", ctx.ui.theme.strikethrough(item.text))
+						ctx.ui.theme.fg("success", "\u2611 ") +
+						ctx.ui.theme.fg("muted", ctx.ui.theme.strikethrough(item.text))
 					);
 				}
 				return `${ctx.ui.theme.fg("muted", "\u2610 ")}${item.text}`;
@@ -89,7 +90,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 				ctx.ui.notify("No todos. Create a plan first with /plan", "info");
 				return;
 			}
-			const list = todoItems.map((item, i) => `${i + 1}. ${item.completed ? "\u2713" : "\u25cb"} ${item.text}`).join("\n");
+			const list = todoItems
+				.map((item, i) => `${i + 1}. ${item.completed ? "\u2713" : "\u25cb"} ${item.text}`)
+				.join("\n");
 			ctx.ui.notify(`Plan Progress:\n${list}`, "info");
 		},
 	});

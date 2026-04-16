@@ -53,7 +53,8 @@ function getFileContent(repoDir: string, filename: string): string {
 	return readFileSync(join(repoDir, filename), "utf-8");
 }
 
-const skipGitUpdateTests = !supportsGitInitialBranchFlag() &&
+const skipGitUpdateTests =
+	!supportsGitInitialBranchFlag() &&
 	warnAndSkip("git init --initial-branch=main unsupported; skipping git update tests");
 
 describe.skipIf(skipGitUpdateTests)("DefaultPackageManager git update", () => {

@@ -1,6 +1,6 @@
 import type { AgentMessage } from "@daedalus-pi/agent-core";
-import * as ai from "@daedalus-pi/ai";
 import type { AssistantMessage, Model } from "@daedalus-pi/ai";
+import * as ai from "@daedalus-pi/ai";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { asMock } from "./helpers/bun-compat.js";
 

@@ -1,4 +1,10 @@
-import { cp as fsCp, mkdtemp as fsMkdtemp, readFile as fsReadFile, readdir as fsReaddir, stat as fsStat } from "fs/promises";
+import {
+	cp as fsCp,
+	mkdtemp as fsMkdtemp,
+	readdir as fsReaddir,
+	readFile as fsReadFile,
+	stat as fsStat,
+} from "fs/promises";
 import os from "os";
 import path from "path";
 import { detectLineEnding, generateDiffString, normalizeToLF, restoreLineEndings, stripBom } from "../edit-diff.js";
@@ -38,7 +44,11 @@ export function applyAstReplacementGroups(content: string, matches: AstMatch[]):
 	return nextContent;
 }
 
-async function collectOriginalFilesRecursive(root: string, base: string, out: Map<string, AstFileSnapshot>): Promise<void> {
+async function collectOriginalFilesRecursive(
+	root: string,
+	base: string,
+	out: Map<string, AstFileSnapshot>,
+): Promise<void> {
 	const entries = await fsReaddir(root, { withFileTypes: true });
 	for (const entry of entries) {
 		const absolutePath = path.join(root, entry.name);
@@ -109,7 +119,10 @@ export async function finalizeAstWorkspace(workspace: AstWorkspace): Promise<{
 		const finalContent = snapshot.bom + restoreLineEndings(newNormalized, snapshot.originalEnding);
 		changedFiles.push({ absolutePath: snapshot.absolutePath, content: finalContent });
 		const diffResult = generateDiffString(snapshot.normalizedContent, newNormalized);
-		if (firstChangedLine === undefined || (diffResult.firstChangedLine ?? Number.MAX_SAFE_INTEGER) < firstChangedLine) {
+		if (
+			firstChangedLine === undefined ||
+			(diffResult.firstChangedLine ?? Number.MAX_SAFE_INTEGER) < firstChangedLine
+		) {
 			firstChangedLine = diffResult.firstChangedLine;
 		}
 		combinedDiff += (combinedDiff ? "\n" : "") + diffResult.diff;

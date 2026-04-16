@@ -72,7 +72,8 @@ describe.skipIf(process.platform === "win32")("SSH remote mutation tools", () =>
 		const content = "write tool smoke test\nline 2\n";
 
 		const result = await tool.execute("tool-1", { path: "write-smoke-test.txt", content });
-		expect(result.content[0]?.text).toContain("Successfully wrote");
+		const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+		expect(text).toContain("Successfully wrote");
 		expect(await readFile(toRemoteFile(env, "write-smoke-test.txt"), "utf8")).toBe(content);
 	});
 
@@ -133,7 +134,8 @@ describe.skipIf(process.platform === "win32")("SSH remote mutation tools", () =>
 			],
 		});
 
-		expect(result.content[0]?.text).toContain("Successfully replaced 2 block(s)");
+		const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+		expect(text).toContain("Successfully replaced 2 block(s)");
 		expect(await readFile(toRemoteFile(env, "edit.txt"), "utf8")).toBe("ALPHA\nBETA\ngamma\n");
 	});
 
@@ -155,20 +157,26 @@ describe.skipIf(process.platform === "win32")("SSH remote mutation tools", () =>
 		const tool = createRemoteHashlineTool(env);
 		await seedRemoteFile(env, "file.ts", "function a() {\n  old();\n}\n");
 
-		const result = await tool.execute("tool-8", {
-			path: "file.ts",
-			edits: [
-				{
-					loc: {
-						range: {
-							pos: `2#${computeLineHash(2, "  old();")}`,
-							end: `2#${computeLineHash(2, "  old();")}`,
+		const result = await tool.execute(
+			"tool-8",
+			{
+				path: "file.ts",
+				edits: [
+					{
+						loc: {
+							range: {
+								pos: `2#${computeLineHash(2, "  old();")}`,
+								end: `2#${computeLineHash(2, "  old();")}`,
+							},
 						},
+						content: ["  next();"],
 					},
-					content: ["  next();"],
-				},
-			],
-		});
+				],
+			},
+			undefined,
+			undefined,
+			{} as any,
+		);
 
 		expect(result.details?.diff).toContain("next();");
 		expect(await readFile(toRemoteFile(env, "file.ts"), "utf8")).toBe("function a() {\n  next();\n}\n");
@@ -179,20 +187,26 @@ describe.skipIf(process.platform === "win32")("SSH remote mutation tools", () =>
 		const tool = createRemoteHashlineTool(env);
 		await seedRemoteFile(env, "file.txt", "\uFEFFfirst\r\nsecond\r\n");
 
-		await tool.execute("tool-9", {
-			path: "file.txt",
-			edits: [
-				{
-					loc: {
-						range: {
-							pos: `2#${computeLineHash(2, "second")}`,
-							end: `2#${computeLineHash(2, "second")}`,
+		await tool.execute(
+			"tool-9",
+			{
+				path: "file.txt",
+				edits: [
+					{
+						loc: {
+							range: {
+								pos: `2#${computeLineHash(2, "second")}`,
+								end: `2#${computeLineHash(2, "second")}`,
+							},
 						},
+						content: ["SECOND"],
 					},
-					content: ["SECOND"],
-				},
-			],
-		});
+				],
+			},
+			undefined,
+			undefined,
+			{} as any,
+		);
 
 		expect(await readFile(toRemoteFile(env, "file.txt"), "utf8")).toBe("\uFEFFfirst\r\nSECOND\r\n");
 	});
@@ -203,15 +217,21 @@ describe.skipIf(process.platform === "win32")("SSH remote mutation tools", () =>
 		await seedRemoteFile(env, "stale.txt", "alpha\nbeta\n");
 
 		await expect(
-			tool.execute("tool-10", {
-				path: "stale.txt",
-				edits: [
-					{
-						loc: { range: { pos: "2#ZZ", end: "2#ZZ" } },
-						content: ["BETA"],
-					},
-				],
-			}),
+			tool.execute(
+				"tool-10",
+				{
+					path: "stale.txt",
+					edits: [
+						{
+							loc: { range: { pos: "2#ZZ", end: "2#ZZ" } },
+							content: ["BETA"],
+						},
+					],
+				},
+				undefined,
+				undefined,
+				{} as any,
+			),
 		).rejects.toBeInstanceOf(HashlineMismatchError);
 		expect(await readFile(toRemoteFile(env, "stale.txt"), "utf8")).toBe("alpha\nbeta\n");
 	});
@@ -265,20 +285,26 @@ describe.skipIf(process.platform === "win32")("SSH remote mutation tools", () =>
 			}),
 		).rejects.toThrow("SSH failed (9): simulated ssh failure");
 		await expect(
-			hashlineTool.execute("tool-15", {
-				path: "hashline-fail.txt",
-				edits: [
-					{
-						loc: {
-							range: {
-								pos: `2#${computeLineHash(2, "beta")}`,
-								end: `2#${computeLineHash(2, "beta")}`,
+			hashlineTool.execute(
+				"tool-15",
+				{
+					path: "hashline-fail.txt",
+					edits: [
+						{
+							loc: {
+								range: {
+									pos: `2#${computeLineHash(2, "beta")}`,
+									end: `2#${computeLineHash(2, "beta")}`,
+								},
 							},
+							content: ["BETA"],
 						},
-						content: ["BETA"],
-					},
-				],
-			}),
+					],
+				},
+				undefined,
+				undefined,
+				{} as any,
+			),
 		).rejects.toThrow("SSH failed (9): simulated ssh failure");
 
 		expect(await readFile(toRemoteFile(env, "edit-fail.txt"), "utf8")).toBe("before\n");

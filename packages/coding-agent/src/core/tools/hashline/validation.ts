@@ -8,11 +8,11 @@ export function parseTag(ref: string): HashlineAnchor {
 	const normalized = normalizeTag(ref);
 	const match = normalized.match(HASHLINE_REF_RE);
 	if (!match) {
-		throw new Error(`Invalid line reference \"${ref}\". Expected format \"LINE#ID\".`);
+		throw new Error(`Invalid line reference "${ref}". Expected format "LINE#ID".`);
 	}
 	const line = Number.parseInt(match[1], 10);
 	if (line < 1) {
-		throw new Error(`Line number must be >= 1, got ${line} in \"${ref}\".`);
+		throw new Error(`Line number must be >= 1, got ${line} in "${ref}".`);
 	}
 	return { line, hash: match[2] };
 }

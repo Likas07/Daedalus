@@ -1,7 +1,7 @@
 import { type AssistantMessage, fauxAssistantMessage, type Model } from "@daedalus-pi/ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createHarness, type Harness } from "./harness.js";
 import { advanceTimers } from "../helpers/bun-compat.js";
+import { createHarness, type Harness } from "./harness.js";
 
 type SessionWithCompactionInternals = {
 	_checkCompaction: (assistantMessage: AssistantMessage, skipAbortedCheck?: boolean) => Promise<void>;

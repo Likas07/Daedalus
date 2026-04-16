@@ -10,18 +10,15 @@ describe("hashline hash computation", () => {
 	});
 
 	test("keeps same hash for significant content on different lines", () => {
-		expect(computeLineHash(1, "const x = 1;"))
-			.toBe(computeLineHash(2, "const x = 1;"));
+		expect(computeLineHash(1, "const x = 1;")).toBe(computeLineHash(2, "const x = 1;"));
 	});
 
 	test("mixes line number for symbol-only lines", () => {
-		expect(computeLineHash(1, "}"))
-			.not.toBe(computeLineHash(2, "}"));
+		expect(computeLineHash(1, "}")).not.toBe(computeLineHash(2, "}"));
 	});
 
 	test("ignores trailing whitespace and CR characters", () => {
-		expect(computeLineHash(1, "hello  "))
-			.toBe(computeLineHash(1, "hello\r"));
+		expect(computeLineHash(1, "hello  ")).toBe(computeLineHash(1, "hello\r"));
 	});
 
 	test("formats tags and hashline output", () => {

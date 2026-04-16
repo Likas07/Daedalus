@@ -57,8 +57,6 @@ describe("package commands", () => {
 		rmSync(tempDir, { recursive: true, force: true });
 	});
 
-
-
 	it("should persist global relative local package paths relative to settings.json", async () => {
 		const relativePkgDir = join(projectDir, "packages", "local-package");
 		mkdirSync(relativePkgDir, { recursive: true });

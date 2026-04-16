@@ -3,7 +3,7 @@ import ignore from "ignore";
 import { homedir } from "os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "path";
 import { CONFIG_DIR_NAME, getAgentDir } from "../config.js";
-import { parseFrontmatter } from "../utils/frontmatter.js";
+import { parseFrontmatter, stripFrontmatter } from "../utils/frontmatter.js";
 import type { ResourceDiagnostic } from "./diagnostics.js";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.js";
 
@@ -83,6 +83,20 @@ export interface Skill {
 export interface LoadSkillsResult {
 	skills: Skill[];
 	diagnostics: ResourceDiagnostic[];
+}
+
+export interface LoadedSkillDocument {
+	skill: Skill;
+	filePath: string;
+	baseDir: string;
+	body: string;
+}
+
+export interface ResolvedSkillResource {
+	skill: Skill;
+	target: string;
+	filePath: string;
+	content: string;
 }
 
 /**
@@ -328,6 +342,45 @@ function loadSkillFromFile(
 	}
 }
 
+export function loadSkillDocument(skill: Skill): LoadedSkillDocument {
+	const raw = readFileSync(skill.filePath, "utf-8");
+	return {
+		skill,
+		filePath: skill.filePath,
+		baseDir: skill.baseDir,
+		body: stripFrontmatter(raw).trim(),
+	};
+}
+
+export function resolveSkillResource(skill: Skill, target: string): ResolvedSkillResource {
+	const trimmed = target.trim();
+	if (!trimmed) {
+		throw new Error("target is required");
+	}
+	if (isAbsolute(trimmed)) {
+		throw new Error("target must be relative to the skill directory");
+	}
+
+	const baseDir = realpathSync(skill.baseDir);
+	const candidatePath = resolve(baseDir, trimmed);
+	if (!existsSync(candidatePath)) {
+		throw new Error(`Skill resource not found: ${trimmed}`);
+	}
+
+	const realCandidate = realpathSync(candidatePath);
+	const rel = relative(baseDir, realCandidate);
+	if (rel.startsWith("..") || isAbsolute(rel)) {
+		throw new Error(`target escapes skill directory: ${trimmed}`);
+	}
+
+	return {
+		skill,
+		target: trimmed,
+		filePath: realCandidate,
+		content: readFileSync(realCandidate, "utf-8"),
+	};
+}
+
 /**
  * Format skills for inclusion in a system prompt.
  * Uses XML format per Agent Skills standard.
@@ -336,17 +389,30 @@ function loadSkillFromFile(
  * Skills with disableModelInvocation=true are excluded from the prompt
  * (they can only be invoked explicitly via /skill:name commands).
  */
-export function formatSkillsForPrompt(skills: Skill[]): string {
+export function formatSkillsForPrompt(
+	skills: Skill[],
+	options: { loader: "read" | "skill" } = { loader: "read" },
+): string {
 	const visibleSkills = skills.filter((s) => !s.disableModelInvocation);
 
 	if (visibleSkills.length === 0) {
 		return "";
 	}
 
+	const loadInstruction =
+		options.loader === "skill"
+			? "Use the skill tool to load a skill when the task matches its description."
+			: "Use the read tool to load a skill's file when the task matches its description.";
+
+	const resolveInstruction =
+		options.loader === "skill"
+			? "When a skill file references a relative path, use the skill tool's resolve action against that skill."
+			: "When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.";
+
 	const lines = [
 		"\n\nThe following skills provide specialized instructions for specific tasks.",
-		"Use the read tool to load a skill's file when the task matches its description.",
-		"When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.",
+		loadInstruction,
+		resolveInstruction,
 		"",
 		"<available_skills>",
 	];

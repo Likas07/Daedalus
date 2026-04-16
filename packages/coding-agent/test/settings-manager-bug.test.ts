@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -45,10 +45,7 @@ afterEach(() => {
 describe("SettingsManager - External Edit Preservation", () => {
 	it("preserves file changes to the packages array when changing an unrelated setting", async () => {
 		const sandbox = createSandbox();
-		writeFileSync(
-			sandbox.globalSettingsPath,
-			JSON.stringify({ theme: "dark", packages: ["npm:pi-mcp-adapter"] }),
-		);
+		writeFileSync(sandbox.globalSettingsPath, JSON.stringify({ theme: "dark", packages: ["npm:pi-mcp-adapter"] }));
 
 		const manager = SettingsManager.create(sandbox.projectDir, sandbox.agentDir);
 		expect(manager.getPackages()).toEqual(["npm:pi-mcp-adapter"]);
@@ -68,10 +65,7 @@ describe("SettingsManager - External Edit Preservation", () => {
 
 	it("preserves file changes to the extensions array when changing an unrelated setting", async () => {
 		const sandbox = createSandbox();
-		writeFileSync(
-			sandbox.globalSettingsPath,
-			JSON.stringify({ theme: "dark", extensions: ["/old/extension.ts"] }),
-		);
+		writeFileSync(sandbox.globalSettingsPath, JSON.stringify({ theme: "dark", extensions: ["/old/extension.ts"] }));
 
 		const manager = SettingsManager.create(sandbox.projectDir, sandbox.agentDir);
 
@@ -109,10 +103,7 @@ describe("SettingsManager - External Edit Preservation", () => {
 
 	it("lets in-memory project changes override external changes for the same project field", async () => {
 		const sandbox = createSandbox();
-		writeFileSync(
-			sandbox.projectSettingsPath,
-			JSON.stringify({ extensions: ["./initial-extension.ts"] }),
-		);
+		writeFileSync(sandbox.projectSettingsPath, JSON.stringify({ extensions: ["./initial-extension.ts"] }));
 
 		const manager = SettingsManager.create(sandbox.projectDir, sandbox.agentDir);
 

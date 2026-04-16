@@ -13,15 +13,15 @@
  * Modes use this class and add their own I/O layer on top.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import type { Agent, AgentEvent, AgentMessage, AgentState, AgentTool, ThinkingLevel } from "@daedalus-pi/agent-core";
 import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@daedalus-pi/ai";
 import { isContextOverflow, modelsAreEqual, resetApiProviders, supportsXhigh } from "@daedalus-pi/ai";
 import { getDocsPath } from "../config.js";
 import { theme } from "../modes/interactive/theme/theme.js";
-import { stripFrontmatter } from "../utils/frontmatter.js";
 import { sleep } from "../utils/sleep.js";
+
 import { type BashResult, executeBashWithOperations } from "./bash-executor.js";
 import {
 	type CompactionResult,
@@ -67,6 +67,7 @@ import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.j
 import type { BranchSummaryEntry, CompactionEntry, SessionManager } from "./session-manager.js";
 import { CURRENT_SESSION_VERSION, getLatestCompactionEntry, type SessionHeader } from "./session-manager.js";
 import type { SettingsManager } from "./settings-manager.js";
+import { loadSkillDocument } from "./skills.js";
 import type { SlashCommandInfo } from "./slash-commands.js";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.js";
 import { buildSystemPrompt } from "./system-prompt.js";
@@ -790,20 +791,16 @@ export class AgentSession {
 		this.agent.state.tools = tools;
 
 		const droppedToolNames = toolNames.filter((name) => !validToolNames.includes(name));
-		logToolDebug(
-			"AgentSession.setActiveToolsByName",
-			summarizeToolTransition(previousToolNames, validToolNames),
-			{
-				requested: toolNames,
-				previous: previousToolNames,
-				next: validToolNames,
-				details: {
-					source: debugContext?.source,
-					note: debugContext?.note,
-					dropped: droppedToolNames.length > 0 ? droppedToolNames : undefined,
-				},
+		logToolDebug("AgentSession.setActiveToolsByName", summarizeToolTransition(previousToolNames, validToolNames), {
+			requested: toolNames,
+			previous: previousToolNames,
+			next: validToolNames,
+			details: {
+				source: debugContext?.source,
+				note: debugContext?.note,
+				dropped: droppedToolNames.length > 0 ? droppedToolNames : undefined,
 			},
-		);
+		});
 
 		// Rebuild base system prompt with new tool set
 		this._baseSystemPrompt = this._rebuildSystemPrompt(validToolNames);
@@ -1122,9 +1119,8 @@ export class AgentSession {
 		if (!skill) return text; // Unknown skill, pass through
 
 		try {
-			const content = readFileSync(skill.filePath, "utf-8");
-			const body = stripFrontmatter(content).trim();
-			const skillBlock = `<skill name="${skill.name}" location="${skill.filePath}">\nReferences are relative to ${skill.baseDir}.\n\n${body}\n</skill>`;
+			const loaded = loadSkillDocument(skill);
+			const skillBlock = `<skill name="${skill.name}" location="${loaded.filePath}">\nReferences are relative to ${loaded.baseDir}.\n\n${loaded.body}\n</skill>`;
 			return args ? `${skillBlock}\n\n${args}` : skillBlock;
 		} catch (err) {
 			// Emit error like extension commands do
@@ -2205,6 +2201,8 @@ export class AgentSession {
 					})();
 				},
 				getSystemPrompt: () => this.systemPrompt,
+
+				getSkills: () => this._resourceLoader.getSkills().skills,
 			},
 			{
 				registerProvider: (name, config) => {
@@ -2295,16 +2293,22 @@ export class AgentSession {
 		}
 
 		const uniqueNextActiveToolNames = [...new Set(nextActiveToolNames)];
-		const newRegistryToolNames = [...this._toolRegistry.keys()].filter((toolName) => !previousRegistryNames.has(toolName));
-		logToolDebug("AgentSession._refreshToolRegistry", summarizeToolTransition(previousActiveToolNames, uniqueNextActiveToolNames), {
-			previous: previousActiveToolNames,
-			next: uniqueNextActiveToolNames,
-			details: {
-				explicitActiveToolNames: options?.activeToolNames ? options.activeToolNames : undefined,
-				includeAllExtensionTools: options?.includeAllExtensionTools ?? false,
-				newRegistryTools: newRegistryToolNames.length > 0 ? newRegistryToolNames : undefined,
+		const newRegistryToolNames = [...this._toolRegistry.keys()].filter(
+			(toolName) => !previousRegistryNames.has(toolName),
+		);
+		logToolDebug(
+			"AgentSession._refreshToolRegistry",
+			summarizeToolTransition(previousActiveToolNames, uniqueNextActiveToolNames),
+			{
+				previous: previousActiveToolNames,
+				next: uniqueNextActiveToolNames,
+				details: {
+					explicitActiveToolNames: options?.activeToolNames ? options.activeToolNames : undefined,
+					includeAllExtensionTools: options?.includeAllExtensionTools ?? false,
+					newRegistryTools: newRegistryToolNames.length > 0 ? newRegistryToolNames : undefined,
+				},
 			},
-		});
+		);
 		this.setActiveToolsByName(uniqueNextActiveToolNames, {
 			source: "AgentSession._refreshToolRegistry",
 			note: options?.activeToolNames

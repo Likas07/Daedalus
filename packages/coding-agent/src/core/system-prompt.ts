@@ -63,10 +63,13 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 			}
 		}
 
-		// Append skills section (only if read tool is available)
-		const customPromptHasRead = !selectedTools || selectedTools.includes("read");
-		if (customPromptHasRead && skills.length > 0) {
-			prompt += formatSkillsForPrompt(skills);
+		// Append skills section when read or skill can load them
+		const customPromptCanLoadSkills =
+			!selectedTools || selectedTools.includes("read") || selectedTools.includes("skill");
+		if (customPromptCanLoadSkills && skills.length > 0) {
+			prompt += formatSkillsForPrompt(skills, {
+				loader: selectedTools?.includes("skill") ? "skill" : "read",
+			});
 		}
 
 		// Add date and working directory last
@@ -104,6 +107,7 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 	const hasFind = tools.includes("find");
 	const hasLs = tools.includes("ls");
 	const hasRead = tools.includes("read");
+	const hasSkill = tools.includes("skill");
 
 	// File exploration guidelines
 	if (hasBash && !hasGrep && !hasFind && !hasLs) {
@@ -156,9 +160,9 @@ Daedalus documentation (read only when the user asks about Daedalus itself, its 
 		}
 	}
 
-	// Append skills section (only if read tool is available)
-	if (hasRead && skills.length > 0) {
-		prompt += formatSkillsForPrompt(skills);
+	// Append skills section when read or skill can load them
+	if ((hasRead || hasSkill) && skills.length > 0) {
+		prompt += formatSkillsForPrompt(skills, { loader: hasSkill ? "skill" : "read" });
 	}
 
 	// Add date and working directory last

@@ -11,7 +11,9 @@ import { afterAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { asMock } from "./helpers/bun-compat.js";
 
 vi.spyOn(childProcess, "spawnSync");
-const spawnSyncMock = asMock(childProcess.spawnSync as unknown as (...args: unknown[]) => SpawnSyncReturns<Buffer>);
+const spawnSyncMock = asMock(
+	childProcess.spawnSync as unknown as (command: string, args: readonly string[]) => SpawnSyncReturns<Buffer>,
+);
 const clipboardMocks = {
 	hasImage: vi.fn(() => false),
 	getImageBinary: vi.fn(() => Promise.resolve(null)),
@@ -64,7 +66,7 @@ describe("readClipboardImage BMP conversion", () => {
 		clipboardMocks.getImageBinary.mockReset();
 		clipboardMocks.hasImage.mockReturnValue(false);
 		clipboardMocks.getImageBinary.mockResolvedValue(null);
-		spawnSyncMock.mockImplementation((command, args) => {
+		spawnSyncMock.mockImplementation((command: string, args: readonly string[]) => {
 			if (command === "wl-paste" && args.includes("--list-types")) {
 				return spawnOk(Buffer.from("image/bmp\n"));
 			}

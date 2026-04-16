@@ -16,10 +16,10 @@ async function checkDirtyRepo(
 		return { cancel: true };
 	}
 
-	const choice = await ctx.ui.select(
-		`You have ${status.changedFileCount} uncommitted file(s). ${action} anyway?`,
-		["Yes, proceed anyway", "No, let me commit first"],
-	);
+	const choice = await ctx.ui.select(`You have ${status.changedFileCount} uncommitted file(s). ${action} anyway?`, [
+		"Yes, proceed anyway",
+		"No, let me commit first",
+	]);
 
 	if (choice !== "Yes, proceed anyway") {
 		ctx.ui.notify("Commit your changes first", "warning");

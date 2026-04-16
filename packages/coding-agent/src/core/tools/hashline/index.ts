@@ -4,8 +4,8 @@ export {
 	HASHLINE_OUTPUT_RE,
 	HASHLINE_REF_RE,
 } from "./constants.js";
-export { computeLineHash, formatHashLines, formatLineTag } from "./hash-computation.js";
 export { applyHashlineEditsToNormalizedContent, HashlineMismatchError } from "./edit-operations.js";
+export { computeLineHash, formatHashLines, formatLineTag } from "./hash-computation.js";
 export { stripHashlinePrefixes, stripNewLinePrefixes } from "./prefix-stripping.js";
 export type {
 	HashlineAnchor,

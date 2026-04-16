@@ -2,7 +2,12 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { getToolDebugLogPath, isToolDebugEnabled, logToolDebug, summarizeToolTransition } from "../src/core/tool-debug.js";
+import {
+	getToolDebugLogPath,
+	isToolDebugEnabled,
+	logToolDebug,
+	summarizeToolTransition,
+} from "../src/core/tool-debug.js";
 
 describe("tool debug logging", () => {
 	afterEach(() => {

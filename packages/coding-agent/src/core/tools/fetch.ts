@@ -2,7 +2,14 @@ import type { AgentTool } from "@daedalus-pi/agent-core";
 import { Text } from "@daedalus-pi/tui";
 import { type Static, Type } from "@sinclair/typebox";
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.js";
-import { extractFetchedText, isTextLikeContentType, normalizeFetchUrl, normalizeMaxChars, normalizeTimeoutSeconds, type FetchOperations } from "./fetch/index.js";
+import {
+	extractFetchedText,
+	type FetchOperations,
+	isTextLikeContentType,
+	normalizeFetchUrl,
+	normalizeMaxChars,
+	normalizeTimeoutSeconds,
+} from "./fetch/index.js";
 import { getTextOutput, invalidArgText, shortenPath, str } from "./render-utils.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 
@@ -64,7 +71,8 @@ export function createFetchToolDefinition(
 	return {
 		name: "fetch",
 		label: "fetch",
-		description: "Fetch remote HTTP/HTTPS content and return cleaned text. Good for documentation pages and known URLs.",
+		description:
+			"Fetch remote HTTP/HTTPS content and return cleaned text. Good for documentation pages and known URLs.",
 		promptSnippet: "Fetch remote HTTP/HTTPS content and return cleaned text",
 		promptGuidelines: [
 			"Use fetch when you already know the URL and need remote page content",

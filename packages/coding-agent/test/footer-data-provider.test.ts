@@ -9,8 +9,17 @@ let resolvedBranch = "main";
 
 vi.spyOn(childProcess, "execFile");
 vi.spyOn(childProcess, "spawnSync");
-const execFileMock = asMock(childProcess.execFile as unknown as (...args: unknown[]) => unknown);
-const spawnSyncMock = asMock(childProcess.spawnSync as unknown as (...args: unknown[]) => unknown);
+const execFileMock = asMock(
+	childProcess.execFile as unknown as (
+		file: string,
+		args: readonly string[],
+		options: unknown,
+		callback: (error: Error | null, stdout: string, stderr: string) => void,
+	) => unknown,
+);
+const spawnSyncMock = asMock(
+	childProcess.spawnSync as unknown as (command: string, args: readonly string[]) => unknown,
+);
 
 type WorktreeFixture = {
 	worktreeDir: string;
@@ -82,7 +91,12 @@ describe("FooterDataProvider reftable branch detection", () => {
 			return { status: 1, stdout: "", stderr: "" };
 		});
 		execFileMock.mockImplementation(
-			(_command, args: readonly string[], _options, callback: (error: Error | null, stdout: string, stderr: string) => void) => {
+			(
+				_command,
+				args: readonly string[],
+				_options,
+				callback: (error: Error | null, stdout: string, stderr: string) => void,
+			) => {
 				if (args[1] === "symbolic-ref") {
 					setTimeout(
 						() =>

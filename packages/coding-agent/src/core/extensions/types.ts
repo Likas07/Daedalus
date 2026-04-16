@@ -8,12 +8,7 @@
  * - Interact with the user via UI primitives
  */
 
-import type {
-	AgentMessage,
-	AgentToolResult,
-	AgentToolUpdateCallback,
-	ThinkingLevel,
-} from "@daedalus-pi/agent-core";
+import type { AgentMessage, AgentToolResult, AgentToolUpdateCallback, ThinkingLevel } from "@daedalus-pi/agent-core";
 import type {
 	Api,
 	AssistantMessageEvent,
@@ -54,6 +49,7 @@ import type {
 	SessionEntry,
 	SessionManager,
 } from "../session-manager.js";
+import type { Skill } from "../skills.js";
 import type { SlashCommandInfo } from "../slash-commands.js";
 import type { SourceInfo } from "../source-info.js";
 import type { BashOperations } from "../tools/bash.js";
@@ -74,8 +70,8 @@ import type {
 } from "../tools/index.js";
 
 export type { ExecOptions, ExecResult } from "../exec.js";
-export type { AgentToolResult, AgentToolUpdateCallback };
 export type { AppKeybinding, KeybindingsManager } from "../keybindings.js";
+export type { AgentToolResult, AgentToolUpdateCallback };
 
 // ============================================================================
 // UI Context
@@ -291,6 +287,9 @@ export interface ExtensionContext {
 	compact(options?: CompactOptions): void;
 	/** Get the current effective system prompt. */
 	getSystemPrompt(): string;
+
+	/** Get loaded skills visible to the session. */
+	getSkills(): Skill[];
 }
 
 /**
@@ -1390,6 +1389,8 @@ export interface ExtensionContextActions {
 	getContextUsage: () => ContextUsage | undefined;
 	compact: (options?: CompactOptions) => void;
 	getSystemPrompt: () => string;
+
+	getSkills: () => Skill[];
 }
 
 /**

@@ -12,9 +12,9 @@ import {
 	restoreLineEndings,
 	stripBom,
 } from "./edit-diff.js";
+import { createPathEditCallRenderer, createPathEditResultRenderer } from "./edit-render.js";
 import { withFileMutationQueue } from "./file-mutation-queue.js";
 import { resolveToCwd } from "./path-utils.js";
-import { createPathEditCallRenderer, createPathEditResultRenderer } from "./edit-render.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 
 type EditRenderState = Record<string, never>;

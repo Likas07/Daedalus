@@ -12,13 +12,17 @@ export interface RecentSession {
  * Inspired by OhMyPi's WelcomeComponent, adapted for Daedalus aesthetics.
  */
 export class WelcomeComponent implements Component {
+	private recentSessions: RecentSession[];
+
 	constructor(
 		private readonly version: string,
 		private modelName: string,
 		private providerName: string,
 		private extensionCount: number,
-		private recentSessions: RecentSession[] = [],
-	) {}
+		recentSessions: RecentSession[] = [],
+	) {
+		this.recentSessions = recentSessions;
+	}
 
 	invalidate(): void {}
 
@@ -43,10 +47,7 @@ export class WelcomeComponent implements Component {
 		const minLeftCol = 22;
 		const minRightCol = 20;
 
-		const desiredLeftCol = Math.min(
-			preferredLeftCol,
-			Math.max(minLeftCol, Math.floor(dualContentWidth * 0.35)),
-		);
+		const desiredLeftCol = Math.min(preferredLeftCol, Math.max(minLeftCol, Math.floor(dualContentWidth * 0.35)));
 		const dualLeftCol =
 			dualContentWidth >= minRightCol + 1
 				? Math.min(desiredLeftCol, dualContentWidth - minRightCol)
@@ -107,12 +108,7 @@ export class WelcomeComponent implements Component {
 			"",
 		];
 
-		const rightLines = [
-			"",
-			...titleArt,
-			...tips,
-			...extSection,
-		];
+		const rightLines = ["", ...titleArt, ...tips, ...extSection];
 
 		// Box drawing — gold borders
 		const hChar = "\u2500";
@@ -139,9 +135,7 @@ export class WelcomeComponent implements Component {
 		}
 
 		// Content rows
-		const maxRows = showRightColumn
-			? Math.max(leftLines.length, rightLines.length)
-			: leftLines.length;
+		const maxRows = showRightColumn ? Math.max(leftLines.length, rightLines.length) : leftLines.length;
 		for (let i = 0; i < maxRows; i++) {
 			const left = this.#fitToWidth(leftLines[i] ?? "", leftCol);
 			if (showRightColumn) {
@@ -154,13 +148,7 @@ export class WelcomeComponent implements Component {
 
 		// Bottom border
 		if (showRightColumn) {
-			lines.push(
-				bl +
-					h.repeat(leftCol) +
-					theme.fg("border", "\u2534") +
-					h.repeat(rightCol) +
-					br,
-			);
+			lines.push(bl + h.repeat(leftCol) + theme.fg("border", "\u2534") + h.repeat(rightCol) + br);
 		} else {
 			lines.push(bl + h.repeat(leftCol) + br);
 		}

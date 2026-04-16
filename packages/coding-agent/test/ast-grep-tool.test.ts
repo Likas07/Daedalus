@@ -2,11 +2,16 @@ import { mkdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { createAstGrepTool } from "../src/core/tools/ast-grep.js";
 import type { AstBackend } from "../src/core/tools/ast/index.js";
+import { createAstGrepTool } from "../src/core/tools/ast-grep.js";
 
 function getTextOutput(result: any): string {
-	return result.content?.filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n") || "";
+	return (
+		result.content
+			?.filter((c: any) => c.type === "text")
+			.map((c: any) => c.text)
+			.join("\n") || ""
+	);
 }
 
 describe("ast_grep tool", () => {

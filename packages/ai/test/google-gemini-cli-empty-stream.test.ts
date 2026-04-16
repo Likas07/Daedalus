@@ -58,7 +58,7 @@ describe("google-gemini-cli empty stream retry", () => {
 			});
 		});
 
-		global.fetch = fetchMock as typeof fetch;
+		global.fetch = fetchMock as unknown as typeof fetch;
 
 		const model: Model<"google-gemini-cli"> = {
 			id: "gemini-2.5-flash",

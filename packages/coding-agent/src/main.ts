@@ -628,7 +628,6 @@ export async function main(args: string[]) {
 		return;
 	}
 
-
 	if (parsed.listModels !== undefined) {
 		const searchPattern = typeof parsed.listModels === "string" ? parsed.listModels : undefined;
 		await listModels(modelRegistry, searchPattern);

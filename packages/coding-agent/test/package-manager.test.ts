@@ -2,8 +2,8 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DefaultPackageManager, type ProgressEvent, type ResolvedResource } from "../src/core/package-manager.js";
 import { CONFIG_DIR_NAME } from "../src/config.js";
+import { DefaultPackageManager, type ProgressEvent, type ResolvedResource } from "../src/core/package-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
 import { createGlobalStubManager } from "./helpers/bun-compat.js";
 
@@ -66,7 +66,6 @@ describe("DefaultPackageManager", () => {
 		globalStubs.restoreAll();
 		rmSync(tempDir, { recursive: true, force: true });
 	});
-
 
 	describe("resolve", () => {
 		it("should return no package-sourced paths when no sources configured", async () => {

@@ -9,12 +9,12 @@ import { createRequire } from "node:module";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createJiti } from "@mariozechner/jiti";
 import * as _bundledPiAgentCore from "@daedalus-pi/agent-core";
 import * as _bundledPiAi from "@daedalus-pi/ai";
 import * as _bundledPiAiOauth from "@daedalus-pi/ai/oauth";
 import type { KeyId } from "@daedalus-pi/tui";
 import * as _bundledPiTui from "@daedalus-pi/tui";
+import { createJiti } from "@mariozechner/jiti";
 // Static imports of packages that extensions may use.
 // These MUST be static so Bun bundles them into the compiled binary.
 // The virtualModules option then makes them available to extensions.
@@ -25,9 +25,9 @@ import { getAgentDir, isBunBinary } from "../../config.js";
 import * as _bundledPiCodingAgent from "../../index.js";
 import { createEventBus, type EventBus } from "../event-bus.js";
 import type { ExecOptions } from "../exec.js";
-import { logToolDebug } from "../tool-debug.js";
 import { execCommand } from "../exec.js";
 import { createSyntheticSourceInfo } from "../source-info.js";
+import { logToolDebug } from "../tool-debug.js";
 import type {
 	Extension,
 	ExtensionAPI,

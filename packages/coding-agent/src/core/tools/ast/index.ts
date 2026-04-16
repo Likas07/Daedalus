@@ -1,10 +1,16 @@
-export { createDefaultAstBackend, createSgCliBackend } from "./backend.js";
-export type * from "./types.js";
-export { resolveAstScope, normalizeNonNegativeInt, normalizePatterns, normalizePositiveInt, normalizeRewriteOps } from "./validation.js";
 export {
+	type AstWorkspace,
 	applyAstReplacementGroups,
 	createTempAstWorkspace,
 	finalizeAstWorkspace,
-	type AstWorkspace,
 } from "./apply.js";
+export { createDefaultAstBackend, createSgCliBackend } from "./backend.js";
 export { formatAstEditPreview, formatAstSearchResults, summarizeAstMatches } from "./render.js";
+export type * from "./types.js";
+export {
+	normalizeNonNegativeInt,
+	normalizePatterns,
+	normalizePositiveInt,
+	normalizeRewriteOps,
+	resolveAstScope,
+} from "./validation.js";

@@ -75,6 +75,29 @@ describe("buildSystemPrompt", () => {
 		});
 	});
 
+	describe("skills", () => {
+		test("includes skills when skill tool is active even without read", () => {
+			const prompt = buildSystemPrompt({
+				selectedTools: ["skill"],
+				toolSnippets: { skill: "Load skills and resolve skill-relative references" },
+				skills: [
+					{
+						name: "test-skill",
+						description: "A test skill.",
+						filePath: "/tmp/test-skill/SKILL.md",
+						baseDir: "/tmp/test-skill",
+						sourceInfo: {} as any,
+						disableModelInvocation: false,
+					},
+				],
+				contextFiles: [],
+			});
+
+			expect(prompt).toContain("<available_skills>");
+			expect(prompt).toContain("Use the skill tool to load a skill");
+		});
+	});
+
 	describe("prompt guidelines", () => {
 		test("appends promptGuidelines to default guidelines", () => {
 			const prompt = buildSystemPrompt({
@@ -98,5 +121,4 @@ describe("buildSystemPrompt", () => {
 			expect(prompt.match(/- Use dynamic_tool for summaries\./g)).toHaveLength(1);
 		});
 	});
-
 });

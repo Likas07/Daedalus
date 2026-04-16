@@ -151,10 +151,7 @@ describe("SettingsManager", () => {
 	describe("reload", () => {
 		it("reloads global settings from disk", async () => {
 			const sandbox = createSandbox();
-			writeFileSync(
-				sandbox.globalSettingsPath,
-				JSON.stringify({ theme: "dark", extensions: ["/before.ts"] }),
-			);
+			writeFileSync(sandbox.globalSettingsPath, JSON.stringify({ theme: "dark", extensions: ["/before.ts"] }));
 
 			const manager = SettingsManager.create(sandbox.projectDir, sandbox.agentDir);
 			writeFileSync(

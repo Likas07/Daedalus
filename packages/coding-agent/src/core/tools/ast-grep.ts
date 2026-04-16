@@ -2,17 +2,17 @@ import type { AgentTool } from "@daedalus-pi/agent-core";
 import { Text } from "@daedalus-pi/tui";
 import { type Static, Type } from "@sinclair/typebox";
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.js";
-import { getTextOutput, invalidArgText, shortenPath, str } from "./render-utils.js";
-import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 import {
+	type AstBackend,
 	createDefaultAstBackend,
 	formatAstSearchResults,
 	normalizeNonNegativeInt,
 	normalizePatterns,
 	normalizePositiveInt,
 	resolveAstScope,
-	type AstBackend,
 } from "./ast/index.js";
+import { getTextOutput, invalidArgText, shortenPath, str } from "./render-utils.js";
+import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 
 const astGrepSchema = Type.Object({
 	pat: Type.Array(Type.String(), { minItems: 1, description: "AST patterns to match" }),

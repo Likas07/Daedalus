@@ -2,12 +2,17 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { allTools, codingTools } from "../src/core/tools/index.js";
-import { createAstEditTool } from "../src/core/tools/ast-edit.js";
 import type { AstBackend } from "../src/core/tools/ast/index.js";
+import { createAstEditTool } from "../src/core/tools/ast-edit.js";
+import { allTools, codingTools } from "../src/core/tools/index.js";
 
 function getTextOutput(result: any): string {
-	return result.content?.filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n") || "";
+	return (
+		result.content
+			?.filter((c: any) => c.type === "text")
+			.map((c: any) => c.text)
+			.join("\n") || ""
+	);
 }
 
 describe("ast_edit tool", () => {

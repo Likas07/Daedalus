@@ -24,7 +24,7 @@ export function createGlobalStubManager() {
 	return {
 		stub(name: keyof typeof globalThis | string, value: unknown) {
 			const key = String(name);
-			const hadOwn = Object.prototype.hasOwnProperty.call(globalThis, key);
+			const hadOwn = Object.hasOwn(globalThis, key);
 			const descriptor = Object.getOwnPropertyDescriptor(globalThis, key);
 			const previousValue = (globalThis as Record<string, unknown>)[key];
 
@@ -71,7 +71,16 @@ export async function advanceTimers(ms: number): Promise<void> {
 let warnedMissingCommands = new Set<string>();
 
 function runCommandUnmocked(command: string, args: string[], cwd?: string): { status: number | null } {
-	const bunRuntime = (globalThis as { Bun?: { spawnSync: (options: { cmd: string[]; cwd?: string; stdout?: "pipe"; stderr?: "pipe" }) => { exitCode: number; success: boolean } } }).Bun;
+	const bunRuntime = (
+		globalThis as {
+			Bun?: {
+				spawnSync: (options: { cmd: string[]; cwd?: string; stdout?: "pipe"; stderr?: "pipe" }) => {
+					exitCode: number;
+					success: boolean;
+				};
+			};
+		}
+	).Bun;
 	if (bunRuntime) {
 		const result = bunRuntime.spawnSync({ cmd: [command, ...args], cwd, stdout: "pipe", stderr: "pipe" });
 		return { status: result.success ? 0 : result.exitCode };

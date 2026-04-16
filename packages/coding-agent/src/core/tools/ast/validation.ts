@@ -5,7 +5,7 @@ import type { AstScope } from "./types.js";
 
 export async function resolveAstScope(inputPath: string | undefined, cwd: string, glob?: string): Promise<AstScope> {
 	const absolutePath = resolveToCwd(inputPath || ".", cwd);
-	let stat;
+	let stat: Awaited<ReturnType<typeof fsStat>>;
 	try {
 		stat = await fsStat(absolutePath);
 	} catch {

@@ -10,7 +10,7 @@ import {
 	withFileMutationQueue,
 } from "@daedalus-pi/coding-agent";
 
-export { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, truncateHead, type TruncationResult };
+export { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, type TruncationResult, truncateHead };
 
 export async function saveToTempFile(content: string, prefix: string): Promise<string> {
 	const tempDir = await mkdtemp(join(tmpdir(), `daedalus-${prefix}-`));

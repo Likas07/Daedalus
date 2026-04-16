@@ -1,8 +1,8 @@
 import { complete, type UserMessage } from "@daedalus-pi/ai";
 import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
 import { BorderedLoader } from "@daedalus-pi/coding-agent";
-import { requireModel, requireUI } from "../shared/ui.js";
 import { resolveModelAuth } from "../shared/model-auth.js";
+import { requireModel, requireUI } from "../shared/ui.js";
 
 const SYSTEM_PROMPT = `You are a question extractor. Given text from a conversation, extract any questions that need answering and format them for the user to fill in.
 

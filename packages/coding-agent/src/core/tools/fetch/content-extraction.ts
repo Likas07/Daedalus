@@ -2,7 +2,11 @@ import { parseHTML } from "linkedom";
 import type { FetchExtractionOptions, FetchExtractionResult } from "./types.js";
 
 function collapseWhitespace(text: string): string {
-	return text.replace(/\r/g, "").replace(/\t/g, " ").replace(/\u00a0/g, " ").replace(/[ \f\v]+/g, " ");
+	return text
+		.replace(/\r/g, "")
+		.replace(/\t/g, " ")
+		.replace(/\u00a0/g, " ")
+		.replace(/[ \f\v]+/g, " ");
 }
 
 function decodeAndNormalizeText(text: string): string {
@@ -48,13 +52,20 @@ function extractHtmlAsText(html: string): string {
 	return title && !body.startsWith(title) ? `${title}\n\n${body}`.trim() : body;
 }
 
-export function extractFetchedText(body: string, contentType: string, options: FetchExtractionOptions): FetchExtractionResult {
+export function extractFetchedText(
+	body: string,
+	contentType: string,
+	options: FetchExtractionOptions,
+): FetchExtractionResult {
 	const normalizedType = contentType.split(";")[0].trim().toLowerCase();
-	const extracted = !options.raw && (normalizedType === "text/html" || normalizedType === "application/xhtml+xml")
-		? extractHtmlAsText(body)
-		: body.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+	const extracted =
+		!options.raw && (normalizedType === "text/html" || normalizedType === "application/xhtml+xml")
+			? extractHtmlAsText(body)
+			: body.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
 	const originalLength = extracted.length;
 	const truncated = extracted.length > options.maxChars;
-	const text = truncated ? `${extracted.slice(0, options.maxChars)}\n\n[Truncated: output exceeded ${options.maxChars} chars]` : extracted;
+	const text = truncated
+		? `${extracted.slice(0, options.maxChars)}\n\n[Truncated: output exceeded ${options.maxChars} chars]`
+		: extracted;
 	return { text, contentType: normalizedType || contentType, truncated, originalLength };
 }

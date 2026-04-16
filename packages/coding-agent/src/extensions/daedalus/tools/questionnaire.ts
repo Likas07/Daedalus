@@ -217,12 +217,12 @@ export default function questionnaire(pi: ExtensionAPI) {
 						return;
 					}
 
-						if (matchesKey(data, Key.enter) && q) {
-							const opt = opts[optionIndex];
-							if (!opt) return;
-							if (opt.isOther) {
-								inputMode = true;
-								inputQuestionId = q.id;
+					if (matchesKey(data, Key.enter) && q) {
+						const opt = opts[optionIndex];
+						if (!opt) return;
+						if (opt.isOther) {
+							inputMode = true;
+							inputQuestionId = q.id;
 							editor.setText("");
 							refresh();
 							return;
@@ -372,7 +372,7 @@ export default function questionnaire(pi: ExtensionAPI) {
 		},
 
 		renderCall(args, theme, _context) {
-			const qs = ((args.questions as Question[] | undefined) || []);
+			const qs = (args.questions as Question[] | undefined) || [];
 			const count = qs.length;
 			const labels = qs.map((q) => q.label || q.id).join(", ");
 			let text = theme.fg("toolTitle", theme.bold("questionnaire "));

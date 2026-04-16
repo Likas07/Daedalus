@@ -6,9 +6,9 @@ import { TypeCompiler } from "@sinclair/typebox/compiler";
 import chalk from "chalk";
 import { highlight, supportsLanguage } from "cli-highlight";
 import { getCustomThemesDir } from "../../../config.js";
+import type { SourceInfo } from "../../../core/source-info.js";
 import darkThemeJson from "./dark.json" with { type: "json" };
 import lightThemeJson from "./light.json" with { type: "json" };
-import type { SourceInfo } from "../../../core/source-info.js";
 
 // ============================================================================
 // Types & Schema

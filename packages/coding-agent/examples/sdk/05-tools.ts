@@ -85,7 +85,12 @@ console.log("Specific hashline tools with custom cwd session created");
 
 await createAgentSession({
 	cwd: customCwd,
-	tools: [createReadTool(customCwd), createFetchTool(customCwd), createAstGrepTool(customCwd), createAstEditTool(customCwd)],
+	tools: [
+		createReadTool(customCwd),
+		createFetchTool(customCwd),
+		createAstGrepTool(customCwd),
+		createAstEditTool(customCwd),
+	],
 	sessionManager: SessionManager.inMemory(),
 });
 console.log("Specific fetch/AST tools with custom cwd session created");

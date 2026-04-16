@@ -60,7 +60,11 @@ function getExternalServiceSkipReason(label: string, message: string): string | 
 	return null;
 }
 
-async function probeModelAvailability(label: string, model: Model<any> | undefined, apiKey: string | undefined): Promise<string | null> {
+async function probeModelAvailability(
+	label: string,
+	model: Model<any> | undefined,
+	apiKey: string | undefined,
+): Promise<string | null> {
 	if (!apiKey) {
 		return `${label} API key could not be resolved`;
 	}
@@ -103,7 +107,9 @@ const ANTIGRAVITY_SKIP_REASON = HAS_ANTIGRAVITY_AUTH
 		)
 	: null;
 const skipAntigravityTests =
-	!HAS_ANTIGRAVITY_AUTH || !ANTIGRAVITY_API_KEY || (ANTIGRAVITY_SKIP_REASON ? warnAndSkip(ANTIGRAVITY_SKIP_REASON) : false);
+	!HAS_ANTIGRAVITY_AUTH ||
+	!ANTIGRAVITY_API_KEY ||
+	(ANTIGRAVITY_SKIP_REASON ? warnAndSkip(ANTIGRAVITY_SKIP_REASON) : false);
 
 const ANTHROPIC_SKIP_REASON = HAS_ANTHROPIC_AUTH
 	? await probeModelAvailability("anthropic", getModel("anthropic", "claude-sonnet-4-5") ?? undefined, API_KEY)

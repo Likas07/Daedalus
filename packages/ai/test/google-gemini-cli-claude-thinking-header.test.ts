@@ -50,7 +50,7 @@ describe("google-gemini-cli Claude thinking header", () => {
 			return createSseResponse();
 		});
 
-		global.fetch = fetchMock as typeof fetch;
+		global.fetch = fetchMock as unknown as typeof fetch;
 
 		const model: Model<"google-gemini-cli"> = {
 			id: "claude-opus-4-5-thinking",
@@ -79,7 +79,7 @@ describe("google-gemini-cli Claude thinking header", () => {
 			return createSseResponse();
 		});
 
-		global.fetch = fetchMock as typeof fetch;
+		global.fetch = fetchMock as unknown as typeof fetch;
 
 		const model: Model<"google-gemini-cli"> = {
 			id: "gemini-2.5-flash",

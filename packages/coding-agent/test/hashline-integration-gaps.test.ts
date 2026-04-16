@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { createFileOps, computeFileLists, extractFileOpsFromMessage } from "../src/core/compaction/utils.js";
+import { computeFileLists, createFileOps, extractFileOpsFromMessage } from "../src/core/compaction/utils.js";
 import { TEMPLATE_JS } from "../src/core/export-html/template.generated.js";
 
 describe("hashline integration gaps", () => {

@@ -4,7 +4,9 @@ import { afterAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { asMock } from "./helpers/bun-compat.js";
 
 vi.spyOn(childProcess, "spawnSync");
-const spawnSyncMock = asMock(childProcess.spawnSync as unknown as (...args: unknown[]) => SpawnSyncReturns<Buffer>);
+const spawnSyncMock = asMock(
+	childProcess.spawnSync as unknown as (command: string, args: readonly string[]) => SpawnSyncReturns<Buffer>,
+);
 const clipboardMocks = {
 	hasImage: vi.fn<() => boolean>(),
 	getImageBinary: vi.fn<() => Promise<Uint8Array | null>>(),
@@ -53,7 +55,7 @@ describe("readClipboardImage", () => {
 			throw new Error("clipboard.hasImage should not be called on Wayland");
 		});
 
-		spawnSyncMock.mockImplementation((command, args) => {
+		spawnSyncMock.mockImplementation((command: string, args: readonly string[]) => {
 			if (command === "wl-paste" && args[0] === "--list-types") {
 				return spawnOk(Buffer.from("text/plain\nimage/png\n", "utf-8"));
 			}
@@ -78,7 +80,7 @@ describe("readClipboardImage", () => {
 		const enoent = new Error("spawn ENOENT");
 		(enoent as { code?: string }).code = "ENOENT";
 
-		spawnSyncMock.mockImplementation((command, args) => {
+		spawnSyncMock.mockImplementation((command: string, args: readonly string[]) => {
 			if (command === "wl-paste") {
 				return spawnError(enoent);
 			}

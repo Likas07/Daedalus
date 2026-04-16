@@ -3,9 +3,9 @@ import { type Static, Type } from "@sinclair/typebox";
 import { readFile as fsReadFile, rm as fsRm, writeFile as fsWriteFile } from "fs/promises";
 import path from "path";
 import type { ToolDefinition } from "../extensions/types.js";
-import { createPathEditCallRenderer, createPathEditResultRenderer } from "./edit-render.js";
-import { withFileMutationQueue } from "./file-mutation-queue.js";
 import {
+	type AstBackend,
+	type AstMatch,
 	applyAstReplacementGroups,
 	createDefaultAstBackend,
 	createTempAstWorkspace,
@@ -14,9 +14,9 @@ import {
 	normalizePositiveInt,
 	normalizeRewriteOps,
 	resolveAstScope,
-	type AstBackend,
-	type AstMatch,
 } from "./ast/index.js";
+import { createPathEditCallRenderer, createPathEditResultRenderer } from "./edit-render.js";
+import { withFileMutationQueue } from "./file-mutation-queue.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 
 const astEditOpSchema = Type.Object({
@@ -124,17 +124,25 @@ export function createAstEditToolDefinition(
 				}
 				const finalResult = await finalizeAstWorkspace(workspace);
 				if (finalResult.changedFiles.length === 0) {
-					const text = totalReplacements === 0 ? "No replacements made" : formatAstEditPreview(finalResult.changes);
+					const text =
+						totalReplacements === 0 ? "No replacements made" : formatAstEditPreview(finalResult.changes);
 					return {
 						content: [{ type: "text", text: `${text}${stderr ? `\n\nWarnings:\n${stderr}` : ""}` }],
 						details: undefined,
 					};
 				}
 				for (const changedFile of finalResult.changedFiles) {
-					await withFileMutationQueue(changedFile.absolutePath, () => ops.writeFile(changedFile.absolutePath, changedFile.content));
+					await withFileMutationQueue(changedFile.absolutePath, () =>
+						ops.writeFile(changedFile.absolutePath, changedFile.content),
+					);
 				}
 				return {
-					content: [{ type: "text", text: `${formatAstEditPreview(finalResult.changes)}${stderr ? `\n\nWarnings:\n${stderr}` : ""}` }],
+					content: [
+						{
+							type: "text",
+							text: `${formatAstEditPreview(finalResult.changes)}${stderr ? `\n\nWarnings:\n${stderr}` : ""}`,
+						},
+					],
 					details: {
 						diff: finalResult.diff,
 						firstChangedLine: finalResult.firstChangedLine,

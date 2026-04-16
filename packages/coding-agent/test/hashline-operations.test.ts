@@ -2,8 +2,8 @@ import { describe, expect, test } from "vitest";
 import {
 	applyHashlineEditsToNormalizedContent,
 	formatLineTag,
-	parseTag,
 	type HashlineEditOperation,
+	parseTag,
 } from "../src/core/tools/hashline/index.js";
 
 function tag(line: number, content: string) {

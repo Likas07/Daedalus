@@ -187,10 +187,7 @@ export function parseArgs(args: string[]): Args {
 	return result;
 }
 
-export function printHelp(
-	extensionFlags?: ExtensionFlag[],
-	output: "stdout" | "stderr" = "stdout",
-): void {
+export function printHelp(extensionFlags?: ExtensionFlag[], output: "stdout" | "stderr" = "stdout"): void {
 	const write = output === "stderr" ? console.error : console.log;
 	const extensionFlagsText =
 		extensionFlags && extensionFlags.length > 0

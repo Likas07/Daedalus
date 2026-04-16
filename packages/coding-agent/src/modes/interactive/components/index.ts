@@ -30,4 +30,4 @@ export { TreeSelectorComponent } from "./tree-selector.js";
 export { UserMessageComponent } from "./user-message.js";
 export { UserMessageSelectorComponent } from "./user-message-selector.js";
 export { truncateToVisualLines, type VisualTruncateResult } from "./visual-truncate.js";
-export { WelcomeComponent, type RecentSession } from "./welcome.js";
+export { type RecentSession, WelcomeComponent } from "./welcome.js";

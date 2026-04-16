@@ -1,6 +1,6 @@
-import type { HashlineAnchor, HashlineApplyResult, HashlineEditOperation } from "./types.js";
 import { formatLineTag } from "./hash-computation.js";
-import { HashlineMismatchError, validateTags } from "./validation.js";
+import type { HashlineAnchor, HashlineApplyResult, HashlineEditOperation } from "./types.js";
+import { validateTags } from "./validation.js";
 
 interface AnnotatedEdit {
 	edit: HashlineEditOperation;
@@ -132,6 +132,8 @@ function getAnnotatedEdits(edits: HashlineEditOperation[], fileLineCount: number
 					return { edit, idx, sortLine: fileLineCount + 1, precedence: 1 };
 				case "prepend_file":
 					return { edit, idx, sortLine: 0, precedence: 2 };
+				default:
+					throw new Error(`Unsupported hashline edit operation: ${(edit as { op: string }).op}`);
 			}
 		})
 		.sort((a, b) => b.sortLine - a.sortLine || a.precedence - b.precedence || a.idx - b.idx);
@@ -157,8 +159,14 @@ export function applyHashlineEditsToNormalizedContent(
 		if (edit.op === "replace_range" && edit.pos.line > edit.end.line) {
 			throw new Error(`Range start line ${edit.pos.line} must be <= end line ${edit.end.line} in ${path}.`);
 		}
-		if ((edit.op === "append_at" || edit.op === "prepend_at" || edit.op === "append_file" || edit.op === "prepend_file") && edit.lines.length === 0) {
-			throw new Error(`${edit.op} requires non-empty content in ${path}. Use [\"\"] to insert a blank line.`);
+		if (
+			(edit.op === "append_at" ||
+				edit.op === "prepend_at" ||
+				edit.op === "append_file" ||
+				edit.op === "prepend_file") &&
+			edit.lines.length === 0
+		) {
+			throw new Error(`${edit.op} requires non-empty content in ${path}. Use [""] to insert a blank line.`);
 		}
 	}
 

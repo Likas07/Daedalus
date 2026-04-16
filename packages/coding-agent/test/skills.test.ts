@@ -2,7 +2,14 @@ import { homedir } from "os";
 import { join, resolve } from "path";
 import { describe, expect, it } from "vitest";
 import type { ResourceDiagnostic } from "../src/core/diagnostics.js";
-import { formatSkillsForPrompt, loadSkills, loadSkillsFromDir, type Skill } from "../src/core/skills.js";
+import {
+	formatSkillsForPrompt,
+	loadSkillDocument,
+	loadSkills,
+	loadSkillsFromDir,
+	resolveSkillResource,
+	type Skill,
+} from "../src/core/skills.js";
 import { createSyntheticSourceInfo } from "../src/core/source-info.js";
 
 const fixturesDir = resolve(__dirname, "fixtures/skills");
@@ -221,6 +228,47 @@ describe("skills", () => {
 		});
 	});
 
+	describe("skill document helpers", () => {
+		it("loads a skill document body without frontmatter", () => {
+			const skill = createTestSkill({
+				name: "test-skill",
+				description: "A test skill.",
+				filePath: join(fixturesDir, "valid-skill", "SKILL.md"),
+				baseDir: join(fixturesDir, "valid-skill"),
+			});
+
+			const loaded = loadSkillDocument(skill);
+
+			expect(loaded.body).toContain("# Valid Skill");
+			expect(loaded.body).not.toContain("name:");
+		});
+
+		it("resolves a relative resource within the skill directory", () => {
+			const skill = createTestSkill({
+				name: "test-skill",
+				description: "A test skill.",
+				filePath: join(fixturesDir, "valid-skill", "SKILL.md"),
+				baseDir: join(fixturesDir, "valid-skill"),
+			});
+
+			const resolved = resolveSkillResource(skill, "reference.md");
+
+			expect(resolved.filePath).toContain("reference.md");
+			expect(resolved.content).toContain("Reference");
+		});
+
+		it("rejects path traversal in resolveSkillResource", () => {
+			const skill = createTestSkill({
+				name: "test-skill",
+				description: "A test skill.",
+				filePath: join(fixturesDir, "valid-skill", "SKILL.md"),
+				baseDir: join(fixturesDir, "valid-skill"),
+			});
+
+			expect(() => resolveSkillResource(skill, "../shared/outside.md")).toThrow("escapes skill directory");
+		});
+	});
+
 	describe("formatSkillsForPrompt", () => {
 		it("should return empty string for no skills", () => {
 			const result = formatSkillsForPrompt([]);
@@ -342,6 +390,23 @@ describe("skills", () => {
 
 			const result = formatSkillsForPrompt(skills);
 			expect(result).toBe("");
+		});
+
+		it("uses skill-tool wording when requested", () => {
+			const result = formatSkillsForPrompt(
+				[
+					createTestSkill({
+						name: "test-skill",
+						description: "A test skill.",
+						filePath: "/path/to/skill/SKILL.md",
+						baseDir: "/path/to/skill",
+					}),
+				],
+				{ loader: "skill" },
+			);
+
+			expect(result).toContain("Use the skill tool to load a skill");
+			expect(result).toContain("skill tool's resolve action");
 		});
 	});
 

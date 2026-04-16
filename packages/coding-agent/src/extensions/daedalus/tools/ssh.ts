@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { createInterface } from "node:readline";
+import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
 import {
 	createBashTool,
 	createFetchTool,
@@ -9,14 +10,13 @@ import {
 	createHashlineEditTool,
 	createLsTool,
 	createReadTool,
+	createWriteTool,
 	DEFAULT_MAX_BYTES,
 	formatSize,
+	type GrepToolDetails,
 	truncateHead,
 	truncateLine,
-	createWriteTool,
-	type GrepToolDetails,
 } from "@daedalus-pi/coding-agent";
-import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
 import { resolveToCwd } from "../../../core/tools/path-utils.js";
 import { GREP_MAX_LINE_LENGTH } from "../../../core/tools/truncate.js";
 import {
@@ -30,11 +30,11 @@ import {
 	createRemoteWriteOps,
 	getRemotePathInfo,
 	parseSshArg,
+	type SshConfig,
 	sshExec,
 	toLocalPath,
 	toRemotePath,
 	toSshBashCommand,
-	type SshConfig,
 } from "../shared/ssh.js";
 
 const DEFAULT_GREP_LIMIT = 100;
@@ -219,7 +219,9 @@ async function executeRemoteGrep(
 			const details: GrepToolDetails = {};
 			const notices: string[] = [];
 			if (matchLimitReached) {
-				notices.push(`${effectiveLimit} matches limit reached. Use limit=${effectiveLimit * 2} for more, or refine pattern`);
+				notices.push(
+					`${effectiveLimit} matches limit reached. Use limit=${effectiveLimit * 2} for more, or refine pattern`,
+				);
 				details.matchLimitReached = effectiveLimit;
 			}
 			if (truncation.truncated) {
