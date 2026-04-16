@@ -3619,11 +3619,11 @@ export class InteractiveMode {
 						this.settingsManager.setClearOnShrink(enabled);
 						this.ui.setClearOnShrink(enabled);
 					},
-					onSubagentsEnabledChange: (enabled) => {
-						this.settingsManager.setSubagentsEnabled(enabled);
+					onSubagentDelegationAggressivenessChange: (value) => {
+						this.settingsManager.setSubagentDelegationAggressiveness(value);
 					},
-					onSubagentDefaultPrimaryChange: (value) => {
-						this.settingsManager.setSubagentDefaultPrimary(value);
+					onSubagentBranchIsolationThresholdChange: (value) => {
+						this.settingsManager.setSubagentBranchIsolationThreshold(value);
 					},
 					onSubagentMaxDepthChange: (value) => {
 						this.settingsManager.setSubagentMaxDepth(value);
@@ -3636,6 +3636,12 @@ export class InteractiveMode {
 					},
 					onSubagentRoleThinkingLevelChange: (role, level) => {
 						this.settingsManager.setSubagentRoleThinkingLevel(role, level);
+					},
+					onSubagentRoleExecutionModeChange: (role, mode) => {
+						this.settingsManager.setSubagentRoleExecutionModePreference(role, mode);
+					},
+					onSubagentRoleIsolationPreferenceChange: (role, isolation) => {
+						this.settingsManager.setSubagentRoleIsolationPreference(role, isolation);
 					},
 					onClearSubagentRoleOverride: (role) => {
 						this.settingsManager.clearSubagentRoleOverride(role);

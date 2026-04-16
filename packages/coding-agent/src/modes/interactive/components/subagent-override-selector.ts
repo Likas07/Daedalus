@@ -1,10 +1,13 @@
 import type { ThinkingLevel } from "@daedalus-pi/agent-core";
 import { Container, type SettingItem, SettingsList } from "@daedalus-pi/tui";
+import type { SubagentExecutionModePreference, SubagentIsolationPreference } from "../../../core/settings-schema.js";
 import { getSettingsListTheme } from "../theme/theme.js";
 import type { SettingsSubagentRole, SettingsSubagentRoleOverride } from "./settings-selector.js";
 import { TextInputSubmenu } from "./settings-submenus.js";
 
 const THINKING_VALUES = ["inherit", "off", "minimal", "low", "medium", "high", "xhigh"] as const;
+const EXECUTION_MODE_VALUES = ["inherit", "foreground", "background", "either"] as const;
+const ISOLATION_VALUES = ["inherit", "shared-branch", "child-branch", "either"] as const;
 
 function formatRoleSummary(override: SettingsSubagentRoleOverride | undefined): string {
 	if (!override?.model && !override?.thinkingLevel) {
@@ -18,6 +21,12 @@ function formatRoleSummary(override: SettingsSubagentRoleOverride | undefined): 
 	if (override.thinkingLevel) {
 		parts.push(`thinking: ${override.thinkingLevel}`);
 	}
+	if (override.executionModePreference) {
+		parts.push(`mode: ${override.executionModePreference}`);
+	}
+	if (override.isolationPreference) {
+		parts.push(`isolation: ${override.isolationPreference}`);
+	}
 	return parts.join(" · ");
 }
 
@@ -28,6 +37,8 @@ function formatConfiguredOverrideCount(overrides: Record<string, SettingsSubagen
 export interface SubagentOverrideSelectorCallbacks {
 	onModelChange: (role: string, model: string | undefined) => void;
 	onThinkingLevelChange: (role: string, level: ThinkingLevel | undefined) => void;
+	onExecutionModeChange: (role: string, mode: SubagentExecutionModePreference | undefined) => void;
+	onIsolationPreferenceChange: (role: string, isolation: SubagentIsolationPreference | undefined) => void;
 	onClear: (role: string) => void;
 	validateModelRef: (value: string) => string | undefined;
 	onDone: (summary: string) => void;
@@ -106,6 +117,20 @@ export class SubagentOverrideSelectorComponent extends Container {
 					currentValue: "no",
 					values: ["no", "clear"],
 				},
+				{
+					id: "execution-mode",
+					label: "Execution mode",
+					description: "Override foreground/background preference for this role.",
+					currentValue: this.overrides[roleName]?.executionModePreference ?? "inherit",
+					values: [...EXECUTION_MODE_VALUES],
+				},
+				{
+					id: "isolation",
+					label: "Isolation",
+					description: "Override shared-branch/child-branch preference for this role.",
+					currentValue: this.overrides[roleName]?.isolationPreference ?? "inherit",
+					values: [...ISOLATION_VALUES],
+				},
 			],
 			10,
 			getSettingsListTheme(),
@@ -119,11 +144,31 @@ export class SubagentOverrideSelectorComponent extends Container {
 					return;
 				}
 
+				if (id === "execution-mode") {
+					const nextValue = value === "inherit" ? undefined : (value as SubagentExecutionModePreference);
+					this.setRoleExecutionMode(roleName, nextValue);
+					this.callbacks.onExecutionModeChange(roleName, nextValue);
+					roleSettings.updateValue("execution-mode", value);
+					this.roleList.updateValue(roleName, formatRoleSummary(this.overrides[roleName]));
+					return;
+				}
+
+				if (id === "isolation") {
+					const nextValue = value === "inherit" ? undefined : (value as SubagentIsolationPreference);
+					this.setRoleIsolationPreference(roleName, nextValue);
+					this.callbacks.onIsolationPreferenceChange(roleName, nextValue);
+					roleSettings.updateValue("isolation", value);
+					this.roleList.updateValue(roleName, formatRoleSummary(this.overrides[roleName]));
+					return;
+				}
+
 				if (id === "clear" && value === "clear") {
 					delete this.overrides[roleName];
 					this.callbacks.onClear(roleName);
 					roleSettings.updateValue("model", "(inherit)");
 					roleSettings.updateValue("thinking", "inherit");
+					roleSettings.updateValue("execution-mode", "inherit");
+					roleSettings.updateValue("isolation", "inherit");
 					roleSettings.updateValue("clear", "no");
 					this.roleList.updateValue(roleName, formatRoleSummary(undefined));
 				}
@@ -137,7 +182,12 @@ export class SubagentOverrideSelectorComponent extends Container {
 
 	private hasOverride(roleName: string): boolean {
 		const override = this.overrides[roleName];
-		return Boolean(override?.model || override?.thinkingLevel);
+		return Boolean(
+			override?.model ||
+				override?.thinkingLevel ||
+				override?.executionModePreference ||
+				override?.isolationPreference,
+		);
 	}
 
 	private setRoleModel(roleName: string, model: string | undefined): void {
@@ -154,6 +204,24 @@ export class SubagentOverrideSelectorComponent extends Container {
 			this.overrides[roleName] = { ...(this.overrides[roleName] ?? {}), thinkingLevel };
 		} else if (this.overrides[roleName]) {
 			delete this.overrides[roleName].thinkingLevel;
+			this.pruneRoleOverride(roleName);
+		}
+	}
+
+	private setRoleExecutionMode(roleName: string, executionModePreference: SubagentExecutionModePreference | undefined): void {
+		if (executionModePreference) {
+			this.overrides[roleName] = { ...(this.overrides[roleName] ?? {}), executionModePreference };
+		} else if (this.overrides[roleName]) {
+			delete this.overrides[roleName].executionModePreference;
+			this.pruneRoleOverride(roleName);
+		}
+	}
+
+	private setRoleIsolationPreference(roleName: string, isolationPreference: SubagentIsolationPreference | undefined): void {
+		if (isolationPreference) {
+			this.overrides[roleName] = { ...(this.overrides[roleName] ?? {}), isolationPreference };
+		} else if (this.overrides[roleName]) {
+			delete this.overrides[roleName].isolationPreference;
 			this.pruneRoleOverride(roleName);
 		}
 	}
