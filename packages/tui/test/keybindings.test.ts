@@ -36,3 +36,12 @@ describe("KeybindingsManager", () => {
 		assert.deepStrictEqual(keybindings.getKeys("tui.editor.cursorLeft"), ["left", "ctrl+b"]);
 	});
 });
+
+it("keeps tab switching separate from input tab", () => {
+	const keybindings = new KeybindingsManager(TUI_KEYBINDINGS, {
+		"tui.input.tab": ["tab", "ctrl+i"],
+	});
+
+	assert.deepStrictEqual(keybindings.getKeys("tui.input.tab"), ["tab", "ctrl+i"]);
+	assert.deepStrictEqual(keybindings.getKeys("tui.tabs.next"), ["tab", "right"]);
+});

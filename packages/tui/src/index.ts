@@ -25,6 +25,7 @@ export {
 } from "./components/select-list.js";
 export { type SettingItem, SettingsList, type SettingsListTheme } from "./components/settings-list.js";
 export { Spacer } from "./components/spacer.js";
+export { type TabItem, Tabs, type TabsTheme } from "./components/tabs.js";
 export { Text } from "./components/text.js";
 export { TruncatedText } from "./components/truncated-text.js";
 export { Viewport } from "./components/viewport.js";

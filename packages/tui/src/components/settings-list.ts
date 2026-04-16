@@ -78,6 +78,10 @@ export class SettingsList implements Component {
 		this.submenuComponent?.invalidate?.();
 	}
 
+	capturesTabNavigation(): boolean {
+		return this.submenuComponent !== null;
+	}
+
 	render(width: number): string[] {
 		// If submenu is active, render it instead
 		if (this.submenuComponent) {

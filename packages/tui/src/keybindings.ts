@@ -39,6 +39,9 @@ export interface Keybindings {
 	"tui.select.pageDown": true;
 	"tui.select.confirm": true;
 	"tui.select.cancel": true;
+	// Tab navigation
+	"tui.tabs.next": true;
+	"tui.tabs.previous": true;
 }
 
 export type Keybinding = keyof Keybindings;
@@ -131,6 +134,8 @@ export const TUI_KEYBINDINGS = {
 		defaultKeys: ["escape", "ctrl+c"],
 		description: "Cancel selection",
 	},
+	"tui.tabs.next": { defaultKeys: ["tab", "right"], description: "Next tab" },
+	"tui.tabs.previous": { defaultKeys: ["shift+tab", "left"], description: "Previous tab" },
 } as const satisfies KeybindingDefinitions;
 
 export interface KeybindingConflict {
