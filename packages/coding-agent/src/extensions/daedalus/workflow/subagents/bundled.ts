@@ -44,8 +44,15 @@ function parseBundledAgent(source: string): SubagentDefinition {
 	const { frontmatter, body } = parseFrontmatter<{
 		name?: string;
 		description?: string;
+		purpose?: string;
 		tools?: string;
 		spawns?: string;
+		executionModePreference?: "foreground" | "background" | "either";
+		isolationPreference?: "shared-branch" | "child-branch" | "either";
+		costClass?: string;
+		useWhen?: string;
+		avoidWhen?: string;
+		observabilityTags?: string;
 	}>(source);
 	if (!frontmatter.name || !frontmatter.description) {
 		throw new Error("Bundled subagent definition is missing required frontmatter.");
@@ -55,6 +62,7 @@ function parseBundledAgent(source: string): SubagentDefinition {
 		description: frontmatter.description,
 		systemPrompt: body,
 		source: "bundled",
+		purpose: frontmatter.purpose,
 		tools: frontmatter.tools
 			?.split(",")
 			.map((value) => value.trim())
@@ -66,6 +74,15 @@ function parseBundledAgent(source: string): SubagentDefinition {
 						?.split(",")
 						.map((value) => value.trim())
 						.filter(Boolean),
+		executionModePreference: frontmatter.executionModePreference,
+		isolationPreference: frontmatter.isolationPreference,
+		costClass: frontmatter.costClass,
+		useWhen: frontmatter.useWhen?.split(",").map((value) => value.trim()).filter(Boolean),
+		avoidWhen: frontmatter.avoidWhen?.split(",").map((value) => value.trim()).filter(Boolean),
+		observabilityTags: frontmatter.observabilityTags
+			?.split(",")
+			.map((value) => value.trim())
+			.filter(Boolean),
 		toolPolicy: toolPolicies[frontmatter.name],
 	};
 }

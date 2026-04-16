@@ -48,6 +48,41 @@ describe("discoverSubagents", () => {
 		expect(result.agents[0]?.description).toBe("project");
 		expect(result.agents[0]?.systemPrompt).toBe("project worker");
 	});
+
+	it("maps v2 routing metadata from agent frontmatter", async () => {
+		fs.writeFileSync(
+			path.join(cwd, CONFIG_DIR_NAME, "agents", "explore.md"),
+			[
+				"---",
+				"name: explore",
+				"description: Find relevant code",
+				"purpose: exploration",
+				"executionModePreference: background",
+				"isolationPreference: shared-branch",
+				"costClass: cheap",
+				"useWhen: ['repo search', 'mapping']",
+				"avoidWhen: ['direct file edits']",
+				"observabilityTags: ['search', 'background']",
+				"thinkingLevel: low",
+				"---",
+				"You are the explore role.",
+			].join("\n"),
+		);
+
+		const result = await discoverSubagents({ cwd, agentDir, bundled: [] });
+		const agent = result.agents.find((candidate) => candidate.name === "explore");
+
+		expect(agent).toMatchObject({
+			purpose: "exploration",
+			executionModePreference: "background",
+			isolationPreference: "shared-branch",
+			costClass: "cheap",
+			useWhen: ["repo search", "mapping"],
+			avoidWhen: ["direct file edits"],
+			observabilityTags: ["search", "background"],
+			thinkingLevel: "low",
+		});
+	});
 });
 
 describe("createSubagentResourceLoader", () => {

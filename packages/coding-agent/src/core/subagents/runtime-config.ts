@@ -10,6 +10,8 @@ export interface ResolvedSubagentRuntimeConfig {
 	thinkingLevel?: ThinkingLevel;
 	policy: SubagentPolicy;
 	appendPrompts: string[];
+	executionModePreference?: SubagentRunRequest["agent"]["executionModePreference"];
+	isolationPreference?: SubagentRunRequest["agent"]["isolationPreference"];
 }
 
 export const SUBAGENT_BASE_CONTRACT = [
@@ -51,6 +53,8 @@ export function resolveSubagentRuntimeConfig(input: {
 		model: resolveModelReference(overrides?.model ?? request.agent.model, modelRegistry),
 		thinkingLevel: overrides?.thinkingLevel ?? request.agent.thinkingLevel,
 		policy: resolveSubagentPolicy(request.agent, request.policy),
+		executionModePreference: overrides?.executionModePreference ?? request.agent.executionModePreference,
+		isolationPreference: overrides?.isolationPreference ?? request.agent.isolationPreference,
 		appendPrompts: buildSubagentAppendPrompts({
 			agent: request.agent,
 			packetText,
