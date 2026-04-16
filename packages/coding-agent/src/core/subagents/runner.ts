@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import type { AgentSessionEvent } from "../agent-session.js";
-import { getSubagentArtifactPaths, shouldSpillSubagentContext } from "./artifacts.js";
+import { getSubagentArtifactPaths } from "./artifacts.js";
 import { writePersistedSubagentRun } from "./persisted-runs.js";
 import { resolveSubagentPolicy } from "./policy.js";
 import { SubagentRegistry } from "./registry.js";
 import { validateSubagentResult } from "./result-validation.js";
 import type { SubmitResultPayload } from "./submit-result-tool.js";
+import { buildTaskPacket } from "./task-packet.js";
 import type { SubagentRunProgress, SubagentRunRequest, SubagentRunResult } from "./types.js";
 
 const MAX_SUBMIT_REMINDERS = 2;
@@ -123,22 +124,18 @@ export class SubagentRunner {
 		const paths = getSubagentArtifactPaths(request.parentSessionFile, runId);
 		await fs.mkdir(paths.directory, { recursive: true });
 
-		const packetLines = [
-			`Goal: ${request.goal}`,
-			"",
-			request.assignment,
-			request.context ? `\nContext:\n${request.context}` : "",
-		].join("\n");
-
+		const builtPacket = buildTaskPacket({
+			goal: request.goal,
+			assignment: request.assignment,
+			context: request.context,
+		});
 		let contextArtifactPath: string | undefined;
-		let packetText = packetLines;
+		let packetText = builtPacket.packetText;
 
-		if (request.context && shouldSpillSubagentContext(packetLines)) {
-			await fs.writeFile(paths.contextFile, request.context, "utf8");
+		if (builtPacket.contextToPersist) {
+			await fs.writeFile(paths.contextFile, builtPacket.contextToPersist, "utf8");
 			contextArtifactPath = paths.contextFile;
-			packetText = [`Goal: ${request.goal}`, "", request.assignment, "", `Context file: ${paths.contextFile}`].join(
-				"\n",
-			);
+			packetText = builtPacket.packetText.replace("{contextArtifactPath}", paths.contextFile);
 		}
 
 		let submitPayload: SubmitResultPayload | undefined;

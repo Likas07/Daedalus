@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type SubagentDefinition, SubagentRegistry, SubagentRunner } from "../src/core/subagents/index.js";
+import { buildTaskPacket, type SubagentDefinition, SubagentRegistry, SubagentRunner } from "../src/core/subagents/index.js";
 
 const worker: SubagentDefinition = {
 	name: "worker",
@@ -222,5 +222,17 @@ describe("SubagentRunner", () => {
 				assignment: "Do work",
 			}),
 		).rejects.toThrow("maxConcurrency");
+	});
+
+	it("builds a compact packet with spillover context when needed", () => {
+		const longContext = "x".repeat(30_000);
+		const packet = buildTaskPacket({
+			goal: "Map auth flow",
+			assignment: "Inspect the authentication entrypoints.",
+			context: longContext,
+		});
+
+		expect(packet.contextToPersist).toBe(longContext);
+		expect(packet.packetText).toContain("Context file: {contextArtifactPath}");
 	});
 });
