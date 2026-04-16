@@ -55,6 +55,9 @@ out.jsonl
 out.html
 pi-*.html
 
+# Local planning docs
+docs/plans/
+
 # Generated files
 packages/coding-agent/src/internal-urls/docs-index.generated.ts
 packages/coding-agent/src/core/export-html/template.generated.ts
