@@ -32,10 +32,15 @@ function makeConfig(): SettingsConfig {
 		quietStartup: false,
 		clearOnShrink: false,
 		subagents: {
-			enabled: false,
-			defaultPrimary: "standard",
+			delegationAggressiveness: "balanced",
 			maxDepth: 2,
 			maxConcurrency: 4,
+			backgroundRoles: ["explore", "reviewer"],
+			branchIsolation: {
+				enabled: true,
+				mutationThreshold: "high-risk",
+				namingTemplate: "subagent/{parentBranch}/{agent}/{runId}",
+			},
 			roles: [],
 			agents: {},
 		},
@@ -99,8 +104,8 @@ describe("SettingsSelectorComponent tabs", () => {
 
 		const render = stripAnsi(selector.render(120).join("\n"));
 		expect(render).toContain("Subagents");
-		expect(render).toContain("Enabled");
-		expect(render).toContain("Default primary");
+		expect(render).toContain("Delegation aggressiveness");
+		expect(render).toContain("Branch isolation threshold");
 		expect(render).toContain("Role overrides");
 	});
 });

@@ -224,18 +224,11 @@ export function buildSettingsSections(
 		label: "Subagents",
 		items: [
 			{
-				id: "subagents-enabled",
-				label: "Enabled",
-				description: "Enable bundled subagents and subagent runtime defaults.",
-				currentValue: config.subagents.enabled ? "true" : "false",
-				values: ["true", "false"],
-			},
-			{
-				id: "subagents-default-primary",
-				label: "Default primary",
-				description: "Choose whether standard mode or orchestrator mode is primary by default.",
-				currentValue: config.subagents.defaultPrimary,
-				values: ["standard", "orchestrator"],
+				id: "subagents-delegation-aggressiveness",
+				label: "Delegation aggressiveness",
+				description: "How readily Daedalus delegates focused work to internal specialists.",
+				currentValue: config.subagents.delegationAggressiveness,
+				values: ["conservative", "balanced", "aggressive"],
 			},
 			{
 				id: "subagents-max-depth",
@@ -252,6 +245,13 @@ export function buildSettingsSections(
 				values: ["1", "2", "3", "4", "6", "8"],
 			},
 			{
+				id: "subagents-branch-isolation-threshold",
+				label: "Branch isolation threshold",
+				description: "When risky mutations should move to a child branch.",
+				currentValue: config.subagents.branchIsolation.mutationThreshold,
+				values: ["never", "high-risk", "always"],
+			},
+			{
 				id: "subagents-role-overrides",
 				label: "Role overrides",
 				description:
@@ -261,6 +261,8 @@ export function buildSettingsSections(
 					new SubagentOverrideSelectorComponent(config.subagents.roles, config.subagents.agents, {
 						onModelChange: safeOnSubagentRoleModelChange,
 						onThinkingLevelChange: safeOnSubagentRoleThinkingLevelChange,
+						onExecutionModeChange: callbacks.onSubagentRoleExecutionModeChange ?? (() => {}),
+						onIsolationPreferenceChange: callbacks.onSubagentRoleIsolationPreferenceChange ?? (() => {}),
 						onClear: safeOnClearSubagentRoleOverride,
 						validateModelRef: config.validateSubagentModelRef ?? (() => undefined),
 						onDone: (summary) => done(summary),

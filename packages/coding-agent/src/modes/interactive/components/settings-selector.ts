@@ -1,5 +1,11 @@
 import type { ThinkingLevel } from "@daedalus-pi/agent-core";
 import type { Transport } from "@daedalus-pi/ai";
+import type {
+	SubagentBranchIsolationThreshold,
+	SubagentDelegationAggressiveness,
+	SubagentExecutionModePreference,
+	SubagentIsolationPreference,
+} from "../../../core/settings-schema.js";
 import { Container, getCapabilities, SettingsList, Tabs } from "@daedalus-pi/tui";
 import { getSettingsListTheme, getTabsTheme } from "../theme/theme.js";
 import { DynamicBorder } from "./dynamic-border.js";
@@ -13,13 +19,20 @@ export interface SettingsSubagentRole {
 export interface SettingsSubagentRoleOverride {
 	model?: string;
 	thinkingLevel?: ThinkingLevel;
+	executionModePreference?: SubagentExecutionModePreference;
+	isolationPreference?: SubagentIsolationPreference;
 }
 
 export interface SettingsSubagentsConfig {
-	enabled: boolean;
-	defaultPrimary: "standard" | "orchestrator";
+	delegationAggressiveness: SubagentDelegationAggressiveness;
 	maxDepth: number;
 	maxConcurrency: number;
+	backgroundRoles: string[];
+	branchIsolation: {
+		enabled: boolean;
+		mutationThreshold: SubagentBranchIsolationThreshold;
+		namingTemplate: string;
+	};
 	roles: SettingsSubagentRole[];
 	agents: Record<string, SettingsSubagentRoleOverride>;
 }
@@ -73,12 +86,14 @@ export interface SettingsCallbacks {
 	onAutocompleteMaxVisibleChange: (maxVisible: number) => void;
 	onQuietStartupChange: (enabled: boolean) => void;
 	onClearOnShrinkChange: (enabled: boolean) => void;
-	onSubagentsEnabledChange?: (enabled: boolean) => void;
-	onSubagentDefaultPrimaryChange?: (value: "standard" | "orchestrator") => void;
+	onSubagentDelegationAggressivenessChange?: (value: SubagentDelegationAggressiveness) => void;
+	onSubagentBranchIsolationThresholdChange?: (value: SubagentBranchIsolationThreshold) => void;
 	onSubagentMaxDepthChange?: (value: number) => void;
 	onSubagentMaxConcurrencyChange?: (value: number) => void;
 	onSubagentRoleModelChange?: (role: string, model: string | undefined) => void;
 	onSubagentRoleThinkingLevelChange?: (role: string, level: ThinkingLevel | undefined) => void;
+	onSubagentRoleExecutionModeChange?: (role: string, mode: SubagentExecutionModePreference | undefined) => void;
+	onSubagentRoleIsolationPreferenceChange?: (role: string, isolation: SubagentIsolationPreference | undefined) => void;
 	onClearSubagentRoleOverride?: (role: string) => void;
 	onCancel: () => void;
 }
@@ -139,11 +154,11 @@ function handleBaseSettingChange(id: string, newValue: string, callbacks: Settin
 		case "clear-on-shrink":
 			callbacks.onClearOnShrinkChange(newValue === "true");
 			break;
-		case "subagents-enabled":
-			callbacks.onSubagentsEnabledChange?.(newValue === "true");
+		case "subagents-delegation-aggressiveness":
+			callbacks.onSubagentDelegationAggressivenessChange?.(newValue as SubagentDelegationAggressiveness);
 			break;
-		case "subagents-default-primary":
-			callbacks.onSubagentDefaultPrimaryChange?.(newValue as "standard" | "orchestrator");
+		case "subagents-branch-isolation-threshold":
+			callbacks.onSubagentBranchIsolationThresholdChange?.(newValue as SubagentBranchIsolationThreshold);
 			break;
 		case "subagents-max-depth":
 			callbacks.onSubagentMaxDepthChange?.(Number.parseInt(newValue, 10));
