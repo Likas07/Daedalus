@@ -1,5 +1,10 @@
 import type * as NodeOs from "node:os";
-import type { Tool as OpenAITool, ResponseInput, ResponseStreamEvent } from "openai/resources/responses/responses.js";
+import type {
+	Tool as OpenAITool,
+	ResponseCreateParamsStreaming,
+	ResponseInput,
+	ResponseStreamEvent,
+} from "openai/resources/responses/responses.js";
 
 // NEVER convert to top-level runtime imports - breaks browser/Vite builds (web-ui)
 let _os: typeof NodeOs | null = null;
@@ -16,7 +21,7 @@ if (typeof process !== "undefined" && (process.versions?.node || process.version
 }
 
 import { getEnvApiKey } from "../env-api-keys.js";
-import { supportsXhigh } from "../models.js";
+import { supportsFastMode, supportsXhigh } from "../models.js";
 import type {
 	Api,
 	AssistantMessage,
@@ -27,7 +32,12 @@ import type {
 	StreamOptions,
 } from "../types.js";
 import { AssistantMessageEventStream } from "../utils/event-stream.js";
-import { convertResponsesMessages, convertResponsesTools, processResponsesStream } from "./openai-responses-shared.js";
+import {
+	applyServiceTierPricing,
+	convertResponsesMessages,
+	convertResponsesTools,
+	processResponsesStream,
+} from "./openai-responses-shared.js";
 import { buildBaseOptions, clampReasoning } from "./simple-options.js";
 
 // ============================================================================
@@ -71,10 +81,12 @@ interface RequestBody {
 	tool_choice?: "auto";
 	parallel_tool_calls?: boolean;
 	temperature?: number;
+	service_tier?: ResponseCreateParamsStreaming["service_tier"];
 	reasoning?: { effort?: string; summary?: string };
 	text?: { verbosity?: string };
 	include?: string[];
 	prompt_cache_key?: string;
+	prompt_cache_retention?: "in-memory";
 	[key: string]: unknown;
 }
 
@@ -140,6 +152,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 			}
 
 			const accountId = extractAccountId(apiKey);
+			const serviceTier = resolveServiceTier(model, options);
 			let body = buildRequestBody(model, context, options);
 			const nextBody = await options?.onPayload?.(body, model);
 			if (nextBody !== undefined) {
@@ -251,7 +264,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 			}
 
 			stream.push({ type: "start", partial: output });
-			await processStream(response, output, stream, model);
+			await processStream(response, output, stream, model, serviceTier);
 
 			if (options?.signal?.aborted) {
 				throw new Error("Request was aborted");
@@ -301,6 +314,7 @@ function buildRequestBody(
 	const messages = convertResponsesMessages(model, context, CODEX_TOOL_CALL_PROVIDERS, {
 		includeSystemPrompt: false,
 	});
+	const serviceTier = resolveServiceTier(model, options);
 
 	const body: RequestBody = {
 		model: model.id,
@@ -311,12 +325,17 @@ function buildRequestBody(
 		text: { verbosity: options?.textVerbosity || "medium" },
 		include: ["reasoning.encrypted_content"],
 		prompt_cache_key: options?.sessionId,
+		prompt_cache_retention: options?.sessionId ? "in-memory" : undefined,
 		tool_choice: "auto",
 		parallel_tool_calls: true,
 	};
 
 	if (options?.temperature !== undefined) {
 		body.temperature = options.temperature;
+	}
+
+	if (serviceTier !== undefined) {
+		body.service_tier = serviceTier;
 	}
 
 	if (context.tools) {
@@ -366,8 +385,22 @@ async function processStream(
 	output: AssistantMessage,
 	stream: AssistantMessageEventStream,
 	model: Model<"openai-codex-responses">,
+	serviceTier: ResponseCreateParamsStreaming["service_tier"] | undefined,
 ): Promise<void> {
-	await processResponsesStream(mapCodexEvents(parseSSE(response)), output, stream, model);
+	await processResponsesStream(mapCodexEvents(parseSSE(response)), output, stream, model, {
+		serviceTier,
+		applyServiceTierPricing,
+	});
+}
+
+function resolveServiceTier(
+	model: Model<"openai-codex-responses">,
+	options?: OpenAICodexResponsesOptions,
+): ResponseCreateParamsStreaming["service_tier"] | undefined {
+	if (options?.fastMode && supportsFastMode(model)) {
+		return "priority";
+	}
+	return undefined;
 }
 
 async function* mapCodexEvents(events: AsyncIterable<Record<string, unknown>>): AsyncGenerator<ResponseStreamEvent> {
@@ -904,6 +937,7 @@ function buildSSEHeaders(
 	headers.set("content-type", "application/json");
 
 	if (sessionId) {
+		headers.set("conversation_id", sessionId);
 		headers.set("session_id", sessionId);
 	}
 
