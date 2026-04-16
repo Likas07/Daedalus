@@ -1,8 +1,8 @@
 /**
  * Subagent Tool - Delegate tasks to specialized agents
  *
- * Spawns a separate `pi` process for each subagent invocation,
- * giving it an isolated context window.
+ * Legacy example: shells out to a separate `daedalus` process for each subagent invocation.
+ * Prefer the built-in starter pack for in-process child sessions.
  *
  * Supports three modes:
  *   - Single: { agent: "name", task: "..." }
@@ -208,7 +208,7 @@ async function mapWithConcurrencyLimit<TIn, TOut>(
 }
 
 async function writePromptToTempFile(agentName: string, prompt: string): Promise<{ dir: string; filePath: string }> {
-	const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "pi-subagent-"));
+	const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "daedalus-subagent-"));
 	const safeName = agentName.replace(/[^\w.-]+/g, "_");
 	const filePath = path.join(tmpDir, `prompt-${safeName}.md`);
 	await withFileMutationQueue(filePath, async () => {
@@ -217,7 +217,7 @@ async function writePromptToTempFile(agentName: string, prompt: string): Promise
 	return { dir: tmpDir, filePath };
 }
 
-function getPiInvocation(args: string[]): { command: string; args: string[] } {
+function getDaedalusInvocation(args: string[]): { command: string; args: string[] } {
 	const currentScript = process.argv[1];
 	if (currentScript && fs.existsSync(currentScript)) {
 		return { command: process.execPath, args: [currentScript, ...args] };
@@ -229,7 +229,7 @@ function getPiInvocation(args: string[]): { command: string; args: string[] } {
 		return { command: process.execPath, args };
 	}
 
-	return { command: "pi", args };
+	return { command: "daedalus", args };
 }
 
 type OnUpdateCallback = (partial: AgentToolResult<SubagentDetails>) => void;
@@ -301,7 +301,7 @@ async function runSingleAgent(
 		let wasAborted = false;
 
 		const exitCode = await new Promise<number>((resolve) => {
-			const invocation = getPiInvocation(args);
+			const invocation = getDaedalusInvocation(args);
 			const proc = spawn(invocation.command, invocation.args, {
 				cwd: cwd ?? defaultCwd,
 				shell: false,
@@ -401,13 +401,13 @@ async function runSingleAgent(
 const TaskItem = Type.Object({
 	agent: Type.String({ description: "Name of the agent to invoke" }),
 	task: Type.String({ description: "Task to delegate to the agent" }),
-	cwd: Type.Optional(Type.String({ description: "Working directory for the agent process" })),
+	cwd: Type.Optional(Type.String({ description: "Working directory for the subagent process" })),
 });
 
 const ChainItem = Type.Object({
 	agent: Type.String({ description: "Name of the agent to invoke" }),
 	task: Type.String({ description: "Task with optional {previous} placeholder for prior output" }),
-	cwd: Type.Optional(Type.String({ description: "Working directory for the agent process" })),
+	cwd: Type.Optional(Type.String({ description: "Working directory for the subagent process" })),
 });
 
 const AgentScopeSchema = StringEnum(["user", "project", "both"] as const, {
@@ -424,7 +424,7 @@ const SubagentParams = Type.Object({
 	confirmProjectAgents: Type.Optional(
 		Type.Boolean({ description: "Prompt before running project-local agents. Default: true.", default: true }),
 	),
-	cwd: Type.Optional(Type.String({ description: "Working directory for the agent process (single mode)" })),
+	cwd: Type.Optional(Type.String({ description: "Working directory for the subagent process (single mode)" })),
 });
 
 export default function (pi: ExtensionAPI) {
@@ -432,10 +432,11 @@ export default function (pi: ExtensionAPI) {
 		name: "subagent",
 		label: "Subagent",
 		description: [
-			"Delegate tasks to specialized subagents with isolated context.",
+			"Legacy subprocess example for delegating tasks to specialized subagents.",
 			"Modes: single (agent + task), parallel (tasks array), chain (sequential with {previous} placeholder).",
-			'Default agent scope is "user" (from ~/.pi/agent/agents).',
-			'To enable project-local agents in .pi/agents, set agentScope: "both" (or "project").',
+			"Prefer the built-in starter pack for in-process child sessions.",
+			'Default agent scope is "user" (from ~/.daedalus/agent/agents).',
+			'To enable project-local agents in .daedalus/agents, set agentScope: "both" (or "project").',
 		].join(" "),
 		parameters: SubagentParams,
 
