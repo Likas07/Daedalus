@@ -1134,3 +1134,12 @@ export function getSettingsListTheme(): import("@daedalus-pi/tui").SettingsListT
 		hint: (text: string) => theme.fg("dim", text),
 	};
 }
+
+export function getTabsTheme(): import("@daedalus-pi/tui").TabsTheme {
+	return {
+		activeLabel: (text: string) => theme.bg("selectedBg", theme.fg("text", text)),
+		inactiveLabel: (text: string) => theme.fg("muted", text),
+		divider: (text: string) => theme.fg("borderMuted", text),
+		hint: (text: string) => theme.fg("dim", text),
+	};
+}
