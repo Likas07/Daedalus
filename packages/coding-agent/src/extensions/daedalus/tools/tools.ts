@@ -1,10 +1,27 @@
 import type { ExtensionAPI, ExtensionContext, ToolInfo } from "@daedalus-pi/coding-agent";
 import { getSettingsListTheme } from "@daedalus-pi/coding-agent";
+import { logToolDebug } from "../../../core/tool-debug.js";
 import { Container, type SettingItem, SettingsList } from "@daedalus-pi/tui";
 import { requireUI } from "../shared/ui.js";
 
 interface ToolsState {
 	enabledTools: string[];
+}
+
+export function migrateLegacyEnabledTools(toolNames: readonly string[]): string[] {
+	const migratedTools: string[] = [];
+	const seen = new Set<string>();
+
+	for (const name of toolNames) {
+		const nextName = name === "edit" ? "hashline_edit" : name;
+		if (seen.has(nextName)) {
+			continue;
+		}
+		seen.add(nextName);
+		migratedTools.push(nextName);
+	}
+
+	return migratedTools;
 }
 
 export default function toolsExtension(pi: ExtensionAPI) {
@@ -36,10 +53,28 @@ export default function toolsExtension(pi: ExtensionAPI) {
 		}
 
 		if (savedTools) {
-			const allToolNames = allTools.map((t) => t.name);
-			enabledTools = new Set(savedTools.filter((t) => allToolNames.includes(t)));
+			const migratedTools = migrateLegacyEnabledTools(savedTools);
+			const didMigrate =
+				migratedTools.length !== savedTools.length || migratedTools.some((tool, index) => tool !== savedTools[index]);
+			const allToolNames = new Set(allTools.map((t) => t.name));
+			enabledTools = new Set(migratedTools.filter((tool) => allToolNames.has(tool)));
+			logToolDebug("daedalus/tools.restoreFromBranch", "restoring saved tool state", {
+				requested: migratedTools,
+				details: {
+					savedTools,
+					migratedTools,
+					didMigrate,
+					filteredEnabledTools: Array.from(enabledTools),
+				},
+			});
 			applyTools();
+			if (didMigrate) {
+				persistState();
+			}
 		} else {
+			logToolDebug("daedalus/tools.restoreFromBranch", "no saved tool state; snapshot current active tools", {
+				requested: pi.getActiveTools(),
+			});
 			enabledTools = new Set(pi.getActiveTools());
 		}
 	}

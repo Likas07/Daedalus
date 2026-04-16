@@ -453,7 +453,11 @@ export async function main(args: string[]) {
 
 	if (parsed.version) {
 		console.log(VERSION);
+		if (shouldTakeOverStdout) {
+			restoreStdout();
+		}
 		process.exit(0);
+		return;
 	}
 
 	if (parsed.export) {
@@ -616,9 +620,14 @@ export async function main(args: string[]) {
 		const extensionFlags = resourceLoader
 			.getExtensions()
 			.extensions.flatMap((extension) => Array.from(extension.flags.values()));
-		printHelp(extensionFlags);
+		printHelp(extensionFlags, appMode === "interactive" ? "stdout" : "stderr");
+		if (shouldTakeOverStdout) {
+			restoreStdout();
+		}
 		process.exit(0);
+		return;
 	}
+
 
 	if (parsed.listModels !== undefined) {
 		const searchPattern = typeof parsed.listModels === "string" ? parsed.listModels : undefined;

@@ -3,7 +3,6 @@ import path from "node:path";
 import { createInterface } from "node:readline";
 import {
 	createBashTool,
-	createEditTool,
 	createFetchTool,
 	createFindTool,
 	createGrepTool,
@@ -23,7 +22,6 @@ import { GREP_MAX_LINE_LENGTH } from "../../../core/tools/truncate.js";
 import {
 	buildShellCommand,
 	createRemoteBashOps,
-	createRemoteEditOps,
 	createRemoteFetchOperations,
 	createRemoteFindOps,
 	createRemoteHashlineEditOps,
@@ -271,7 +269,6 @@ export default function (pi: ExtensionAPI) {
 	const localCwd = process.cwd();
 	const localRead = createReadTool(localCwd);
 	const localWrite = createWriteTool(localCwd);
-	const localEdit = createEditTool(localCwd);
 	const localHashlineEdit = createHashlineEditTool(localCwd);
 	const localBash = createBashTool(localCwd);
 	const localLs = createLsTool(localCwd);
@@ -308,20 +305,6 @@ export default function (pi: ExtensionAPI) {
 				return tool.execute(id, params, signal, onUpdate);
 			}
 			return localWrite.execute(id, params, signal, onUpdate);
-		},
-	});
-
-	pi.registerTool({
-		...localEdit,
-		async execute(id, params, signal, onUpdate, _ctx) {
-			const ssh = getSsh();
-			if (ssh) {
-				const tool = createEditTool(localCwd, {
-					operations: createRemoteEditOps(ssh.remote, ssh.remoteCwd, localCwd),
-				});
-				return tool.execute(id, params, signal, onUpdate);
-			}
-			return localEdit.execute(id, params, signal, onUpdate);
 		},
 	});
 

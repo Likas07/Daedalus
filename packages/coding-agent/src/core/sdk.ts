@@ -15,6 +15,7 @@ import { DefaultResourceLoader } from "./resource-loader.js";
 import { getDefaultSessionDir, SessionManager } from "./session-manager.js";
 import { SettingsManager } from "./settings-manager.js";
 import { time } from "./timings.js";
+import { DEFAULT_ACTIVE_TOOL_NAMES, type ToolName } from "./tools/defaults.js";
 import {
 	allTools,
 	astEditTool,
@@ -28,8 +29,8 @@ import {
 	createEditTool,
 	createFetchTool,
 	createFindTool,
-	createHashlineEditTool,
 	createGrepTool,
+	createHashlineEditTool,
 	createLsTool,
 	createReadOnlyTools,
 	createReadTool,
@@ -37,13 +38,12 @@ import {
 	editTool,
 	fetchTool,
 	findTool,
-	hashlineEditTool,
 	grepTool,
+	hashlineEditTool,
 	lsTool,
 	readOnlyTools,
 	readTool,
 	type Tool,
-	type ToolName,
 	withFileMutationQueue,
 	writeTool,
 } from "./tools/index.js";
@@ -66,7 +66,7 @@ export interface CreateAgentSessionOptions {
 	/** Models available for cycling (Ctrl+P in interactive mode) */
 	scopedModels?: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
 
-	/** Built-in tools to use. Default: codingTools [read, bash, hashline_edit, fetch, ast_grep, ast_edit, write, grep, find, ls] */
+	/** Built-in tools to use. Default: the default active built-in tools (read, bash, hashline_edit, fetch, ast_grep, ast_edit, write, grep, find, ls). */
 	tools?: Tool[];
 	/** Custom tools to register (in addition to built-in tools). */
 	customTools?: ToolDefinition[];
@@ -110,36 +110,36 @@ export type { Skill } from "./skills.js";
 export type { Tool } from "./tools/index.js";
 
 export {
-	// Pre-built tools (use process.cwd())
-	readTool,
-	bashTool,
-	editTool,
-	hashlineEditTool,
-	fetchTool,
-	astGrepTool,
-	astEditTool,
-	writeTool,
-	grepTool,
-	findTool,
-	lsTool,
-	codingTools,
-	readOnlyTools,
 	allTools as allBuiltInTools,
-	withFileMutationQueue,
+	astEditTool,
+	astGrepTool,
+	bashTool,
+	codingTools,
+	createAstEditTool,
+	createAstGrepTool,
+	createBashTool,
 	// Tool factories (for custom cwd)
 	createCodingTools,
+	createEditTool,
+	createFetchTool,
+	createFindTool,
+	createGrepTool,
+	createHashlineEditTool,
+	createLsTool,
 	createReadOnlyTools,
 	createReadTool,
-	createBashTool,
-	createEditTool,
-	createHashlineEditTool,
-	createFetchTool,
-	createAstGrepTool,
-	createAstEditTool,
 	createWriteTool,
-	createGrepTool,
-	createFindTool,
-	createLsTool,
+	editTool,
+	fetchTool,
+	findTool,
+	grepTool,
+	hashlineEditTool,
+	lsTool,
+	readOnlyTools,
+	// Pre-built tools (use process.cwd())
+	readTool,
+	withFileMutationQueue,
+	writeTool,
 };
 
 // Helper Functions
@@ -198,7 +198,12 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const sessionManager = options.sessionManager ?? SessionManager.create(cwd, getDefaultSessionDir(cwd, agentDir));
 
 	if (!resourceLoader) {
-		resourceLoader = new DefaultResourceLoader({ cwd, agentDir, settingsManager, extensionFactories: [daedalusBundle] });
+		resourceLoader = new DefaultResourceLoader({
+			cwd,
+			agentDir,
+			settingsManager,
+			extensionFactories: [daedalusBundle],
+		});
 		await resourceLoader.reload();
 		time("resourceLoader.reload");
 	}
@@ -255,11 +260,11 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	}
 
 	// Clamp to model capabilities
-	if (!model || !model.reasoning) {
+	if (!model?.reasoning) {
 		thinkingLevel = "off";
 	}
 
-	const defaultActiveToolNames: ToolName[] = ["read", "bash", "edit", "write", "grep", "find", "ls"];
+	const defaultActiveToolNames: ToolName[] = [...DEFAULT_ACTIVE_TOOL_NAMES];
 	const initialActiveToolNames: ToolName[] = options.tools
 		? options.tools.map((t) => t.name).filter((n): n is ToolName => n in allTools)
 		: defaultActiveToolNames;

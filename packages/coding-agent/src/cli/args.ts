@@ -6,7 +6,8 @@ import type { ThinkingLevel } from "@daedalus-pi/agent-core";
 import chalk from "chalk";
 import { APP_NAME, CONFIG_DIR_NAME, ENV_AGENT_DIR } from "../config.js";
 import type { ExtensionFlag } from "../core/extensions/types.js";
-import { allTools, type ToolName } from "../core/tools/index.js";
+import { BUILTIN_TOOL_ORDER, DEFAULT_ACTIVE_TOOL_NAMES, type ToolName } from "../core/tools/defaults.js";
+import { allTools } from "../core/tools/index.js";
 
 export type Mode = "text" | "json" | "rpc";
 
@@ -186,7 +187,11 @@ export function parseArgs(args: string[]): Args {
 	return result;
 }
 
-export function printHelp(extensionFlags?: ExtensionFlag[]): void {
+export function printHelp(
+	extensionFlags?: ExtensionFlag[],
+	output: "stdout" | "stderr" = "stdout",
+): void {
+	const write = output === "stderr" ? console.error : console.log;
 	const extensionFlagsText =
 		extensionFlags && extensionFlags.length > 0
 			? `\n${chalk.bold("Extension CLI Flags:")}\n${extensionFlags
@@ -197,7 +202,10 @@ export function printHelp(extensionFlags?: ExtensionFlag[]): void {
 					})
 					.join("\n")}\n`
 			: "";
-	console.log(`${chalk.bold(APP_NAME)} - AI coding assistant with read, bash, edit, write tools
+	const defaultToolsText = DEFAULT_ACTIVE_TOOL_NAMES.join(",");
+	const availableToolsText = BUILTIN_TOOL_ORDER.join(", ");
+
+	write(`${chalk.bold(APP_NAME)} - AI coding assistant with configurable built-in tools
 
 ${chalk.bold("Usage:")}
   ${APP_NAME} [options] [@files...] [messages...]
@@ -228,8 +236,8 @@ ${chalk.bold("Options:")}
   --models <patterns>            Comma-separated model patterns for Ctrl+P cycling
                                  Supports globs (anthropic/*, *sonnet*) and fuzzy matching
   --no-tools                     Disable all built-in tools
-  --tools <tools>                Comma-separated list of tools to enable (default: read,bash,hashline_edit,fetch,ast_grep,ast_edit,write,grep,find,ls)
-                                 Available: read, bash, edit, hashline_edit, fetch, ast_grep, ast_edit, write, grep, find, ls
+  --tools <tools>                Comma-separated list of tools to enable (default: ${defaultToolsText})
+                                 Available: ${availableToolsText}
   --thinking <level>             Set thinking level: off, minimal, low, medium, high, xhigh
   --extension, -e <path>         Load an extension file (can be used multiple times)
   --no-extensions, -ne           Disable extension discovery (explicit -e paths still work)
@@ -323,16 +331,22 @@ ${chalk.bold("Environment Variables:")}
   ${ENV_AGENT_DIR.padEnd(32)} - Session storage directory (default: ~/${CONFIG_DIR_NAME}/agent)
   DAEDALUS_PACKAGE_DIR                   - Override package directory (for Nix/Guix store paths)
   DAEDALUS_OFFLINE                       - Disable startup network operations when set to 1/true/yes
+  DAEDALUS_DEBUG_TOOLS                   - Log tool activation/debug tracing to stderr and a log file when set to 1/true/yes
+  DAEDALUS_DEBUG_TOOLS_FILE              - Override tool debug log path (default: ~/${CONFIG_DIR_NAME}/agent/logs/tool-debug.log)
   DAEDALUS_SHARE_VIEWER_URL              - Base URL for /share command (default: https://pi.dev/session/)
   DAEDALUS_AI_ANTIGRAVITY_VERSION        - Override Antigravity User-Agent version (e.g., 1.23.0)
 
-${chalk.bold("Available Tools (default: read, bash, edit, write):")}
-  read   - Read file contents
-  bash   - Execute bash commands
-  edit   - Edit files with find/replace
-  write  - Write files (creates/overwrites)
-  grep   - Search file contents (read-only, off by default)
-  find   - Find files by glob pattern (read-only, off by default)
-  ls     - List directory contents (read-only, off by default)
+${chalk.bold(`Available Tools (default: ${defaultToolsText}):`)}
+  read          - Read file contents
+  bash          - Execute bash commands
+  edit          - Exact-text file edits with find/replace
+  hashline_edit - Edit files using LINE#ID anchors from read(format: "hashline")
+  fetch         - Fetch remote HTTP/HTTPS content
+  ast_grep      - Structural code search using AST matching
+  ast_edit      - Structural AST-aware rewrites
+  write         - Write files (creates/overwrites)
+  grep          - Search file contents (read-only, off by default)
+  find          - Find files by glob pattern (read-only, off by default)
+  ls            - List directory contents (read-only, off by default)
 `);
 }

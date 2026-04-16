@@ -258,7 +258,7 @@ Before summarization, messages are serialized to text via [`serializeConversatio
 [User]: What they said
 [Assistant thinking]: Internal reasoning
 [Assistant]: Response text
-[Assistant tool calls]: read(path="foo.ts"); edit(path="bar.ts", ...)
+[Assistant tool calls]: read(path="foo.ts"); hashline_edit(path="bar.ts", ...)
 [Tool result]: Output from tool
 ```
 

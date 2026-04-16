@@ -1,4 +1,23 @@
 export {
+	type AstEditOperations,
+	type AstEditToolDetails,
+	type AstEditToolInput,
+	type AstEditToolOptions,
+	astEditTool,
+	astEditToolDefinition,
+	createAstEditTool,
+	createAstEditToolDefinition,
+} from "./ast-edit.js";
+export {
+	type AstGrepToolDetails,
+	type AstGrepToolInput,
+	type AstGrepToolOptions,
+	astGrepTool,
+	astGrepToolDefinition,
+	createAstGrepTool,
+	createAstGrepToolDefinition,
+} from "./ast-grep.js";
+export {
 	type BashOperations,
 	type BashSpawnContext,
 	type BashSpawnHook,
@@ -11,6 +30,7 @@ export {
 	createBashToolDefinition,
 	createLocalBashOperations,
 } from "./bash.js";
+export type { ToolName } from "./defaults.js";
 export {
 	createEditTool,
 	createEditToolDefinition,
@@ -22,17 +42,6 @@ export {
 	editToolDefinition,
 } from "./edit.js";
 export {
-	createHashlineEditTool,
-	createHashlineEditToolDefinition,
-	type HashlineEditEntry,
-	type HashlineEditOperations,
-	type HashlineEditToolDetails,
-	type HashlineEditToolInput,
-	type HashlineEditToolOptions,
-	hashlineEditTool,
-	hashlineEditToolDefinition,
-} from "./hashline-edit.js";
-export {
 	createFetchTool,
 	createFetchToolDefinition,
 	type FetchToolDetails,
@@ -41,25 +50,6 @@ export {
 	fetchTool,
 	fetchToolDefinition,
 } from "./fetch.js";
-export {
-	createAstGrepTool,
-	createAstGrepToolDefinition,
-	type AstGrepToolDetails,
-	type AstGrepToolInput,
-	type AstGrepToolOptions,
-	astGrepTool,
-	astGrepToolDefinition,
-} from "./ast-grep.js";
-export {
-	createAstEditTool,
-	createAstEditToolDefinition,
-	type AstEditOperations,
-	type AstEditToolDetails,
-	type AstEditToolInput,
-	type AstEditToolOptions,
-	astEditTool,
-	astEditToolDefinition,
-} from "./ast-edit.js";
 export { withFileMutationQueue } from "./file-mutation-queue.js";
 export {
 	createFindTool,
@@ -81,6 +71,17 @@ export {
 	grepTool,
 	grepToolDefinition,
 } from "./grep.js";
+export {
+	createHashlineEditTool,
+	createHashlineEditToolDefinition,
+	type HashlineEditEntry,
+	type HashlineEditOperations,
+	type HashlineEditToolDetails,
+	type HashlineEditToolInput,
+	type HashlineEditToolOptions,
+	hashlineEditTool,
+	hashlineEditToolDefinition,
+} from "./hashline-edit.js";
 export {
 	createLsTool,
 	createLsToolDefinition,
@@ -123,6 +124,8 @@ export {
 
 import type { AgentTool } from "@daedalus-pi/agent-core";
 import type { ToolDefinition } from "../extensions/types.js";
+import { astEditTool, astEditToolDefinition, createAstEditTool, createAstEditToolDefinition } from "./ast-edit.js";
+import { astGrepTool, astGrepToolDefinition, createAstGrepTool, createAstGrepToolDefinition } from "./ast-grep.js";
 import {
 	type BashToolOptions,
 	bashTool,
@@ -130,18 +133,17 @@ import {
 	createBashTool,
 	createBashToolDefinition,
 } from "./bash.js";
+import { DEFAULT_ACTIVE_TOOL_NAMES, READ_ONLY_TOOL_NAMES, type ToolName } from "./defaults.js";
 import { createEditTool, createEditToolDefinition, editTool, editToolDefinition } from "./edit.js";
+import { createFetchTool, createFetchToolDefinition, fetchTool, fetchToolDefinition } from "./fetch.js";
+import { createFindTool, createFindToolDefinition, findTool, findToolDefinition } from "./find.js";
+import { createGrepTool, createGrepToolDefinition, grepTool, grepToolDefinition } from "./grep.js";
 import {
 	createHashlineEditTool,
 	createHashlineEditToolDefinition,
 	hashlineEditTool,
 	hashlineEditToolDefinition,
 } from "./hashline-edit.js";
-import { createFetchTool, createFetchToolDefinition, fetchTool, fetchToolDefinition } from "./fetch.js";
-import { createAstGrepTool, createAstGrepToolDefinition, astGrepTool, astGrepToolDefinition } from "./ast-grep.js";
-import { createAstEditTool, createAstEditToolDefinition, astEditTool, astEditToolDefinition } from "./ast-edit.js";
-import { createFindTool, createFindToolDefinition, findTool, findToolDefinition } from "./find.js";
-import { createGrepTool, createGrepToolDefinition, grepTool, grepToolDefinition } from "./grep.js";
 import { createLsTool, createLsToolDefinition, lsTool, lsToolDefinition } from "./ls.js";
 import {
 	createReadTool,
@@ -155,21 +157,11 @@ import { createWriteTool, createWriteToolDefinition, writeTool, writeToolDefinit
 export type Tool = AgentTool<any>;
 export type ToolDef = ToolDefinition<any, any>;
 
-export const codingTools: Tool[] = [
-	readTool,
-	bashTool,
-	hashlineEditTool,
-	fetchTool,
-	astGrepTool,
-	astEditTool,
-	writeTool,
-	grepTool,
-	findTool,
-	lsTool,
-];
-export const readOnlyTools: Tool[] = [readTool, grepTool, findTool, lsTool];
+function selectToolsByName<T>(registry: Record<ToolName, T>, names: readonly ToolName[]): T[] {
+	return names.map((name) => registry[name]);
+}
 
-export const allTools = {
+export const allTools: Record<ToolName, Tool> = {
 	read: readTool,
 	bash: bashTool,
 	edit: editTool,
@@ -183,7 +175,7 @@ export const allTools = {
 	ls: lsTool,
 };
 
-export const allToolDefinitions = {
+export const allToolDefinitions: Record<ToolName, ToolDef> = {
 	read: readToolDefinition,
 	bash: bashToolDefinition,
 	edit: editToolDefinition,
@@ -197,7 +189,8 @@ export const allToolDefinitions = {
 	ls: lsToolDefinition,
 };
 
-export type ToolName = keyof typeof allTools;
+export const codingTools: Tool[] = selectToolsByName(allTools, DEFAULT_ACTIVE_TOOL_NAMES);
+export const readOnlyTools: Tool[] = selectToolsByName(allTools, READ_ONLY_TOOL_NAMES);
 
 export interface ToolsOptions {
 	read?: ReadToolOptions;
@@ -205,27 +198,11 @@ export interface ToolsOptions {
 }
 
 export function createCodingToolDefinitions(cwd: string, options?: ToolsOptions): ToolDef[] {
-	return [
-		createReadToolDefinition(cwd, options?.read),
-		createBashToolDefinition(cwd, options?.bash),
-		createHashlineEditToolDefinition(cwd),
-		createFetchToolDefinition(cwd),
-		createAstGrepToolDefinition(cwd),
-		createAstEditToolDefinition(cwd),
-		createWriteToolDefinition(cwd),
-		createGrepToolDefinition(cwd),
-		createFindToolDefinition(cwd),
-		createLsToolDefinition(cwd),
-	];
+	return selectToolsByName(createAllToolDefinitions(cwd, options), DEFAULT_ACTIVE_TOOL_NAMES);
 }
 
 export function createReadOnlyToolDefinitions(cwd: string, options?: ToolsOptions): ToolDef[] {
-	return [
-		createReadToolDefinition(cwd, options?.read),
-		createGrepToolDefinition(cwd),
-		createFindToolDefinition(cwd),
-		createLsToolDefinition(cwd),
-	];
+	return selectToolsByName(createAllToolDefinitions(cwd, options), READ_ONLY_TOOL_NAMES);
 }
 
 export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): Record<ToolName, ToolDef> {
@@ -245,22 +222,11 @@ export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): R
 }
 
 export function createCodingTools(cwd: string, options?: ToolsOptions): Tool[] {
-	return [
-		createReadTool(cwd, options?.read),
-		createBashTool(cwd, options?.bash),
-		createHashlineEditTool(cwd),
-		createFetchTool(cwd),
-		createAstGrepTool(cwd),
-		createAstEditTool(cwd),
-		createWriteTool(cwd),
-		createGrepTool(cwd),
-		createFindTool(cwd),
-		createLsTool(cwd),
-	];
+	return selectToolsByName(createAllTools(cwd, options), DEFAULT_ACTIVE_TOOL_NAMES);
 }
 
 export function createReadOnlyTools(cwd: string, options?: ToolsOptions): Tool[] {
-	return [createReadTool(cwd, options?.read), createGrepTool(cwd), createFindTool(cwd), createLsTool(cwd)];
+	return selectToolsByName(createAllTools(cwd, options), READ_ONLY_TOOL_NAMES);
 }
 
 export function createAllTools(cwd: string, options?: ToolsOptions): Record<ToolName, Tool> {

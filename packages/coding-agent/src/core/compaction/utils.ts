@@ -49,6 +49,7 @@ export function extractFileOpsFromMessage(message: AgentMessage, fileOps: FileOp
 				fileOps.written.add(path);
 				break;
 			case "edit":
+			case "hashline_edit":
 				fileOps.edited.add(path);
 				break;
 		}

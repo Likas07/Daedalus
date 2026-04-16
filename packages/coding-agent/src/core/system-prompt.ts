@@ -4,11 +4,12 @@
 
 import { getDocsPath, getExamplesPath, getReadmePath } from "../config.js";
 import { formatSkillsForPrompt, type Skill } from "./skills.js";
+import { DEFAULT_ACTIVE_TOOL_NAMES } from "./tools/defaults.js";
 
 export interface BuildSystemPromptOptions {
 	/** Custom system prompt (replaces default). */
 	customPrompt?: string;
-	/** Tools to include in prompt. Default: [read, bash, hashline_edit, fetch, ast_grep, ast_edit, write, grep, find, ls] */
+	/** Tools to include in prompt. Default: the default active built-in tools. */
 	selectedTools?: string[];
 	/** Optional one-line tool snippets keyed by tool name. */
 	toolSnippets?: Record<string, string>;
@@ -82,7 +83,7 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 
 	// Build tools list based on selected tools.
 	// A tool appears in Available tools only when the caller provides a one-line snippet.
-	const tools = selectedTools || ["read", "bash", "hashline_edit", "fetch", "ast_grep", "ast_edit", "write", "grep", "find", "ls"];
+	const tools = selectedTools || [...DEFAULT_ACTIVE_TOOL_NAMES];
 	const visibleTools = tools.filter((name) => !!toolSnippets?.[name]);
 	const toolsList =
 		visibleTools.length > 0 ? visibleTools.map((name) => `- ${name}: ${toolSnippets![name]}`).join("\n") : "(none)";

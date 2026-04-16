@@ -3,16 +3,16 @@ import { type Static, Type } from "@sinclair/typebox";
 import { constants } from "fs";
 import { access as fsAccess, readFile as fsReadFile, writeFile as fsWriteFile } from "fs/promises";
 import type { ToolDefinition } from "../extensions/types.js";
+import type { EditToolDetails } from "./edit.js";
 import { detectLineEnding, generateDiffString, normalizeToLF, restoreLineEndings, stripBom } from "./edit-diff.js";
-import { EditToolDetails } from "./edit.js";
 import { createPathEditCallRenderer, createPathEditResultRenderer } from "./edit-render.js";
 import { withFileMutationQueue } from "./file-mutation-queue.js";
 import {
 	applyHashlineEditsToNormalizedContent,
-	HashlineMismatchError,
-	parseTag,
 	type HashlineAnchor,
 	type HashlineEditOperation,
+	HashlineMismatchError,
+	parseTag,
 	stripNewLinePrefixes,
 } from "./hashline/index.js";
 import { resolveToCwd } from "./path-utils.js";
@@ -92,7 +92,9 @@ function parseAnchor(raw: string, field: string): HashlineAnchor {
 	try {
 		return parseTag(raw);
 	} catch (error) {
-		throw new Error(`${field} requires valid LINE#ID anchor. ${error instanceof Error ? error.message : String(error)}`);
+		throw new Error(
+			`${field} requires valid LINE#ID anchor. ${error instanceof Error ? error.message : String(error)}`,
+		);
 	}
 }
 
@@ -112,12 +114,13 @@ function resolveHashlineEdits(edits: HashlineEditEntry[]): HashlineEditOperation
 	});
 }
 
-function buildNoChangeError(path: string, noopEdits?: Array<{ editIndex: number; loc: string; current: string }>): Error {
+function buildNoChangeError(
+	path: string,
+	noopEdits?: Array<{ editIndex: number; loc: string; current: string }>,
+): Error {
 	let diagnostic = `No changes made to ${path}. The edits produced identical content.`;
 	if (noopEdits && noopEdits.length > 0) {
-		diagnostic += ` No-op edits: ${noopEdits
-			.map((edit) => `edits[${edit.editIndex}] at ${edit.loc}`)
-			.join(", ")}.`;
+		diagnostic += ` No-op edits: ${noopEdits.map((edit) => `edits[${edit.editIndex}] at ${edit.loc}`).join(", ")}.`;
 	}
 	return new Error(diagnostic);
 }
@@ -134,13 +137,14 @@ export function createHashlineEditToolDefinition(
 		name: "hashline_edit",
 		label: "hashline_edit",
 		description:
-			"Edit a single file using LINE#ID anchors from read(format=\"hashline\"). Read first, copy anchors exactly, batch all edits for one file in one call, then re-read before editing same file again.",
-		promptSnippet: "Apply precise file edits using LINE#ID anchors from read(format=\"hashline\")",
+			'Edit a single file using LINE#ID anchors from read(format="hashline"). Read first, copy anchors exactly, batch all edits for one file in one call, then re-read before editing same file again.',
+		promptSnippet: 'Preferred stale-safe surgical file edits using LINE#ID anchors from read(format="hashline")',
 		promptGuidelines: [
-			"Use hashline_edit for stale-safe surgical edits after read(format=\"hashline\")",
-			"Copy anchors exactly as LINE#ID from latest read output",
-			"Batch all edits for one file in one hashline_edit call, then re-read before another call on same file",
-			"Do not guess anchors or reproduce surrounding file text",
+			'Prefer hashline_edit for ordinary surgical file edits; start with read({ path, format: "hashline" }) to get fresh LINE#ID anchors',
+			"hashline_edit is not exact-text edit: do not send oldText/newText style patterns or reproduce surrounding file text",
+			"Copy anchors exactly as LINE#ID from the latest hashline read output; do not guess, normalize, or partially copy them",
+			"Use range/append/prepend locations correctly and provide only the replacement or inserted content",
+			"Batch all edits for one file in one hashline_edit call, then re-read before another call on the same file",
 		],
 		parameters: hashlineEditSchema,
 		async execute(_toolCallId, input: HashlineEditToolInput, signal?: AbortSignal) {
@@ -151,77 +155,82 @@ export function createHashlineEditToolDefinition(
 			return withFileMutationQueue(
 				absolutePath,
 				() =>
-					new Promise<{ content: Array<{ type: "text"; text: string }>; details: HashlineEditToolDetails | undefined }>(
-						(resolve, reject) => {
-							if (signal?.aborted) {
-								reject(new Error("Operation aborted"));
-								return;
-							}
+					new Promise<{
+						content: Array<{ type: "text"; text: string }>;
+						details: HashlineEditToolDetails | undefined;
+					}>((resolve, reject) => {
+						if (signal?.aborted) {
+							reject(new Error("Operation aborted"));
+							return;
+						}
 
-							let aborted = false;
-							const onAbort = () => {
-								aborted = true;
-								reject(new Error("Operation aborted"));
-							};
-							signal?.addEventListener("abort", onAbort, { once: true });
+						let aborted = false;
+						const onAbort = () => {
+							aborted = true;
+							reject(new Error("Operation aborted"));
+						};
+						signal?.addEventListener("abort", onAbort, { once: true });
 
-							void (async () => {
+						void (async () => {
+							try {
 								try {
-									try {
-										await ops.access(absolutePath);
-									} catch {
-										signal?.removeEventListener("abort", onAbort);
-										reject(new Error(`File not found: ${path}`));
-										return;
-									}
-									if (aborted) return;
-
-									const buffer = await ops.readFile(absolutePath);
-									const rawContent = buffer.toString("utf-8");
-									if (aborted) return;
-
-									const { bom, text } = stripBom(rawContent);
-									const originalEnding = detectLineEnding(text);
-									const normalizedContent = normalizeToLF(text);
-									const applyResult = applyHashlineEditsToNormalizedContent(normalizedContent, resolvedEdits, path);
-									if (applyResult.baseContent === applyResult.newContent) {
-										throw buildNoChangeError(path, applyResult.noopEdits);
-									}
-									if (aborted) return;
-
-									const finalContent = bom + restoreLineEndings(applyResult.newContent, originalEnding);
-									await ops.writeFile(absolutePath, finalContent);
-									if (aborted) return;
-
+									await ops.access(absolutePath);
+								} catch {
 									signal?.removeEventListener("abort", onAbort);
-									const diffResult = generateDiffString(applyResult.baseContent, applyResult.newContent);
-									const warningsBlock = applyResult.warnings?.length
-										? `\nWarnings:\n${applyResult.warnings.join("\n")}`
-										: "";
-									resolve({
-										content: [
-											{
-												type: "text",
-												text: `Updated ${path} with ${resolvedEdits.length} hashline edit(s).${warningsBlock}`,
-											},
-										],
-										details: {
-											diff: diffResult.diff,
-											firstChangedLine: applyResult.firstChangedLine ?? diffResult.firstChangedLine,
-										},
-									});
-								} catch (error) {
-									signal?.removeEventListener("abort", onAbort);
-									if (aborted) return;
-									if (error instanceof HashlineMismatchError) {
-										reject(error);
-										return;
-									}
-									reject(error instanceof Error ? error : new Error(String(error)));
+									reject(new Error(`File not found: ${path}`));
+									return;
 								}
-							})();
-						},
-					),
+								if (aborted) return;
+
+								const buffer = await ops.readFile(absolutePath);
+								const rawContent = buffer.toString("utf-8");
+								if (aborted) return;
+
+								const { bom, text } = stripBom(rawContent);
+								const originalEnding = detectLineEnding(text);
+								const normalizedContent = normalizeToLF(text);
+								const applyResult = applyHashlineEditsToNormalizedContent(
+									normalizedContent,
+									resolvedEdits,
+									path,
+								);
+								if (applyResult.baseContent === applyResult.newContent) {
+									throw buildNoChangeError(path, applyResult.noopEdits);
+								}
+								if (aborted) return;
+
+								const finalContent = bom + restoreLineEndings(applyResult.newContent, originalEnding);
+								await ops.writeFile(absolutePath, finalContent);
+								if (aborted) return;
+
+								signal?.removeEventListener("abort", onAbort);
+								const diffResult = generateDiffString(applyResult.baseContent, applyResult.newContent);
+								const warningsBlock = applyResult.warnings?.length
+									? `\nWarnings:\n${applyResult.warnings.join("\n")}`
+									: "";
+								resolve({
+									content: [
+										{
+											type: "text",
+											text: `Updated ${path} with ${resolvedEdits.length} hashline edit(s).${warningsBlock}`,
+										},
+									],
+									details: {
+										diff: diffResult.diff,
+										firstChangedLine: applyResult.firstChangedLine ?? diffResult.firstChangedLine,
+									},
+								});
+							} catch (error) {
+								signal?.removeEventListener("abort", onAbort);
+								if (aborted) return;
+								if (error instanceof HashlineMismatchError) {
+									reject(error);
+									return;
+								}
+								reject(error instanceof Error ? error : new Error(String(error)));
+							}
+						})();
+					}),
 			);
 		},
 		renderCall: renderHashlineEditCall,
@@ -229,7 +238,10 @@ export function createHashlineEditToolDefinition(
 	};
 }
 
-export function createHashlineEditTool(cwd: string, options?: HashlineEditToolOptions): AgentTool<typeof hashlineEditSchema> {
+export function createHashlineEditTool(
+	cwd: string,
+	options?: HashlineEditToolOptions,
+): AgentTool<typeof hashlineEditSchema> {
 	return wrapToolDefinition(createHashlineEditToolDefinition(cwd, options));
 }
 

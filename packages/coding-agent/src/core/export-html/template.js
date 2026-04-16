@@ -569,7 +569,8 @@
           case 'write':
             return `[write: ${shortenPath(String(args.path || args.file_path || ''))}]`;
           case 'edit':
-            return `[edit: ${shortenPath(String(args.path || args.file_path || ''))}]`;
+          case 'hashline_edit':
+            return `[${name}: ${shortenPath(String(args.path || args.file_path || ''))}]`;
           case 'bash': {
             const rawCmd = String(args.command || '');
             const cmd = rawCmd.replace(/[\n\t]/g, ' ').trim().slice(0, 50);
@@ -945,9 +946,10 @@
             }
             break;
           }
-          case 'edit': {
+          case 'edit':
+          case 'hashline_edit': {
             const filePath = str(args.file_path ?? args.path);
-            html += `<div class="tool-header"><span class="tool-name">edit</span> <span class="tool-path">${filePath === null ? invalidArg : escapeHtml(shortenPath(filePath || ''))}</span></div>`;
+            html += `<div class="tool-header"><span class="tool-name">${escapeHtml(name)}</span> <span class="tool-path">${filePath === null ? invalidArg : escapeHtml(shortenPath(filePath || ''))}</span></div>`;
 
             if (result?.details?.diff) {
               const diffLines = result.details.diff.split('\n');

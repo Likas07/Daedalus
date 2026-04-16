@@ -25,6 +25,7 @@ import { getAgentDir, isBunBinary } from "../../config.js";
 import * as _bundledPiCodingAgent from "../../index.js";
 import { createEventBus, type EventBus } from "../event-bus.js";
 import type { ExecOptions } from "../exec.js";
+import { logToolDebug } from "../tool-debug.js";
 import { execCommand } from "../exec.js";
 import { createSyntheticSourceInfo } from "../source-info.js";
 import type {
@@ -256,6 +257,13 @@ function createExtensionAPI(
 		},
 
 		setActiveTools(toolNames: string[]): void {
+			logToolDebug("ExtensionAPI.setActiveTools", `extension=${extension.path}`, {
+				requested: toolNames,
+				details: {
+					extensionPath: extension.path,
+					sourcePath: extension.sourceInfo.path,
+				},
+			});
 			runtime.setActiveTools(toolNames);
 		},
 

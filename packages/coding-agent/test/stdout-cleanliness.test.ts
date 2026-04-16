@@ -1,32 +1,41 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { ENV_AGENT_DIR } from "../src/config.js";
+import { CONFIG_DIR_NAME, ENV_AGENT_DIR } from "../src/config.js";
 
-const cliPath = resolve(__dirname, "../src/cli.ts");
-const tsxPath = resolve(__dirname, "../../../node_modules/tsx/dist/cli.mjs");
-
+const cliPath = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
+const tsxPath = fileURLToPath(new URL("../../../node_modules/tsx/dist/cli.mjs", import.meta.url));
 const tempDirs: string[] = [];
 
 afterEach(() => {
 	for (const dir of tempDirs.splice(0)) {
-		rmSync(dir, { recursive: true, force: true });
+		if (existsSync(dir)) {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	}
 });
 
 function createTempDir(): string {
-	const dir = mkdtempSync(join(tmpdir(), "pi-stdout-clean-"));
+	const dir = mkdtempSync(join(tmpdir(), "daedalus-stdout-clean-"));
 	tempDirs.push(dir);
 	return dir;
+}
+
+function resolveCliInvocation(args: string[]): { command: string; argv: string[] } {
+	if (process.versions.bun) {
+		return { command: process.execPath, argv: [cliPath, ...args] };
+	}
+	return { command: process.execPath, argv: [tsxPath, cliPath, ...args] };
 }
 
 async function runCli(args: string[]): Promise<{ stdout: string; stderr: string; code: number | null }> {
 	const tempRoot = createTempDir();
 	const agentDir = join(tempRoot, "agent");
 	const projectDir = join(tempRoot, "project");
-	const projectConfigDir = join(projectDir, ".pi");
+	const projectConfigDir = join(projectDir, CONFIG_DIR_NAME);
 	mkdirSync(agentDir, { recursive: true });
 	mkdirSync(projectConfigDir, { recursive: true });
 
@@ -54,8 +63,9 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 		"utf-8",
 	);
 
+	const invocation = resolveCliInvocation(args);
 	return await new Promise((resolvePromise, reject) => {
-		const child = spawn(process.execPath, [tsxPath, cliPath, ...args], {
+		const child = spawn(invocation.command, invocation.argv, {
 			cwd: projectDir,
 			env: {
 				...process.env,

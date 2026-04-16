@@ -863,9 +863,10 @@ class TreeList implements Component {
 				const path = shortenPath(String(args.path || args.file_path || ""));
 				return `[write: ${path}]`;
 			}
-			case "edit": {
+			case "edit":
+			case "hashline_edit": {
 				const path = shortenPath(String(args.path || args.file_path || ""));
-				return `[edit: ${path}]`;
+				return `[${name}: ${path}]`;
 			}
 			case "bash": {
 				const rawCmd = String(args.command || "");

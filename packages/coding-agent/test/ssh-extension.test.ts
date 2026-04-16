@@ -72,9 +72,8 @@ afterEach(async () => {
 });
 
 describe.skipIf(process.platform === "win32")("SSH extension wiring", () => {
-	test("routes write/edit/hashline_edit through remote ops when --ssh is set", async () => {
+	test("routes write/hashline_edit through remote ops and does not register edit when --ssh is set", async () => {
 		const env = await setupFakeSsh("extension-routing");
-		await writeFile(join(env.remoteCwd, "edit.txt"), "before\n", "utf8");
 		await writeFile(join(env.remoteCwd, "hashline.txt"), "alpha\nbeta\n", "utf8");
 		const runner = await createRunner(env);
 		runner.setFlagValue("ssh", `${env.remote}:${env.remoteCwd}`);
@@ -85,15 +84,11 @@ describe.skipIf(process.platform === "win32")("SSH extension wiring", () => {
 		const editTool = runner.getToolDefinition("edit");
 		const hashlineTool = runner.getToolDefinition("hashline_edit");
 		expect(writeTool).toBeDefined();
-		expect(editTool).toBeDefined();
+		expect(editTool).toBeUndefined();
 		expect(hashlineTool).toBeDefined();
 
 		await writeTool!.execute("tool-1", { path: "write.txt", content: "via extension\n" });
-		await editTool!.execute("tool-2", {
-			path: "edit.txt",
-			edits: [{ oldText: "before", newText: "after" }],
-		});
-		await hashlineTool!.execute("tool-3", {
+		await hashlineTool!.execute("tool-2", {
 			path: "hashline.txt",
 			edits: [
 				{
@@ -109,7 +104,6 @@ describe.skipIf(process.platform === "win32")("SSH extension wiring", () => {
 		});
 
 		expect(await readFile(join(env.remoteCwd, "write.txt"), "utf8")).toBe("via extension\n");
-		expect(await readFile(join(env.remoteCwd, "edit.txt"), "utf8")).toBe("after\n");
 		expect(await readFile(join(env.remoteCwd, "hashline.txt"), "utf8")).toBe("alpha\nBETA\n");
 	});
 

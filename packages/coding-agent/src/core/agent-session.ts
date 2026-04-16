@@ -15,14 +15,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import type {
-	Agent,
-	AgentEvent,
-	AgentMessage,
-	AgentState,
-	AgentTool,
-	ThinkingLevel,
-} from "@daedalus-pi/agent-core";
+import type { Agent, AgentEvent, AgentMessage, AgentState, AgentTool, ThinkingLevel } from "@daedalus-pi/agent-core";
 import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@daedalus-pi/ai";
 import { isContextOverflow, modelsAreEqual, resetApiProviders, supportsXhigh } from "@daedalus-pi/ai";
 import { getDocsPath } from "../config.js";
@@ -77,7 +70,9 @@ import type { SettingsManager } from "./settings-manager.js";
 import type { SlashCommandInfo } from "./slash-commands.js";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.js";
 import { buildSystemPrompt } from "./system-prompt.js";
+import { logToolDebug, summarizeToolTransition } from "./tool-debug.js";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.js";
+import { DEFAULT_ACTIVE_TOOL_NAMES } from "./tools/defaults.js";
 import { createAllToolDefinitions } from "./tools/index.js";
 import { createToolDefinitionFromAgentTool, wrapToolDefinition } from "./tools/tool-definition-wrapper.js";
 
@@ -148,7 +143,7 @@ export interface AgentSessionConfig {
 	customTools?: ToolDefinition[];
 	/** Model registry for API key resolution and model discovery */
 	modelRegistry: ModelRegistry;
-	/** Initial active built-in tool names. Default: [read, bash, edit, write, grep, find, ls] */
+	/** Initial active built-in tool names. Default: the default active built-in tools. */
 	initialActiveToolNames?: string[];
 	/**
 	 * Override base tools (useful for custom runtimes).
@@ -585,7 +580,6 @@ export class AgentSession {
 		return textBlocks.map((c) => (c as TextContent).text).join("");
 	}
 
-
 	/** Find the last assistant message in agent state (including aborted ones) */
 	private _findLastAssistantMessage(): AssistantMessage | undefined {
 		const messages = this.agent.state.messages;
@@ -747,7 +741,6 @@ export class AgentSession {
 		return this.agent.state.systemPrompt;
 	}
 
-
 	/** Current retry attempt (0 if not retrying) */
 	get retryAttempt(): number {
 		return this._retryAttempt;
@@ -783,7 +776,8 @@ export class AgentSession {
 	 * Also rebuilds the system prompt to reflect the new tool set.
 	 * Changes take effect on the next agent turn.
 	 */
-	setActiveToolsByName(toolNames: string[]): void {
+	setActiveToolsByName(toolNames: string[], debugContext?: { source?: string; note?: string }): void {
+		const previousToolNames = this.getActiveToolNames();
 		const tools: AgentTool[] = [];
 		const validToolNames: string[] = [];
 		for (const name of toolNames) {
@@ -794,6 +788,22 @@ export class AgentSession {
 			}
 		}
 		this.agent.state.tools = tools;
+
+		const droppedToolNames = toolNames.filter((name) => !validToolNames.includes(name));
+		logToolDebug(
+			"AgentSession.setActiveToolsByName",
+			summarizeToolTransition(previousToolNames, validToolNames),
+			{
+				requested: toolNames,
+				previous: previousToolNames,
+				next: validToolNames,
+				details: {
+					source: debugContext?.source,
+					note: debugContext?.note,
+					dropped: droppedToolNames.length > 0 ? droppedToolNames : undefined,
+				},
+			},
+		);
 
 		// Rebuild base system prompt with new tool set
 		this._baseSystemPrompt = this._rebuildSystemPrompt(validToolNames);
@@ -2284,7 +2294,25 @@ export class AgentSession {
 			}
 		}
 
-		this.setActiveToolsByName([...new Set(nextActiveToolNames)]);
+		const uniqueNextActiveToolNames = [...new Set(nextActiveToolNames)];
+		const newRegistryToolNames = [...this._toolRegistry.keys()].filter((toolName) => !previousRegistryNames.has(toolName));
+		logToolDebug("AgentSession._refreshToolRegistry", summarizeToolTransition(previousActiveToolNames, uniqueNextActiveToolNames), {
+			previous: previousActiveToolNames,
+			next: uniqueNextActiveToolNames,
+			details: {
+				explicitActiveToolNames: options?.activeToolNames ? options.activeToolNames : undefined,
+				includeAllExtensionTools: options?.includeAllExtensionTools ?? false,
+				newRegistryTools: newRegistryToolNames.length > 0 ? newRegistryToolNames : undefined,
+			},
+		});
+		this.setActiveToolsByName(uniqueNextActiveToolNames, {
+			source: "AgentSession._refreshToolRegistry",
+			note: options?.activeToolNames
+				? "explicit active tools provided"
+				: options?.includeAllExtensionTools
+					? "including all extension tools"
+					: "preserve previous active tools and add newly registered tools",
+		});
 	}
 
 	private _buildRuntime(options: {
@@ -2339,8 +2367,18 @@ export class AgentSession {
 
 		const defaultActiveToolNames = this._baseToolsOverride
 			? Object.keys(this._baseToolsOverride)
-			: ["read", "bash", "edit", "write", "grep", "find", "ls"];
+			: [...DEFAULT_ACTIVE_TOOL_NAMES];
 		const baseActiveToolNames = options.activeToolNames ?? defaultActiveToolNames;
+		logToolDebug("AgentSession._buildRuntime", `baseActive=[${baseActiveToolNames.join(",") || "(none)"}]`, {
+			requested: baseActiveToolNames,
+			details: {
+				defaultActive: defaultActiveToolNames,
+				baseToolsOverride: this._baseToolsOverride ? Object.keys(this._baseToolsOverride) : undefined,
+				extensionCount: extensionsResult.extensions.length,
+				customToolCount: this._customTools.length,
+				includeAllExtensionTools: options.includeAllExtensionTools ?? false,
+			},
+		});
 		this._refreshToolRegistry({
 			activeToolNames: baseActiveToolNames,
 			includeAllExtensionTools: options.includeAllExtensionTools,
