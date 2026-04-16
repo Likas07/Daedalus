@@ -1,4 +1,4 @@
-import type { Model } from "@daedalus-pi/ai";
+import { type Model, supportsFastMode } from "@daedalus-pi/ai";
 import { icon } from "@mariozechner/mini-lit";
 import { Button } from "@mariozechner/mini-lit/dist/Button.js";
 import { Select, type SelectOption } from "@mariozechner/mini-lit/dist/Select.js";
@@ -30,6 +30,7 @@ export class MessageEditor extends LitElement {
 	@property() isStreaming = false;
 	@property() currentModel?: Model<any>;
 	@property() thinkingLevel: ThinkingLevel = "off";
+	@property() fastMode = false;
 	@property() showAttachmentButton = true;
 	@property() showModelSelector = true;
 	@property() showThinkingSelector = true;
@@ -38,6 +39,7 @@ export class MessageEditor extends LitElement {
 	@property() onAbort?: () => void;
 	@property() onModelSelect?: () => void;
 	@property() onThinkingChange?: (level: "off" | "minimal" | "low" | "medium" | "high") => void;
+	@property() onFastModeChange?: (enabled: boolean) => void;
 	@property() onFilesChange?: (files: Attachment[]) => void;
 	@property() attachments: Attachment[] = [];
 	@property() maxFiles = 10;
@@ -236,6 +238,7 @@ export class MessageEditor extends LitElement {
 		// Check if current model supports thinking/reasoning
 		const model = this.currentModel;
 		const supportsThinking = model?.reasoning === true; // Models with reasoning:true support thinking
+		const supportsFast = model ? supportsFastMode(model) : false;
 
 		return html`
 			<div
@@ -341,6 +344,22 @@ export class MessageEditor extends LitElement {
 										size: "sm",
 										variant: "ghost",
 										fitContent: true,
+									})}
+								`
+								: ""
+						}
+						${
+							supportsFast
+								? html`
+									${Button({
+										variant: this.fastMode ? "outline" : "ghost",
+										size: "sm",
+										onClick: () => {
+											this.fastMode = !this.fastMode;
+											this.onFastModeChange?.(this.fastMode);
+										},
+										children: "Fast",
+										className: "h-8 text-xs",
 									})}
 								`
 								: ""

@@ -365,6 +365,7 @@ export class AgentInterface extends LitElement {
 							.isStreaming=${state.isStreaming}
 							.currentModel=${state.model}
 							.thinkingLevel=${state.thinkingLevel}
+							.fastMode=${state.fastMode}
 							.showAttachmentButton=${this.enableAttachments}
 							.showModelSelector=${this.enableModelSelector}
 							.showThinkingSelector=${this.enableThinkingSelector}
@@ -388,6 +389,9 @@ export class AgentInterface extends LitElement {
 										}
 									: undefined
 							}
+							.onFastModeChange=${(enabled: boolean) => {
+								session.state.fastMode = enabled;
+							}}
 						></message-editor>
 						${this.renderStats()}
 					</div>
