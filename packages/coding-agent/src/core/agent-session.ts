@@ -77,6 +77,7 @@ import type { SettingsManager } from "./settings-manager.js";
 import { loadSkillDocument } from "./skills.js";
 import type { SlashCommandInfo } from "./slash-commands.js";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.js";
+import { createTaskManager, TaskHistory } from "./control-plane/index.js";
 import {
 	createSubagentResourceLoader,
 	createSubagentTools,
@@ -2185,6 +2186,8 @@ export class AgentSession {
 
 		const subagentSettings = this.settingsManager.getSubagentSettings();
 		const subagentRegistry = new SubagentRegistry();
+		const subagentTaskManager = createTaskManager();
+		const subagentTaskHistory = new TaskHistory();
 		const subagentRunner = new SubagentRunner({
 			registry: subagentRegistry,
 			maxDepth: subagentSettings.maxDepth,
@@ -2296,6 +2299,19 @@ export class AgentSession {
 				},
 				getActiveSubagentRuns: () => subagentRegistry.getActiveRuns(),
 				listSubagentRuns: async () => listPersistedSubagentRuns(this.sessionManager.getSessionFile()),
+				launchSubagentTask: async (request) => {
+					const task = subagentTaskManager.createTask({
+						parentSessionFile: request.parentSessionFile,
+						parentAgent: this._subagentContext?.agentName ?? request.metadata?.parentAgent ?? "daedalus",
+						agent: request.agent.name,
+						goal: request.goal,
+						executionMode: request.executionMode ?? "foreground",
+					});
+					subagentTaskHistory.record(request.parentSessionFile, task);
+					return { id: task.id, status: task.status };
+				},
+				getSubagentTask: (id) => subagentTaskManager.getTask(id),
+				listSubagentTaskHistory: async () => subagentTaskHistory.list(this.sessionManager.getSessionFile()),
 			},
 			{
 				getModel: () => this.model,
