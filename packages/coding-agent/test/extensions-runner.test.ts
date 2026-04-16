@@ -7,7 +7,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.js";
-import { createExtensionRuntime, discoverAndLoadExtensions } from "../src/core/extensions/loader.js";
+import { createExtensionRuntime, discoverAndLoadExtensions, loadExtensions } from "../src/core/extensions/loader.js";
 import { ExtensionRunner } from "../src/core/extensions/runner.js";
 import type { ExtensionActions, ExtensionContextActions, ProviderConfig } from "../src/core/extensions/types.js";
 import { KeybindingsManager, type KeyId } from "../src/core/keybindings.js";
@@ -33,6 +33,15 @@ describe("ExtensionRunner", () => {
 	afterEach(() => {
 		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
+
+	async function loadOrderedExtensions(files: Array<{ name: string; code: string }>) {
+		const paths = files.map(({ name, code }) => {
+			const extensionPath = path.join(extensionsDir, name);
+			fs.writeFileSync(extensionPath, code);
+			return extensionPath;
+		});
+		return loadExtensions(paths, tempDir);
+	}
 
 	const providerModelConfig: ProviderConfig = {
 		baseUrl: "https://provider.test/v1",
@@ -268,21 +277,20 @@ describe("ExtensionRunner", () => {
 	describe("tool collection", () => {
 		it("collects tools from multiple extensions", async () => {
 			const toolCode = (name: string) => `
-				import { Type } from "@sinclair/typebox";
 				export default function(pi) {
 					pi.registerTool({
 						name: "${name}",
 						label: "${name}",
 						description: "Test tool",
-						parameters: Type.Object({}),
+						parameters: { type: "object", properties: {} },
 						execute: async () => ({ content: [{ type: "text", text: "ok" }], details: {} }),
 					});
 				}
 			`;
-			fs.writeFileSync(path.join(extensionsDir, "tool-a.ts"), toolCode("tool_a"));
-			fs.writeFileSync(path.join(extensionsDir, "tool-b.ts"), toolCode("tool_b"));
-
-			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const result = await loadOrderedExtensions([
+				{ name: "tool-a.ts", code: toolCode("tool_a") },
+				{ name: "tool-b.ts", code: toolCode("tool_b") },
+			]);
 			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
 			const tools = runner.getAllRegisteredTools();
 
@@ -292,33 +300,31 @@ describe("ExtensionRunner", () => {
 
 		it("keeps first tool when two extensions register the same name", async () => {
 			const first = `
-				import { Type } from "@sinclair/typebox";
 				export default function(pi) {
 					pi.registerTool({
 						name: "shared",
 						label: "shared",
 						description: "first",
-						parameters: Type.Object({}),
+						parameters: { type: "object", properties: {} },
 						execute: async () => ({ content: [{ type: "text", text: "ok" }], details: {} }),
 					});
 				}
 			`;
 			const second = `
-				import { Type } from "@sinclair/typebox";
 				export default function(pi) {
 					pi.registerTool({
 						name: "shared",
 						label: "shared",
 						description: "second",
-						parameters: Type.Object({}),
+						parameters: { type: "object", properties: {} },
 						execute: async () => ({ content: [{ type: "text", text: "ok" }], details: {} }),
 					});
 				}
 			`;
-			fs.writeFileSync(path.join(extensionsDir, "a-first.ts"), first);
-			fs.writeFileSync(path.join(extensionsDir, "b-second.ts"), second);
-
-			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const result = await loadOrderedExtensions([
+				{ name: "a-first.ts", code: first },
+				{ name: "b-second.ts", code: second },
+			]);
 			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
 			const tools = runner.getAllRegisteredTools();
 
@@ -382,10 +388,10 @@ describe("ExtensionRunner", () => {
 					});
 				}
 			`;
-			fs.writeFileSync(path.join(extensionsDir, "cmd-a.ts"), cmdCode("First command"));
-			fs.writeFileSync(path.join(extensionsDir, "cmd-b.ts"), cmdCode("Second command"));
-
-			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const result = await loadOrderedExtensions([
+				{ name: "cmd-a.ts", code: cmdCode("First command") },
+				{ name: "cmd-b.ts", code: cmdCode("Second command") },
+			]);
 			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
 			const commands = runner.getRegisteredCommands();
 			const diagnostics = runner.getCommandDiagnostics();
@@ -506,10 +512,10 @@ describe("ExtensionRunner", () => {
 					});
 				}
 			`;
-			fs.writeFileSync(path.join(extensionsDir, "a-first.ts"), first);
-			fs.writeFileSync(path.join(extensionsDir, "b-second.ts"), second);
-
-			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const result = await loadOrderedExtensions([
+				{ name: "a-first.ts", code: first },
+				{ name: "b-second.ts", code: second },
+			]);
 			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
 			const flags = runner.getFlags();
 

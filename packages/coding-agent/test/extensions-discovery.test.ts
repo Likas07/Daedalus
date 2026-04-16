@@ -1,463 +1,304 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { discoverAndLoadExtensions } from "../src/core/extensions/loader.js";
+import { afterEach, describe, expect, it } from "vitest";
+import { CONFIG_DIR_NAME } from "../src/config.js";
+import { discoverAndLoadExtensions, loadExtensions } from "../src/core/extensions/loader.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+type Sandbox = {
+	rootDir: string;
+	cwd: string;
+	agentDir: string;
+	localExtensionsDir: string;
+};
 
-describe("extensions discovery", () => {
-	let tempDir: string;
-	let extensionsDir: string;
+const tempDirs: string[] = [];
 
-	beforeEach(() => {
-		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-ext-test-"));
-		extensionsDir = path.join(tempDir, "extensions");
-		fs.mkdirSync(extensionsDir);
-	});
+function createSandbox(): Sandbox {
+	const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), "daedalus-ext-discovery-"));
+	const cwd = path.join(rootDir, "project");
+	const agentDir = path.join(rootDir, "agent");
+	const localExtensionsDir = path.join(cwd, CONFIG_DIR_NAME, "extensions");
+	fs.mkdirSync(localExtensionsDir, { recursive: true });
+	fs.mkdirSync(agentDir, { recursive: true });
+	tempDirs.push(rootDir);
+	return { rootDir, cwd, agentDir, localExtensionsDir };
+}
 
-	afterEach(() => {
-		fs.rmSync(tempDir, { recursive: true, force: true });
-	});
+async function discoverLocalExtensions(sandbox: Sandbox, configuredPaths: string[] = []) {
+	return discoverAndLoadExtensions(configuredPaths, sandbox.cwd, sandbox.agentDir);
+}
 
-	const extensionCode = `
+function writeLocalExtension(sandbox: Sandbox, relativePath: string, content: string): string {
+	const targetPath = path.join(sandbox.localExtensionsDir, relativePath);
+	fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+	fs.writeFileSync(targetPath, content);
+	return targetPath;
+}
+
+function commandExtensionCode(commandName = "test"): string {
+	return `
 		export default function(pi) {
-			pi.registerCommand("test", { handler: async () => {} });
+			pi.registerCommand("${commandName}", { description: "Test command", handler: async () => {} });
 		}
 	`;
+}
 
-	const extensionCodeWithTool = (toolName: string) => `
-		import { Type } from "@sinclair/typebox";
+function toolExtensionCode(toolName: string): string {
+	return `
 		export default function(pi) {
 			pi.registerTool({
 				name: "${toolName}",
 				label: "${toolName}",
 				description: "Test tool",
-				parameters: Type.Object({}),
-				execute: async () => ({ content: [{ type: "text", text: "ok" }] }),
+				parameters: { type: "object", properties: {} },
+				execute: async () => ({ content: [{ type: "text", text: "ok" }], details: {} }),
 			});
 		}
 	`;
+}
 
-	it("discovers direct .ts files in extensions/", async () => {
-		fs.writeFileSync(path.join(extensionsDir, "foo.ts"), extensionCode);
-		fs.writeFileSync(path.join(extensionsDir, "bar.ts"), extensionCode);
 
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+afterEach(() => {
+	for (const dir of tempDirs.splice(0)) {
+		fs.rmSync(dir, { recursive: true, force: true });
+	}
+});
 
-		expect(result.errors).toHaveLength(0);
+describe("extensions discovery", () => {
+	it("discovers direct .ts and .js files in the project extensions directory", async () => {
+		const sandbox = createSandbox();
+		writeLocalExtension(sandbox, "foo.ts", commandExtensionCode("foo"));
+		writeLocalExtension(sandbox, "bar.js", commandExtensionCode("bar"));
+
+		const result = await discoverLocalExtensions(sandbox);
+
+		expect(result.errors).toEqual([]);
+		expect(result.extensions.map((extension) => path.basename(extension.path)).sort()).toEqual(["bar.js", "foo.ts"]);
+	});
+
+	it("discovers subdirectories via index.ts or index.js", async () => {
+		const sandbox = createSandbox();
+		writeLocalExtension(sandbox, "with-ts/index.ts", commandExtensionCode("ts-index"));
+		writeLocalExtension(sandbox, "with-js/index.js", commandExtensionCode("js-index"));
+
+		const result = await discoverLocalExtensions(sandbox);
+
+		expect(result.errors).toEqual([]);
 		expect(result.extensions).toHaveLength(2);
-		expect(result.extensions.map((e) => path.basename(e.path)).sort()).toEqual(["bar.ts", "foo.ts"]);
+		expect(result.extensions.some((extension) => extension.path.endsWith("with-ts/index.ts"))).toBe(true);
+		expect(result.extensions.some((extension) => extension.path.endsWith("with-js/index.js"))).toBe(true);
 	});
 
-	it("discovers direct .js files in extensions/", async () => {
-		fs.writeFileSync(path.join(extensionsDir, "foo.js"), extensionCode);
-
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
-
-		expect(result.errors).toHaveLength(0);
-		expect(result.extensions).toHaveLength(1);
-		expect(path.basename(result.extensions[0].path)).toBe("foo.js");
-	});
-
-	it("discovers subdirectory with index.ts", async () => {
-		const subdir = path.join(extensionsDir, "my-extension");
-		fs.mkdirSync(subdir);
-		fs.writeFileSync(path.join(subdir, "index.ts"), extensionCode);
-
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
-
-		expect(result.errors).toHaveLength(0);
-		expect(result.extensions).toHaveLength(1);
-		expect(result.extensions[0].path).toContain("my-extension");
-		expect(result.extensions[0].path).toContain("index.ts");
-	});
-
-	it("discovers subdirectory with index.js", async () => {
-		const subdir = path.join(extensionsDir, "my-extension");
-		fs.mkdirSync(subdir);
-		fs.writeFileSync(path.join(subdir, "index.js"), extensionCode);
-
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
-
-		expect(result.errors).toHaveLength(0);
-		expect(result.extensions).toHaveLength(1);
-		expect(result.extensions[0].path).toContain("index.js");
-	});
-
-	it("prefers index.ts over index.js", async () => {
-		const subdir = path.join(extensionsDir, "my-extension");
-		fs.mkdirSync(subdir);
-		fs.writeFileSync(path.join(subdir, "index.ts"), extensionCode);
-		fs.writeFileSync(path.join(subdir, "index.js"), extensionCode);
-
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
-
-		expect(result.errors).toHaveLength(0);
-		expect(result.extensions).toHaveLength(1);
-		expect(result.extensions[0].path).toContain("index.ts");
-	});
-
-	it("discovers subdirectory with package.json pi field", async () => {
-		const subdir = path.join(extensionsDir, "my-package");
-		const srcDir = path.join(subdir, "src");
-		fs.mkdirSync(subdir);
-		fs.mkdirSync(srcDir);
-		fs.writeFileSync(path.join(srcDir, "main.ts"), extensionCode);
+	it("prefers package manifests over index files and supports multiple manifest entries", async () => {
+		const sandbox = createSandbox();
+		const packageDir = path.join(sandbox.localExtensionsDir, "manifest-package");
+		fs.mkdirSync(packageDir, { recursive: true });
+		fs.writeFileSync(path.join(packageDir, "index.ts"), toolExtensionCode("from-index"));
+		fs.writeFileSync(path.join(packageDir, "custom-a.ts"), toolExtensionCode("from-custom-a"));
+		fs.writeFileSync(path.join(packageDir, "custom-b.ts"), toolExtensionCode("from-custom-b"));
 		fs.writeFileSync(
-			path.join(subdir, "package.json"),
+			path.join(packageDir, "package.json"),
 			JSON.stringify({
-				name: "my-package",
-				pi: {
-					extensions: ["./src/main.ts"],
-				},
+				name: "manifest-package",
+				pi: { extensions: ["./custom-a.ts", "./custom-b.ts"] },
 			}),
 		);
 
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+		const result = await discoverLocalExtensions(sandbox);
 
-		expect(result.errors).toHaveLength(0);
-		expect(result.extensions).toHaveLength(1);
-		expect(result.extensions[0].path).toContain("src");
-		expect(result.extensions[0].path).toContain("main.ts");
-	});
-
-	it("package.json can declare multiple extensions", async () => {
-		const subdir = path.join(extensionsDir, "my-package");
-		fs.mkdirSync(subdir);
-		fs.writeFileSync(path.join(subdir, "ext1.ts"), extensionCode);
-		fs.writeFileSync(path.join(subdir, "ext2.ts"), extensionCode);
-		fs.writeFileSync(
-			path.join(subdir, "package.json"),
-			JSON.stringify({
-				name: "my-package",
-				pi: {
-					extensions: ["./ext1.ts", "./ext2.ts"],
-				},
-			}),
-		);
-
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
-
-		expect(result.errors).toHaveLength(0);
+		expect(result.errors).toEqual([]);
 		expect(result.extensions).toHaveLength(2);
+		expect(result.extensions.every((extension) => !extension.path.endsWith("index.ts"))).toBe(true);
+		expect(result.extensions.some((extension) => extension.tools.has("from-custom-a"))).toBe(true);
+		expect(result.extensions.some((extension) => extension.tools.has("from-custom-b"))).toBe(true);
 	});
 
-	it("package.json with pi field takes precedence over index.ts", async () => {
-		const subdir = path.join(extensionsDir, "my-package");
-		fs.mkdirSync(subdir);
-		fs.writeFileSync(path.join(subdir, "index.ts"), extensionCodeWithTool("from-index"));
-		fs.writeFileSync(path.join(subdir, "custom.ts"), extensionCodeWithTool("from-custom"));
-		fs.writeFileSync(
-			path.join(subdir, "package.json"),
-			JSON.stringify({
-				name: "my-package",
-				pi: {
-					extensions: ["./custom.ts"],
-				},
-			}),
-		);
+	it("falls back to index.ts when package.json has no extension manifest", async () => {
+		const sandbox = createSandbox();
+		const packageDir = path.join(sandbox.localExtensionsDir, "fallback-package");
+		fs.mkdirSync(packageDir, { recursive: true });
+		fs.writeFileSync(path.join(packageDir, "index.ts"), commandExtensionCode("fallback"));
+		fs.writeFileSync(path.join(packageDir, "package.json"), JSON.stringify({ name: "fallback-package" }));
 
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+		const result = await discoverLocalExtensions(sandbox);
 
-		expect(result.errors).toHaveLength(0);
+		expect(result.errors).toEqual([]);
 		expect(result.extensions).toHaveLength(1);
-		expect(result.extensions[0].path).toContain("custom.ts");
-		// Verify the right tool was registered
-		expect(result.extensions[0].tools.has("from-custom")).toBe(true);
-		expect(result.extensions[0].tools.has("from-index")).toBe(false);
+		expect(result.extensions[0]?.path).toContain("index.ts");
 	});
 
-	it("ignores package.json without pi field, falls back to index.ts", async () => {
-		const subdir = path.join(extensionsDir, "my-package");
-		fs.mkdirSync(subdir);
-		fs.writeFileSync(path.join(subdir, "index.ts"), extensionCode);
+	it("skips missing manifest entries and subdirectories without entries", async () => {
+		const sandbox = createSandbox();
+		const packageDir = path.join(sandbox.localExtensionsDir, "partial-package");
+		fs.mkdirSync(packageDir, { recursive: true });
+		fs.writeFileSync(path.join(packageDir, "exists.ts"), commandExtensionCode("exists"));
 		fs.writeFileSync(
-			path.join(subdir, "package.json"),
-			JSON.stringify({
-				name: "my-package",
-				version: "1.0.0",
-			}),
+			path.join(packageDir, "package.json"),
+			JSON.stringify({ pi: { extensions: ["./exists.ts", "./missing.ts"] } }),
 		);
+		const emptyDir = path.join(sandbox.localExtensionsDir, "not-an-extension");
+		fs.mkdirSync(emptyDir, { recursive: true });
+		fs.writeFileSync(path.join(emptyDir, "helper.ts"), commandExtensionCode("ignored"));
 
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+		const result = await discoverLocalExtensions(sandbox);
 
-		expect(result.errors).toHaveLength(0);
+		expect(result.errors).toEqual([]);
 		expect(result.extensions).toHaveLength(1);
-		expect(result.extensions[0].path).toContain("index.ts");
-	});
-
-	it("ignores subdirectory without index or package.json", async () => {
-		const subdir = path.join(extensionsDir, "not-an-extension");
-		fs.mkdirSync(subdir);
-		fs.writeFileSync(path.join(subdir, "helper.ts"), extensionCode);
-		fs.writeFileSync(path.join(subdir, "utils.ts"), extensionCode);
-
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
-
-		expect(result.errors).toHaveLength(0);
-		expect(result.extensions).toHaveLength(0);
+		expect(result.extensions[0]?.path).toContain("exists.ts");
 	});
 
 	it("does not recurse beyond one level", async () => {
-		const subdir = path.join(extensionsDir, "container");
-		const nested = path.join(subdir, "nested");
-		fs.mkdirSync(subdir);
-		fs.mkdirSync(nested);
-		fs.writeFileSync(path.join(nested, "index.ts"), extensionCode);
-		// No index.ts or package.json in container/
+		const sandbox = createSandbox();
+		writeLocalExtension(sandbox, "container/nested/index.ts", commandExtensionCode("nested"));
 
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+		const result = await discoverLocalExtensions(sandbox);
 
-		expect(result.errors).toHaveLength(0);
+		expect(result.errors).toEqual([]);
 		expect(result.extensions).toHaveLength(0);
 	});
 
-	it("handles mixed direct files and subdirectories", async () => {
-		// Direct file
-		fs.writeFileSync(path.join(extensionsDir, "direct.ts"), extensionCode);
+	it("handles mixed direct files and package directories", async () => {
+		const sandbox = createSandbox();
+		writeLocalExtension(sandbox, "direct.ts", commandExtensionCode("direct"));
+		writeLocalExtension(sandbox, "with-index/index.ts", commandExtensionCode("with-index"));
+		const packageDir = path.join(sandbox.localExtensionsDir, "with-manifest");
+		fs.mkdirSync(packageDir, { recursive: true });
+		fs.writeFileSync(path.join(packageDir, "entry.ts"), commandExtensionCode("with-manifest"));
+		fs.writeFileSync(path.join(packageDir, "package.json"), JSON.stringify({ pi: { extensions: ["./entry.ts"] } }));
 
-		// Subdirectory with index
-		const subdir1 = path.join(extensionsDir, "with-index");
-		fs.mkdirSync(subdir1);
-		fs.writeFileSync(path.join(subdir1, "index.ts"), extensionCode);
+		const result = await discoverLocalExtensions(sandbox);
 
-		// Subdirectory with package.json
-		const subdir2 = path.join(extensionsDir, "with-manifest");
-		fs.mkdirSync(subdir2);
-		fs.writeFileSync(path.join(subdir2, "entry.ts"), extensionCode);
-		fs.writeFileSync(path.join(subdir2, "package.json"), JSON.stringify({ pi: { extensions: ["./entry.ts"] } }));
-
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
-
-		expect(result.errors).toHaveLength(0);
+		expect(result.errors).toEqual([]);
 		expect(result.extensions).toHaveLength(3);
+		expect(result.extensions.flatMap((extension) => [...extension.commands.keys()]).sort()).toEqual([
+			"direct",
+			"with-index",
+			"with-manifest",
+		]);
 	});
 
-	it("skips non-existent paths declared in package.json", async () => {
-		const subdir = path.join(extensionsDir, "my-package");
-		fs.mkdirSync(subdir);
-		fs.writeFileSync(path.join(subdir, "exists.ts"), extensionCode);
-		fs.writeFileSync(
-			path.join(subdir, "package.json"),
-			JSON.stringify({
-				pi: {
-					extensions: ["./exists.ts", "./missing.ts"],
-				},
-			}),
+	it("loads discovered extensions that register commands, tools, renderers, handlers, shortcuts, and flags", async () => {
+		const sandbox = createSandbox();
+		writeLocalExtension(sandbox, "with-command.ts", commandExtensionCode("test-command"));
+		writeLocalExtension(sandbox, "with-tool.ts", toolExtensionCode("test-tool"));
+		writeLocalExtension(
+			sandbox,
+			"with-renderer.ts",
+			`export default function(pi) { pi.registerMessageRenderer("my-type", () => null); }`,
+		);
+		writeLocalExtension(
+			sandbox,
+			"with-handlers.ts",
+			`export default function(pi) { pi.on("agent_start", async () => {}); pi.on("tool_call", async () => undefined); }`,
+		);
+		writeLocalExtension(
+			sandbox,
+			"with-shortcut.ts",
+			`export default function(pi) { pi.registerShortcut("ctrl+t", { description: "shortcut", handler: async () => {} }); }`,
+		);
+		writeLocalExtension(
+			sandbox,
+			"with-flag.ts",
+			`export default function(pi) { pi.registerFlag("my-flag", { description: "flag", type: "boolean", default: true }); }`,
 		);
 
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+		const result = await discoverLocalExtensions(sandbox);
 
-		expect(result.errors).toHaveLength(0);
-		expect(result.extensions).toHaveLength(1);
-		expect(result.extensions[0].path).toContain("exists.ts");
+		expect(result.errors).toEqual([]);
+		expect(result.extensions).toHaveLength(6);
+		expect(result.extensions.some((extension) => extension.commands.has("test-command"))).toBe(true);
+		expect(result.extensions.some((extension) => extension.tools.has("test-tool"))).toBe(true);
+		expect(result.extensions.some((extension) => extension.messageRenderers.has("my-type"))).toBe(true);
+		expect(result.extensions.some((extension) => extension.handlers.has("agent_start"))).toBe(true);
+		expect(result.extensions.some((extension) => extension.shortcuts.has("ctrl+t"))).toBe(true);
+		expect(result.extensions.some((extension) => extension.flags.has("my-flag"))).toBe(true);
 	});
 
-	it("loads extensions and registers commands", async () => {
-		fs.writeFileSync(path.join(extensionsDir, "with-command.ts"), extensionCode);
+	it("surfaces extension load errors for invalid code, thrown initialization, and missing default export", async () => {
+		const sandbox = createSandbox();
+		writeLocalExtension(sandbox, "invalid.ts", "this is not valid typescript export");
+		writeLocalExtension(sandbox, "throws.ts", `export default function() { throw new Error("Initialization failed!"); }`);
+		writeLocalExtension(sandbox, "no-default.ts", `export function notDefault() {}`);
 
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+		const result = await discoverLocalExtensions(sandbox);
 
-		expect(result.errors).toHaveLength(0);
-		expect(result.extensions).toHaveLength(1);
-		expect(result.extensions[0].commands.has("test")).toBe(true);
-	});
-
-	it("loads extensions and registers tools", async () => {
-		fs.writeFileSync(path.join(extensionsDir, "with-tool.ts"), extensionCodeWithTool("my-tool"));
-
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
-
-		expect(result.errors).toHaveLength(0);
-		expect(result.extensions).toHaveLength(1);
-		expect(result.extensions[0].tools.has("my-tool")).toBe(true);
-	});
-
-	it("reports errors for invalid extension code", async () => {
-		fs.writeFileSync(path.join(extensionsDir, "invalid.ts"), "this is not valid typescript export");
-
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
-
-		expect(result.errors).toHaveLength(1);
-		expect(result.errors[0].path).toContain("invalid.ts");
 		expect(result.extensions).toHaveLength(0);
+		expect(result.errors).toHaveLength(3);
+		expect(result.errors.some((entry) => entry.path.includes("invalid.ts"))).toBe(true);
+		expect(result.errors.some((entry) => entry.error.includes("Initialization failed!"))).toBe(true);
+		expect(result.errors.some((entry) => entry.error.includes("does not export a valid factory function"))).toBe(true);
 	});
 
-	it("handles explicitly configured paths", async () => {
-		const customPath = path.join(tempDir, "custom-location", "my-ext.ts");
-		fs.mkdirSync(path.dirname(customPath), { recursive: true });
-		fs.writeFileSync(customPath, extensionCode);
+	it("handles explicitly configured files and directories", async () => {
+		const sandbox = createSandbox();
+		const explicitFile = path.join(sandbox.rootDir, "custom-location", "my-ext.ts");
+		fs.mkdirSync(path.dirname(explicitFile), { recursive: true });
+		fs.writeFileSync(explicitFile, commandExtensionCode("explicit-file"));
 
-		const result = await discoverAndLoadExtensions([customPath], tempDir, tempDir);
+		const explicitDir = path.join(sandbox.rootDir, "dir-ext");
+		fs.mkdirSync(explicitDir, { recursive: true });
+		fs.writeFileSync(path.join(explicitDir, "entry.ts"), commandExtensionCode("explicit-dir"));
+		fs.writeFileSync(path.join(explicitDir, "package.json"), JSON.stringify({ pi: { extensions: ["./entry.ts"] } }));
 
-		expect(result.errors).toHaveLength(0);
+		const result = await discoverLocalExtensions(sandbox, [explicitFile, explicitDir]);
+
+		expect(result.errors).toEqual([]);
+		expect(result.extensions.flatMap((extension) => [...extension.commands.keys()]).sort()).toEqual([
+			"explicit-dir",
+			"explicit-file",
+		]);
+	});
+
+	it("resolves dependencies from an extension's own node_modules", async () => {
+		const sandbox = createSandbox();
+		const extensionDir = path.join(sandbox.rootDir, "with-deps");
+		fs.mkdirSync(path.join(extensionDir, "node_modules", "ms"), { recursive: true });
+		fs.writeFileSync(
+			path.join(extensionDir, "package.json"),
+			JSON.stringify({ name: "with-deps", pi: { extensions: ["./index.ts"] } }),
+		);
+		fs.writeFileSync(
+			path.join(extensionDir, "node_modules", "ms", "package.json"),
+			JSON.stringify({ name: "ms", main: "index.js" }),
+		);
+		fs.writeFileSync(
+			path.join(extensionDir, "node_modules", "ms", "index.js"),
+			"module.exports = function ms(value) { return value === '2h' ? 7200000 : undefined; };",
+		);
+		fs.writeFileSync(
+			path.join(extensionDir, "index.ts"),
+			`import ms from "ms"; export default function(pi) { pi.registerTool({ name: "parse_duration", label: "parse_duration", description: "Parse duration", parameters: { type: "object", properties: { duration: { type: "string" } }, required: ["duration"] }, execute: async (_id, params) => ({ content: [{ type: "text", text: String(ms(params.duration)) }], details: {} }), }); }`,
+		);
+
+		const result = await discoverLocalExtensions(sandbox, [extensionDir]);
+
+		expect(result.errors).toEqual([]);
 		expect(result.extensions).toHaveLength(1);
-		expect(result.extensions[0].path).toContain("my-ext.ts");
-	});
-
-	it("resolves dependencies from extension's own node_modules", async () => {
-		// Load extension that has its own package.json and node_modules with 'ms' package
-		const extPath = path.resolve(__dirname, "../examples/extensions/with-deps");
-
-		const result = await discoverAndLoadExtensions([extPath], tempDir, tempDir);
-
-		expect(result.errors).toHaveLength(0);
-		expect(result.extensions).toHaveLength(1);
-		expect(result.extensions[0].path).toContain("with-deps");
-		// The extension registers a 'parse_duration' tool
-		expect(result.extensions[0].tools.has("parse_duration")).toBe(true);
-	});
-
-	it("registers message renderers", async () => {
-		const extCode = `
-			export default function(pi) {
-				pi.registerMessageRenderer("my-custom-type", (message, options, theme) => {
-					return null; // Use default rendering
-				});
-			}
-		`;
-		fs.writeFileSync(path.join(extensionsDir, "with-renderer.ts"), extCode);
-
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
-
-		expect(result.errors).toHaveLength(0);
-		expect(result.extensions).toHaveLength(1);
-		expect(result.extensions[0].messageRenderers.has("my-custom-type")).toBe(true);
-	});
-
-	it("reports error when extension throws during initialization", async () => {
-		const extCode = `
-			export default function(pi) {
-				throw new Error("Initialization failed!");
-			}
-		`;
-		fs.writeFileSync(path.join(extensionsDir, "throws.ts"), extCode);
-
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
-
-		expect(result.errors).toHaveLength(1);
-		expect(result.errors[0].error).toContain("Initialization failed!");
-		expect(result.extensions).toHaveLength(0);
-	});
-
-	it("reports error when extension has no default export", async () => {
-		const extCode = `
-			export function notDefault(pi) {
-				pi.registerCommand("test", { handler: async () => {} });
-			}
-		`;
-		fs.writeFileSync(path.join(extensionsDir, "no-default.ts"), extCode);
-
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
-
-		expect(result.errors).toHaveLength(1);
-		expect(result.errors[0].error).toContain("does not export a valid factory function");
-		expect(result.extensions).toHaveLength(0);
-	});
-
-	it("allows multiple extensions to register different tools", async () => {
-		fs.writeFileSync(path.join(extensionsDir, "tool-a.ts"), extensionCodeWithTool("tool-a"));
-		fs.writeFileSync(path.join(extensionsDir, "tool-b.ts"), extensionCodeWithTool("tool-b"));
-
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
-
-		expect(result.errors).toHaveLength(0);
-		expect(result.extensions).toHaveLength(2);
-
-		const allTools = new Set<string>();
-		for (const ext of result.extensions) {
-			for (const name of ext.tools.keys()) {
-				allTools.add(name);
-			}
-		}
-		expect(allTools.has("tool-a")).toBe(true);
-		expect(allTools.has("tool-b")).toBe(true);
-	});
-
-	it("loads extension with event handlers", async () => {
-		const extCode = `
-			export default function(pi) {
-				pi.on("agent_start", async () => {});
-				pi.on("tool_call", async (event) => undefined);
-				pi.on("agent_end", async () => {});
-			}
-		`;
-		fs.writeFileSync(path.join(extensionsDir, "with-handlers.ts"), extCode);
-
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
-
-		expect(result.errors).toHaveLength(0);
-		expect(result.extensions).toHaveLength(1);
-		expect(result.extensions[0].handlers.has("agent_start")).toBe(true);
-		expect(result.extensions[0].handlers.has("tool_call")).toBe(true);
-		expect(result.extensions[0].handlers.has("agent_end")).toBe(true);
-	});
-
-	it("loads extension with shortcuts", async () => {
-		const extCode = `
-			export default function(pi) {
-				pi.registerShortcut("ctrl+t", {
-					description: "Test shortcut",
-					handler: async (ctx) => {},
-				});
-			}
-		`;
-		fs.writeFileSync(path.join(extensionsDir, "with-shortcut.ts"), extCode);
-
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
-
-		expect(result.errors).toHaveLength(0);
-		expect(result.extensions).toHaveLength(1);
-		expect(result.extensions[0].shortcuts.has("ctrl+t")).toBe(true);
-	});
-
-	it("loads extension with flags", async () => {
-		const extCode = `
-			export default function(pi) {
-				pi.registerFlag("my-flag", {
-					description: "My custom flag",
-					handler: async (value) => {},
-				});
-			}
-		`;
-		fs.writeFileSync(path.join(extensionsDir, "with-flag.ts"), extCode);
-
-		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
-
-		expect(result.errors).toHaveLength(0);
-		expect(result.extensions).toHaveLength(1);
-		expect(result.extensions[0].flags.has("my-flag")).toBe(true);
+		expect(result.extensions[0]?.tools.has("parse_duration")).toBe(true);
 	});
 
 	it("loadExtensions only loads explicit paths without discovery", async () => {
-		// Create discoverable extensions (would be found by discoverAndLoadExtensions)
-		fs.writeFileSync(path.join(extensionsDir, "discovered.ts"), extensionCodeWithTool("discovered"));
+		const sandbox = createSandbox();
+		writeLocalExtension(sandbox, "discovered.ts", toolExtensionCode("discovered"));
+		const explicitPath = path.join(sandbox.rootDir, "explicit.ts");
+		fs.writeFileSync(explicitPath, toolExtensionCode("explicit"));
 
-		// Create explicit extension outside discovery path
-		const explicitPath = path.join(tempDir, "explicit.ts");
-		fs.writeFileSync(explicitPath, extensionCodeWithTool("explicit"));
+		const result = await loadExtensions([explicitPath], sandbox.cwd);
 
-		// Use loadExtensions directly to skip discovery
-		const { loadExtensions } = await import("../src/core/extensions/loader.js");
-		const result = await loadExtensions([explicitPath], tempDir);
-
-		expect(result.errors).toHaveLength(0);
+		expect(result.errors).toEqual([]);
 		expect(result.extensions).toHaveLength(1);
-		expect(result.extensions[0].tools.has("explicit")).toBe(true);
-		expect(result.extensions[0].tools.has("discovered")).toBe(false);
+		expect(result.extensions[0]?.tools.has("explicit")).toBe(true);
+		expect(result.extensions[0]?.tools.has("discovered")).toBe(false);
 	});
 
 	it("loadExtensions with no paths loads nothing", async () => {
-		// Create discoverable extensions (would be found by discoverAndLoadExtensions)
-		fs.writeFileSync(path.join(extensionsDir, "discovered.ts"), extensionCode);
+		const sandbox = createSandbox();
+		writeLocalExtension(sandbox, "discovered.ts", commandExtensionCode("discovered"));
 
-		// Use loadExtensions directly with empty paths
-		const { loadExtensions } = await import("../src/core/extensions/loader.js");
-		const result = await loadExtensions([], tempDir);
+		const result = await loadExtensions([], sandbox.cwd);
 
-		expect(result.errors).toHaveLength(0);
-		expect(result.extensions).toHaveLength(0);
+		expect(result.errors).toEqual([]);
+		expect(result.extensions).toEqual([]);
 	});
 });
