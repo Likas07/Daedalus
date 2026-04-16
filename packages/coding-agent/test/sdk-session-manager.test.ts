@@ -63,4 +63,27 @@ describe("createAgentSession session manager defaults", () => {
 
 		session.dispose();
 	});
+
+	it("restores fast mode from session history", async () => {
+		const model = getModel("openai", "gpt-5.4");
+		expect(model).toBeTruthy();
+
+		const sessionManager = SessionManager.inMemory(cwd);
+		sessionManager.appendModelChange(model!.provider, model!.id);
+		sessionManager.appendThinkingLevelChange("medium");
+		sessionManager.appendFastModeChange(true);
+		sessionManager.appendMessage({ role: "user", content: "hello", timestamp: Date.now() });
+
+		const { session } = await createAgentSession({
+			cwd,
+			agentDir,
+			model: model!,
+			sessionManager,
+		});
+
+		expect(session.fastMode).toBe(true);
+		expect(session.state.fastMode).toBe(true);
+
+		session.dispose();
+	});
 });

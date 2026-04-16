@@ -64,6 +64,8 @@ export interface CreateAgentSessionOptions {
 	model?: Model<any>;
 	/** Thinking level. Default: from settings, else 'medium' (clamped to model capabilities) */
 	thinkingLevel?: ThinkingLevel;
+	/** Whether to request fast/priority execution when supported. Default: false. */
+	fastMode?: boolean;
 	/** Models available for cycling (Ctrl+P in interactive mode) */
 	scopedModels?: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
 
@@ -217,6 +219,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const existingSession = sessionManager.buildSessionContext();
 	const hasExistingSession = existingSession.messages.length > 0;
 	const hasThinkingEntry = sessionManager.getBranch().some((entry) => entry.type === "thinking_level_change");
+	const hasFastModeEntry = sessionManager.getBranch().some((entry) => entry.type === "fast_mode_change");
 
 	let model = options.model;
 	let modelFallbackMessage: string | undefined;
@@ -267,6 +270,14 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// Clamp to model capabilities
 	if (!model?.reasoning) {
 		thinkingLevel = "off";
+	}
+
+	let fastMode = options.fastMode;
+	if (fastMode === undefined && hasExistingSession) {
+		fastMode = hasFastModeEntry ? existingSession.fastMode : false;
+	}
+	if (fastMode === undefined) {
+		fastMode = false;
 	}
 
 	const defaultActiveToolNames: ToolName[] = [...DEFAULT_ACTIVE_TOOL_NAMES];
@@ -320,6 +331,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			systemPrompt: "",
 			model,
 			thinkingLevel,
+			fastMode,
 			tools: [],
 		},
 		convertToLlm: convertToLlmWithBlockImages,
@@ -360,12 +372,18 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		if (!hasThinkingEntry) {
 			sessionManager.appendThinkingLevelChange(thinkingLevel);
 		}
+		if (!hasFastModeEntry && fastMode) {
+			sessionManager.appendFastModeChange(fastMode);
+		}
 	} else {
 		// Save initial model and thinking level for new sessions so they can be restored on resume
 		if (model) {
 			sessionManager.appendModelChange(model.provider, model.id);
 		}
 		sessionManager.appendThinkingLevelChange(thinkingLevel);
+		if (fastMode) {
+			sessionManager.appendFastModeChange(fastMode);
+		}
 	}
 
 	const session = new AgentSession({

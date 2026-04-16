@@ -17,7 +17,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import type { Agent, AgentEvent, AgentMessage, AgentState, AgentTool, ThinkingLevel } from "@daedalus-pi/agent-core";
 import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@daedalus-pi/ai";
-import { isContextOverflow, modelsAreEqual, resetApiProviders, supportsXhigh } from "@daedalus-pi/ai";
+import { isContextOverflow, modelsAreEqual, resetApiProviders, supportsFastMode, supportsXhigh } from "@daedalus-pi/ai";
 import { getDocsPath } from "../config.js";
 import { theme } from "../modes/interactive/theme/theme.js";
 import { sleep } from "../utils/sleep.js";
@@ -761,9 +761,19 @@ export class AgentSession {
 		return this.agent.state.thinkingLevel;
 	}
 
+	/** Whether fast/priority execution is requested for future turns. */
+	get fastMode(): boolean {
+		return this.agent.state.fastMode;
+	}
+
 	/** Whether agent is currently streaming a response */
 	get isStreaming(): boolean {
 		return this.agent.state.isStreaming;
+	}
+
+	/** Whether the current model can apply the fast-mode preference. */
+	supportsFastMode(): boolean {
+		return this.model ? supportsFastMode(this.model) : false;
 	}
 
 	/** Current effective system prompt (includes any per-turn extension modifications) */
@@ -1516,6 +1526,16 @@ export class AgentSession {
 				this.settingsManager.setDefaultThinkingLevel(effectiveLevel);
 			}
 		}
+	}
+
+	/**
+	 * Set fast mode preference for future turns.
+	 * Saves to session history only if the value actually changes.
+	 */
+	setFastMode(enabled: boolean): void {
+		if (enabled === this.agent.state.fastMode) return;
+		this.agent.state.fastMode = enabled;
+		this.sessionManager.appendFastModeChange(enabled);
 	}
 
 	/**

@@ -57,6 +57,11 @@ export interface ThinkingLevelChangeEntry extends SessionEntryBase {
 	thinkingLevel: string;
 }
 
+export interface FastModeChangeEntry extends SessionEntryBase {
+	type: "fast_mode_change";
+	fastMode: boolean;
+}
+
 export interface ModelChangeEntry extends SessionEntryBase {
 	type: "model_change";
 	provider: string;
@@ -137,6 +142,7 @@ export interface CustomMessageEntry<T = unknown> extends SessionEntryBase {
 export type SessionEntry =
 	| SessionMessageEntry
 	| ThinkingLevelChangeEntry
+	| FastModeChangeEntry
 	| ModelChangeEntry
 	| CompactionEntry
 	| BranchSummaryEntry
@@ -161,6 +167,7 @@ export interface SessionTreeNode {
 export interface SessionContext {
 	messages: AgentMessage[];
 	thinkingLevel: string;
+	fastMode: boolean;
 	model: { provider: string; modelId: string } | null;
 }
 
@@ -324,7 +331,7 @@ export function buildSessionContext(
 	let leaf: SessionEntry | undefined;
 	if (leafId === null) {
 		// Explicitly null - return no messages (navigated to before first entry)
-		return { messages: [], thinkingLevel: "off", model: null };
+		return { messages: [], thinkingLevel: "off", fastMode: false, model: null };
 	}
 	if (leafId) {
 		leaf = byId.get(leafId);
@@ -335,7 +342,7 @@ export function buildSessionContext(
 	}
 
 	if (!leaf) {
-		return { messages: [], thinkingLevel: "off", model: null };
+		return { messages: [], thinkingLevel: "off", fastMode: false, model: null };
 	}
 
 	// Walk from leaf to root, collecting path
@@ -348,12 +355,15 @@ export function buildSessionContext(
 
 	// Extract settings and find compaction
 	let thinkingLevel = "off";
+	let fastMode = false;
 	let model: { provider: string; modelId: string } | null = null;
 	let compaction: CompactionEntry | null = null;
 
 	for (const entry of path) {
 		if (entry.type === "thinking_level_change") {
 			thinkingLevel = entry.thinkingLevel;
+		} else if (entry.type === "fast_mode_change") {
+			fastMode = entry.fastMode;
 		} else if (entry.type === "model_change") {
 			model = { provider: entry.provider, modelId: entry.modelId };
 		} else if (entry.type === "message" && entry.message.role === "assistant") {
@@ -413,7 +423,7 @@ export function buildSessionContext(
 		}
 	}
 
-	return { messages, thinkingLevel, model };
+	return { messages, thinkingLevel, fastMode, model };
 }
 
 /**
@@ -846,6 +856,19 @@ export class SessionManager {
 			parentId: this.leafId,
 			timestamp: new Date().toISOString(),
 			thinkingLevel,
+		};
+		this._appendEntry(entry);
+		return entry.id;
+	}
+
+	/** Append a fast mode change as child of current leaf, then advance leaf. Returns entry id. */
+	appendFastModeChange(fastMode: boolean): string {
+		const entry: FastModeChangeEntry = {
+			type: "fast_mode_change",
+			id: generateId(this.byId),
+			parentId: this.leafId,
+			timestamp: new Date().toISOString(),
+			fastMode,
 		};
 		this._appendEntry(entry);
 		return entry.id;
