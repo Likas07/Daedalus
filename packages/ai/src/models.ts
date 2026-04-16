@@ -65,6 +65,17 @@ export function supportsXhigh<TApi extends Api>(model: Model<TApi>): boolean {
 }
 
 /**
+ * Check if a model supports the provider's fast/priority execution tier.
+ *
+ * Supported today:
+ * - OpenAI `gpt-5.4`
+ * - OpenAI Codex `gpt-5.4`
+ */
+export function supportsFastMode<TApi extends Api>(model: Model<TApi>): boolean {
+	return model.id === "gpt-5.4" && (model.provider === "openai" || model.provider === "openai-codex");
+}
+
+/**
  * Check if two models are equal by comparing both their id and provider.
  * Returns false if either model is null or undefined.
  */

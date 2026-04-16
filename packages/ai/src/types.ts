@@ -63,6 +63,11 @@ export interface StreamOptions {
 	signal?: AbortSignal;
 	apiKey?: string;
 	/**
+	 * Request a provider's fast/priority execution tier when supported.
+	 * Providers that do not support fast mode ignore this option.
+	 */
+	fastMode?: boolean;
+	/**
 	 * Preferred transport for providers that support multiple transports.
 	 * Providers that do not support this option ignore it.
 	 */
