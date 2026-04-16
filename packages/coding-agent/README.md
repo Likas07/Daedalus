@@ -275,10 +275,10 @@ Use `/settings` to modify common options, or edit JSON files directly:
 Use `Tab` / `Shift+Tab` or `Left` / `Right` to switch tabs.
 
 The `Subagents` tab covers:
-- `subagents.enabled`
-- `subagents.defaultPrimary`
+- `subagents.delegationAggressiveness`
 - `subagents.maxDepth`
 - `subagents.maxConcurrency`
+- `subagents.branchIsolation.mutationThreshold`
 - safe per-role `model` / `thinkingLevel` overrides
 
 Advanced policy arrays such as `readableGlobs`, `writableGlobs`, and `spawns` remain JSON-only for now.

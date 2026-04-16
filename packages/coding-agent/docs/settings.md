@@ -174,10 +174,11 @@ When multiple sources specify a session directory, `--session-dir` CLI flag take
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `subagents.enabled` | boolean | `false` | Enable bundled subagents and subagent runtime defaults |
-| `subagents.defaultPrimary` | string | `"standard"` | Default primary mode: `"standard"` or `"orchestrator"` |
+| `subagents.delegationAggressiveness` | string | `"balanced"` | How aggressively Daedalus delegates focused work |
 | `subagents.maxDepth` | number | `2` | Default maximum nested subagent depth |
 | `subagents.maxConcurrency` | number | `4` | Default maximum concurrent child subagents |
+| `subagents.backgroundRoles` | string[] | `["explore", "reviewer"]` | Roles that default to background execution |
+| `subagents.branchIsolation.mutationThreshold` | string | `"high-risk"` | When risky mutating tasks should move to a child branch |
 | `subagents.agents.<name>.model` | string | - | Optional per-role model override (`provider/modelId`) |
 | `subagents.agents.<name>.thinkingLevel` | string | - | Optional per-role thinking override |
 
@@ -193,10 +194,15 @@ Advanced policy arrays stay JSON-only for now:
 ```json
 {
   "subagents": {
-    "enabled": true,
-    "defaultPrimary": "orchestrator",
+    "delegationAggressiveness": "aggressive",
     "maxDepth": 3,
     "maxConcurrency": 6,
+    "backgroundRoles": ["explore", "reviewer"],
+    "branchIsolation": {
+      "enabled": true,
+      "mutationThreshold": "high-risk",
+      "namingTemplate": "subagent/{parentBranch}/{agent}/{runId}"
+    },
     "agents": {
       "scout": {
         "model": "anthropic/claude-sonnet-4-5",
