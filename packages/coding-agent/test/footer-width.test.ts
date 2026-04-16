@@ -19,6 +19,7 @@ function createSession(options: {
 	provider?: string;
 	reasoning?: boolean;
 	thinkingLevel?: string;
+	fastMode?: boolean;
 	usage?: AssistantUsage;
 }): AgentSession {
 	const usage = options.usage;
@@ -44,6 +45,7 @@ function createSession(options: {
 				reasoning: options.reasoning ?? false,
 			},
 			thinkingLevel: options.thinkingLevel ?? "off",
+			fastMode: options.fastMode ?? false,
 		},
 		sessionManager: {
 			getEntries: () => entries,
@@ -108,6 +110,25 @@ describe("FooterComponent width handling", () => {
 		const footer = new FooterComponent(session, createFooterData(2));
 
 		const lines = footer.render(width);
+		for (const line of lines) {
+			expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+		}
+	});
+
+	it("renders the fast indicator for supported models without overflowing width", () => {
+		const width = 80;
+		const session = createSession({
+			sessionName: "",
+			modelId: "gpt-5.4",
+			provider: "openai",
+			reasoning: true,
+			thinkingLevel: "medium",
+			fastMode: true,
+		});
+		const footer = new FooterComponent(session, createFooterData(1));
+
+		const lines = footer.render(width);
+		expect(lines.join("\n")).toContain("fast");
 		for (const line of lines) {
 			expect(visibleWidth(line)).toBeLessThanOrEqual(width);
 		}

@@ -1,3 +1,4 @@
+import { supportsFastMode } from "@daedalus-pi/ai";
 import { type Component, truncateToWidth, visibleWidth } from "@daedalus-pi/tui";
 import type { AgentSession } from "../../../core/agent-session.js";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.js";
@@ -160,6 +161,9 @@ export class FooterComponent implements Component {
 			const thinkingLevel = state.thinkingLevel || "off";
 			rightSideWithoutProvider =
 				thinkingLevel === "off" ? `${modelName} • thinking off` : `${modelName} • ${thinkingLevel}`;
+		}
+		if (state.model && state.fastMode && supportsFastMode(state.model)) {
+			rightSideWithoutProvider += " • fast";
 		}
 
 		// Prepend the provider in parentheses if there are multiple providers and there's enough room
