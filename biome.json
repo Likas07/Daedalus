@@ -1,5 +1,5 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.3.5/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.4.11/schema.json",
 	"linter": {
 		"enabled": true,
 		"rules": {
@@ -33,6 +33,7 @@
 			"!**/node_modules/**/*",
 			"!**/test-sessions.ts",
 			"!**/models.generated.ts",
+			"!**/template.generated.ts",
 			"!packages/web-ui/src/app.css",
 			"!packages/mom/data/**/*",
 			"!!**/node_modules"

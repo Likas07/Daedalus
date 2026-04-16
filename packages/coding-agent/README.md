@@ -352,7 +352,14 @@ Place in `~/.pi/agent/extensions/`, `.pi/extensions/`, or a [daedalus package](#
 
 ### Subagents
 
-Daedalus can run session-backed subagents with compact task packets instead of replaying the full parent transcript.
+Daedalus can run session-backed subagents as in-process child sessions with:
+
+- compact task packets instead of replaying the full parent transcript
+- a base delegation contract plus role-specific prompts
+- per-agent model and thinking-level overrides
+- runtime-enforced tool, read, write, spawn, depth, and concurrency policy
+- explicit `submit_result` completion with optional structured-output validation
+- persisted transcript, context, result, and metadata artifacts for `/subagents` inspection
 
 Built-in starter-pack roles:
 - `orchestrator`
@@ -364,7 +371,7 @@ Built-in starter-pack roles:
 Commands:
 - `/orchestrator on|off|status`
 - `/agents`
-- `/subagents`
+- `/subagents` — inspect transcript, context, and structured result artifacts
 
 Agent definitions can live in:
 - `~/.daedalus/agent/agents/*.md`

@@ -68,12 +68,12 @@ describe("createSubagentResourceLoader", () => {
 			reload: async () => {},
 		};
 
-		const child = createSubagentResourceLoader(parent, "Subagent append prompt");
+		const child = createSubagentResourceLoader(parent, ["Subagent append prompt", "Task packet"]);
 
 		expect(child.getExtensions().extensions).toEqual([]);
 		expect(child.getSkills().skills).toHaveLength(1);
 		expect(child.getPrompts().prompts).toHaveLength(1);
 		expect(child.getAgentsFiles().agentsFiles[0]?.path).toBe("/tmp/AGENTS.md");
-		expect(child.getAppendSystemPrompt()).toEqual(["Subagent append prompt"]);
+		expect(child.getAppendSystemPrompt()).toEqual(["Subagent append prompt", "Task packet"]);
 	});
 });

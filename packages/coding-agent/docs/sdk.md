@@ -8,7 +8,7 @@ The SDK provides programmatic access to pi's agent capabilities. Use it to embed
 - Build a custom UI (web, desktop, mobile)
 - Integrate agent capabilities into existing applications
 - Create automated pipelines with agent reasoning
-- Build custom tools that spawn sub-agents
+- Build custom tools that launch in-process subagents
 - Test agent behavior programmatically
 
 See [examples/sdk/](../examples/sdk/) for working examples from minimal to full control.
@@ -1103,8 +1103,13 @@ The SDK exports session-backed subagent helpers for building orchestrators:
 - `discoverSubagents(...)`
 - `createSubagentResourceLoader(...)`
 - `createSubmitResultTool(...)`
+- `listPersistedSubagentRuns(...)`
+- `resolveSubagentRuntimeConfig(...)`
+- `validateSubagentResult(...)`
 
-These helpers let embedders create child sessions with compact task packets, structured completion, and persisted child-run inspection.
+These helpers let embedders create in-process child sessions with compact task packets, role prompts, per-agent model overrides, structured completion, and persisted child-run inspection.
+
+Each run now writes a `.meta.json` record alongside the child transcript, spilled context packet, and optional result JSON under the parent session artifact directory.
 
 ## Exports
 

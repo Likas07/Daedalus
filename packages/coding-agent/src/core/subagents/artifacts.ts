@@ -7,6 +7,7 @@ export interface SubagentArtifactPaths {
 	sessionFile: string;
 	resultFile: string;
 	contextFile: string;
+	metaFile: string;
 }
 
 export function getSubagentArtifactPaths(parentSessionFile: string, runId: string): SubagentArtifactPaths {
@@ -17,6 +18,7 @@ export function getSubagentArtifactPaths(parentSessionFile: string, runId: strin
 		sessionFile: join(directory, `${runId}.jsonl`),
 		resultFile: join(directory, `${runId}.result.json`),
 		contextFile: join(directory, `${runId}.context.md`),
+		metaFile: join(directory, `${runId}.meta.json`),
 	};
 }
 

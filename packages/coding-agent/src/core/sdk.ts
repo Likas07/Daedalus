@@ -14,6 +14,7 @@ import type { ResourceLoader } from "./resource-loader.js";
 import { DefaultResourceLoader } from "./resource-loader.js";
 import { getDefaultSessionDir, SessionManager } from "./session-manager.js";
 import { SettingsManager } from "./settings-manager.js";
+import type { SubagentSessionContext } from "./subagents/types.js";
 import { time } from "./timings.js";
 import { DEFAULT_ACTIVE_TOOL_NAMES, type ToolName } from "./tools/defaults.js";
 import {
@@ -76,6 +77,9 @@ export interface CreateAgentSessionOptions {
 
 	/** Session manager. Default: SessionManager.create(cwd) */
 	sessionManager?: SessionManager;
+
+	/** Nested subagent runtime metadata for child sessions. */
+	subagentContext?: SubagentSessionContext;
 
 	/** Settings manager. Default: SettingsManager.create(cwd, agentDir) */
 	settingsManager?: SettingsManager;
@@ -375,6 +379,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		modelRegistry,
 		initialActiveToolNames,
 		extensionRunnerRef,
+		subagentContext: options.subagentContext,
 		sessionStartEvent: options.sessionStartEvent,
 	});
 	const extensionsResult = resourceLoader.getExtensions();

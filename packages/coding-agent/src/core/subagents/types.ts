@@ -9,8 +9,8 @@ export interface SubagentDefinition {
 	systemPrompt: string;
 	source: SubagentSource;
 	filePath?: string;
-	tools?: string[];
-	spawns?: string[] | "*";
+	tools?: readonly string[];
+	spawns?: readonly string[] | "*";
 	model?: string;
 	thinkingLevel?: ThinkingLevel;
 	outputSchema?: unknown;
@@ -18,11 +18,36 @@ export interface SubagentDefinition {
 }
 
 export interface SubagentPolicy {
-	allowedTools: string[];
-	writableGlobs: string[];
-	readableGlobs?: string[];
-	spawns: string[] | "*" | [];
+	allowedTools: readonly string[];
+	writableGlobs: readonly string[];
+	readableGlobs?: readonly string[];
+	spawns: readonly string[] | "*";
 	maxDepth?: number;
+}
+
+export interface SubagentRunMetadata {
+	parentRunId?: string;
+	parentAgent?: string;
+	depth?: number;
+}
+
+export interface SubagentSessionContext {
+	runId: string;
+	agentName: string;
+	depth: number;
+	spawns: readonly string[] | "*";
+	maxDepth?: number;
+}
+
+export interface SubagentRunProgress {
+	runId: string;
+	agent: string;
+	status: "running";
+	summary: string;
+	childSessionFile: string;
+	contextArtifactPath?: string;
+	activity?: string;
+	recentActivity?: string[];
 }
 
 export interface SubagentRunRequest {
@@ -34,6 +59,8 @@ export interface SubagentRunRequest {
 	outputSchema?: unknown;
 	policy?: Partial<SubagentPolicy>;
 	taskLabel?: string;
+	metadata?: SubagentRunMetadata;
+	onProgress?: (progress: SubagentRunProgress) => void;
 }
 
 export interface SubagentRunResult {
@@ -41,6 +68,11 @@ export interface SubagentRunResult {
 	agent: string;
 	status: SubagentRunStatus;
 	summary: string;
+	goal?: string;
+	startedAt?: number;
+	updatedAt?: number;
+	activity?: string;
+	recentActivity?: string[];
 	childSessionFile: string;
 	resultArtifactPath?: string;
 	contextArtifactPath?: string;
@@ -62,5 +94,9 @@ export interface ActiveSubagentRun {
 	status: SubagentRunStatus;
 	summary: string;
 	startedAt: number;
+	updatedAt: number;
+	activity?: string;
+	recentActivity?: string[];
 	childSessionFile?: string;
+	contextArtifactPath?: string;
 }

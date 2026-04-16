@@ -9,6 +9,7 @@ describe("getSubagentArtifactPaths", () => {
 		expect(paths.sessionFile).toBe("/tmp/sessions/demo/subagents/run-001.jsonl");
 		expect(paths.resultFile).toBe("/tmp/sessions/demo/subagents/run-001.result.json");
 		expect(paths.contextFile).toBe("/tmp/sessions/demo/subagents/run-001.context.md");
+		expect(paths.metaFile).toBe("/tmp/sessions/demo/subagents/run-001.meta.json");
 	});
 });
 

@@ -77,15 +77,17 @@ import type { SettingsManager } from "./settings-manager.js";
 import { loadSkillDocument } from "./skills.js";
 import type { SlashCommandInfo } from "./slash-commands.js";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.js";
-import type { SubagentRunResult } from "./subagents/index.js";
 import {
 	createSubagentResourceLoader,
 	createSubagentTools,
 	createSubmitResultTool,
-	resolveSubagentPolicy,
+	isSubagentSpawnAllowed,
+	listPersistedSubagentRuns,
 	SubagentRegistry,
 	SubagentRunner,
 } from "./subagents/index.js";
+import { resolveSubagentRuntimeConfig } from "./subagents/runtime-config.js";
+import type { SubagentSessionContext } from "./subagents/types.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import { logToolDebug, summarizeToolTransition } from "./tool-debug.js";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.js";
@@ -171,6 +173,8 @@ export interface AgentSessionConfig {
 	baseToolsOverride?: Record<string, AgentTool>;
 	/** Mutable ref used by Agent to access the current ExtensionRunner */
 	extensionRunnerRef?: { current?: ExtensionRunner };
+	/** Nested subagent runtime metadata when this session is itself a child run. */
+	subagentContext?: SubagentSessionContext;
 	/** Session start event metadata emitted when extensions bind to this runtime. */
 	sessionStartEvent?: SessionStartEvent;
 }
@@ -297,6 +301,7 @@ export class AgentSession {
 	private _initialActiveToolNames?: string[];
 	private _baseToolsOverride?: Record<string, AgentTool>;
 	private _sessionStartEvent: SessionStartEvent;
+	private _subagentContext?: SubagentSessionContext;
 	private _extensionUIContext?: ExtensionUIContext;
 	private _extensionCommandContextActions?: ExtensionCommandContextActions;
 	private _extensionShutdownHandler?: ShutdownHandler;
@@ -327,6 +332,7 @@ export class AgentSession {
 		this._extensionRunnerRef = config.extensionRunnerRef;
 		this._initialActiveToolNames = config.initialActiveToolNames;
 		this._baseToolsOverride = config.baseToolsOverride;
+		this._subagentContext = config.subagentContext;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
 
 		// Always subscribe to agent events for internal handling
@@ -2157,26 +2163,44 @@ export class AgentSession {
 			return [...extensionCommands, ...templates, ...skills];
 		};
 
+		const subagentSettings = this.settingsManager.getSubagentSettings();
 		const subagentRegistry = new SubagentRegistry();
 		const subagentRunner = new SubagentRunner({
 			registry: subagentRegistry,
-			createSession: async ({ childSessionFile, packetText, request, onSubmit }) => {
+			maxDepth: subagentSettings.maxDepth,
+			maxConcurrency: subagentSettings.maxConcurrency,
+			createSession: async ({ runId, childSessionFile, packetText, request, onSubmit }) => {
 				const sessionManager = SessionManager.create(this._cwd, dirname(childSessionFile));
 				sessionManager.setSessionFile(childSessionFile);
-				const policy = resolveSubagentPolicy(request.agent, request.policy);
-				const resourceLoader = createSubagentResourceLoader(this._resourceLoader, packetText);
+				const runtime = resolveSubagentRuntimeConfig({
+					request,
+					packetText,
+					settingsManager: this.settingsManager,
+					modelRegistry: this._modelRegistry,
+				});
+				const resourceLoader = createSubagentResourceLoader(this._resourceLoader, runtime.appendPrompts);
 				const { session } = await createNestedAgentSession({
 					cwd: this._cwd,
 					modelRegistry: this._modelRegistry,
 					settingsManager: this.settingsManager,
 					sessionManager,
 					resourceLoader,
-					tools: createSubagentTools(this._cwd, policy),
+					tools: createSubagentTools(this._cwd, runtime.policy),
 					customTools: [createSubmitResultTool(onSubmit)],
+					model: runtime.model,
+					thinkingLevel: runtime.thinkingLevel,
+					subagentContext: {
+						runId,
+						agentName: request.agent.name,
+						depth: request.metadata?.depth ?? 1,
+						spawns: runtime.policy.spawns,
+						maxDepth: runtime.policy.maxDepth,
+					},
 				});
 
 				session.sessionManager.appendCustomEntry("subagent-run", {
 					parentSessionFile: request.parentSessionFile,
+					runId,
 					agent: request.agent.name,
 					goal: request.goal,
 				});
@@ -2186,6 +2210,7 @@ export class AgentSession {
 					waitForIdle: () => session.agent.waitForIdle(),
 					abort: () => session.abort(),
 					dispose: () => session.dispose(),
+					subscribe: (listener) => session.subscribe(listener),
 				};
 			},
 		});
@@ -2234,16 +2259,23 @@ export class AgentSession {
 				},
 				getThinkingLevel: () => this.thinkingLevel,
 				setThinkingLevel: (level) => this.setThinkingLevel(level),
-				runSubagent: (request) => subagentRunner.run(request),
-				getActiveSubagentRuns: () => subagentRegistry.getActiveRuns(),
-				listSubagentRuns: async () => {
-					return this.sessionManager.getBranch().flatMap((entry) => {
-						if (entry.type !== "message") return [];
-						if (entry.message.role !== "toolResult" || entry.message.toolName !== "subagent") return [];
-						const details = entry.message.details as SubagentRunResult | undefined;
-						return details && typeof details.runId === "string" ? [details] : [];
+				runSubagent: (request) => {
+					if (this._subagentContext && !isSubagentSpawnAllowed(this._subagentContext.spawns, request.agent.name)) {
+						throw new Error(`Subagent ${this._subagentContext.agentName} may not spawn ${request.agent.name}.`);
+					}
+
+					return subagentRunner.run({
+						...request,
+						metadata: {
+							...request.metadata,
+							parentRunId: this._subagentContext?.runId ?? request.metadata?.parentRunId,
+							parentAgent: this._subagentContext?.agentName ?? request.metadata?.parentAgent,
+							depth: this._subagentContext ? this._subagentContext.depth + 1 : (request.metadata?.depth ?? 1),
+						},
 					});
 				},
+				getActiveSubagentRuns: () => subagentRegistry.getActiveRuns(),
+				listSubagentRuns: async () => listPersistedSubagentRuns(this.sessionManager.getSessionFile()),
 			},
 			{
 				getModel: () => this.model,

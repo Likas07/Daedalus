@@ -1243,7 +1243,9 @@ Extensions can launch and inspect subagents through the runtime API:
 - `pi.getActiveSubagentRuns()`
 - `pi.listSubagentRuns()`
 
-Use these methods when you want a command or custom tool to delegate focused work to a child session while keeping the parent session readable.
+Use these methods when you want a command or custom tool to delegate focused work to an in-process child session while keeping the parent session readable.
+
+`pi.listSubagentRuns()` reads persisted `.meta.json` records from the parent session artifact directory, so inspection still works after the parent session reloads. The built-in starter-pack `/subagents` command uses those records to open transcript, context, and structured-result artifacts.
 
 ### pi.registerMessageRenderer(customType, renderer)
 
@@ -2254,7 +2256,7 @@ All examples in [examples/extensions/](../examples/extensions/).
 | `ssh.ts` | SSH remote execution | `registerFlag`, `on("user_bash")`, `on("before_agent_start")`, tool operations |
 | `interactive-shell.ts` | Persistent shell session | `on("user_bash")` |
 | `sandbox/` | Sandboxed tool execution | Tool operations |
-| `subagent/` | Spawn sub-agents | `registerTool`, `exec` |
+| `subagent/` | Legacy subprocess subagents (prefer built-in starter pack) | `registerTool`, `exec` |
 | **Games** |||
 | `snake.ts` | Snake game | `registerCommand`, `ui.custom`, keyboard handling |
 | `space-invaders.ts` | Space Invaders game | `registerCommand`, `ui.custom` |

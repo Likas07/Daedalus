@@ -18,7 +18,7 @@ export function createSubmitResultTool(onSubmit: (payload: SubmitResultPayload) 
 	return {
 		name: "submit_result",
 		label: "Submit Result",
-		description: "Submit the final structured result for this subagent run.",
+		description: "Submit the final structured result for this subagent run exactly once. Use `error` when blocked.",
 		parameters,
 		async execute(_toolCallId, rawParams) {
 			const params = rawParams as { summary: string; data?: unknown; error?: string };
