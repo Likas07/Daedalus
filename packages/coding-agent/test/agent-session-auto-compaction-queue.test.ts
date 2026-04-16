@@ -6,52 +6,62 @@ import { type AssistantMessage, getModel } from "@daedalus-pi/ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentSession } from "../src/core/agent-session.js";
 import { AuthStorage } from "../src/core/auth-storage.js";
+import * as compactionModule from "../src/core/compaction/index.js";
 import { ModelRegistry } from "../src/core/model-registry.js";
 import { SessionManager } from "../src/core/session-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
+import { advanceTimers } from "./helpers/bun-compat.js";
 import { createTestResourceLoader } from "./utilities.js";
 
-vi.mock("../src/core/compaction/index.js", () => ({
-	calculateContextTokens: (usage: {
-		input: number;
-		output: number;
-		cacheRead: number;
-		cacheWrite: number;
-		totalTokens?: number;
-	}) => usage.totalTokens ?? usage.input + usage.output + usage.cacheRead + usage.cacheWrite,
-	collectEntriesForBranchSummary: () => ({ entries: [], commonAncestorId: null }),
-	compact: async () => ({
+function calculateMockContextTokens(usage: {
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+	totalTokens?: number;
+}): number {
+	return usage.totalTokens ?? usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
+}
+
+function estimateMockContextTokens(
+	messages: Array<{
+		role: string;
+		usage?: { input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens?: number };
+		stopReason?: string;
+	}>,
+) {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const msg = messages[i];
+		if (msg.role === "assistant" && msg.stopReason !== "error" && msg.stopReason !== "aborted" && msg.usage) {
+			const tokens = calculateMockContextTokens(msg.usage);
+			return { tokens, usageTokens: tokens, trailingTokens: 0, lastUsageIndex: i };
+		}
+	}
+
+	return { tokens: 0, usageTokens: 0, trailingTokens: 0, lastUsageIndex: null };
+}
+
+function installCompactionSpies(): void {
+	vi.spyOn(compactionModule, "calculateContextTokens").mockImplementation(calculateMockContextTokens);
+	vi.spyOn(compactionModule, "compact").mockResolvedValue({
 		summary: "compacted",
 		firstKeptEntryId: "entry-1",
 		tokensBefore: 100,
 		details: {},
-	}),
-	estimateContextTokens: (
-		messages: Array<{
-			role: string;
-			usage?: { input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens?: number };
-			stopReason?: string;
-		}>,
-	) => {
-		// Walk backwards to find last non-error, non-aborted assistant with usage
-		for (let i = messages.length - 1; i >= 0; i--) {
-			const msg = messages[i];
-			if (msg.role === "assistant" && msg.stopReason !== "error" && msg.stopReason !== "aborted" && msg.usage) {
-				const tokens =
-					msg.usage.totalTokens ?? msg.usage.input + msg.usage.output + msg.usage.cacheRead + msg.usage.cacheWrite;
-				return { tokens, usageTokens: tokens, trailingTokens: 0, lastUsageIndex: i };
-			}
-		}
-		return { tokens: 0, usageTokens: 0, trailingTokens: 0, lastUsageIndex: null };
-	},
-	generateBranchSummary: async () => ({ summary: "", aborted: false, readFiles: [], modifiedFiles: [] }),
-	prepareCompaction: () => ({ dummy: true }),
-	shouldCompact: (
-		contextTokens: number,
-		contextWindow: number,
-		settings: { enabled: boolean; reserveTokens: number },
-	) => settings.enabled && contextTokens > contextWindow - settings.reserveTokens,
-}));
+	});
+	vi.spyOn(compactionModule, "estimateContextTokens").mockImplementation(estimateMockContextTokens);
+	vi.spyOn(compactionModule, "generateBranchSummary").mockResolvedValue({
+		summary: "",
+		aborted: false,
+		readFiles: [],
+		modifiedFiles: [],
+	});
+	vi.spyOn(compactionModule, "prepareCompaction").mockReturnValue({ dummy: true } as never);
+	vi.spyOn(compactionModule, "shouldCompact").mockImplementation(
+		(contextTokens: number, contextWindow: number, settings: { enabled: boolean; reserveTokens: number }) =>
+			settings.enabled && contextTokens > contextWindow - settings.reserveTokens,
+	);
+}
 
 describe("AgentSession auto-compaction queue resume", () => {
 	let session: AgentSession;
@@ -62,6 +72,7 @@ describe("AgentSession auto-compaction queue resume", () => {
 		tempDir = join(tmpdir(), `pi-auto-compaction-queue-${Date.now()}`);
 		mkdirSync(tempDir, { recursive: true });
 		vi.useFakeTimers();
+		installCompactionSpies();
 
 		const model = getModel("anthropic", "claude-sonnet-4-5")!;
 		const agent = new Agent({
@@ -118,7 +129,7 @@ describe("AgentSession auto-compaction queue resume", () => {
 		)._runAutoCompaction.bind(session);
 
 		await runAutoCompaction("threshold", false);
-		await vi.advanceTimersByTimeAsync(100);
+		await advanceTimers(100);
 
 		expect(continueSpy).toHaveBeenCalledTimes(1);
 	});

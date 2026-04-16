@@ -12,13 +12,14 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent, type ThinkingLevel } from "@daedalus-pi/agent-core";
-import { getModel, type Model } from "@daedalus-pi/ai";
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { completeSimple, getModel, type Model } from "@daedalus-pi/ai";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AgentSession } from "../src/core/agent-session.js";
 import { ModelRegistry } from "../src/core/model-registry.js";
 import { SessionManager } from "../src/core/session-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
 import { codingTools } from "../src/core/tools/index.js";
+import { warnAndSkip } from "./helpers/bun-compat.js";
 import {
 	API_KEY,
 	createTestResourceLoader,
@@ -27,27 +28,98 @@ import {
 	resolveApiKey,
 } from "./utilities.js";
 
-// Check for auth
 const HAS_ANTIGRAVITY_AUTH = hasAuthForProvider("google-antigravity");
 const HAS_ANTHROPIC_AUTH = !!API_KEY;
 
-describe.skipIf(!HAS_ANTIGRAVITY_AUTH)("Compaction with thinking models (Antigravity)", () => {
+function errorMessage(error: unknown): string {
+	if (error instanceof Error) {
+		return error.message;
+	}
+	return String(error);
+}
+
+function getExternalServiceSkipReason(label: string, message: string): string | null {
+	const normalized = message.toLowerCase();
+	if (
+		normalized.includes("cloud code assist api error (403)") ||
+		normalized.includes("disabled in this account") ||
+		normalized.includes("terms of service") ||
+		normalized.includes("quota") ||
+		normalized.includes("rate limit") ||
+		normalized.includes("timed out") ||
+		normalized.includes("enotfound") ||
+		normalized.includes("econn") ||
+		normalized.includes("network") ||
+		normalized.includes("api key") ||
+		normalized.includes("401") ||
+		normalized.includes("403") ||
+		normalized.includes("429")
+	) {
+		return `${label} unavailable for real compaction tests: ${message}`;
+	}
+	return null;
+}
+
+async function probeModelAvailability(label: string, model: Model<any> | undefined, apiKey: string | undefined): Promise<string | null> {
+	if (!apiKey) {
+		return `${label} API key could not be resolved`;
+	}
+	if (!model) {
+		return `${label} model unavailable for real compaction tests`;
+	}
+
+	try {
+		const response = await completeSimple(
+			model,
+			{
+				systemPrompt: "Reply with OK only.",
+				messages: [
+					{
+						role: "user",
+						content: [{ type: "text", text: "OK" }],
+						timestamp: Date.now(),
+					},
+				],
+			},
+			{ apiKey, maxTokens: 32 },
+		);
+
+		if (response.stopReason === "error") {
+			return getExternalServiceSkipReason(label, response.errorMessage ?? "Unknown external API error");
+		}
+	} catch (error) {
+		return getExternalServiceSkipReason(label, errorMessage(error));
+	}
+
+	return null;
+}
+
+const ANTIGRAVITY_API_KEY = HAS_ANTIGRAVITY_AUTH ? await resolveApiKey("google-antigravity") : undefined;
+const ANTIGRAVITY_SKIP_REASON = HAS_ANTIGRAVITY_AUTH
+	? await probeModelAvailability(
+			"google-antigravity",
+			getModel("google-antigravity", "claude-sonnet-4-5") ?? undefined,
+			ANTIGRAVITY_API_KEY,
+		)
+	: null;
+const skipAntigravityTests =
+	!HAS_ANTIGRAVITY_AUTH || !ANTIGRAVITY_API_KEY || (ANTIGRAVITY_SKIP_REASON ? warnAndSkip(ANTIGRAVITY_SKIP_REASON) : false);
+
+const ANTHROPIC_SKIP_REASON = HAS_ANTHROPIC_AUTH
+	? await probeModelAvailability("anthropic", getModel("anthropic", "claude-sonnet-4-5") ?? undefined, API_KEY)
+	: null;
+const skipAnthropicTests = !HAS_ANTHROPIC_AUTH || (ANTHROPIC_SKIP_REASON ? warnAndSkip(ANTHROPIC_SKIP_REASON) : false);
+
+describe.skipIf(skipAntigravityTests)("Compaction with thinking models (Antigravity)", () => {
 	let session: AgentSession;
 	let tempDir: string;
-	let apiKey: string;
-
-	beforeAll(async () => {
-		const key = await resolveApiKey("google-antigravity");
-		if (!key) throw new Error("Failed to resolve google-antigravity API key");
-		apiKey = key;
-	});
 
 	beforeEach(() => {
 		tempDir = join(tmpdir(), `pi-thinking-compaction-test-${Date.now()}`);
 		mkdirSync(tempDir, { recursive: true });
 	});
 
-	afterEach(async () => {
+	afterEach(() => {
 		if (session) {
 			session.dispose();
 		}
@@ -66,7 +138,7 @@ describe.skipIf(!HAS_ANTIGRAVITY_AUTH)("Compaction with thinking models (Antigra
 		}
 
 		const agent = new Agent({
-			getApiKey: () => apiKey,
+			getApiKey: () => ANTIGRAVITY_API_KEY!,
 			initialState: {
 				model,
 				systemPrompt: "You are a helpful assistant. Be concise.",
@@ -77,9 +149,6 @@ describe.skipIf(!HAS_ANTIGRAVITY_AUTH)("Compaction with thinking models (Antigra
 
 		const sessionManager = SessionManager.inMemory();
 		const settingsManager = SettingsManager.create(tempDir, tempDir);
-		// Use minimal keepRecentTokens so small test conversations have something to summarize
-		// settingsManager.applyOverrides({ compaction: { keepRecentTokens: 1 } });
-
 		const authStorage = getRealAuthStorage();
 		const modelRegistry = ModelRegistry.create(authStorage);
 
@@ -93,32 +162,27 @@ describe.skipIf(!HAS_ANTIGRAVITY_AUTH)("Compaction with thinking models (Antigra
 		});
 
 		session.subscribe(() => {});
-
 		return session;
 	}
 
 	it("should compact successfully with claude-opus-4-5-thinking and thinking level high", async () => {
 		createSession("claude-opus-4-5-thinking", "high");
 
-		// Send a simple prompt
 		await session.prompt("Write down the first 10 prime numbers.");
 		await session.agent.waitForIdle();
 
-		// Verify we got a response
 		const messages = session.messages;
 		expect(messages.length).toBeGreaterThan(0);
 
-		const assistantMessages = messages.filter((m) => m.role === "assistant");
+		const assistantMessages = messages.filter((message) => message.role === "assistant");
 		expect(assistantMessages.length).toBeGreaterThan(0);
 
-		// Now try to compact - this should not throw
 		const result = await session.compact();
 
 		expect(result.summary).toBeDefined();
 		expect(result.summary.length).toBeGreaterThan(0);
 		expect(result.tokensBefore).toBeGreaterThan(0);
 
-		// Verify session is still usable after compaction
 		const messagesAfterCompact = session.messages;
 		expect(messagesAfterCompact.length).toBeGreaterThan(0);
 		expect(messagesAfterCompact[0].role).toBe("compactionSummary");
@@ -144,7 +208,7 @@ describe.skipIf(!HAS_ANTIGRAVITY_AUTH)("Compaction with thinking models (Antigra
 // Real Anthropic API tests (for comparison)
 // ============================================================================
 
-describe.skipIf(!HAS_ANTHROPIC_AUTH)("Compaction with thinking models (Anthropic)", () => {
+describe.skipIf(skipAnthropicTests)("Compaction with thinking models (Anthropic)", () => {
 	let session: AgentSession;
 	let tempDir: string;
 
@@ -153,7 +217,7 @@ describe.skipIf(!HAS_ANTHROPIC_AUTH)("Compaction with thinking models (Anthropic
 		mkdirSync(tempDir, { recursive: true });
 	});
 
-	afterEach(async () => {
+	afterEach(() => {
 		if (session) {
 			session.dispose();
 		}
@@ -175,7 +239,6 @@ describe.skipIf(!HAS_ANTHROPIC_AUTH)("Compaction with thinking models (Anthropic
 
 		const sessionManager = SessionManager.inMemory();
 		const settingsManager = SettingsManager.create(tempDir, tempDir);
-
 		const authStorage = getRealAuthStorage();
 		const modelRegistry = ModelRegistry.create(authStorage);
 
@@ -189,33 +252,31 @@ describe.skipIf(!HAS_ANTHROPIC_AUTH)("Compaction with thinking models (Anthropic
 		});
 
 		session.subscribe(() => {});
-
 		return session;
 	}
 
 	it("should compact successfully with claude-sonnet-4-5 and thinking level high", async () => {
-		const model = getModel("anthropic", "claude-sonnet-4-5")!;
+		const model = getModel("anthropic", "claude-sonnet-4-5");
+		if (!model) {
+			throw new Error("Model not found: anthropic/claude-sonnet-4-5");
+		}
 		createSession(model, "high");
 
-		// Send a simple prompt
 		await session.prompt("Write down the first 10 prime numbers.");
 		await session.agent.waitForIdle();
 
-		// Verify we got a response
 		const messages = session.messages;
 		expect(messages.length).toBeGreaterThan(0);
 
-		const assistantMessages = messages.filter((m) => m.role === "assistant");
+		const assistantMessages = messages.filter((message) => message.role === "assistant");
 		expect(assistantMessages.length).toBeGreaterThan(0);
 
-		// Now try to compact - this should not throw
 		const result = await session.compact();
 
 		expect(result.summary).toBeDefined();
 		expect(result.summary.length).toBeGreaterThan(0);
 		expect(result.tokensBefore).toBeGreaterThan(0);
 
-		// Verify session is still usable after compaction
 		const messagesAfterCompact = session.messages;
 		expect(messagesAfterCompact.length).toBeGreaterThan(0);
 		expect(messagesAfterCompact[0].role).toBe("compactionSummary");

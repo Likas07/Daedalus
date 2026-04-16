@@ -332,7 +332,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		expect(session.isStreaming).toBe(false);
 
 		// Second prompt should work
-		await expect(session.prompt("Second message")).resolves.not.toThrow();
+		await expect(session.prompt("Second message")).resolves.toBeUndefined();
 	});
 
 	it("should wait for queued agent events before emitting tool_call", async () => {

@@ -12,8 +12,10 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { CONFIG_DIR_NAME } from "../src/config.js";
 import { DefaultPackageManager } from "../src/core/package-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
+import { supportsGitInitialBranchFlag, warnAndSkip } from "./helpers/bun-compat.js";
 
 // Helper to run git commands in a directory
 function git(args: string[], cwd: string): string {
@@ -51,7 +53,10 @@ function getFileContent(repoDir: string, filename: string): string {
 	return readFileSync(join(repoDir, filename), "utf-8");
 }
 
-describe("DefaultPackageManager git update", () => {
+const skipGitUpdateTests = !supportsGitInitialBranchFlag() &&
+	warnAndSkip("git init --initial-branch=main unsupported; skipping git update tests");
+
+describe.skipIf(skipGitUpdateTests)("DefaultPackageManager git update", () => {
 	let tempDir: string;
 	let remoteDir: string; // Simulates the "remote" repository
 	let agentDir: string; // The agent directory where extensions are installed
@@ -315,7 +320,7 @@ describe("DefaultPackageManager git update", () => {
 			const gitHost = "github.com";
 			const gitPath = "test/extension";
 			const hash = createHash("sha256").update(`git-${gitHost}-${gitPath}`).digest("hex").slice(0, 8);
-			const cachedDir = join(tmpdir(), "pi-extensions", `git-${gitHost}`, hash, gitPath);
+			const cachedDir = join(tmpdir(), "daedalus-extensions", `git-${gitHost}`, hash, gitPath);
 			const extensionFile = join(cachedDir, "pi-extensions", "session-breakdown.ts");
 
 			rmSync(cachedDir, { recursive: true, force: true });
@@ -362,7 +367,7 @@ describe("DefaultPackageManager git update", () => {
 			const gitHost = "github.com";
 			const gitPath = "test/extension";
 			const hash = createHash("sha256").update(`git-${gitHost}-${gitPath}`).digest("hex").slice(0, 8);
-			const cachedDir = join(tmpdir(), "pi-extensions", `git-${gitHost}`, hash, gitPath);
+			const cachedDir = join(tmpdir(), "daedalus-extensions", `git-${gitHost}`, hash, gitPath);
 			const extensionFile = join(cachedDir, "pi-extensions", "session-breakdown.ts");
 
 			rmSync(cachedDir, { recursive: true, force: true });
@@ -396,7 +401,7 @@ describe("DefaultPackageManager git update", () => {
 			createCommit(remoteDir, "extension.ts", "// v2", "Second commit");
 
 			// The project-scope install path should not exist before or after update
-			const projectGitDir = join(tempDir, ".pi", "git", "github.com", "test", "extension");
+			const projectGitDir = join(tempDir, CONFIG_DIR_NAME, "git", "github.com", "test", "extension");
 			expect(existsSync(projectGitDir)).toBe(false);
 
 			await packageManager.update(gitSource);

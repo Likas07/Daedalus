@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ENV_AGENT_DIR } from "../src/config.js";
+import { APP_NAME, ENV_AGENT_DIR } from "../src/config.js";
 import { main } from "../src/main.js";
 
 describe("package commands", () => {
@@ -12,7 +12,8 @@ describe("package commands", () => {
 	let packageDir: string;
 	let originalCwd: string;
 	let originalAgentDir: string | undefined;
-	let originalExitCode: typeof process.exitCode;
+	let originalProcess: typeof process;
+	let trackedExitCode: typeof process.exitCode;
 
 	beforeEach(() => {
 		tempDir = join(tmpdir(), `pi-package-commands-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -25,15 +26,29 @@ describe("package commands", () => {
 
 		originalCwd = process.cwd();
 		originalAgentDir = process.env[ENV_AGENT_DIR];
-		originalExitCode = process.exitCode;
-		process.exitCode = undefined;
+		originalProcess = globalThis.process;
+		trackedExitCode = undefined;
+		globalThis.process = new Proxy(originalProcess, {
+			get(target, property, receiver) {
+				if (property === "exitCode") return trackedExitCode;
+				const value = Reflect.get(target, property, receiver);
+				return typeof value === "function" ? value.bind(target) : value;
+			},
+			set(target, property, value, receiver) {
+				if (property === "exitCode") {
+					trackedExitCode = value as typeof process.exitCode;
+					return true;
+				}
+				return Reflect.set(target, property, value, receiver);
+			},
+		}) as typeof process;
 		process.env[ENV_AGENT_DIR] = agentDir;
 		process.chdir(projectDir);
 	});
 
 	afterEach(() => {
 		process.chdir(originalCwd);
-		process.exitCode = originalExitCode;
+		globalThis.process = originalProcess;
 		if (originalAgentDir === undefined) {
 			delete process.env[ENV_AGENT_DIR];
 		} else {
@@ -41,6 +56,8 @@ describe("package commands", () => {
 		}
 		rmSync(tempDir, { recursive: true, force: true });
 	});
+
+
 
 	it("should persist global relative local package paths relative to settings.json", async () => {
 		const relativePkgDir = join(projectDir, "packages", "local-package");
@@ -78,9 +95,9 @@ describe("package commands", () => {
 
 			const stdout = logSpy.mock.calls.map(([message]) => String(message)).join("\n");
 			expect(stdout).toContain("Usage:");
-			expect(stdout).toContain("pi install <source> [-l]");
+			expect(stdout).toContain(`${APP_NAME} install <source> [-l]`);
 			expect(errorSpy).not.toHaveBeenCalled();
-			expect(process.exitCode).toBeUndefined();
+			expect(trackedExitCode).toBeUndefined();
 		} finally {
 			logSpy.mockRestore();
 			errorSpy.mockRestore();
@@ -94,9 +111,10 @@ describe("package commands", () => {
 			await expect(main(["install", "--unknown"])).resolves.toBeUndefined();
 
 			const stderr = errorSpy.mock.calls.map(([message]) => String(message)).join("\n");
+
 			expect(stderr).toContain('Unknown option --unknown for "install".');
-			expect(stderr).toContain('Use "pi --help" or "pi install <source> [-l]".');
-			expect(process.exitCode).toBe(1);
+			expect(stderr).toContain(`Use "${APP_NAME} --help" or "${APP_NAME} install <source> [-l]".`);
+			expect(trackedExitCode).toBe(1);
 		} finally {
 			errorSpy.mockRestore();
 		}
@@ -110,9 +128,9 @@ describe("package commands", () => {
 
 			const stderr = errorSpy.mock.calls.map(([message]) => String(message)).join("\n");
 			expect(stderr).toContain("Missing install source.");
-			expect(stderr).toContain("Usage: pi install <source> [-l]");
+			expect(stderr).toContain(`Usage: ${APP_NAME} install <source> [-l]`);
 			expect(stderr).not.toContain("at ");
-			expect(process.exitCode).toBe(1);
+			expect(trackedExitCode).toBe(1);
 		} finally {
 			errorSpy.mockRestore();
 		}
@@ -132,7 +150,7 @@ describe("package commands", () => {
 			const stdout = logSpy.mock.calls.map(([message]) => String(message)).join("\n");
 			expect(stderr).toContain("Did you mean npm:pi-formatter?");
 			expect(stdout).not.toContain("Updated pi-formatter");
-			expect(process.exitCode).toBe(1);
+			expect(trackedExitCode).toBe(1);
 
 			const settings = JSON.parse(readFileSync(settingsPath, "utf-8")) as { packages?: string[] };
 			expect(settings.packages).toContain("npm:pi-formatter");

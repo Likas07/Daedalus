@@ -1,6 +1,7 @@
 import { type AssistantMessage, fauxAssistantMessage, type Model } from "@daedalus-pi/ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHarness, type Harness } from "./harness.js";
+import { advanceTimers } from "../helpers/bun-compat.js";
 
 type SessionWithCompactionInternals = {
 	_checkCompaction: (assistantMessage: AssistantMessage, skipAbortedCheck?: boolean) => Promise<void>;
@@ -153,7 +154,7 @@ describe("AgentSession compaction characterization", () => {
 		const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
 
 		await sessionInternals._runAutoCompaction("threshold", false);
-		await vi.advanceTimersByTimeAsync(100);
+		await advanceTimers(100);
 
 		expect(continueSpy).toHaveBeenCalledTimes(1);
 	});

@@ -1,19 +1,16 @@
 import type { AgentMessage } from "@daedalus-pi/agent-core";
+import * as ai from "@daedalus-pi/ai";
 import type { AssistantMessage, Model } from "@daedalus-pi/ai";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { generateSummary } from "../src/core/compaction/index.js";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { asMock } from "./helpers/bun-compat.js";
 
-const { completeSimpleMock } = vi.hoisted(() => ({
-	completeSimpleMock: vi.fn(),
-}));
+vi.spyOn(ai, "completeSimple");
+const completeSimpleMock = asMock(ai.completeSimple as unknown as (...args: unknown[]) => Promise<AssistantMessage>);
 
-vi.mock("@daedalus-pi/ai", async (importOriginal) => {
-	const actual = await importOriginal<typeof import("@daedalus-pi/ai")>();
-	return {
-		...actual,
-		completeSimple: completeSimpleMock,
-	};
-});
+async function loadGenerateSummary() {
+	const mod = await import("../src/core/compaction/index.js");
+	return mod.generateSummary;
+}
 
 function createModel(reasoning: boolean): Model<"anthropic-messages"> {
 	return {
@@ -56,7 +53,12 @@ describe("generateSummary reasoning options", () => {
 		completeSimpleMock.mockResolvedValue(mockSummaryResponse);
 	});
 
+	afterAll(() => {
+		vi.restoreAllMocks();
+	});
+
 	it("sets reasoning=high for reasoning-capable models", async () => {
+		const generateSummary = await loadGenerateSummary();
 		await generateSummary(messages, createModel(true), 2000, "test-key");
 
 		expect(completeSimpleMock).toHaveBeenCalledTimes(1);
@@ -67,6 +69,7 @@ describe("generateSummary reasoning options", () => {
 	});
 
 	it("does not set reasoning for non-reasoning models", async () => {
+		const generateSummary = await loadGenerateSummary();
 		await generateSummary(messages, createModel(false), 2000, "test-key");
 
 		expect(completeSimpleMock).toHaveBeenCalledTimes(1);

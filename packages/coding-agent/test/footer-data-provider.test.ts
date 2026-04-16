@@ -1,48 +1,26 @@
-import { execFile, spawnSync } from "child_process";
+import * as childProcess from "child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { asMock } from "./helpers/bun-compat.js";
 
 let resolvedBranch = "main";
 
-vi.mock("child_process", () => ({
-	execFile: vi.fn(
-		(
-			_command: string,
-			args: readonly string[],
-			_options: unknown,
-			callback: (error: Error | null, stdout: string, stderr: string) => void,
-		) => {
-			if (args[1] === "symbolic-ref") {
-				setTimeout(
-					() =>
-						callback(
-							resolvedBranch ? null : new Error("detached"),
-							resolvedBranch ? `${resolvedBranch}\n` : "",
-							"",
-						),
-					0,
-				);
-				return;
-			}
-			setTimeout(() => callback(new Error("unsupported"), "", ""), 0);
-		},
-	),
-	spawnSync: vi.fn((_command: string, args: readonly string[]) => {
-		if (args[1] === "symbolic-ref") {
-			return { status: resolvedBranch ? 0 : 1, stdout: resolvedBranch ? `${resolvedBranch}\n` : "", stderr: "" };
-		}
-		return { status: 1, stdout: "", stderr: "" };
-	}),
-}));
-
-import { FooterDataProvider } from "../src/core/footer-data-provider.js";
+vi.spyOn(childProcess, "execFile");
+vi.spyOn(childProcess, "spawnSync");
+const execFileMock = asMock(childProcess.execFile as unknown as (...args: unknown[]) => unknown);
+const spawnSyncMock = asMock(childProcess.spawnSync as unknown as (...args: unknown[]) => unknown);
 
 type WorktreeFixture = {
 	worktreeDir: string;
 	reftableDir: string;
 };
+
+async function createProvider() {
+	const mod = await import("../src/core/footer-data-provider.js");
+	return new mod.FooterDataProvider();
+}
 
 function createPlainReftableRepo(tempDir: string): string {
 	const repoDir = join(tempDir, "repo");
@@ -95,8 +73,32 @@ describe("FooterDataProvider reftable branch detection", () => {
 		originalCwd = process.cwd();
 		tempDir = mkdtempSync(join(tmpdir(), "footer-data-provider-"));
 		resolvedBranch = "main";
-		vi.mocked(spawnSync).mockClear();
-		vi.mocked(execFile).mockClear();
+		spawnSyncMock.mockReset();
+		execFileMock.mockReset();
+		spawnSyncMock.mockImplementation((_command, args: readonly string[]) => {
+			if (args[1] === "symbolic-ref") {
+				return { status: resolvedBranch ? 0 : 1, stdout: resolvedBranch ? `${resolvedBranch}\n` : "", stderr: "" };
+			}
+			return { status: 1, stdout: "", stderr: "" };
+		});
+		execFileMock.mockImplementation(
+			(_command, args: readonly string[], _options, callback: (error: Error | null, stdout: string, stderr: string) => void) => {
+				if (args[1] === "symbolic-ref") {
+					setTimeout(
+						() =>
+							callback(
+								resolvedBranch ? null : new Error("detached"),
+								resolvedBranch ? `${resolvedBranch}\n` : "",
+								"",
+							),
+						0,
+					);
+					return undefined as never;
+				}
+				setTimeout(() => callback(new Error("unsupported"), "", ""), 0);
+				return undefined as never;
+			},
+		);
 	});
 
 	afterEach(() => {
@@ -106,29 +108,33 @@ describe("FooterDataProvider reftable branch detection", () => {
 		}
 	});
 
-	it("uses HEAD directly in a regular repo from a nested directory", () => {
+	afterAll(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("uses HEAD directly in a regular repo from a nested directory", async () => {
 		const repoDir = createPlainRepo(tempDir);
 		const nestedDir = join(repoDir, "src", "nested");
 		mkdirSync(nestedDir, { recursive: true });
 		process.chdir(nestedDir);
 
-		const provider = new FooterDataProvider();
+		const provider = await createProvider();
 		try {
 			expect(provider.getGitBranch()).toBe("main");
-			expect(vi.mocked(spawnSync)).not.toHaveBeenCalled();
+			expect(spawnSyncMock).not.toHaveBeenCalled();
 		} finally {
 			provider.dispose();
 		}
 	});
 
-	it("resolves the branch via git when HEAD is .invalid in a reftable repo", () => {
+	it("resolves the branch via git when HEAD is .invalid in a reftable repo", async () => {
 		const repoDir = createPlainReftableRepo(tempDir);
 		process.chdir(repoDir);
 
-		const provider = new FooterDataProvider();
+		const provider = await createProvider();
 		try {
 			expect(provider.getGitBranch()).toBe("main");
-			expect(vi.mocked(spawnSync)).toHaveBeenCalledWith(
+			expect(spawnSyncMock).toHaveBeenCalledWith(
 				"git",
 				["--no-optional-locks", "symbolic-ref", "--quiet", "--short", "HEAD"],
 				expect.objectContaining({
@@ -142,11 +148,11 @@ describe("FooterDataProvider reftable branch detection", () => {
 		}
 	});
 
-	it("resolves the branch via git in a reftable-backed worktree", () => {
+	it("resolves the branch via git in a reftable-backed worktree", async () => {
 		const { worktreeDir } = createReftableWorktree(tempDir);
 		process.chdir(worktreeDir);
 
-		const provider = new FooterDataProvider();
+		const provider = await createProvider();
 		try {
 			expect(provider.getGitBranch()).toBe("main");
 		} finally {
@@ -154,12 +160,12 @@ describe("FooterDataProvider reftable branch detection", () => {
 		}
 	});
 
-	it("treats an unresolved .invalid reftable HEAD as detached", () => {
+	it("treats an unresolved .invalid reftable HEAD as detached", async () => {
 		const repoDir = createPlainReftableRepo(tempDir);
 		process.chdir(repoDir);
 		resolvedBranch = "";
 
-		const provider = new FooterDataProvider();
+		const provider = await createProvider();
 		try {
 			expect(provider.getGitBranch()).toBe("detached");
 		} finally {
@@ -171,18 +177,18 @@ describe("FooterDataProvider reftable branch detection", () => {
 		const { worktreeDir, reftableDir } = createReftableWorktree(tempDir);
 		process.chdir(worktreeDir);
 
-		const provider = new FooterDataProvider();
+		const provider = await createProvider();
 		try {
 			expect(provider.getGitBranch()).toBe("main");
-			vi.mocked(spawnSync).mockClear();
+			spawnSyncMock.mockClear();
 			const onBranchChange = vi.fn();
 			provider.onBranchChange(onBranchChange);
 
 			writeFileSync(join(reftableDir, "tables.list"), "1\n");
-			await waitFor(() => vi.mocked(execFile).mock.calls.length === 1);
+			await waitFor(() => execFileMock.mock.calls.length === 1);
 
-			expect(vi.mocked(execFile)).toHaveBeenCalledTimes(1);
-			expect(vi.mocked(spawnSync)).not.toHaveBeenCalled();
+			expect(execFileMock).toHaveBeenCalledTimes(1);
+			expect(spawnSyncMock).not.toHaveBeenCalled();
 			expect(provider.getGitBranch()).toBe("main");
 			expect(onBranchChange).not.toHaveBeenCalled();
 		} finally {
@@ -194,18 +200,18 @@ describe("FooterDataProvider reftable branch detection", () => {
 		const { worktreeDir, reftableDir } = createReftableWorktree(tempDir);
 		process.chdir(worktreeDir);
 
-		const provider = new FooterDataProvider();
+		const provider = await createProvider();
 		try {
 			expect(provider.getGitBranch()).toBe("main");
-			vi.mocked(execFile).mockClear();
+			execFileMock.mockClear();
 
 			writeFileSync(join(reftableDir, "tables.list"), "1\n");
 			writeFileSync(join(reftableDir, "tables.list"), "2\n");
 			writeFileSync(join(reftableDir, "tables.list"), "3\n");
-			await waitFor(() => vi.mocked(execFile).mock.calls.length === 1);
+			await waitFor(() => execFileMock.mock.calls.length === 1);
 			await new Promise((resolve) => setTimeout(resolve, 650));
 
-			expect(vi.mocked(execFile)).toHaveBeenCalledTimes(1);
+			expect(execFileMock).toHaveBeenCalledTimes(1);
 		} finally {
 			provider.dispose();
 		}
@@ -215,7 +221,7 @@ describe("FooterDataProvider reftable branch detection", () => {
 		const { worktreeDir, reftableDir } = createReftableWorktree(tempDir);
 		process.chdir(worktreeDir);
 
-		const provider = new FooterDataProvider();
+		const provider = await createProvider();
 		try {
 			expect(provider.getGitBranch()).toBe("main");
 			resolvedBranch = "foo";
@@ -223,10 +229,10 @@ describe("FooterDataProvider reftable branch detection", () => {
 			provider.onBranchChange(onBranchChange);
 
 			writeFileSync(join(reftableDir, "tables.list"), "1\n");
-			await waitFor(() => vi.mocked(execFile).mock.calls.length === 1);
+			await waitFor(() => execFileMock.mock.calls.length === 1);
 			await waitFor(() => provider.getGitBranch() === "foo");
 
-			expect(vi.mocked(execFile)).toHaveBeenCalledTimes(1);
+			expect(execFileMock).toHaveBeenCalledTimes(1);
 			expect(provider.getGitBranch()).toBe("foo");
 			expect(onBranchChange).toHaveBeenCalledTimes(1);
 		} finally {

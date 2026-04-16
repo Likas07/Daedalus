@@ -3,7 +3,9 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DefaultPackageManager, type ProgressEvent, type ResolvedResource } from "../src/core/package-manager.js";
+import { CONFIG_DIR_NAME } from "../src/config.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
+import { createGlobalStubManager } from "./helpers/bun-compat.js";
 
 function normalizeForMatch(value: string): string {
 	return value.replace(/\\/g, "/");
@@ -36,7 +38,7 @@ describe("DefaultPackageManager", () => {
 	let settingsManager: SettingsManager;
 	let packageManager: DefaultPackageManager;
 	let previousOfflineEnv: string | undefined;
-
+	let globalStubs = createGlobalStubManager();
 	beforeEach(() => {
 		previousOfflineEnv = process.env.DAEDALUS_OFFLINE;
 		delete process.env.DAEDALUS_OFFLINE;
@@ -51,6 +53,7 @@ describe("DefaultPackageManager", () => {
 			agentDir,
 			settingsManager,
 		});
+		globalStubs = createGlobalStubManager();
 	});
 
 	afterEach(() => {
@@ -60,9 +63,10 @@ describe("DefaultPackageManager", () => {
 			process.env.DAEDALUS_OFFLINE = previousOfflineEnv;
 		}
 		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
+		globalStubs.restoreAll();
 		rmSync(tempDir, { recursive: true, force: true });
 	});
+
 
 	describe("resolve", () => {
 		it("should return no package-sourced paths when no sources configured", async () => {
@@ -122,8 +126,8 @@ Content`,
 			expect(result.skills.some((r) => r.path === skillFile && r.enabled)).toBe(true);
 		});
 
-		it("should resolve project paths relative to .pi", async () => {
-			const extDir = join(tempDir, ".pi", "extensions");
+		it("should resolve project paths relative to the project config dir", async () => {
+			const extDir = join(tempDir, CONFIG_DIR_NAME, "extensions");
 			mkdirSync(extDir, { recursive: true });
 			const extPath = join(extDir, "project-ext.ts");
 			writeFileSync(extPath, "export default function() {}");
@@ -147,7 +151,7 @@ Content`,
 		});
 
 		it("should auto-discover project prompts with overrides", async () => {
-			const promptsDir = join(tempDir, ".pi", "prompts");
+			const promptsDir = join(tempDir, CONFIG_DIR_NAME, "prompts");
 			mkdirSync(promptsDir, { recursive: true });
 			const promptPath = join(promptsDir, "is.md");
 			writeFileSync(promptPath, "Is prompt");
@@ -326,10 +330,10 @@ Content`,
 			expect(result.skills.some((r) => r.path.includes("venv") && r.enabled)).toBe(false);
 		});
 
-		it("should not apply parent .gitignore to .pi auto-discovery", async () => {
-			writeFileSync(join(tempDir, ".gitignore"), ".pi\n");
+		it("should not apply parent .gitignore to project config auto-discovery", async () => {
+			writeFileSync(join(tempDir, ".gitignore"), `${CONFIG_DIR_NAME}\n`);
 
-			const skillDir = join(tempDir, ".pi", "skills", "auto-skill");
+			const skillDir = join(tempDir, CONFIG_DIR_NAME, "skills", "auto-skill");
 			mkdirSync(skillDir, { recursive: true });
 			const skillPath = join(skillDir, "SKILL.md");
 			writeFileSync(skillPath, "---\nname: auto-skill\ndescription: Auto\n---\nContent");
@@ -564,7 +568,7 @@ Content`,
 			expect(settings.packages?.[0]).toBe(expected);
 		});
 
-		it("should store project local packages relative to .pi settings base", () => {
+		it("should store project local packages relative to the project config dir", () => {
 			const projectPkgDir = join(tempDir, "project-local-pkg");
 			mkdirSync(join(projectPkgDir, "extensions"), { recursive: true });
 			writeFileSync(join(projectPkgDir, "extensions", "index.ts"), "export default function() {}");
@@ -573,7 +577,7 @@ Content`,
 			expect(added).toBe(true);
 
 			const settings = settingsManager.getProjectSettings();
-			const rel = relative(join(tempDir, ".pi"), projectPkgDir);
+			const rel = relative(join(tempDir, CONFIG_DIR_NAME), projectPkgDir);
 			const expected = rel.startsWith(".") ? rel : `./${rel}`;
 			expect(settings.packages?.[0]).toBe(expected);
 		});
@@ -1351,7 +1355,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 
 			expect(runCommandSpy).toHaveBeenCalledWith(
 				"npm",
-				["install", "example@latest", "--prefix", join(tempDir, ".pi", "npm")],
+				["install", "example@latest", "--prefix", join(tempDir, CONFIG_DIR_NAME, "npm")],
 				undefined,
 			);
 		});
@@ -1401,7 +1405,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 		});
 
 		it("should not fetch npm registry during resolve for installed unpinned packages", async () => {
-			const installedPath = join(tempDir, ".pi", "npm", "node_modules", "example");
+			const installedPath = join(tempDir, CONFIG_DIR_NAME, "npm", "node_modules", "example");
 			mkdirSync(join(installedPath, "extensions"), { recursive: true });
 			writeFileSync(join(installedPath, "package.json"), JSON.stringify({ name: "example", version: "1.0.0" }));
 			writeFileSync(join(installedPath, "extensions", "index.ts"), "export default function() {};");
@@ -1415,7 +1419,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 		});
 
 		it("should reinstall pinned npm packages when installed version does not match", async () => {
-			const installedPath = join(tempDir, ".pi", "npm", "node_modules", "example");
+			const installedPath = join(tempDir, CONFIG_DIR_NAME, "npm", "node_modules", "example");
 			mkdirSync(installedPath, { recursive: true });
 			writeFileSync(join(installedPath, "package.json"), JSON.stringify({ name: "example", version: "1.0.0" }));
 			settingsManager.setProjectPackages(["npm:example@2.0.0"]);
@@ -1438,7 +1442,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 		});
 
 		it("should report updates for installed unpinned npm packages", async () => {
-			const installedPath = join(tempDir, ".pi", "npm", "node_modules", "example");
+			const installedPath = join(tempDir, CONFIG_DIR_NAME, "npm", "node_modules", "example");
 			mkdirSync(installedPath, { recursive: true });
 			writeFileSync(join(installedPath, "package.json"), JSON.stringify({ name: "example", version: "1.0.0" }));
 			settingsManager.setProjectPackages(["npm:example"]);
@@ -1447,7 +1451,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 				ok: true,
 				json: async () => ({ version: "1.2.3" }),
 			});
-			vi.stubGlobal("fetch", fetchMock);
+			globalStubs.stub("fetch", fetchMock);
 
 			const updates = await packageManager.checkForAvailableUpdates();
 			expect(updates).toEqual([
@@ -1461,7 +1465,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 		});
 
 		it("should skip pinned packages when checking for updates", async () => {
-			const installedNpmPath = join(tempDir, ".pi", "npm", "node_modules", "example");
+			const installedNpmPath = join(tempDir, CONFIG_DIR_NAME, "npm", "node_modules", "example");
 			mkdirSync(installedNpmPath, { recursive: true });
 			writeFileSync(join(installedNpmPath, "package.json"), JSON.stringify({ name: "example", version: "1.0.0" }));
 			const parsedGitSource = (packageManager as any).parseSource("git:github.com/example/repo@v1");
@@ -1483,7 +1487,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 				ok: true,
 				json: async () => ({ version: "1.2.3" }),
 			});
-			vi.stubGlobal("fetch", fetchMock);
+			globalStubs.stub("fetch", fetchMock);
 
 			const latest = await (packageManager as any).getLatestNpmVersion("example");
 			expect(latest).toBe("1.2.3");

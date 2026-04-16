@@ -2,15 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-vi.mock("../src/utils/image-resize.js", () => ({
-	resizeImage: vi.fn(),
-	formatDimensionNote: vi.fn(() => undefined),
-}));
-
-import { processFileArguments } from "../src/cli/file-processor.js";
-import { createReadTool } from "../src/core/tools/read.js";
-import { resizeImage } from "../src/utils/image-resize.js";
+import * as imageResizeModule from "../src/utils/image-resize.js";
 
 const TINY_PNG_BASE64 =
 	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
@@ -21,11 +13,12 @@ describe("image resize callers", () => {
 	beforeEach(() => {
 		testDir = join(tmpdir(), `image-resize-callers-${Date.now()}`);
 		mkdirSync(testDir, { recursive: true });
-		vi.mocked(resizeImage).mockReset();
-		vi.mocked(resizeImage).mockResolvedValue(null);
+		vi.spyOn(imageResizeModule, "resizeImage").mockResolvedValue(null);
+		vi.spyOn(imageResizeModule, "formatDimensionNote").mockReturnValue(undefined);
 	});
 
 	afterEach(() => {
+		vi.restoreAllMocks();
 		rmSync(testDir, { recursive: true, force: true });
 	});
 
@@ -33,6 +26,7 @@ describe("image resize callers", () => {
 		const imagePath = join(testDir, "test.png");
 		writeFileSync(imagePath, Buffer.from(TINY_PNG_BASE64, "base64"));
 
+		const { createReadTool } = await import("../src/core/tools/read.js");
 		const tool = createReadTool(testDir);
 		const result = await tool.execute("test-read-image", { path: imagePath });
 
@@ -45,6 +39,7 @@ describe("image resize callers", () => {
 		const imagePath = join(testDir, "test.png");
 		writeFileSync(imagePath, Buffer.from(TINY_PNG_BASE64, "base64"));
 
+		const { processFileArguments } = await import("../src/cli/file-processor.js");
 		const result = await processFileArguments([imagePath]);
 
 		expect(result.images).toHaveLength(0);

@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { CONFIG_DIR_NAME } from "../src/config.js";
 import { AuthStorage } from "../src/core/auth-storage.js";
 import { ExtensionRunner } from "../src/core/extensions/runner.js";
 import { ModelRegistry } from "../src/core/model-registry.js";
@@ -98,7 +99,7 @@ Prompt content.`,
 
 		it("should prefer project resources over user on name collisions", async () => {
 			const userPromptsDir = join(agentDir, "prompts");
-			const projectPromptsDir = join(cwd, ".pi", "prompts");
+			const projectPromptsDir = join(cwd, CONFIG_DIR_NAME, "prompts");
 			mkdirSync(userPromptsDir, { recursive: true });
 			mkdirSync(projectPromptsDir, { recursive: true });
 			const userPromptPath = join(userPromptsDir, "commit.md");
@@ -107,7 +108,7 @@ Prompt content.`,
 			writeFileSync(projectPromptPath, "Project prompt");
 
 			const userSkillDir = join(agentDir, "skills", "collision-skill");
-			const projectSkillDir = join(cwd, ".pi", "skills", "collision-skill");
+			const projectSkillDir = join(cwd, CONFIG_DIR_NAME, "skills", "collision-skill");
 			mkdirSync(userSkillDir, { recursive: true });
 			mkdirSync(projectSkillDir, { recursive: true });
 			const userSkillPath = join(userSkillDir, "SKILL.md");
@@ -130,13 +131,13 @@ Project skill`,
 			);
 
 			const baseTheme = JSON.parse(
-				readFileSync(join(process.cwd(), "src", "modes", "interactive", "theme", "dark.json"), "utf-8"),
+				readFileSync(new URL("../src/modes/interactive/theme/dark.json", import.meta.url), "utf-8"),
 			) as { name: string; vars?: Record<string, string> };
 			baseTheme.name = "collision-theme";
 			const userThemePath = join(agentDir, "themes", "collision.json");
-			const projectThemePath = join(cwd, ".pi", "themes", "collision.json");
+			const projectThemePath = join(cwd, CONFIG_DIR_NAME, "themes", "collision.json");
 			mkdirSync(join(agentDir, "themes"), { recursive: true });
-			mkdirSync(join(cwd, ".pi", "themes"), { recursive: true });
+			mkdirSync(join(cwd, CONFIG_DIR_NAME, "themes"), { recursive: true });
 			writeFileSync(userThemePath, JSON.stringify(baseTheme, null, 2));
 			if (baseTheme.vars) {
 				baseTheme.vars.accent = "#ff00ff";
@@ -158,7 +159,7 @@ Project skill`,
 
 		it("should keep both extensions loaded when command names collide", async () => {
 			const userExtDir = join(agentDir, "extensions");
-			const projectExtDir = join(cwd, ".pi", "extensions");
+			const projectExtDir = join(cwd, CONFIG_DIR_NAME, "extensions");
 			mkdirSync(userExtDir, { recursive: true });
 			mkdirSync(projectExtDir, { recursive: true });
 
@@ -276,10 +277,10 @@ Content`,
 			expect(agentsFiles.some((f) => f.path.includes("AGENTS.md"))).toBe(true);
 		});
 
-		it("should discover SYSTEM.md from cwd/.pi", async () => {
-			const piDir = join(cwd, ".pi");
-			mkdirSync(piDir, { recursive: true });
-			writeFileSync(join(piDir, "SYSTEM.md"), "You are a helpful assistant.");
+		it("should discover SYSTEM.md from the project config dir", async () => {
+			const configDir = join(cwd, CONFIG_DIR_NAME);
+			mkdirSync(configDir, { recursive: true });
+			writeFileSync(join(configDir, "SYSTEM.md"), "You are a helpful assistant.");
 
 			const loader = new DefaultResourceLoader({ cwd, agentDir });
 			await loader.reload();
@@ -287,10 +288,10 @@ Content`,
 			expect(loader.getSystemPrompt()).toBe("You are a helpful assistant.");
 		});
 
-		it("should discover APPEND_SYSTEM.md", async () => {
-			const piDir = join(cwd, ".pi");
-			mkdirSync(piDir, { recursive: true });
-			writeFileSync(join(piDir, "APPEND_SYSTEM.md"), "Additional instructions.");
+		it("should discover APPEND_SYSTEM.md from the project config dir", async () => {
+			const configDir = join(cwd, CONFIG_DIR_NAME);
+			mkdirSync(configDir, { recursive: true });
+			writeFileSync(join(configDir, "APPEND_SYSTEM.md"), "Additional instructions.");
 
 			const loader = new DefaultResourceLoader({ cwd, agentDir });
 			await loader.reload();
@@ -458,32 +459,28 @@ Content`,
 
 			writeFileSync(
 				join(ext1Dir, "index.ts"),
-				`
-import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
-import { Type } from "@sinclair/typebox";
-export default function(pi: ExtensionAPI) {
-  pi.registerTool({
-    name: "duplicate-tool",
-    description: "First",
-    parameters: Type.Object({}),
-    execute: async () => ({ result: "1" }),
-  });
-}`,
+				`export default function(pi) {
+	pi.registerTool({
+		name: "duplicate-tool",
+		label: "duplicate-tool",
+		description: "First",
+		parameters: { type: "object", properties: {} },
+		execute: async () => ({ content: [{ type: "text", text: "1" }], details: {} }),
+	});
+	}`,
 			);
 
 			writeFileSync(
 				join(ext2Dir, "index.ts"),
-				`
-import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
-import { Type } from "@sinclair/typebox";
-export default function(pi: ExtensionAPI) {
-  pi.registerTool({
-    name: "duplicate-tool",
-    description: "Second",
-    parameters: Type.Object({}),
-    execute: async () => ({ result: "2" }),
-  });
-}`,
+				`export default function(pi) {
+	pi.registerTool({
+		name: "duplicate-tool",
+		label: "duplicate-tool",
+		description: "Second",
+		parameters: { type: "object", properties: {} },
+		execute: async () => ({ content: [{ type: "text", text: "2" }], details: {} }),
+	});
+	}`,
 			);
 
 			const loader = new DefaultResourceLoader({ cwd, agentDir });
@@ -500,40 +497,36 @@ export default function(pi: ExtensionAPI) {
 
 			writeFileSync(
 				join(globalExtDir, "global.ts"),
-				`
-import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
-import { Type } from "@sinclair/typebox";
-export default function(pi: ExtensionAPI) {
-  pi.registerTool({
-    name: "duplicate-tool",
-    description: "global tool",
-    parameters: Type.Object({}),
-    execute: async () => ({ result: "global" }),
-  });
-  pi.registerCommand("deploy", {
-    description: "global command",
-    handler: async () => {},
-  });
-}`,
+				`export default function(pi) {
+	pi.registerTool({
+		name: "duplicate-tool",
+		label: "duplicate-tool",
+		description: "global tool",
+		parameters: { type: "object", properties: {} },
+		execute: async () => ({ content: [{ type: "text", text: "global" }], details: {} }),
+	});
+	pi.registerCommand("deploy", {
+		description: "global command",
+		handler: async () => {},
+	});
+	}`,
 			);
 
 			writeFileSync(
 				explicitExtPath,
-				`
-import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
-import { Type } from "@sinclair/typebox";
-export default function(pi: ExtensionAPI) {
-  pi.registerTool({
-    name: "duplicate-tool",
-    description: "explicit tool",
-    parameters: Type.Object({}),
-    execute: async () => ({ result: "explicit" }),
-  });
-  pi.registerCommand("deploy", {
-    description: "explicit command",
-    handler: async () => {},
-  });
-}`,
+				`export default function(pi) {
+	pi.registerTool({
+		name: "duplicate-tool",
+		label: "duplicate-tool",
+		description: "explicit tool",
+		parameters: { type: "object", properties: {} },
+		execute: async () => ({ content: [{ type: "text", text: "explicit" }], details: {} }),
+	});
+	pi.registerCommand("deploy", {
+		description: "explicit command",
+		handler: async () => {},
+	});
+	}`,
 			);
 
 			const loader = new DefaultResourceLoader({
