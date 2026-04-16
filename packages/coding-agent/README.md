@@ -171,7 +171,7 @@ Type `/` in the editor to trigger commands. [Extensions](#extensions) can regist
 | `/login`, `/logout` | OAuth authentication |
 | `/model` | Switch models |
 | `/scoped-models` | Enable/disable models for Ctrl+P cycling |
-| `/settings` | Thinking level, theme, message delivery, transport |
+| `/settings` | Tabbed settings for general, display, behavior, and subagents |
 | `/resume` | Pick from previous sessions |
 | `/new` | Start a new session |
 | `/name <name>` | Set session display name |
@@ -267,9 +267,21 @@ Compaction is lossy. The full history remains in the JSONL file; use `/tree` to 
 Use `/settings` to modify common options, or edit JSON files directly:
 
 | Location | Scope |
+| Location | Scope |
 |----------|-------|
-| `~/.pi/agent/settings.json` | Global (all projects) |
-| `.pi/settings.json` | Project (overrides global) |
+| `~/.daedalus/agent/settings.json` | Global (all projects) |
+| `.daedalus/settings.json` | Project (overrides global) |
+`/settings` is organized into tabs: `General`, `Display`, `Behavior`, and `Subagents`.
+Use `Tab` / `Shift+Tab` or `Left` / `Right` to switch tabs.
+
+The `Subagents` tab covers:
+- `subagents.enabled`
+- `subagents.defaultPrimary`
+- `subagents.maxDepth`
+- `subagents.maxConcurrency`
+- safe per-role `model` / `thinkingLevel` overrides
+
+Advanced policy arrays such as `readableGlobs`, `writableGlobs`, and `spawns` remain JSON-only for now.
 
 See [docs/settings.md](docs/settings.md) for all options.
 

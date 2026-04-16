@@ -564,6 +564,104 @@ export class SettingsManager {
 		};
 	}
 
+	private ensureGlobalSubagents(): SubagentSettings {
+		if (!this.globalSettings.subagents) {
+			this.globalSettings.subagents = {};
+		}
+		if (!this.globalSettings.subagents.agents) {
+			this.globalSettings.subagents.agents = {};
+		}
+		return this.globalSettings.subagents;
+	}
+
+	private cleanupGlobalSubagents(): void {
+		const subagents = this.globalSettings.subagents;
+		if (!subagents) return;
+
+		if (subagents.agents && Object.keys(subagents.agents).length === 0) {
+			delete subagents.agents;
+		}
+
+		if (Object.keys(subagents).length === 0) {
+			delete this.globalSettings.subagents;
+		}
+	}
+
+	setSubagentsEnabled(enabled: boolean): void {
+		this.ensureGlobalSubagents().enabled = enabled;
+		this.markModified("subagents", "enabled");
+		this.save();
+	}
+
+	setSubagentDefaultPrimary(value: "standard" | "orchestrator"): void {
+		this.ensureGlobalSubagents().defaultPrimary = value;
+		this.markModified("subagents", "defaultPrimary");
+		this.save();
+	}
+
+	setSubagentMaxDepth(value: number): void {
+		this.ensureGlobalSubagents().maxDepth = Math.max(1, Math.floor(value));
+		this.markModified("subagents", "maxDepth");
+		this.save();
+	}
+
+	setSubagentMaxConcurrency(value: number): void {
+		this.ensureGlobalSubagents().maxConcurrency = Math.max(1, Math.floor(value));
+		this.markModified("subagents", "maxConcurrency");
+		this.save();
+	}
+
+	setSubagentRoleModel(agentName: string, model: string | undefined): void {
+		const subagents = this.ensureGlobalSubagents();
+		const next = subagents.agents?.[agentName] ?? {};
+		if (model) {
+			next.model = model;
+		} else {
+			delete next.model;
+		}
+
+		if (next.model || next.thinkingLevel) {
+			subagents.agents![agentName] = next;
+		} else {
+			delete subagents.agents?.[agentName];
+			this.cleanupGlobalSubagents();
+		}
+
+		this.markModified("subagents", "agents");
+		this.save();
+	}
+
+	setSubagentRoleThinkingLevel(
+		agentName: string,
+		thinkingLevel: SubagentRoleOverride["thinkingLevel"] | undefined,
+	): void {
+		const subagents = this.ensureGlobalSubagents();
+		const next = subagents.agents?.[agentName] ?? {};
+		if (thinkingLevel) {
+			next.thinkingLevel = thinkingLevel;
+		} else {
+			delete next.thinkingLevel;
+		}
+
+		if (next.model || next.thinkingLevel) {
+			subagents.agents![agentName] = next;
+		} else {
+			delete subagents.agents?.[agentName];
+			this.cleanupGlobalSubagents();
+		}
+
+		this.markModified("subagents", "agents");
+		this.save();
+	}
+
+	clearSubagentRoleOverride(agentName: string): void {
+		const subagents = this.ensureGlobalSubagents();
+		delete subagents.agents?.[agentName];
+		this.cleanupGlobalSubagents();
+		this.markModified("subagents", "agents");
+		this.save();
+	}
+
 	getDefaultProvider(): string | undefined {
 		return this.settings.defaultProvider;
 	}

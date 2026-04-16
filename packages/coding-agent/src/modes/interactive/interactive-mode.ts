@@ -68,6 +68,7 @@ import { type SessionContext, SessionManager } from "../../core/session-manager.
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.js";
 import type { SourceInfo } from "../../core/source-info.js";
 import type { TruncationResult } from "../../core/tools/truncate.js";
+import { getBundledStarterAgents } from "../../extensions/daedalus/workflow/subagents/bundled.js";
 import { getChangelogPath, getNewEntries, parseChangelog } from "../../utils/changelog.js";
 import { copyToClipboard } from "../../utils/clipboard.js";
 import { extensionForImageMimeType, readClipboardImage } from "../../utils/clipboard-image.js";
@@ -3466,6 +3467,16 @@ export class InteractiveMode {
 
 	private showSettingsSelector(): void {
 		this.showSelector((done) => {
+			this.session.modelRegistry.refresh();
+			const subagentSettings = this.settingsManager.getSubagentSettings();
+			const roleDescriptions = getBundledStarterAgents().map((agent) => ({
+				name: agent.name,
+				description: agent.description,
+			}));
+			const extraRoleNames = Object.keys(subagentSettings.agents)
+				.filter((name) => !roleDescriptions.some((role) => role.name === name))
+				.map((name) => ({ name, description: "Custom role override from settings.json" }));
+
 			const selector = new SettingsSelectorComponent(
 				{
 					autoCompact: this.session.autoCompactionEnabled,
@@ -3477,6 +3488,7 @@ export class InteractiveMode {
 					followUpMode: this.session.followUpMode,
 					transport: this.settingsManager.getTransport(),
 					thinkingLevel: this.session.thinkingLevel,
+					fastMode: this.session.fastMode,
 					availableThinkingLevels: this.session.getAvailableThinkingLevels(),
 					currentTheme: this.settingsManager.getTheme() || "dark",
 					availableThemes: getAvailableThemes(),
@@ -3489,6 +3501,16 @@ export class InteractiveMode {
 					autocompleteMaxVisible: this.settingsManager.getAutocompleteMaxVisible(),
 					quietStartup: this.settingsManager.getQuietStartup(),
 					clearOnShrink: this.settingsManager.getClearOnShrink(),
+					subagents: {
+						...subagentSettings,
+						roles: [...roleDescriptions, ...extraRoleNames],
+					},
+					validateSubagentModelRef: (value) => {
+						if (!value) return undefined;
+						const [provider, modelId] = value.split("/", 2);
+						if (!provider || !modelId) return "Use provider/modelId";
+						return this.session.modelRegistry.find(provider, modelId) ? undefined : `Unknown model: ${value}`;
+					},
 				},
 				{
 					onAutoCompactChange: (enabled) => {
@@ -3527,6 +3549,15 @@ export class InteractiveMode {
 						this.session.setThinkingLevel(level);
 						this.footer.invalidate();
 						this.updateEditorBorderColor();
+					},
+					onFastModeChange: (enabled) => {
+						this.session.setFastMode(enabled);
+						this.footer.invalidate();
+						this.showStatus(
+							enabled && !this.session.supportsFastMode()
+								? "Fast mode: on (inactive for current model)"
+								: `Fast mode: ${enabled ? "on" : "off"}`,
+						);
 					},
 					onThemeChange: (themeName) => {
 						const result = setTheme(themeName, true);
@@ -3588,13 +3619,34 @@ export class InteractiveMode {
 						this.settingsManager.setClearOnShrink(enabled);
 						this.ui.setClearOnShrink(enabled);
 					},
+					onSubagentsEnabledChange: (enabled) => {
+						this.settingsManager.setSubagentsEnabled(enabled);
+					},
+					onSubagentDefaultPrimaryChange: (value) => {
+						this.settingsManager.setSubagentDefaultPrimary(value);
+					},
+					onSubagentMaxDepthChange: (value) => {
+						this.settingsManager.setSubagentMaxDepth(value);
+					},
+					onSubagentMaxConcurrencyChange: (value) => {
+						this.settingsManager.setSubagentMaxConcurrency(value);
+					},
+					onSubagentRoleModelChange: (role, model) => {
+						this.settingsManager.setSubagentRoleModel(role, model);
+					},
+					onSubagentRoleThinkingLevelChange: (role, level) => {
+						this.settingsManager.setSubagentRoleThinkingLevel(role, level);
+					},
+					onClearSubagentRoleOverride: (role) => {
+						this.settingsManager.clearSubagentRoleOverride(role);
+					},
 					onCancel: () => {
 						done();
 						this.ui.requestRender();
 					},
 				},
 			);
-			return { component: selector, focus: selector.getSettingsList() };
+			return { component: selector, focus: selector };
 		});
 	}
 

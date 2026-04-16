@@ -9,6 +9,19 @@ Daedalus uses JSON settings files with project settings overriding global settin
 
 Edit directly or use `/settings` for common options.
 
+
+## `/settings`
+
+The interactive settings selector is organized into tabs:
+- `General`
+- `Display`
+- `Behavior`
+- `Subagents`
+
+Use `Tab` / `Shift+Tab` or `Left` / `Right` to switch tabs.
+
+`/settings` covers the common interactive options. Keep editing `settings.json` directly for advanced or bulk configuration.
+
 ## All Settings
 
 ### Model & Thinking
@@ -156,6 +169,44 @@ When multiple sources specify a session directory, `--session-dir` CLI flag take
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `markdown.codeBlockIndent` | string | `"  "` | Indentation for code blocks |
+
+### Subagents
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `subagents.enabled` | boolean | `false` | Enable bundled subagents and subagent runtime defaults |
+| `subagents.defaultPrimary` | string | `"standard"` | Default primary mode: `"standard"` or `"orchestrator"` |
+| `subagents.maxDepth` | number | `2` | Default maximum nested subagent depth |
+| `subagents.maxConcurrency` | number | `4` | Default maximum concurrent child subagents |
+| `subagents.agents.<name>.model` | string | - | Optional per-role model override (`provider/modelId`) |
+| `subagents.agents.<name>.thinkingLevel` | string | - | Optional per-role thinking override |
+
+The `Subagents` tab edits the common runtime defaults above and supports safe per-role overrides for bundled roles:
+- `model`
+- `thinkingLevel`
+
+Advanced policy arrays stay JSON-only for now:
+- `readableGlobs`
+- `writableGlobs`
+- `spawns`
+
+```json
+{
+  "subagents": {
+    "enabled": true,
+    "defaultPrimary": "orchestrator",
+    "maxDepth": 3,
+    "maxConcurrency": 6,
+    "agents": {
+      "scout": {
+        "model": "anthropic/claude-sonnet-4-5",
+        "thinkingLevel": "low"
+      }
+    }
+  }
+}
+```
+
 
 ### Resources
 

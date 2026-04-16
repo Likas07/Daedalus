@@ -104,6 +104,26 @@ describe("SettingsManager", () => {
 			const savedSettings = JSON.parse(readFileSync(sandbox.globalSettingsPath, "utf-8"));
 			expect(savedSettings.defaultThinkingLevel).toBe("high");
 		});
+
+		it("persists subagent nested writes without dropping unrelated settings", async () => {
+			const sandbox = createSandbox();
+			writeFileSync(sandbox.globalSettingsPath, JSON.stringify({ theme: "dark", extensions: ["/tmp/ext.ts"] }));
+
+			const manager = SettingsManager.create(sandbox.projectDir, sandbox.agentDir);
+			manager.setSubagentsEnabled(true);
+			manager.setSubagentDefaultPrimary("orchestrator");
+			manager.setSubagentRoleThinkingLevel("scout", "low");
+			await manager.flush();
+
+			const saved = JSON.parse(readFileSync(sandbox.globalSettingsPath, "utf-8"));
+			expect(saved.theme).toBe("dark");
+			expect(saved.extensions).toEqual(["/tmp/ext.ts"]);
+			expect(saved.subagents).toEqual({
+				enabled: true,
+				defaultPrimary: "orchestrator",
+				agents: { scout: { thinkingLevel: "low" } },
+			});
+		});
 	});
 
 	describe("packages migration", () => {
