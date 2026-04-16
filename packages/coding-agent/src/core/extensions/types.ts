@@ -52,6 +52,7 @@ import type {
 import type { Skill } from "../skills.js";
 import type { SlashCommandInfo } from "../slash-commands.js";
 import type { SourceInfo } from "../source-info.js";
+import type { TaskRecord } from "../control-plane/index.js";
 import type { ActiveSubagentRun, SubagentRunRequest, SubagentRunResult } from "../subagents/index.js";
 import type { BashOperations } from "../tools/bash.js";
 import type { EditToolDetails } from "../tools/edit.js";
@@ -1129,6 +1130,18 @@ export interface ExtensionAPI {
 	/** List persisted subagent runs visible to the current session. */
 	listSubagentRuns(): Promise<SubagentRunResult[]>;
 
+	/** Launch a tracked subagent task. */
+	launchSubagentTask(request: SubagentRunRequest & { executionMode?: "foreground" | "background" }): Promise<{
+		id: string;
+		status: string;
+	}>;
+
+	/** Inspect a tracked subagent task. */
+	getSubagentTask(id: string): TaskRecord | undefined;
+
+	/** List tracked subagent task history visible to the current session. */
+	listSubagentTaskHistory(): Promise<TaskRecord[]>;
+
 	// =========================================================================
 	// Model and Thinking Level
 	// =========================================================================
@@ -1351,6 +1364,14 @@ export type GetActiveSubagentRunsHandler = () => ActiveSubagentRun[];
 
 export type ListSubagentRunsHandler = () => Promise<SubagentRunResult[]>;
 
+export type LaunchSubagentTaskHandler = (
+	request: SubagentRunRequest & { executionMode?: "foreground" | "background" },
+) => Promise<{ id: string; status: string }>;
+
+export type GetSubagentTaskHandler = (id: string) => TaskRecord | undefined;
+
+export type ListSubagentTaskHistoryHandler = () => Promise<TaskRecord[]>;
+
 /**
  * Shared state created by loader, used during registration and runtime.
  * Contains flag values (defaults set during registration, CLI values set after).
@@ -1391,6 +1412,9 @@ export interface ExtensionActions {
 	runSubagent: RunSubagentHandler;
 	getActiveSubagentRuns: GetActiveSubagentRunsHandler;
 	listSubagentRuns: ListSubagentRunsHandler;
+	launchSubagentTask: LaunchSubagentTaskHandler;
+	getSubagentTask: GetSubagentTaskHandler;
+	listSubagentTaskHistory: ListSubagentTaskHistoryHandler;
 }
 
 /**

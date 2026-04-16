@@ -142,6 +142,9 @@ export function createExtensionRuntime(): ExtensionRuntime {
 		runSubagent: () => Promise.reject(new Error("Extension runtime not initialized")),
 		getActiveSubagentRuns: notInitialized,
 		listSubagentRuns: () => Promise.reject(new Error("Extension runtime not initialized")),
+		launchSubagentTask: () => Promise.reject(new Error("Extension runtime not initialized")),
+		getSubagentTask: notInitialized,
+		listSubagentTaskHistory: () => Promise.reject(new Error("Extension runtime not initialized")),
 		flagValues: new Map(),
 		pendingProviderRegistrations: [],
 		// Pre-bind: queue registrations so bindCore() can flush them once the
@@ -296,6 +299,18 @@ function createExtensionAPI(
 
 		listSubagentRuns() {
 			return runtime.listSubagentRuns();
+		},
+
+		launchSubagentTask(request) {
+			return runtime.launchSubagentTask(request);
+		},
+
+		getSubagentTask(id) {
+			return runtime.getSubagentTask(id);
+		},
+
+		listSubagentTaskHistory() {
+			return runtime.listSubagentTaskHistory();
 		},
 
 		registerProvider(name: string, config: ProviderConfig) {

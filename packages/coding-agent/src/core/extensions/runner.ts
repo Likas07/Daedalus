@@ -269,6 +269,9 @@ export class ExtensionRunner {
 		this.runtime.runSubagent = actions.runSubagent;
 		this.runtime.getActiveSubagentRuns = actions.getActiveSubagentRuns;
 		this.runtime.listSubagentRuns = actions.listSubagentRuns;
+		this.runtime.launchSubagentTask = actions.launchSubagentTask;
+		this.runtime.getSubagentTask = actions.getSubagentTask;
+		this.runtime.listSubagentTaskHistory = actions.listSubagentTaskHistory;
 
 		// Context actions (required)
 		this.getModel = contextActions.getModel;

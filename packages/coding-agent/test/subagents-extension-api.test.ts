@@ -116,4 +116,96 @@ describe("subagent extension API", () => {
 		await command!.handler("", runner.createCommandContext());
 		expect(runSubagent).toHaveBeenCalledOnce();
 	});
+
+	it("exposes task launch and lookup helpers to extension commands", async () => {
+		const extensionPath = path.join(extensionsDir, "subagent-task-api.ts");
+		fs.writeFileSync(
+			extensionPath,
+			`
+        export default function(pi) {
+          pi.registerCommand("launch-task", {
+            description: "launch test subagent task",
+            handler: async (_args, ctx) => {
+              const task = await pi.launchSubagentTask({
+                agent: { name: "explore", description: "explore", systemPrompt: "Map files", source: "bundled" },
+                parentSessionFile: "/tmp/parent.jsonl",
+                goal: "Map repo",
+                assignment: "Inspect file layout",
+                executionMode: "background",
+              });
+              const current = pi.getSubagentTask(task.id);
+              const history = await pi.listSubagentTaskHistory();
+              ctx.ui.notify([task.status, current?.status, history.length].join("/"), "info");
+            },
+          });
+        }
+      `,
+		);
+
+		const loaded = await loadExtensions([extensionPath], tempDir);
+		const runner = new ExtensionRunner(
+			loaded.extensions,
+			loaded.runtime,
+			tempDir,
+			SessionManager.inMemory(),
+			ModelRegistry.create(AuthStorage.create(path.join(tempDir, "auth.json"))),
+		);
+
+		const actions: ExtensionActions = {
+			sendMessage: () => {},
+			sendUserMessage: () => {},
+			appendEntry: () => {},
+			setSessionName: () => {},
+			getSessionName: () => undefined,
+			setLabel: () => {},
+			getActiveTools: () => [],
+			getAllTools: () => [],
+			setActiveTools: () => {},
+			refreshTools: () => {},
+			getCommands: () => [],
+			setModel: async () => false,
+			getThinkingLevel: () => "off",
+			setThinkingLevel: () => {},
+			runSubagent: vi.fn(async () => ({
+				runId: "run-1",
+				agent: "explore",
+				status: "completed" as const,
+				summary: "done",
+				childSessionFile: "/tmp/parent/subagents/run-1.jsonl",
+			})),
+			getActiveSubagentRuns: () => [],
+			listSubagentRuns: async () => [],
+			launchSubagentTask: vi.fn(async () => ({ id: "task-1", status: "queued" as const })),
+			getSubagentTask: vi.fn(() => ({
+				id: "task-1",
+				status: "completed" as const,
+				summary: "Mapped repo",
+			})),
+			listSubagentTaskHistory: vi.fn(async () => []),
+		} as any;
+
+		const ctxActions: ExtensionContextActions = {
+			getModel: () => undefined,
+			isIdle: () => true,
+			getSignal: () => undefined,
+			abort: () => {},
+			hasPendingMessages: () => false,
+			shutdown: () => {},
+			getContextUsage: () => undefined,
+			compact: () => {},
+			getSystemPrompt: () => "",
+			getSkills: () => [],
+		};
+
+		runner.bindCore(actions, ctxActions, {
+			registerProvider: () => {},
+			unregisterProvider: () => {},
+		});
+
+		const command = runner.getCommand("launch-task");
+		expect(command).toBeDefined();
+		await command!.handler("", runner.createCommandContext());
+		expect(actions.launchSubagentTask).toHaveBeenCalledOnce();
+		expect(actions.getSubagentTask).toHaveBeenCalledWith("task-1");
+	});
 });
