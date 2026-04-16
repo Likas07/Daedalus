@@ -40,7 +40,7 @@ describe("tool state migration", () => {
 		});
 		await session.bindExtensions({});
 
-		expect(session.getActiveToolNames()).toEqual(["read", "bash", "hashline_edit", "write"]);
+		expect(session.getActiveToolNames()).toEqual(["read", "bash", "hashline_edit", "write", "subagent"]);
 
 		const toolEntries = sessionManager
 			.getEntries()

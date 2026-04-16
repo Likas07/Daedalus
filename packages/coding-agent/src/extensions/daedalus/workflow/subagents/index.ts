@@ -5,7 +5,8 @@ import { getAgentDir } from "../../../../config.js";
 import { discoverSubagents } from "../../../../core/subagents/index.js";
 import { getBundledStarterAgents } from "./bundled.js";
 import { buildInspectorOptions, formatInspectorLabel, openSubagentArtifacts } from "./inspect.js";
-import { restoreSubagentMode } from "./state.js";
+import { getOrchestratorGuidance } from "./orchestrator-prompt.js";
+import { formatTaskProgress } from "./task-progress-renderer.js";
 
 interface SubagentToolDetails {
 	runId?: string;
@@ -83,23 +84,6 @@ function renderSubagentResult(
 }
 
 export default function subagentStarterPack(pi: ExtensionAPI): void {
-	let orchestratorEnabled = false;
-	let baseToolNames: string[] = [];
-
-	const persistMode = () => {
-		pi.appendEntry("subagent-mode", { enabled: orchestratorEnabled });
-	};
-
-	const syncToolState = () => {
-		const next = new Set(baseToolNames.length > 0 ? baseToolNames : pi.getActiveTools());
-		if (orchestratorEnabled) {
-			next.add("subagent");
-		} else {
-			next.delete("subagent");
-		}
-		pi.setActiveTools(Array.from(next));
-	};
-
 	pi.registerTool({
 		name: "subagent",
 		label: "Subagent",
@@ -136,7 +120,17 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 				context: params.context,
 				onProgress: (progress) => {
 					onUpdate?.({
-						content: [{ type: "text", text: progress.activity ?? `${progress.agent} is working...` }],
+						content: [
+							{
+								type: "text",
+								text: formatTaskProgress({
+									agent: progress.agent,
+									status: progress.status,
+									summary: progress.summary,
+									activity: progress.activity,
+								}),
+							},
+						],
 						details: {
 							agent: progress.agent,
 							goal: params.goal,
@@ -168,22 +162,6 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.registerCommand("orchestrator", {
-		description: "Enable or disable orchestrator mode",
-		handler: async (args, ctx) => {
-			const normalized = args.trim();
-			if (normalized === "status") {
-				ctx.ui.notify(`orchestrator: ${orchestratorEnabled ? "on" : "off"}`);
-				return;
-			}
-			if (normalized === "on") orchestratorEnabled = true;
-			if (normalized === "off") orchestratorEnabled = false;
-			syncToolState();
-			persistMode();
-			ctx.ui.notify(`orchestrator: ${orchestratorEnabled ? "on" : "off"}`);
-		},
-	});
-
 	pi.registerCommand("agents", {
 		description: "List bundled starter-pack agents",
 		handler: async (_args, ctx) => {
@@ -212,29 +190,17 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.on("session_start", async (_event, ctx) => {
-		baseToolNames = pi.getActiveTools().filter((name) => name !== "subagent");
-		orchestratorEnabled = restoreSubagentMode(ctx).enabled;
-		syncToolState();
+	pi.on("session_start", async () => {
+		const next = new Set(pi.getActiveTools());
+		next.add("subagent");
+		pi.setActiveTools(Array.from(next));
 	});
 
-	pi.on("before_agent_start", async () => {
-		if (!orchestratorEnabled) return;
-		return {
-			message: {
-				customType: "orchestrator-mode",
-				content: [
-					{
-						type: "text",
-						text: [
-							"[ORCHESTRATOR MODE]",
-							"Delegate focused work to scout/planner/worker/reviewer.",
-							"Send compact assignments, not the full transcript.",
-						].join("\n"),
-					},
-				],
-				display: false,
-			},
-		};
-	});
+	pi.on("before_agent_start", async () => ({
+		message: {
+			customType: "daedalus-orchestrator",
+			content: [{ type: "text", text: getOrchestratorGuidance() }],
+			display: false,
+		},
+	}));
 }

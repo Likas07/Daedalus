@@ -134,7 +134,7 @@ describe("starter-pack subagent extension", () => {
 		return runner;
 	};
 
-	it("registers the subagent tool plus /orchestrator, /agents, and /subagents", async () => {
+	it("registers the subagent tool plus /agents and /subagents without an orchestrator toggle", async () => {
 		const runner = await createRunner();
 		const tools = runner.getAllRegisteredTools();
 		const commands = runner
@@ -144,25 +144,22 @@ describe("starter-pack subagent extension", () => {
 
 		expect(tools.some((tool) => tool.definition.name === "subagent")).toBe(true);
 		expect(commands).toContain("agents");
-		expect(commands).toContain("orchestrator");
 		expect(commands).toContain("subagents");
+		expect(commands).not.toContain("orchestrator");
 	});
 
-	it("injects concise orchestrator guidance before agent start", async () => {
+	it("always injects orchestrator guidance before agent start", async () => {
 		const runner = await createRunner();
 		await runner.emit({ type: "session_start", reason: "startup" });
-
-		const orchestrator = runner.getRegisteredCommands().find((command) => command.invocationName === "orchestrator");
-		await orchestrator?.handler("on", runner.createCommandContext());
 
 		const result = await runner.emitBeforeAgentStart("help", undefined, "System prompt");
 		const text = result?.messages?.[0]?.content?.[0];
 		const textContent = text && typeof text === "object" && "type" in text && text.type === "text" ? text : undefined;
 
 		expect(textContent?.type).toBe("text");
-		expect(textContent?.text ?? "").toContain("[ORCHESTRATOR MODE]");
-		expect(textContent?.text ?? "").toContain("Delegate focused work to scout/planner/worker/reviewer.");
-		expect(textContent?.text ?? "").toContain("Send compact assignments, not the full transcript.");
+		expect(textContent?.text ?? "").toContain("[DAEDALUS ORCHESTRATOR]");
+		expect(textContent?.text ?? "").toContain("Delegate focused work when it improves speed, clarity, or safety.");
+		expect(textContent?.text ?? "").toContain("Use compact task packets and inspectable task results.");
 	});
 
 	it("renders the active agent name and live progress details instead of a generic subagent label", async () => {
