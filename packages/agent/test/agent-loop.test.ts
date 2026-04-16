@@ -755,4 +755,33 @@ describe("agentLoopContinue with AgentMessage", () => {
 		expect(messages.length).toBe(1);
 		expect(messages[0].role).toBe("assistant");
 	});
+
+	it("forwards fastMode from loop config to the stream function", async () => {
+		const context: AgentContext = {
+			systemPrompt: "You are helpful.",
+			messages: [],
+			tools: [],
+		};
+
+		const userPrompt: AgentMessage = createUserMessage("Hello");
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			fastMode: true,
+		};
+
+		let receivedFastMode: boolean | undefined;
+		const streamFn = (_model: Model<any>, _context: any, options?: { fastMode?: boolean }) => {
+			receivedFastMode = options?.fastMode;
+			const stream = new MockAssistantStream();
+			queueMicrotask(() => {
+				const message = createAssistantMessage([{ type: "text", text: "Hi there!" }]);
+				stream.push({ type: "done", reason: "stop", message });
+			});
+			return stream;
+		};
+
+		await agentLoop([userPrompt], context, config, undefined, streamFn).result();
+		expect(receivedFastMode).toBe(true);
+	});
 });

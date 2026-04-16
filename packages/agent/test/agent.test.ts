@@ -55,6 +55,7 @@ describe("Agent", () => {
 		expect(agent.state.systemPrompt).toBe("");
 		expect(agent.state.model).toBeDefined();
 		expect(agent.state.thinkingLevel).toBe("off");
+		expect(agent.state.fastMode).toBe(false);
 		expect(agent.state.tools).toEqual([]);
 		expect(agent.state.messages).toEqual([]);
 		expect(agent.state.isStreaming).toBe(false);
@@ -70,12 +71,14 @@ describe("Agent", () => {
 				systemPrompt: "You are a helpful assistant.",
 				model: customModel,
 				thinkingLevel: "low",
+				fastMode: true,
 			},
 		});
 
 		expect(agent.state.systemPrompt).toBe("You are a helpful assistant.");
 		expect(agent.state.model).toBe(customModel);
 		expect(agent.state.thinkingLevel).toBe("low");
+		expect(agent.state.fastMode).toBe(true);
 	});
 
 	it("should subscribe to events", () => {
@@ -459,5 +462,26 @@ describe("Agent", () => {
 
 		await agent.prompt("hello again");
 		expect(receivedSessionId).toBe("session-def");
+	});
+
+	it("forwards fastMode to streamFn options", async () => {
+		let receivedFastMode: boolean | undefined;
+		const agent = new Agent({
+			initialState: {
+				fastMode: true,
+			},
+			streamFn: (_model, _context, options) => {
+				receivedFastMode = options?.fastMode;
+				const stream = new MockAssistantStream();
+				queueMicrotask(() => {
+					const message = createAssistantMessage("ok");
+					stream.push({ type: "done", reason: "stop", message });
+				});
+				return stream;
+			},
+		});
+
+		await agent.prompt("hello");
+		expect(receivedFastMode).toBe(true);
 	});
 });
