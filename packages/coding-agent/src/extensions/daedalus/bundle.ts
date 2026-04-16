@@ -15,6 +15,7 @@ import statusLine from "./ui/status-line.js";
 import handoff from "./workflow/handoff.js";
 import planMode from "./workflow/plan-mode/index.js";
 import qna from "./workflow/qna.js";
+import subagents from "./workflow/subagents/index.js";
 
 // Excluded from default bundle (environment-sensitive or strongly opinionated):
 //   ssh, interactive-shell, file-trigger, modal-editor, notify
@@ -35,6 +36,7 @@ export default function daedalusBundle(pi: ExtensionAPI) {
 	qna(pi);
 	handoff(pi);
 	planMode(pi);
+	subagents(pi);
 	statusLine(pi);
 	dynamicResources(pi);
 }

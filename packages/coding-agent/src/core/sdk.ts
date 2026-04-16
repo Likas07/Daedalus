@@ -107,6 +107,7 @@ export type {
 } from "./extensions/index.js";
 export type { PromptTemplate } from "./prompt-templates.js";
 export type { Skill } from "./skills.js";
+export * from "./subagents/index.js";
 export type { Tool } from "./tools/index.js";
 
 export {

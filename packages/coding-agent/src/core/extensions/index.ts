@@ -70,6 +70,7 @@ export type {
 	ExtensionWidgetOptions,
 	FindToolCallEvent,
 	FindToolResultEvent,
+	GetActiveSubagentRunsHandler,
 	GetActiveToolsHandler,
 	GetAllToolsHandler,
 	GetCommandsHandler,
@@ -81,6 +82,7 @@ export type {
 	InputEventResult,
 	InputSource,
 	KeybindingsManager,
+	ListSubagentRunsHandler,
 	LoadExtensionsResult,
 	LsToolCallEvent,
 	LsToolResultEvent,
@@ -105,6 +107,7 @@ export type {
 	// Events - Resources
 	ResourcesDiscoverEvent,
 	ResourcesDiscoverResult,
+	RunSubagentHandler,
 	SendMessageHandler,
 	SendUserMessageHandler,
 	SessionBeforeCompactEvent,

@@ -213,6 +213,8 @@ export {
 	type PackageSource,
 	type RetrySettings,
 	SettingsManager,
+	type SubagentRoleOverride,
+	type SubagentSettings,
 } from "./core/settings-manager.js";
 // Skills
 export {
@@ -225,6 +227,7 @@ export {
 	type SkillFrontmatter,
 } from "./core/skills.js";
 export { createSyntheticSourceInfo } from "./core/source-info.js";
+export * from "./core/subagents/index.js";
 // Tools
 export {
 	type AstEditOperations,

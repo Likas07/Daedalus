@@ -266,6 +266,9 @@ export class ExtensionRunner {
 		this.runtime.setModel = actions.setModel;
 		this.runtime.getThinkingLevel = actions.getThinkingLevel;
 		this.runtime.setThinkingLevel = actions.setThinkingLevel;
+		this.runtime.runSubagent = actions.runSubagent;
+		this.runtime.getActiveSubagentRuns = actions.getActiveSubagentRuns;
+		this.runtime.listSubagentRuns = actions.listSubagentRuns;
 
 		// Context actions (required)
 		this.getModel = contextActions.getModel;

@@ -64,12 +64,28 @@ import type { BashExecutionMessage, CustomMessage } from "./messages.js";
 import type { ModelRegistry } from "./model-registry.js";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.js";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.js";
-import type { BranchSummaryEntry, CompactionEntry, SessionManager } from "./session-manager.js";
-import { CURRENT_SESSION_VERSION, getLatestCompactionEntry, type SessionHeader } from "./session-manager.js";
+import type { CreateAgentSessionResult } from "./sdk.js";
+import {
+	type BranchSummaryEntry,
+	type CompactionEntry,
+	CURRENT_SESSION_VERSION,
+	getLatestCompactionEntry,
+	type SessionHeader,
+	SessionManager,
+} from "./session-manager.js";
 import type { SettingsManager } from "./settings-manager.js";
 import { loadSkillDocument } from "./skills.js";
 import type { SlashCommandInfo } from "./slash-commands.js";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.js";
+import type { SubagentRunResult } from "./subagents/index.js";
+import {
+	createSubagentResourceLoader,
+	createSubagentTools,
+	createSubmitResultTool,
+	resolveSubagentPolicy,
+	SubagentRegistry,
+	SubagentRunner,
+} from "./subagents/index.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import { logToolDebug, summarizeToolTransition } from "./tool-debug.js";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.js";
@@ -206,9 +222,16 @@ export interface SessionStats {
 	contextUsage?: ContextUsage;
 }
 
-interface ToolDefinitionEntry {
+type ToolDefinitionEntry = {
 	definition: ToolDefinition;
 	sourceInfo: SourceInfo;
+};
+
+async function createNestedAgentSession(
+	options: Parameters<typeof import("./sdk.js")["createAgentSession"]>[0],
+): Promise<CreateAgentSessionResult> {
+	const mod = await import("./sdk.js");
+	return mod.createAgentSession(options);
 }
 
 // ============================================================================
@@ -2134,6 +2157,39 @@ export class AgentSession {
 			return [...extensionCommands, ...templates, ...skills];
 		};
 
+		const subagentRegistry = new SubagentRegistry();
+		const subagentRunner = new SubagentRunner({
+			registry: subagentRegistry,
+			createSession: async ({ childSessionFile, packetText, request, onSubmit }) => {
+				const sessionManager = SessionManager.create(this._cwd, dirname(childSessionFile));
+				sessionManager.setSessionFile(childSessionFile);
+				const policy = resolveSubagentPolicy(request.agent, request.policy);
+				const resourceLoader = createSubagentResourceLoader(this._resourceLoader, packetText);
+				const { session } = await createNestedAgentSession({
+					cwd: this._cwd,
+					modelRegistry: this._modelRegistry,
+					settingsManager: this.settingsManager,
+					sessionManager,
+					resourceLoader,
+					tools: createSubagentTools(this._cwd, policy),
+					customTools: [createSubmitResultTool(onSubmit)],
+				});
+
+				session.sessionManager.appendCustomEntry("subagent-run", {
+					parentSessionFile: request.parentSessionFile,
+					agent: request.agent.name,
+					goal: request.goal,
+				});
+
+				return {
+					prompt: (text) => session.prompt(text),
+					waitForIdle: () => session.agent.waitForIdle(),
+					abort: () => session.abort(),
+					dispose: () => session.dispose(),
+				};
+			},
+		});
+
 		runner.bindCore(
 			{
 				sendMessage: (message, options) => {
@@ -2178,6 +2234,16 @@ export class AgentSession {
 				},
 				getThinkingLevel: () => this.thinkingLevel,
 				setThinkingLevel: (level) => this.setThinkingLevel(level),
+				runSubagent: (request) => subagentRunner.run(request),
+				getActiveSubagentRuns: () => subagentRegistry.getActiveRuns(),
+				listSubagentRuns: async () => {
+					return this.sessionManager.getBranch().flatMap((entry) => {
+						if (entry.type !== "message") return [];
+						if (entry.message.role !== "toolResult" || entry.message.toolName !== "subagent") return [];
+						const details = entry.message.details as SubagentRunResult | undefined;
+						return details && typeof details.runId === "string" ? [details] : [];
+					});
+				},
 			},
 			{
 				getModel: () => this.model,
@@ -2201,7 +2267,6 @@ export class AgentSession {
 					})();
 				},
 				getSystemPrompt: () => this.systemPrompt,
-
 				getSkills: () => this._resourceLoader.getSkills().skills,
 			},
 			{

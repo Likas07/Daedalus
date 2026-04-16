@@ -1094,6 +1094,18 @@ RPC mode is preferred when:
 - You want process isolation
 - You're building a language-agnostic client
 
+## Subagent primitives
+
+The SDK exports session-backed subagent helpers for building orchestrators:
+
+- `SubagentRunner`
+- `SubagentRegistry`
+- `discoverSubagents(...)`
+- `createSubagentResourceLoader(...)`
+- `createSubmitResultTool(...)`
+
+These helpers let embedders create child sessions with compact task packets, structured completion, and persisted child-run inspection.
+
 ## Exports
 
 The main entry point exports:

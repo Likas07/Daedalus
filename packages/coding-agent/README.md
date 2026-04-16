@@ -28,7 +28,7 @@ OSS weekend runs Thursday, April 2, 2026 through Monday, April 13, 2026. New iss
 
 Daedalus is a terminal coding harness. Adapt daedalus to your workflows, not the other way around, without having to modify internals. Extend it with TypeScript [Extensions](#extensions), [Skills](#skills), [Prompt Templates](#prompt-templates), and [Themes](#themes). Put your extensions, skills, prompt templates, and themes in [Daedalus Packages](#daedalus-packages) and share them with others via npm or git.
 
-Daedalus ships with powerful defaults but skips features like sub agents and plan mode. Instead, you can ask daedalus to build what you want or install a third party daedalus package that matches your workflow.
+Daedalus ships with powerful defaults plus opt-in workflow extensions such as plan mode and subagents. You can still ask daedalus to build what you want or install a third-party daedalus package that matches your workflow.
 
 Pi runs in four modes: interactive, print or JSON, RPC for process integration, and an SDK for embedding in your own apps. See [openclaw/openclaw](https://github.com/openclaw/openclaw) for a real-world SDK integration.
 
@@ -350,6 +350,26 @@ export default function (pi: ExtensionAPI) {
 
 Place in `~/.pi/agent/extensions/`, `.pi/extensions/`, or a [daedalus package](#daedalus-packages) to share with others. See [docs/extensions.md](docs/extensions.md) and [examples/extensions/](examples/extensions/).
 
+### Subagents
+
+Daedalus can run session-backed subagents with compact task packets instead of replaying the full parent transcript.
+
+Built-in starter-pack roles:
+- `orchestrator`
+- `scout`
+- `planner`
+- `worker`
+- `reviewer`
+
+Commands:
+- `/orchestrator on|off|status`
+- `/agents`
+- `/subagents`
+
+Agent definitions can live in:
+- `~/.daedalus/agent/agents/*.md`
+- `.daedalus/agents/*.md`
+
 ### Themes
 
 Built-in: `dark`, `light`. Themes hot-reload: modify the active theme file and pi immediately applies changes.
@@ -445,7 +465,7 @@ Daedalus is aggressively extensible so it doesn't have to dictate your workflow.
 
 **No MCP.** Build CLI tools with READMEs (see [Skills](#skills)), or build an extension that adds MCP support. [Why?](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/)
 
-**No sub-agents.** There's many ways to do this. Spawn pi instances via tmux, or build your own with [extensions](#extensions), or install a package that does it your way.
+**Subagents are opt-in.** Use the built-in orchestrator starter pack, build your own with [extensions](#extensions), or install a package that does it your way.
 
 **No permission popups.** Run in a container, or build your own confirmation flow with [extensions](#extensions) inline with your environment and security requirements.
 

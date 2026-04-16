@@ -52,6 +52,7 @@ import type {
 import type { Skill } from "../skills.js";
 import type { SlashCommandInfo } from "../slash-commands.js";
 import type { SourceInfo } from "../source-info.js";
+import type { ActiveSubagentRun, SubagentRunRequest, SubagentRunResult } from "../subagents/index.js";
 import type { BashOperations } from "../tools/bash.js";
 import type { EditToolDetails } from "../tools/edit.js";
 import type {
@@ -1119,6 +1120,15 @@ export interface ExtensionAPI {
 	/** Get available slash commands in the current session. */
 	getCommands(): SlashCommandInfo[];
 
+	/** Run a session-backed subagent. */
+	runSubagent(request: SubagentRunRequest): Promise<SubagentRunResult>;
+
+	/** Get currently running subagent runs. */
+	getActiveSubagentRuns(): ActiveSubagentRun[];
+
+	/** List persisted subagent runs visible to the current session. */
+	listSubagentRuns(): Promise<SubagentRunResult[]>;
+
 	// =========================================================================
 	// Model and Thinking Level
 	// =========================================================================
@@ -1335,6 +1345,11 @@ export type GetThinkingLevelHandler = () => ThinkingLevel;
 export type SetThinkingLevelHandler = (level: ThinkingLevel) => void;
 
 export type SetLabelHandler = (entryId: string, label: string | undefined) => void;
+export type RunSubagentHandler = (request: SubagentRunRequest) => Promise<SubagentRunResult>;
+
+export type GetActiveSubagentRunsHandler = () => ActiveSubagentRun[];
+
+export type ListSubagentRunsHandler = () => Promise<SubagentRunResult[]>;
 
 /**
  * Shared state created by loader, used during registration and runtime.
@@ -1373,6 +1388,9 @@ export interface ExtensionActions {
 	setModel: SetModelHandler;
 	getThinkingLevel: GetThinkingLevelHandler;
 	setThinkingLevel: SetThinkingLevelHandler;
+	runSubagent: RunSubagentHandler;
+	getActiveSubagentRuns: GetActiveSubagentRunsHandler;
+	listSubagentRuns: ListSubagentRunsHandler;
 }
 
 /**

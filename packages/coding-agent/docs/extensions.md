@@ -1235,6 +1235,16 @@ Use `sourceInfo` as the canonical provenance field. Do not infer ownership from 
 Built-in interactive commands (like `/model` and `/settings`) are not included here. They are handled only in interactive
 mode and would not execute if sent via `prompt`.
 
+### Subagents from extensions
+
+Extensions can launch and inspect subagents through the runtime API:
+
+- `pi.runSubagent(request)`
+- `pi.getActiveSubagentRuns()`
+- `pi.listSubagentRuns()`
+
+Use these methods when you want a command or custom tool to delegate focused work to a child session while keeping the parent session readable.
+
 ### pi.registerMessageRenderer(customType, renderer)
 
 Register a custom TUI renderer for messages with your `customType`. See [Custom UI](#custom-ui).

@@ -75,6 +75,15 @@ describe("ExtensionRunner", () => {
 		setModel: async () => false,
 		getThinkingLevel: () => "off",
 		setThinkingLevel: () => {},
+		runSubagent: async () => ({
+			runId: "run-1",
+			agent: "scout",
+			status: "completed",
+			summary: "ok",
+			childSessionFile: "/tmp/run-1.jsonl",
+		}),
+		getActiveSubagentRuns: () => [],
+		listSubagentRuns: async () => [],
 	};
 
 	const extensionContextActions: ExtensionContextActions = {

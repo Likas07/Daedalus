@@ -43,6 +43,19 @@ export interface MarkdownSettings {
 	codeBlockIndent?: string; // default: "  "
 }
 
+export interface SubagentRoleOverride {
+	model?: string;
+	thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+}
+
+export interface SubagentSettings {
+	enabled?: boolean;
+	defaultPrimary?: "standard" | "orchestrator";
+	maxDepth?: number;
+	maxConcurrency?: number;
+	agents?: Record<string, SubagentRoleOverride>;
+}
+
 export type TransportSetting = Transport;
 
 /**
@@ -95,6 +108,7 @@ export interface Settings {
 	showHardwareCursor?: boolean; // Show terminal cursor while still positioning it for IME
 	markdown?: MarkdownSettings;
 	sessionDir?: string; // Custom session storage directory (same format as --session-dir CLI flag)
+	subagents?: SubagentSettings; // Subagent runtime defaults and per-role overrides
 }
 
 /** Deep merge settings: project/overrides take precedence, nested objects merge recursively */
@@ -534,6 +548,20 @@ export class SettingsManager {
 
 	getSessionDir(): string | undefined {
 		return this.settings.sessionDir;
+	}
+
+	getSubagentSettings(): Required<
+		Pick<SubagentSettings, "enabled" | "defaultPrimary" | "maxDepth" | "maxConcurrency">
+	> & {
+		agents: Record<string, SubagentRoleOverride>;
+	} {
+		return {
+			enabled: this.settings.subagents?.enabled ?? false,
+			defaultPrimary: this.settings.subagents?.defaultPrimary ?? "standard",
+			maxDepth: this.settings.subagents?.maxDepth ?? 2,
+			maxConcurrency: this.settings.subagents?.maxConcurrency ?? 4,
+			agents: { ...(this.settings.subagents?.agents ?? {}) },
+		};
 	}
 
 	getDefaultProvider(): string | undefined {
