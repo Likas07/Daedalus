@@ -1,4 +1,10 @@
 import type { ThinkingLevel } from "@daedalus-pi/agent-core";
+import type {
+	SubagentExecutionModePreference,
+	SubagentIsolationPreference,
+	SubagentRoleOverride,
+} from "../settings-schema.js";
+import type { BranchIsolationMetadata } from "./branch-isolation.js";
 
 export type SubagentSource = "bundled" | "user" | "project";
 export type SubagentRunStatus = "running" | "completed" | "failed" | "aborted";
@@ -15,6 +21,13 @@ export interface SubagentDefinition {
 	thinkingLevel?: ThinkingLevel;
 	outputSchema?: unknown;
 	toolPolicy?: SubagentPolicy;
+	purpose?: "exploration" | "planning" | "implementation" | "review" | string;
+	executionModePreference?: SubagentExecutionModePreference;
+	isolationPreference?: SubagentIsolationPreference;
+	costClass?: "free" | "cheap" | "expensive" | string;
+	useWhen?: readonly string[];
+	avoidWhen?: readonly string[];
+	observabilityTags?: readonly string[];
 }
 
 export interface SubagentPolicy {
@@ -29,6 +42,7 @@ export interface SubagentRunMetadata {
 	parentRunId?: string;
 	parentAgent?: string;
 	depth?: number;
+	effectiveRoleOverride?: SubagentRoleOverride;
 }
 
 export interface SubagentSessionContext {
@@ -76,6 +90,8 @@ export interface SubagentRunResult {
 	childSessionFile: string;
 	resultArtifactPath?: string;
 	contextArtifactPath?: string;
+	isolationMode?: "shared-branch" | "child-branch";
+	branchMetadata?: BranchIsolationMetadata;
 	data?: unknown;
 	error?: string;
 	usage?: {
@@ -99,4 +115,6 @@ export interface ActiveSubagentRun {
 	recentActivity?: string[];
 	childSessionFile?: string;
 	contextArtifactPath?: string;
+	isolationMode?: "shared-branch" | "child-branch";
+	branchMetadata?: BranchIsolationMetadata;
 }
