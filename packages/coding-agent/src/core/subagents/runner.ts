@@ -252,19 +252,21 @@ export class SubagentRunner {
 				const updatedAt = Date.now();
 				this.#registry.finish(runId, { status: "failed", summary: "Subagent exited without submit_result." });
 				await queuePersist({
-					status: "failed",
-					summary: "Subagent exited without submit_result.",
-					updatedAt,
-					activity: lastActivity,
+				status: "failed",
+				summary: "Subagent exited without submit_result.",
+				deliverable: undefined,
+				updatedAt,
+				activity: lastActivity,
 					recentActivity,
 					error: "Subagent exited without submit_result.",
 				});
 				return {
 					runId,
 					agent: request.agent.name,
-					status: "failed",
-					summary: "Subagent exited without submit_result.",
-					goal: request.goal,
+				status: "failed",
+				summary: "Subagent exited without submit_result.",
+				deliverable: undefined,
+				goal: request.goal,
 					startedAt,
 					updatedAt,
 					activity: lastActivity,
@@ -281,13 +283,15 @@ export class SubagentRunner {
 			if (schemaError) {
 				const updatedAt = Date.now();
 				this.#registry.finish(runId, {
-					status: "failed",
-					summary: "Subagent returned invalid structured output.",
-				});
+				status: "failed",
+				summary: "Subagent returned invalid structured output.",
+				deliverable: undefined,
+			});
 				await queuePersist({
-					status: "failed",
-					summary: "Subagent returned invalid structured output.",
-					updatedAt,
+				status: "failed",
+				summary: "Subagent returned invalid structured output.",
+				deliverable: undefined,
+				updatedAt,
 					activity: lastActivity,
 					recentActivity,
 					error: schemaError,
@@ -295,9 +299,10 @@ export class SubagentRunner {
 				return {
 					runId,
 					agent: request.agent.name,
-					status: "failed",
-					summary: "Subagent returned invalid structured output.",
-					goal: request.goal,
+				status: "failed",
+				summary: "Subagent returned invalid structured output.",
+				deliverable: undefined,
+				goal: request.goal,
 					startedAt,
 					updatedAt,
 					activity: lastActivity,
@@ -317,9 +322,10 @@ export class SubagentRunner {
 			const updatedAt = Date.now();
 			this.#registry.finish(runId, { status, summary: submitPayload.summary });
 			await queuePersist({
-				status,
-				summary: submitPayload.summary,
-				updatedAt,
+			status,
+			summary: submitPayload.summary,
+			deliverable: submitPayload.deliverable,
+			updatedAt,
 				activity: lastActivity,
 				recentActivity,
 				resultArtifactPath,
@@ -328,9 +334,10 @@ export class SubagentRunner {
 			return {
 				runId,
 				agent: request.agent.name,
-				status,
-				summary: submitPayload.summary,
-				goal: request.goal,
+			status,
+			summary: submitPayload.summary,
+			deliverable: submitPayload.deliverable,
+			goal: request.goal,
 				startedAt,
 				updatedAt,
 				activity: lastActivity,

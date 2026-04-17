@@ -87,6 +87,7 @@ export interface SubagentRunResult {
 	agent: string;
 	status: SubagentRunStatus;
 	summary: string;
+	deliverable?: unknown;
 	goal?: string;
 	startedAt?: number;
 	updatedAt?: number;

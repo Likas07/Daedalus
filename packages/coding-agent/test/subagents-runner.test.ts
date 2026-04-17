@@ -235,4 +235,31 @@ describe("SubagentRunner", () => {
 		expect(packet.contextToPersist).toBe(longContext);
 		expect(packet.packetText).toContain("Context file: {contextArtifactPath}");
 	});
+
+	it("returns deliverable content separately from summary", async () => {
+		const registry = new SubagentRegistry();
+		const runner = new SubagentRunner({
+			registry,
+			createSession: async (options: any) => ({
+				prompt: async () =>
+					options.onSubmit({
+						summary: "Drafted a short introduction",
+						deliverable: "I am Hephaestus, a focused implementation specialist.",
+					}),
+				waitForIdle: async () => {},
+				abort: async () => {},
+				dispose: () => {},
+			}),
+		});
+
+		const result = await runner.run({
+			parentSessionFile: "/tmp/parent.jsonl",
+			agent: { name: "worker", description: "worker", systemPrompt: "Work.", source: "bundled" },
+			goal: "Write an introduction",
+			assignment: "Write a short first-person introduction.",
+		});
+
+		expect(result.summary).toBe("Drafted a short introduction");
+		expect(result.deliverable).toBe("I am Hephaestus, a focused implementation specialist.");
+	});
 });
