@@ -19,4 +19,9 @@ describe("subagent base contract", () => {
 		expect(prompts[0]).toBe(markdownContract);
 		expect(prompts[1]).toContain("You are the worker subagent.");
 	});
+
+	it("includes bounded autonomy and result-submission rules in the shared contract", () => {
+		expect(SUBAGENT_BASE_CONTRACT).toContain("bounded autonomy");
+		expect(SUBAGENT_BASE_CONTRACT).toContain("required result-submission behavior");
+	});
 });

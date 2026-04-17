@@ -17,13 +17,30 @@ export interface ResolvedSubagentRuntimeConfig {
 
 export const SUBAGENT_BASE_CONTRACT = subagentBaseContract.trim();
 
+function resolveSubagentPromptOverride(
+	agent: { modelOverrides?: { gpt?: string; claude?: string } },
+	modelId?: string,
+): string | undefined {
+	if (!modelId) return undefined;
+	const normalized = modelId.toLowerCase();
+	if (normalized.includes("gpt")) return agent.modelOverrides?.gpt;
+	if (normalized.includes("claude")) return agent.modelOverrides?.claude;
+	return undefined;
+}
+
 export function buildSubagentAppendPrompts(input: {
-	agent: Pick<SubagentRunRequest["agent"], "systemPrompt">;
+	agent: Pick<SubagentRunRequest["agent"], "systemPrompt"> & {
+		name?: string;
+		modelOverrides?: { gpt?: string; claude?: string };
+	};
 	packetText?: string;
+	modelId?: string;
 }): string[] {
+	const override = resolveSubagentPromptOverride(input.agent, input.modelId);
 	return [
 		SUBAGENT_BASE_CONTRACT,
 		input.agent.systemPrompt.trim(),
+		override?.trim(),
 		input.packetText ? `Delegated task packet:\n${input.packetText.trim()}` : undefined,
 	].filter((prompt): prompt is string => Boolean(prompt));
 }

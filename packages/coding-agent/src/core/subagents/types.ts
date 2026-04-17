@@ -22,6 +22,10 @@ export interface SubagentDefinition {
 	thinkingLevel?: ThinkingLevel;
 	outputSchema?: unknown;
 	toolPolicy?: SubagentPolicy;
+	modelOverrides?: {
+		gpt?: string;
+		claude?: string;
+	};
 	purpose?: "exploration" | "planning" | "implementation" | "review" | string;
 	executionModePreference?: SubagentExecutionModePreference;
 	isolationPreference?: SubagentIsolationPreference;
