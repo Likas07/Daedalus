@@ -218,7 +218,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 		);
 
 		it.skipIf(!process.env.OPENAI_API_KEY)(
-			"should set prompt_cache_retention to 24h when PI_CACHE_RETENTION=long",
+			"should omit prompt_cache_retention when PI_CACHE_RETENTION=long",
 			async () => {
 				process.env.PI_CACHE_RETENTION = "long";
 				const model = getModel("openai", "gpt-4o-mini");
@@ -236,7 +236,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 				}
 
 				expect(capturedPayload).not.toBeNull();
-				expect(capturedPayload.prompt_cache_retention).toBe("24h");
+				expect(capturedPayload.prompt_cache_retention).toBeUndefined();
 			},
 		);
 
@@ -304,7 +304,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			expect(capturedPayload.prompt_cache_retention).toBeUndefined();
 		});
 
-		it("should set prompt_cache_retention when cacheRetention is long", async () => {
+		it("should omit prompt_cache_retention when cacheRetention is long", async () => {
 			const model = getModel("openai", "gpt-4o-mini");
 			let capturedPayload: any = null;
 
@@ -329,7 +329,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 
 			expect(capturedPayload).not.toBeNull();
 			expect(capturedPayload.prompt_cache_key).toBe("session-2");
-			expect(capturedPayload.prompt_cache_retention).toBe("24h");
+			expect(capturedPayload.prompt_cache_retention).toBeUndefined();
 		});
 	});
 });

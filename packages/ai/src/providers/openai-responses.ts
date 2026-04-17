@@ -2,16 +2,7 @@ import OpenAI from "openai";
 import type { ResponseCreateParamsStreaming } from "openai/resources/responses/responses.js";
 import { getEnvApiKey } from "../env-api-keys.js";
 import { supportsFastMode, supportsXhigh } from "../models.js";
-import type {
-	Api,
-	AssistantMessage,
-	CacheRetention,
-	Context,
-	Model,
-	SimpleStreamOptions,
-	StreamFunction,
-	StreamOptions,
-} from "../types.js";
+import type { Api, AssistantMessage, CacheRetention, Context, Model, SimpleStreamOptions, StreamFunction, StreamOptions } from "../types.js";
 import { AssistantMessageEventStream } from "../utils/event-stream.js";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.js";
 import {
@@ -36,20 +27,6 @@ function resolveCacheRetention(cacheRetention?: CacheRetention): CacheRetention 
 		return "long";
 	}
 	return "short";
-}
-
-/**
- * Get prompt cache retention based on cacheRetention and base URL.
- * Only applies to direct OpenAI API calls (api.openai.com).
- */
-function getPromptCacheRetention(baseUrl: string, cacheRetention: CacheRetention): "24h" | undefined {
-	if (cacheRetention !== "long") {
-		return undefined;
-	}
-	if (baseUrl.includes("api.openai.com")) {
-		return "24h";
-	}
-	return undefined;
 }
 
 // OpenAI Responses-specific options
@@ -199,7 +176,6 @@ function buildParams(model: Model<"openai-responses">, context: Context, options
 		input: messages,
 		stream: true,
 		prompt_cache_key: cacheRetention === "none" ? undefined : options?.sessionId,
-		prompt_cache_retention: getPromptCacheRetention(model.baseUrl, cacheRetention),
 		store: false,
 	};
 
