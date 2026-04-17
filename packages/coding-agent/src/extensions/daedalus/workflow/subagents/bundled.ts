@@ -4,20 +4,14 @@ import { parseFrontmatter } from "../../../../utils/frontmatter.js";
 
 const mdGlob = "**/*.md";
 const toolPolicies: Record<string, SubagentDefinition["toolPolicy"]> = {
-	orchestrator: {
-		allowedTools: ["subagent", "read", "grep", "find", "ls"],
-		writableGlobs: [mdGlob],
-		spawns: ["scout", "planner", "worker", "reviewer"],
-		maxDepth: 2,
-	},
 	scout: {
-		allowedTools: ["read", "grep", "find", "ls", "bash", "write", "edit", "hashline_edit"],
+		allowedTools: ["read", "grep", "find", "ls", "bash", "write", "hashline_edit"],
 		writableGlobs: [mdGlob],
 		spawns: [],
 		maxDepth: 1,
 	},
 	planner: {
-		allowedTools: ["read", "grep", "find", "ls", "write", "edit", "hashline_edit"],
+		allowedTools: ["read", "grep", "find", "ls", "write", "hashline_edit"],
 		writableGlobs: [mdGlob],
 		spawns: [],
 		maxDepth: 1,
@@ -29,7 +23,7 @@ const toolPolicies: Record<string, SubagentDefinition["toolPolicy"]> = {
 		maxDepth: 1,
 	},
 	reviewer: {
-		allowedTools: ["read", "grep", "find", "ls", "bash", "write", "edit", "hashline_edit"],
+		allowedTools: ["read", "grep", "find", "ls", "bash", "write", "hashline_edit"],
 		writableGlobs: [mdGlob],
 		spawns: [],
 		maxDepth: 1,
@@ -38,6 +32,11 @@ const toolPolicies: Record<string, SubagentDefinition["toolPolicy"]> = {
 
 function readAgentFile(name: string): string {
 	return fs.readFileSync(new URL(`./agents/${name}.md`, import.meta.url), "utf8");
+}
+
+function readOptionalAgentFile(name: string): string | undefined {
+	const url = new URL(`./agents/${name}`, import.meta.url);
+	return fs.existsSync(url) ? fs.readFileSync(url, "utf8") : undefined;
 }
 
 function parseBundledAgent(source: string): SubagentDefinition {
@@ -85,12 +84,16 @@ function parseBundledAgent(source: string): SubagentDefinition {
 			?.split(",")
 			.map((value) => value.trim())
 			.filter(Boolean),
+		modelOverrides: {
+			gpt: readOptionalAgentFile(`${frontmatter.name}-overrides-gpt.md`)?.trim(),
+			claude: readOptionalAgentFile(`${frontmatter.name}-overrides-claude.md`)?.trim(),
+		},
 		toolPolicy: toolPolicies[frontmatter.name],
 	};
 }
 
 export function getBundledStarterAgents(): SubagentDefinition[] {
-	return ["orchestrator", "scout", "planner", "worker", "reviewer"].map((name) =>
+	return ["scout", "planner", "worker", "reviewer"].map((name) =>
 		parseBundledAgent(readAgentFile(name)),
 	);
 }

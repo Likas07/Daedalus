@@ -163,6 +163,17 @@ describe("starter-pack subagent extension", () => {
 		expect(textContent?.text ?? "").toContain("Use compact task packets and inspectable task results.");
 	});
 
+	it("keeps Daedalus as the only primary orchestrator and never exposes an orchestrator subagent", async () => {
+		const notice = vi.fn();
+		const runner = await createRunner({}, { notify: notice });
+		const command = runner.getRegisteredCommands().find((item) => item.invocationName === "agents");
+		expect(command).toBeDefined();
+
+		await command!.handler("", runner.createCommandContext());
+
+		expect(JSON.stringify(notice.mock.calls)).not.toContain("orchestrator");
+	});
+
 	it("renders the active agent name and live progress details instead of a generic subagent label", async () => {
 		const runner = await createRunner();
 		const definition = runner.getToolDefinition("subagent");

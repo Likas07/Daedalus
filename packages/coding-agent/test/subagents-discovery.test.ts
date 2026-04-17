@@ -10,6 +10,7 @@ import {
 	discoverSubagents,
 	type SubagentDefinition,
 } from "../src/core/subagents/index.js";
+import { getBundledStarterAgents } from "../src/extensions/daedalus/workflow/subagents/bundled.js";
 
 describe("discoverSubagents", () => {
 	let tempDir: string;
@@ -106,6 +107,30 @@ describe("discoverSubagents", () => {
 			displayName: "Hephaestus",
 			description: "Implementation specialist",
 		});
+	});
+
+	it("does not expose Daedalus as a bundled subagent", () => {
+		const agents = getBundledStarterAgents();
+		expect(agents.map((agent) => agent.name)).toEqual(["scout", "planner", "worker", "reviewer"]);
+		expect(agents.some((agent) => agent.displayName === "Daedalus")).toBe(false);
+	});
+
+	it("bundled worker prompt includes execution anti-patterns and finish-fully doctrine", () => {
+		const worker = getBundledStarterAgents().find((agent) => agent.name === "worker");
+		const prompt = worker?.systemPrompt ?? "";
+
+		expect(prompt).toContain("Operating Mode");
+		expect(prompt).toContain("do not become another orchestrator");
+		expect(prompt).toContain("finish the assigned task fully");
+	});
+
+	it("bundled scout prompt includes search strategy and stop conditions", () => {
+		const scout = getBundledStarterAgents().find((agent) => agent.name === "scout");
+		const prompt = scout?.systemPrompt ?? "";
+
+		expect(prompt).toContain("Heuristics");
+		expect(prompt).toContain("stop conditions");
+		expect(prompt).toContain("parallel");
 	});
 });
 
