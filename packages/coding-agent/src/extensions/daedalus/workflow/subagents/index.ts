@@ -88,6 +88,7 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 		name: "subagent",
 		label: "Subagent",
 		description: "Run a bundled or discovered subagent with a compact task packet.",
+		promptSnippet: "Delegate a focused sub-task to an available specialist.",
 		parameters: Type.Object({
 			agent: Type.String(),
 			goal: Type.String(),
@@ -145,13 +146,16 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 				},
 			});
 
+			const visibleContent = typeof result.deliverable === "string" ? result.deliverable : result.summary;
+
 			return {
-				content: [{ type: "text", text: result.summary }],
+				content: [{ type: "text", text: visibleContent }],
 				details: {
 					agent: result.agent,
 					goal: params.goal,
 					status: result.status,
 					summary: result.summary,
+					deliverable: result.deliverable,
 					runId: result.runId,
 					childSessionFile: result.childSessionFile,
 					contextArtifactPath: result.contextArtifactPath,
@@ -196,11 +200,19 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 		pi.setActiveTools(Array.from(next));
 	});
 
-	pi.on("before_agent_start", async () => ({
-		message: {
-			customType: "daedalus-orchestrator",
-			content: [{ type: "text", text: getOrchestratorGuidance() }],
-			display: false,
-		},
-	}));
+	pi.on("before_agent_start", async (_event, ctx) => {
+		const { agents } = await discoverSubagents({
+			cwd: ctx.cwd,
+			agentDir: getAgentDir(),
+			bundled: getBundledStarterAgents(),
+		});
+
+		return {
+			message: {
+				customType: "daedalus-orchestrator",
+				content: [{ type: "text", text: getOrchestratorGuidance(agents) }],
+				display: false,
+			},
+		};
+	});
 }

@@ -161,6 +161,17 @@ describe("starter-pack subagent extension", () => {
 		expect(textContent?.text ?? "").toContain("Daedalus is a master artisan");
 		expect(textContent?.text ?? "").toContain("Delegate focused work when it improves quality, speed, or safety.");
 		expect(textContent?.text ?? "").toContain("Use compact task packets and inspectable task results.");
+		expect(textContent?.text ?? "").toContain('Use agent="scout" for Icarus (scout)');
+		expect(textContent?.text ?? "").toContain('Use agent="planner" for Prometheus (planner)');
+		expect(textContent?.text ?? "").toContain('Use agent="worker" for Hephaestus (worker)');
+		expect(textContent?.text ?? "").toContain('Use agent="reviewer" for Athena (reviewer)');
+	});
+
+	it("exposes the subagent tool in the prompt via a prompt snippet", async () => {
+		const runner = await createRunner();
+		const tool = runner.getToolDefinition("subagent");
+		expect(tool).toBeDefined();
+		expect(tool?.promptSnippet).toContain("Delegate a focused sub-task to an available specialist");
 	});
 
 	it("keeps Daedalus as the only primary orchestrator and never exposes an orchestrator subagent", async () => {
@@ -249,6 +260,75 @@ describe("starter-pack subagent extension", () => {
 			"⋯ scout · grep /Authorization/ in src",
 			"✓ reviewer · Reviewed auth flow",
 		]);
+	});
+
+	it("renders deliverable text instead of meta-summary when deliverable exists", async () => {
+		const runner = await createRunner({
+			runSubagent: vi.fn(async () => ({
+				runId: "run-1",
+				agent: "worker",
+				status: "completed" as const,
+				summary: "Drafted a short introduction",
+				deliverable: "I am Hephaestus, a focused implementation specialist.",
+				childSessionFile: "/tmp/parent/subagents/run-1.jsonl",
+			})),
+		});
+
+		const definition = runner.getToolDefinition("subagent");
+		const ctx = runner.createCommandContext();
+		const result = await definition!.execute(
+			"tool-1",
+			{ agent: "worker", goal: "Introduce yourself", assignment: "Write a short first-person introduction." },
+			undefined,
+			undefined,
+			{
+				...ctx,
+				sessionManager: {
+					...ctx.sessionManager,
+					getSessionFile: () => "/tmp/parent.jsonl",
+				},
+			},
+		);
+
+		expect(result.content[0]).toEqual({
+			type: "text",
+			text: "I am Hephaestus, a focused implementation specialist.",
+		});
+	});
+
+	it("shows the actual introduction text instead of a meta-summary", async () => {
+		const runner = await createRunner({
+			runSubagent: vi.fn(async () => ({
+				runId: "run-1",
+				agent: "worker",
+				status: "completed" as const,
+				summary: "Prepared a concise introduction",
+				deliverable: "I am Hephaestus, a focused implementation specialist who finishes the task fully.",
+				childSessionFile: "/tmp/parent/subagents/run-1.jsonl",
+			})),
+		});
+
+		const definition = runner.getToolDefinition("subagent");
+		const ctx = runner.createCommandContext();
+		const result = await definition!.execute(
+			"tool-1",
+			{ agent: "worker", goal: "Introduce yourself", assignment: "Return only the actual introduction text." },
+			undefined,
+			undefined,
+			{
+				...ctx,
+				sessionManager: {
+					...ctx.sessionManager,
+					getSessionFile: () => "/tmp/parent.jsonl",
+				},
+			},
+		);
+
+		expect(result.content[0]).toEqual({
+			type: "text",
+			text: "I am Hephaestus, a focused implementation specialist who finishes the task fully.",
+		});
+		expect(JSON.stringify(result.content[0])).not.toContain("Prepared a concise introduction");
 	});
 
 	it("opens transcript, context, and result artifact actions from /subagents", async () => {
