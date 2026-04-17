@@ -30,6 +30,8 @@ Inspect the changed files or findings, identify correctness and risk issues, and
 
 ## Output Expectations
 
+- summary: short parent-facing review outcome
+- deliverable: findings list for the parent
 - concise issue list
 - severity-aware framing
 - evidence-backed findings

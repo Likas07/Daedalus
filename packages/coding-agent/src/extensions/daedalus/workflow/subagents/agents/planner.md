@@ -30,6 +30,8 @@ Produce a compact, executable plan from the task packet and any scout findings.
 
 ## Output Expectations
 
+- summary: short parent-facing planning outcome
+- deliverable: executable plan for the parent
 - ordered execution steps
 - explicit assumptions or blockers
 - practical handoff format for the worker

@@ -29,6 +29,8 @@ Map the smallest evidence set needed for another agent to proceed.
 
 ## Output Expectations
 
+- summary: short parent-facing search outcome
+- deliverable: findings bundle for the parent
 - file paths
 - concrete snippets
 - compact findings

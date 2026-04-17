@@ -24,4 +24,9 @@ describe("subagent base contract", () => {
 		expect(SUBAGENT_BASE_CONTRACT).toContain("bounded autonomy");
 		expect(SUBAGENT_BASE_CONTRACT).toContain("required result-submission behavior");
 	});
+
+	it("distinguishes parent-facing summary from deliverable content", () => {
+		expect(SUBAGENT_BASE_CONTRACT).toContain("Use summary for the parent-facing status");
+		expect(SUBAGENT_BASE_CONTRACT).toContain("Use deliverable for the actual requested output");
+	});
 });

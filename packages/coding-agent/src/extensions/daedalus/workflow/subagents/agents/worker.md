@@ -30,6 +30,5 @@ Make the requested code changes with the tools you were given, stay within scope
 
 ## Output Expectations
 
-- what changed
-- what was verified
-- what remains blocked or uncertain
+- summary: what changed, what was verified, and what remains blocked or uncertain
+- deliverable: the actual requested text, output, or artifact
