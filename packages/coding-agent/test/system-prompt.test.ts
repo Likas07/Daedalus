@@ -147,5 +147,15 @@ describe("buildSystemPrompt", () => {
 			expect(prompt).toContain("master artisan");
 			expect(prompt).toContain("The primary assistant is Daedalus");
 		});
+
+		test("includes explicit constitutional sections for Daedalus doctrine", () => {
+			const prompt = buildSystemPrompt({ selectedTools: [], contextFiles: [], skills: [] });
+
+			expect(prompt).toContain("## Core Competencies");
+			expect(prompt).toContain("## Operating Mode");
+			expect(prompt).toContain("## Intent Gate");
+			expect(prompt).toContain("## Parallel & Delegation Doctrine");
+			expect(prompt).toContain("## Hard Blocks");
+		});
 	});
 });

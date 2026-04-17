@@ -7,6 +7,8 @@ import { formatSkillsForPrompt, type Skill } from "./skills.js";
 import { DEFAULT_ACTIVE_TOOL_NAMES } from "./tools/defaults.js";
 import constitutionPrompt from "./prompts/daedalus-constitution.md" with { type: "text" };
 import personaPrompt from "./prompts/daedalus-persona.md" with { type: "text" };
+import gptOverride from "./prompts/daedalus-overrides-gpt.md" with { type: "text" };
+import claudeOverride from "./prompts/daedalus-overrides-claude.md" with { type: "text" };
 
 export interface BuildSystemPromptOptions {
 	/** Custom system prompt (replaces default). */
@@ -25,6 +27,15 @@ export interface BuildSystemPromptOptions {
 	contextFiles?: Array<{ path: string; content: string }>;
 	/** Pre-loaded skills. */
 	skills?: Skill[];
+	/** Optional model identifier used for prompt override selection. */
+	modelId?: string;
+}
+
+function resolveMainPromptOverride(modelId: string | undefined): string | undefined {
+	if (!modelId) return undefined;
+	if (modelId.includes("gpt")) return gptOverride.trim();
+	if (modelId.includes("claude")) return claudeOverride.trim();
+	return undefined;
 }
 
 /** Build the system prompt with tools, guidelines, and context */
@@ -38,6 +49,7 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 		cwd,
 		contextFiles: providedContextFiles,
 		skills: providedSkills,
+		modelId,
 	} = options;
 	const resolvedCwd = cwd ?? process.cwd();
 	const promptCwd = resolvedCwd.replace(/\\/g, "/");
@@ -131,7 +143,8 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 
 	const guidelines = guidelinesList.map((g) => `- ${g}`).join("\n");
 
-	const baseIdentity = [constitutionPrompt.trim(), personaPrompt.trim()].join("\n\n");
+	const override = resolveMainPromptOverride(modelId);
+	const baseIdentity = [constitutionPrompt.trim(), personaPrompt.trim(), override].filter(Boolean).join("\n\n");
 
 	let prompt = `${baseIdentity}
 
