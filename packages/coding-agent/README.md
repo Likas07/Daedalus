@@ -292,6 +292,25 @@ Daedalus uses four prompt layers:
 
 Subagents may appear in the UI as `Mythic Name (role)`, while their behavioral prompts remain functional.
 
+## Prompt Architecture V2
+
+Daedalus uses canonical prompt layers plus model-specific overrides.
+
+Main agent:
+1. Constitution
+2. Persona
+3. GPT/Claude override
+
+Subagents:
+1. Shared delegated-task contract
+2. Canonical role prompt
+3. GPT/Claude override
+4. Delegated task packet
+
+Daedalus is the only primary orchestrator.
+There is no orchestrator subagent.
+Bundled roles are Icarus, Prometheus, Hephaestus, and Athena.
+
 Advanced policy arrays such as `readableGlobs`, `writableGlobs`, and `spawns` remain JSON-only for now.
 
 See [docs/settings.md](docs/settings.md) for all options.
