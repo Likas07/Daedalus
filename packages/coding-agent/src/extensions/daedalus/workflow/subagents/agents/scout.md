@@ -1,5 +1,6 @@
 ---
 name: scout
+displayName: Icarus
 description: Fast codebase reconnaissance with compact findings
 tools: read,grep,find,ls,bash,write,edit,hashline_edit
 ---

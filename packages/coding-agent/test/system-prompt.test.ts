@@ -121,4 +121,31 @@ describe("buildSystemPrompt", () => {
 			expect(prompt.match(/- Use dynamic_tool for summaries\./g)).toHaveLength(1);
 		});
 	});
+
+	describe("Daedalus prompt layering", () => {
+		test("composes constitutional prompt before Daedalus persona layer", () => {
+			const prompt = buildSystemPrompt({
+				selectedTools: [],
+				contextFiles: [],
+				skills: [],
+			});
+
+			const constitutionIndex = prompt.indexOf("# Daedalus Constitution");
+			const personaIndex = prompt.indexOf("# Daedalus Persona");
+
+			expect(constitutionIndex).toBeGreaterThanOrEqual(0);
+			expect(personaIndex).toBeGreaterThan(constitutionIndex);
+		});
+
+		test("describes Daedalus as a master artisan in the persona layer", () => {
+			const prompt = buildSystemPrompt({
+				selectedTools: [],
+				contextFiles: [],
+				skills: [],
+			});
+
+			expect(prompt).toContain("master artisan");
+			expect(prompt).toContain("The primary assistant is Daedalus");
+		});
+	});
 });

@@ -49,7 +49,19 @@ See [examples/extensions/](../examples/extensions/) for working implementations.
 - [Custom UI](#custom-ui)
 - [Error Handling](#error-handling)
 - [Mode Behavior](#mode-behavior)
+- [Prompt Architecture](#prompt-architecture)
 - [Examples Reference](#examples-reference)
+
+## Prompt Architecture
+
+Daedalus uses four prompt layers:
+
+1. Main constitutional system prompt
+2. Daedalus persona/orchestrator prompt
+3. Shared subagent base contract
+4. Role-specific subagent prompts
+
+Subagents may appear in the UI as `Mythic Name (role)`, while their behavioral prompts remain functional.
 
 ## Quick Start
 

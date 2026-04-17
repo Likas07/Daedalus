@@ -83,6 +83,30 @@ describe("discoverSubagents", () => {
 			thinkingLevel: "low",
 		});
 	});
+
+	it("parses dual-name metadata for mythic display names", async () => {
+		fs.writeFileSync(
+			path.join(cwd, CONFIG_DIR_NAME, "agents", "worker.md"),
+			[
+				"---",
+				"name: worker",
+				"displayName: Hephaestus",
+				"description: Implementation specialist",
+				"purpose: implementation",
+				"---",
+				"You are the worker subagent.",
+			].join("\n"),
+		);
+
+		const result = await discoverSubagents({ cwd, agentDir, bundled: [] });
+		const agent = result.agents.find((candidate) => candidate.name === "worker");
+
+		expect(agent).toMatchObject({
+			name: "worker",
+			displayName: "Hephaestus",
+			description: "Implementation specialist",
+		});
+	});
 });
 
 describe("createSubagentResourceLoader", () => {

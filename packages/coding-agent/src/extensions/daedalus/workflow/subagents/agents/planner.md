@@ -1,5 +1,6 @@
 ---
 name: planner
+displayName: Prometheus
 description: Planning specialist that converts findings into executable steps
 tools: read,grep,find,ls,write,edit,hashline_edit
 ---

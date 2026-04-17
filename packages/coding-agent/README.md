@@ -281,6 +281,17 @@ The `Subagents` tab covers:
 - `subagents.branchIsolation.mutationThreshold`
 - safe per-role `model` / `thinkingLevel` overrides
 
+## Prompt architecture
+
+Daedalus uses four prompt layers:
+
+1. Main constitutional system prompt
+2. Daedalus persona/orchestrator prompt
+3. Shared subagent base contract
+4. Role-specific subagent prompts
+
+Subagents may appear in the UI as `Mythic Name (role)`, while their behavioral prompts remain functional.
+
 Advanced policy arrays such as `readableGlobs`, `writableGlobs`, and `spawns` remain JSON-only for now.
 
 See [docs/settings.md](docs/settings.md) for all options.

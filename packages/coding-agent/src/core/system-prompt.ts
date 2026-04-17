@@ -5,6 +5,8 @@
 import { getDocsPath, getExamplesPath, getReadmePath } from "../config.js";
 import { formatSkillsForPrompt, type Skill } from "./skills.js";
 import { DEFAULT_ACTIVE_TOOL_NAMES } from "./tools/defaults.js";
+import constitutionPrompt from "./prompts/daedalus-constitution.md" with { type: "text" };
+import personaPrompt from "./prompts/daedalus-persona.md" with { type: "text" };
 
 export interface BuildSystemPromptOptions {
 	/** Custom system prompt (replaces default). */
@@ -129,7 +131,9 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 
 	const guidelines = guidelinesList.map((g) => `- ${g}`).join("\n");
 
-	let prompt = `You are an expert coding assistant operating inside daedalus, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files. your developer is likas who goes by Likas07 on github.
+	const baseIdentity = [constitutionPrompt.trim(), personaPrompt.trim()].join("\n\n");
+
+	let prompt = `${baseIdentity}
 
 Available tools:
 ${toolsList}

@@ -1,5 +1,6 @@
 ---
 name: reviewer
+displayName: Athena
 description: Validation specialist for correctness and risk review
 tools: read,grep,find,ls,bash,write,edit,hashline_edit
 ---

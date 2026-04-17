@@ -1,10 +1,12 @@
 import type { ExtensionCommandContext } from "@daedalus-pi/coding-agent";
 import type { ActiveSubagentRun, SubagentRunResult, SubagentRunStatus } from "../../../../core/subagents/index.js";
+import { formatAgentLabel } from "./task-progress-renderer.js";
 import { showJsonArtifact, showTextArtifact } from "./viewer.js";
 
 export interface InspectableSubagentRun {
 	runId: string;
 	agent: string;
+	displayName?: string;
 	status: SubagentRunStatus;
 	summary: string;
 	startedAt?: number;
@@ -46,7 +48,7 @@ export function buildInspectorOptions(
 export function formatInspectorLabel(run: InspectableSubagentRun): string {
 	const icon = run.status === "running" ? "⋯" : run.status === "completed" ? "✓" : "✗";
 	const detail = run.status === "running" ? (run.activity ?? run.summary) : run.summary;
-	return `${icon} ${run.agent} · ${detail}`;
+	return `${icon} ${formatAgentLabel({ name: run.agent, displayName: run.displayName })} · ${detail}`;
 }
 
 export async function openSubagentArtifacts(ctx: ExtensionCommandContext, run: InspectableSubagentRun): Promise<void> {

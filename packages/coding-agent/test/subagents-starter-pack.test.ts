@@ -148,7 +148,7 @@ describe("starter-pack subagent extension", () => {
 		expect(commands).not.toContain("orchestrator");
 	});
 
-	it("always injects orchestrator guidance before agent start", async () => {
+	it("always injects Daedalus artisan guidance before agent start", async () => {
 		const runner = await createRunner();
 		await runner.emit({ type: "session_start", reason: "startup" });
 
@@ -157,8 +157,9 @@ describe("starter-pack subagent extension", () => {
 		const textContent = text && typeof text === "object" && "type" in text && text.type === "text" ? text : undefined;
 
 		expect(textContent?.type).toBe("text");
-		expect(textContent?.text ?? "").toContain("[DAEDALUS ORCHESTRATOR]");
-		expect(textContent?.text ?? "").toContain("Delegate focused work when it improves speed, clarity, or safety.");
+		expect(textContent?.text ?? "").toContain("[DAEDALUS]");
+		expect(textContent?.text ?? "").toContain("Daedalus is a master artisan");
+		expect(textContent?.text ?? "").toContain("Delegate focused work when it improves quality, speed, or safety.");
 		expect(textContent?.text ?? "").toContain("Use compact task packets and inspectable task results.");
 	});
 

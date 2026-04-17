@@ -63,6 +63,25 @@ describe("SubagentOverrideSelectorComponent", () => {
 		expect(output).toContain("isolation: shared-branch");
 	});
 
+	it("renders dual-name role labels", () => {
+		const selector = new SubagentOverrideSelectorComponent(
+			[{ name: "worker", displayName: "Hephaestus", description: "Implementation specialist" }],
+			{},
+			{
+				onModelChange: vi.fn(),
+				onThinkingLevelChange: vi.fn(),
+				onExecutionModeChange: vi.fn(),
+				onIsolationPreferenceChange: vi.fn(),
+				onClear: vi.fn(),
+				validateModelRef: () => undefined,
+				onDone: vi.fn(),
+			},
+		);
+
+		const output = stripAnsi(selector.render(120).join("\n"));
+		expect(output).toContain("Hephaestus (worker)");
+	});
+
 	it("shows validation errors for bad model refs", () => {
 		const selector = new SubagentOverrideSelectorComponent(
 			[{ name: "scout", description: "Read-only reconnaissance" }],

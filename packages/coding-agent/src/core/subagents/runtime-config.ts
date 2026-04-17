@@ -4,6 +4,7 @@ import type { ModelRegistry } from "../model-registry.js";
 import type { SettingsManager } from "../settings-manager.js";
 import { resolveSubagentPolicy } from "./policy.js";
 import type { SubagentPolicy, SubagentRunRequest } from "./types.js";
+import subagentBaseContract from "./subagent-base-contract.md" with { type: "text" };
 
 export interface ResolvedSubagentRuntimeConfig {
 	model?: Model<Api>;
@@ -14,13 +15,7 @@ export interface ResolvedSubagentRuntimeConfig {
 	isolationPreference?: SubagentRunRequest["agent"]["isolationPreference"];
 }
 
-export const SUBAGENT_BASE_CONTRACT = [
-	"You are operating on a delegated sub-task.",
-	"Do not talk to the user directly.",
-	"Stay within the tools and paths the runtime gives you.",
-	"If you are blocked, call submit_result with an error instead of asking the user.",
-	"Call submit_result exactly once before stopping.",
-].join("\n");
+export const SUBAGENT_BASE_CONTRACT = subagentBaseContract.trim();
 
 export function buildSubagentAppendPrompts(input: {
 	agent: Pick<SubagentRunRequest["agent"], "systemPrompt">;

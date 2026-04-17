@@ -1,6 +1,7 @@
 import type { ThinkingLevel } from "@daedalus-pi/agent-core";
 import { Container, type SettingItem, SettingsList } from "@daedalus-pi/tui";
 import type { SubagentExecutionModePreference, SubagentIsolationPreference } from "../../../core/settings-schema.js";
+import { formatAgentLabel } from "../../../extensions/daedalus/workflow/subagents/task-progress-renderer.js";
 import { getSettingsListTheme } from "../theme/theme.js";
 import type { SettingsSubagentRole, SettingsSubagentRoleOverride } from "./settings-selector.js";
 import { TextInputSubmenu } from "./settings-submenus.js";
@@ -59,7 +60,7 @@ export class SubagentOverrideSelectorComponent extends Container {
 
 		const items: SettingItem[] = roles.map((role) => ({
 			id: role.name,
-			label: role.name,
+			label: formatAgentLabel({ name: role.name, displayName: role.displayName }),
 			description: role.description,
 			currentValue: formatRoleSummary(this.overrides[role.name]),
 			submenu: (_currentValue, done) => this.createRoleSettingsList(role.name, done),

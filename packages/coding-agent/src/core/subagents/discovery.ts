@@ -12,6 +12,7 @@ interface DiscoverSubagentsOptions {
 
 type AgentFrontmatter = Record<string, unknown> & {
 	name?: string;
+	displayName?: string;
 	description?: string;
 	purpose?: string;
 	tools?: string | string[];
@@ -60,6 +61,7 @@ async function loadDir(dir: string, source: "user" | "project"): Promise<Subagen
 							.filter(Boolean);
 			return {
 				name: frontmatter.name,
+				displayName: frontmatter.displayName,
 				description: frontmatter.description,
 				systemPrompt: body,
 				source,

@@ -186,6 +186,17 @@ The `Subagents` tab edits the common runtime defaults above and supports safe pe
 - `model`
 - `thinkingLevel`
 
+## Prompt architecture
+
+Daedalus uses four prompt layers:
+
+1. Main constitutional system prompt
+2. Daedalus persona/orchestrator prompt
+3. Shared subagent base contract
+4. Role-specific subagent prompts
+
+Subagents may appear in the UI as `Mythic Name (role)`, while their behavioral prompts remain functional.
+
 Advanced policy arrays stay JSON-only for now:
 - `readableGlobs`
 - `writableGlobs`

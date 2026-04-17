@@ -43,6 +43,7 @@ function readAgentFile(name: string): string {
 function parseBundledAgent(source: string): SubagentDefinition {
 	const { frontmatter, body } = parseFrontmatter<{
 		name?: string;
+		displayName?: string;
 		description?: string;
 		purpose?: string;
 		tools?: string;
@@ -59,6 +60,7 @@ function parseBundledAgent(source: string): SubagentDefinition {
 	}
 	return {
 		name: frontmatter.name,
+		displayName: frontmatter.displayName,
 		description: frontmatter.description,
 		systemPrompt: body,
 		source: "bundled",

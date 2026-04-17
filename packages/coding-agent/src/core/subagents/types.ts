@@ -11,6 +11,7 @@ export type SubagentRunStatus = "running" | "completed" | "failed" | "aborted";
 
 export interface SubagentDefinition {
 	name: string;
+	displayName?: string;
 	description: string;
 	systemPrompt: string;
 	source: SubagentSource;

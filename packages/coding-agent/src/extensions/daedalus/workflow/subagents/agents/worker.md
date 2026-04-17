@@ -1,5 +1,6 @@
 ---
 name: worker
+displayName: Hephaestus
 description: Implementation specialist for focused code changes
 ---
 
