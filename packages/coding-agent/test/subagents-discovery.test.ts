@@ -146,7 +146,7 @@ describe("createSubagentResourceLoader", () => {
 			getPrompts: () => ({ prompts: [{ name: "review" }] as never[], diagnostics: [] }),
 			getThemes: () => ({ themes: [], diagnostics: [] }),
 			getAgentsFiles: () => ({ agentsFiles: [{ path: "/tmp/AGENTS.md", content: "# rules" }] }),
-			getSystemPrompt: () => undefined,
+			getSystemPrompt: () => "The primary assistant is Daedalus.",
 			getAppendSystemPrompt: () => [],
 			extendResources: () => {},
 			reload: async () => {},
@@ -158,6 +158,9 @@ describe("createSubagentResourceLoader", () => {
 		expect(child.getSkills().skills).toHaveLength(1);
 		expect(child.getPrompts().prompts).toHaveLength(1);
 		expect(child.getAgentsFiles().agentsFiles[0]?.path).toBe("/tmp/AGENTS.md");
-		expect(child.getAppendSystemPrompt()).toEqual(["Subagent append prompt", "Task packet"]);
+		expect(child.getSystemPrompt()).toContain("Subagent append prompt");
+		expect(child.getSystemPrompt()).toContain("Task packet");
+		expect(child.getSystemPrompt()).not.toContain("The primary assistant is Daedalus");
+		expect(child.getAppendSystemPrompt()).toEqual([]);
 	});
 });

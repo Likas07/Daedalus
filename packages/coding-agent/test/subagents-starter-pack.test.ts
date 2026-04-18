@@ -331,6 +331,39 @@ describe("starter-pack subagent extension", () => {
 		expect(JSON.stringify(result.content[0])).not.toContain("Prepared a concise introduction");
 	});
 
+	it("does not let the worker identify itself as Daedalus when asked directly", async () => {
+		const runner = await createRunner({
+			runSubagent: vi.fn(async () => ({
+				runId: "run-1",
+				agent: "worker",
+				status: "completed" as const,
+				summary: "Generated worker introduction",
+				deliverable: "I’m Hephaestus, a code-focused implementation specialist and software craftsperson.",
+				childSessionFile: "/tmp/parent/subagents/run-1.jsonl",
+			})),
+		});
+
+		const definition = runner.getToolDefinition("subagent");
+		const ctx = runner.createCommandContext();
+		const result = await definition!.execute(
+			"tool-1",
+			{ agent: "worker", goal: "Introduce yourself", assignment: "Introduce yourself in first person." },
+			undefined,
+			undefined,
+			{
+				...ctx,
+				sessionManager: {
+					...ctx.sessionManager,
+					getSessionFile: () => "/tmp/parent.jsonl",
+				},
+			},
+		);
+
+		const text = (result.content[0] as { type: "text"; text: string }).text;
+		expect(text).toContain("Hephaestus");
+		expect(text).not.toContain("I’m Daedalus");
+	});
+
 	it("opens transcript, context, and result artifact actions from /subagents", async () => {
 		const sessionFile = path.join(tempDir, "run-1.jsonl");
 		const contextFile = path.join(tempDir, "run-1.context.md");
