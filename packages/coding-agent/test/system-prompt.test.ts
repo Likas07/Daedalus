@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { createSubagentResourceLoader } from "../src/core/subagents/resource-loader.js";
 import { buildSystemPrompt } from "../src/core/system-prompt.js";
 
 describe("buildSystemPrompt", () => {
@@ -156,6 +157,19 @@ describe("buildSystemPrompt", () => {
 			expect(prompt).toContain("## Intent Gate");
 			expect(prompt).toContain("## Parallel & Delegation Doctrine");
 			expect(prompt).toContain("## Hard Blocks");
+		});
+
+		test("subagent sessions do not reuse the parent Daedalus identity prompt", () => {
+			const loader = createSubagentResourceLoader(
+				{
+					getSystemPrompt: () => "The primary assistant is Daedalus.",
+					getAppendSystemPrompt: () => [],
+				} as any,
+				["You are Hephaestus (worker), a delegated implementation specialist."],
+			);
+
+			expect(loader.getSystemPrompt()).not.toContain("The primary assistant is Daedalus");
+			expect(loader.getSystemPrompt()).toContain("You are Hephaestus (worker)");
 		});
 	});
 });
