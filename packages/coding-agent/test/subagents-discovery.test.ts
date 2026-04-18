@@ -115,22 +115,34 @@ describe("discoverSubagents", () => {
 		expect(agents.some((agent) => agent.displayName === "Daedalus")).toBe(false);
 	});
 
-	it("bundled worker prompt includes execution anti-patterns and finish-fully doctrine", () => {
+	it("bundled planner prompt maximizes parallel execution and marks serialization boundaries", () => {
+		const planner = getBundledStarterAgents().find((agent) => agent.name === "planner");
+		const prompt = planner?.systemPrompt ?? "";
+
+		expect(prompt).toContain("maximize safe parallel execution");
+		expect(prompt).toContain("serialization boundaries");
+		expect(prompt).toContain("parallel lanes and serialized steps");
+	});
+
+	it("bundled worker prompt includes execution anti-patterns, finish-fully doctrine, and dependency reporting", () => {
 		const worker = getBundledStarterAgents().find((agent) => agent.name === "worker");
 		const prompt = worker?.systemPrompt ?? "";
 
 		expect(prompt).toContain("Operating Mode");
 		expect(prompt).toContain("do not become another orchestrator");
 		expect(prompt).toContain("finish the assigned task fully");
+		expect(prompt).toContain("report blocked prerequisites clearly");
+		expect(prompt).toContain("leave final synthesis and user-facing judgment to Daedalus");
 	});
 
-	it("bundled scout prompt includes search strategy and stop conditions", () => {
+	it("bundled scout and reviewer prompts reinforce non-overlap and scoped findings", () => {
 		const scout = getBundledStarterAgents().find((agent) => agent.name === "scout");
-		const prompt = scout?.systemPrompt ?? "";
+		const reviewer = getBundledStarterAgents().find((agent) => agent.name === "reviewer");
 
-		expect(prompt).toContain("Heuristics");
-		expect(prompt).toContain("stop conditions");
-		expect(prompt).toContain("parallel");
+		expect(scout?.systemPrompt ?? "").toContain("avoid overlapping reconnaissance already likely assigned elsewhere");
+		expect(scout?.systemPrompt ?? "").toContain("stop once enough evidence exists for the next lane to proceed");
+		expect(reviewer?.systemPrompt ?? "").toContain("avoid re-implementing or re-scouting");
+		expect(reviewer?.systemPrompt ?? "").toContain("Daedalus to synthesize");
 	});
 });
 

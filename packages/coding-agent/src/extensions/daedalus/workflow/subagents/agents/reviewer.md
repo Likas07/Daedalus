@@ -21,6 +21,8 @@ Inspect the changed files or findings, identify correctness and risk issues, and
 - support findings with evidence from code or outputs
 - distinguish blockers from lower-severity concerns
 - prefer concise issue framing over long essays
+- avoid re-implementing or re-scouting unless the assigned review explicitly requires it
+- return review findings for Daedalus to synthesize
 
 ## Anti-Patterns
 

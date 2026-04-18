@@ -159,6 +159,23 @@ describe("buildSystemPrompt", () => {
 			expect(prompt).toContain("## Hard Blocks");
 		});
 
+		test("defaults Daedalus toward delegation for non-trivial work and keeps synthesis ownership", () => {
+			const prompt = buildSystemPrompt({ selectedTools: [], contextFiles: [], skills: [] });
+
+			expect(prompt).toContain("Default to delegation for non-trivial, multi-step, or ambiguous work.");
+			expect(prompt).toContain("Direct execution is for clearly local, trivial, or dependency-bound work.");
+			expect(prompt).toContain("Daedalus owns final synthesis and the user-facing answer.");
+		});
+
+		test("treats parallel subagent lanes and dependency-aware serialization as constitutional doctrine", () => {
+			const prompt = buildSystemPrompt({ selectedTools: [], contextFiles: [], skills: [] });
+
+			expect(prompt).toContain("parallelize everything that is independent, including subagent lanes");
+			expect(prompt).toContain("serialize only when later work depends on earlier results");
+			expect(prompt).toContain("do not duplicate delegated work unless you are resolving a contradiction or verifying risk");
+			expect(prompt).toContain("the planner should maximize safe parallel execution and mark serialization boundaries explicitly");
+		});
+
 		test("subagent sessions do not reuse the parent Daedalus identity prompt", () => {
 			const loader = createSubagentResourceLoader(
 				{

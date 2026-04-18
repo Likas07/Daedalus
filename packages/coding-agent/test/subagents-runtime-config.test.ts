@@ -62,6 +62,7 @@ describe("resolveSubagentRuntimeConfig", () => {
 		});
 
 		expect(prompts.join("\n\n")).toContain("delegated sub-task");
+		expect(prompts.join("\n\n")).toContain("one delegated lane in a broader plan");
 		expect(prompts.join("\n\n")).toContain("You are the scout subagent.");
 		expect(prompts.join("\n\n")).toContain("Goal: Trace auth flow");
 	});

@@ -160,6 +160,15 @@ describe("starter-pack subagent extension", () => {
 		expect(textContent?.text ?? "").toContain("[DAEDALUS]");
 		expect(textContent?.text ?? "").toContain("Daedalus is a master artisan");
 		expect(textContent?.text ?? "").toContain("Delegate focused work when it improves quality, speed, or safety.");
+		expect(textContent?.text ?? "").toContain("Default to delegation for non-trivial, multi-step, or ambiguous work.");
+		expect(textContent?.text ?? "").toContain(
+			"Parallelize everything that is independent; serialize only when later work depends on earlier results.",
+		);
+		expect(textContent?.text ?? "").toContain(
+			"Use planner when the task needs decomposition or dependency-aware sequencing.",
+		);
+		expect(textContent?.text ?? "").toContain("Keep final synthesis in Daedalus; subagents return scoped results.");
+		expect(textContent?.text ?? "").toContain("Avoid duplicate or overly granular delegations.");
 		expect(textContent?.text ?? "").toContain("Use compact task packets and inspectable task results.");
 		expect(textContent?.text ?? "").toContain('Use agent="scout" for Icarus (scout)');
 		expect(textContent?.text ?? "").toContain('Use agent="planner" for Prometheus (planner)');

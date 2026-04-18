@@ -19,8 +19,11 @@ Map the smallest evidence set needed for another agent to proceed.
 ## Heuristics
 
 - parallelize independent search paths
+- avoid overlapping reconnaissance already likely assigned elsewhere
 - prefer concise evidence-backed findings
 - return only the minimum architectural facts another agent needs
+- stop once enough evidence exists for the next lane to proceed
+- surface dependency blockers instead of continuing speculative search
 
 ## Anti-Patterns
 
