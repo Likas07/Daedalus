@@ -65,4 +65,18 @@ describe("resolveSubagentRuntimeConfig", () => {
 		expect(prompts.join("\n\n")).toContain("You are the scout subagent.");
 		expect(prompts.join("\n\n")).toContain("Goal: Trace auth flow");
 	});
+
+	it("treats the role prompt as the subagent identity/doctrine layer", () => {
+		const prompts = buildSubagentAppendPrompts({
+			agent: {
+				name: "worker",
+				systemPrompt:
+					"You are Hephaestus (worker), a delegated implementation specialist.\n\n## Operating Mode\n- finish the assigned task fully",
+			},
+			packetText: "Goal: patch auth flow",
+		});
+
+		expect(prompts[1]).toContain("You are Hephaestus (worker)");
+		expect(prompts[1]).toContain("## Operating Mode");
+	});
 });
