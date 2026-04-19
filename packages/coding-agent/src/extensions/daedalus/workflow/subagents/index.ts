@@ -4,7 +4,7 @@ import { Type } from "@sinclair/typebox";
 import { getAgentDir } from "../../../../config.js";
 import { discoverSubagents } from "../../../../core/subagents/index.js";
 import { getBundledStarterAgents } from "./bundled.js";
-import { buildInspectorOptions, formatInspectorLabel, openSubagentArtifacts } from "./inspect.js";
+import { buildInspectorOptions, formatInspectorLabel, openSubagentInspector } from "./inspect.js";
 import { getOrchestratorGuidance } from "./orchestrator-prompt.js";
 import { formatTaskProgress } from "./task-progress-renderer.js";
 
@@ -14,6 +14,7 @@ interface SubagentToolDetails {
 	goal: string;
 	status: "running" | "completed" | "failed" | "aborted";
 	summary: string;
+	deliverable?: unknown;
 	activity?: string;
 	recentActivity?: string[];
 	childSessionFile?: string;
@@ -45,7 +46,11 @@ function renderSubagentResult(
 	result: { content: Array<{ type: string; text?: string }>; details?: unknown },
 	options: { isPartial: boolean },
 	theme: any,
+	context: { state: Record<string, unknown> },
 ): Text {
+	delete context.state.primaryActionData;
+	delete context.state.primaryActionLabel;
+
 	const details = result.details as SubagentToolDetails | undefined;
 	if (!details) {
 		const text = result.content[0];
@@ -73,12 +78,22 @@ function renderSubagentResult(
 		for (const activity of previous) {
 			text += `\n  ${theme.fg("dim", `↳ ${truncate(activity, 88)}`)}`;
 		}
+		if (details.childSessionFile || details.runId) {
+			context.state.primaryActionData = { toolName: "subagent", details };
+			context.state.primaryActionLabel = "Inspect";
+			text += `\n  ${theme.fg("accent", "Inspect (Enter · Ctrl+Alt+I to cycle)")}`;
+		}
 		return new Text(text, 0, 0);
 	}
 
 	text += `\n  ${theme.fg(details.status === "completed" ? "toolOutput" : "error", truncate(details.summary, 92))}`;
 	if (details.error) {
 		text += `\n  ${theme.fg("error", truncate(details.error, 92))}`;
+	}
+	if (details.childSessionFile || details.runId) {
+		context.state.primaryActionData = { toolName: "subagent", details };
+		context.state.primaryActionLabel = "Inspect";
+		text += `\n  ${theme.fg("accent", "Inspect (Enter · Ctrl+Alt+I to cycle)")}`;
 	}
 	return new Text(text, 0, 0);
 }
@@ -96,7 +111,7 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 			context: Type.Optional(Type.String()),
 		}),
 		renderCall: (args, theme) => renderSubagentCall(args, theme),
-		renderResult: (result, options, theme) => renderSubagentResult(result, options, theme),
+		renderResult: (result, options, theme, context) => renderSubagentResult(result, options, theme, context),
 		async execute(_toolCallId, params, _signal, onUpdate, ctx) {
 			const parentSessionFile = ctx.sessionManager.getSessionFile();
 			if (!parentSessionFile) {
@@ -141,6 +156,7 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 							recentActivity: progress.recentActivity,
 							childSessionFile: progress.childSessionFile,
 							contextArtifactPath: progress.contextArtifactPath,
+							runId: progress.runId,
 						} satisfies SubagentToolDetails,
 					});
 				},
@@ -189,7 +205,7 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 			const selectedLabel = await ctx.ui.select("Inspect subagent run", runs.map(formatInspectorLabel));
 			const selected = runs.find((run) => formatInspectorLabel(run) === selectedLabel);
 			if (selected) {
-				await openSubagentArtifacts(ctx, selected);
+				await openSubagentInspector(ctx, selected);
 			}
 		},
 	});

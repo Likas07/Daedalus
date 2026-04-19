@@ -69,6 +69,7 @@ import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.js";
 import type { SourceInfo } from "../../core/source-info.js";
 import type { TruncationResult } from "../../core/tools/truncate.js";
 import { getBundledStarterAgents } from "../../extensions/daedalus/workflow/subagents/bundled.js";
+import { openSubagentInspectorFromDetails } from "../../extensions/daedalus/workflow/subagents/viewer.js";
 import { getChangelogPath, getNewEntries, parseChangelog } from "../../utils/changelog.js";
 import { copyToClipboard } from "../../utils/clipboard.js";
 import { extensionForImageMimeType, readClipboardImage } from "../../utils/clipboard-image.js";
@@ -2196,6 +2197,7 @@ export class InteractiveMode {
 		this.ui.onDebug = () => this.handleDebugCommand();
 		this.defaultEditor.onAction("app.model.select", () => this.showModelSelector());
 		this.defaultEditor.onAction("app.tools.expand", () => this.toggleToolOutputExpansion());
+		this.defaultEditor.onAction("app.tools.focusLatestActionable", () => this.focusLatestActionableTool());
 		this.defaultEditor.onAction("app.thinking.toggle", () => this.toggleThinkingBlockVisibility());
 		this.defaultEditor.onAction("app.editor.external", () => this.openExternalEditor());
 		this.defaultEditor.onAction("app.message.followUp", () => this.handleFollowUp());
@@ -2501,18 +2503,11 @@ export class InteractiveMode {
 					for (const content of this.streamingMessage.content) {
 						if (content.type === "toolCall") {
 							if (!this.pendingTools.has(content.id)) {
-								const component = new ToolExecutionComponent(
+								const component = this.createToolExecutionComponent(
 									content.name,
 									content.id,
 									content.arguments,
-									{
-										showImages: this.settingsManager.getShowImages(),
-									},
-									this.getRegisteredToolDefinition(content.name),
-									this.ui,
-									this.sessionManager.getCwd(),
 								);
-								component.setExpanded(this.toolOutputExpanded);
 								this.chatContainer.addChild(component);
 								this.pendingTools.set(content.id, component);
 							} else {
@@ -2569,18 +2564,7 @@ export class InteractiveMode {
 			case "tool_execution_start": {
 				let component = this.pendingTools.get(event.toolCallId);
 				if (!component) {
-					component = new ToolExecutionComponent(
-						event.toolName,
-						event.toolCallId,
-						event.args,
-						{
-							showImages: this.settingsManager.getShowImages(),
-						},
-						this.getRegisteredToolDefinition(event.toolName),
-						this.ui,
-						this.sessionManager.getCwd(),
-					);
-					component.setExpanded(this.toolOutputExpanded);
+					component = this.createToolExecutionComponent(event.toolName, event.toolCallId, event.args);
 					this.chatContainer.addChild(component);
 					this.pendingTools.set(event.toolCallId, component);
 				}
@@ -2881,16 +2865,7 @@ export class InteractiveMode {
 				// Render tool call components
 				for (const content of message.content) {
 					if (content.type === "toolCall") {
-						const component = new ToolExecutionComponent(
-							content.name,
-							content.id,
-							content.arguments,
-							{ showImages: this.settingsManager.getShowImages() },
-							this.getRegisteredToolDefinition(content.name),
-							this.ui,
-							this.sessionManager.getCwd(),
-						);
-						component.setExpanded(this.toolOutputExpanded);
+						const component = this.createToolExecutionComponent(content.name, content.id, content.arguments);
 						this.chatContainer.addChild(component);
 
 						if (message.stopReason === "aborted" || message.stopReason === "error") {
@@ -2942,6 +2917,63 @@ export class InteractiveMode {
 			const times = compactionCount === 1 ? "1 time" : `${compactionCount} times`;
 			this.showStatus(`Session compacted ${times}`);
 		}
+	}
+
+	private createToolExecutionComponent(toolName: string, toolCallId: string, args: unknown): ToolExecutionComponent {
+		const component = new ToolExecutionComponent(
+			toolName,
+			toolCallId,
+			args,
+			{
+				showImages: this.settingsManager.getShowImages(),
+				keybindings: this.keybindings,
+				onPrimaryAction: (payload) => this.handleToolPrimaryAction(payload),
+				onCycleActionable: () => this.focusLatestActionableTool(),
+				onReleaseFocus: () => {
+					this.ui.setFocus(this.defaultEditor);
+					this.ui.requestRender();
+				},
+			},
+			this.getRegisteredToolDefinition(toolName),
+			this.ui,
+			this.sessionManager.getCwd(),
+		);
+		component.setExpanded(this.toolOutputExpanded);
+		return component;
+	}
+
+	private async handleToolPrimaryAction(payload: unknown): Promise<void> {
+		if (!payload || typeof payload !== "object") return;
+		const data = payload as { toolName?: unknown; details?: unknown };
+		if (data.toolName !== "subagent") return;
+		if (!data.details || typeof data.details !== "object") return;
+		const extensionRunner = this.session.extensionRunner;
+		if (!extensionRunner) return;
+		await openSubagentInspectorFromDetails(extensionRunner.createCommandContext(), data.details as any);
+	}
+
+	private getActionableToolComponents(): ToolExecutionComponent[] {
+		const components: ToolExecutionComponent[] = [];
+		for (let i = this.chatContainer.children.length - 1; i >= 0; i--) {
+			const child = this.chatContainer.children[i];
+			if (child instanceof ToolExecutionComponent && child.hasPrimaryAction()) {
+				components.push(child);
+			}
+		}
+		return components;
+	}
+
+	private focusLatestActionableTool(): void {
+		const components = this.getActionableToolComponents();
+		if (components.length === 0) {
+			this.showStatus("No actionable tool row.");
+			return;
+		}
+
+		const currentIndex = components.findIndex((component) => component.focused);
+		const nextComponent = currentIndex === -1 ? components[0] : components[(currentIndex + 1) % components.length];
+		this.ui.setFocus(nextComponent);
+		this.ui.requestRender();
 	}
 
 	async getUserInput(): Promise<string> {

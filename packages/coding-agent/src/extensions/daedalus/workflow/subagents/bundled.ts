@@ -11,13 +11,25 @@ const toolPolicies: Record<string, SubagentDefinition["toolPolicy"]> = {
 		maxDepth: 1,
 	},
 	planner: {
-		allowedTools: ["read", "grep", "find", "ls", "write", "hashline_edit"],
+		allowedTools: ["read", "grep", "find", "ls", "write", "hashline_edit", "skill"],
 		writableGlobs: [mdGlob],
 		spawns: [],
 		maxDepth: 1,
 	},
 	worker: {
-		allowedTools: ["read", "bash", "hashline_edit", "write", "grep", "find", "ls", "fetch", "ast_grep", "ast_edit"],
+		allowedTools: [
+			"read",
+			"bash",
+			"hashline_edit",
+			"write",
+			"grep",
+			"find",
+			"ls",
+			"fetch",
+			"ast_grep",
+			"ast_edit",
+			"skill",
+		],
 		writableGlobs: ["**/*"],
 		spawns: [],
 		maxDepth: 1,
@@ -78,8 +90,14 @@ function parseBundledAgent(source: string): SubagentDefinition {
 		executionModePreference: frontmatter.executionModePreference,
 		isolationPreference: frontmatter.isolationPreference,
 		costClass: frontmatter.costClass,
-		useWhen: frontmatter.useWhen?.split(",").map((value) => value.trim()).filter(Boolean),
-		avoidWhen: frontmatter.avoidWhen?.split(",").map((value) => value.trim()).filter(Boolean),
+		useWhen: frontmatter.useWhen
+			?.split(",")
+			.map((value) => value.trim())
+			.filter(Boolean),
+		avoidWhen: frontmatter.avoidWhen
+			?.split(",")
+			.map((value) => value.trim())
+			.filter(Boolean),
 		observabilityTags: frontmatter.observabilityTags
 			?.split(",")
 			.map((value) => value.trim())
@@ -93,7 +111,5 @@ function parseBundledAgent(source: string): SubagentDefinition {
 }
 
 export function getBundledStarterAgents(): SubagentDefinition[] {
-	return ["scout", "planner", "worker", "reviewer"].map((name) =>
-		parseBundledAgent(readAgentFile(name)),
-	);
+	return ["scout", "planner", "worker", "reviewer"].map((name) => parseBundledAgent(readAgentFile(name)));
 }

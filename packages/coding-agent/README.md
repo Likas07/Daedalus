@@ -402,6 +402,8 @@ Daedalus can run session-backed subagents as in-process child sessions with:
 - runtime-enforced tool, read, write, spawn, depth, and concurrency policy
 - explicit `submit_result` completion with optional structured-output validation
 - persisted transcript, context, result, and metadata artifacts for `/subagents` inspection
+- a read-only subagent inspector that can open transcript, context packet, result JSON, and metadata views
+- child-session entry from the inspector, with a return path back to the parent session
 
 Built-in starter-pack roles:
 - `orchestrator`
@@ -413,7 +415,7 @@ Built-in starter-pack roles:
 Commands:
 - `/orchestrator on|off|status`
 - `/agents`
-- `/subagents` — inspect transcript, context, and structured result artifacts
+- `/subagents` — inspect runs, artifacts, and child sessions for the current parent session
 
 Agent definitions can live in:
 - `~/.daedalus/agent/agents/*.md`

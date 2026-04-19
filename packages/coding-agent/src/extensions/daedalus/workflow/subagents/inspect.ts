@@ -1,9 +1,10 @@
 import type { ExtensionCommandContext } from "@daedalus-pi/coding-agent";
 import type { ActiveSubagentRun, SubagentRunResult, SubagentRunStatus } from "../../../../core/subagents/index.js";
+import { buildRunInspectorModel, type InspectorRunSource } from "./inspector.js";
 import { formatAgentLabel } from "./task-progress-renderer.js";
-import { showJsonArtifact, showTextArtifact } from "./viewer.js";
+import { showSubagentInspector } from "./viewer.js";
 
-export interface InspectableSubagentRun {
+export interface InspectableSubagentRun extends InspectorRunSource {
 	runId: string;
 	agent: string;
 	displayName?: string;
@@ -16,6 +17,8 @@ export interface InspectableSubagentRun {
 	childSessionFile?: string;
 	contextArtifactPath?: string;
 	resultArtifactPath?: string;
+	goal?: string;
+	parentSessionFile?: string;
 }
 
 function rankStatus(status: SubagentRunStatus): number {
@@ -35,6 +38,7 @@ export function buildInspectorOptions(
 		byRunId.set(run.runId, {
 			...byRunId.get(run.runId),
 			...run,
+			parentSessionFile: run.parentSessionFile,
 		});
 	}
 
@@ -51,44 +55,14 @@ export function formatInspectorLabel(run: InspectableSubagentRun): string {
 	return `${icon} ${formatAgentLabel({ name: run.agent, displayName: run.displayName })} · ${detail}`;
 }
 
-export async function openSubagentArtifacts(ctx: ExtensionCommandContext, run: InspectableSubagentRun): Promise<void> {
-	const actions = [
-		run.childSessionFile
-			? {
-					label: "Transcript",
-					open: () => showTextArtifact(ctx, `${run.agent} transcript`, run.childSessionFile!),
-				}
-			: undefined,
-		run.contextArtifactPath
-			? {
-					label: "Context packet",
-					open: () => showTextArtifact(ctx, `${run.agent} context`, run.contextArtifactPath!),
-				}
-			: undefined,
-		run.resultArtifactPath
-			? {
-					label: "Result JSON",
-					open: () => showJsonArtifact(ctx, `${run.agent} result`, run.resultArtifactPath!),
-				}
-			: undefined,
-	].filter((action): action is { label: string; open: () => Promise<void> } => Boolean(action));
-
-	if (actions.length === 0) {
-		ctx.ui.notify("No artifacts are available for this subagent run.", "info");
-		return;
-	}
-
-	if (actions.length === 1) {
-		await actions[0]!.open();
-		return;
-	}
-
-	const selectedLabel = await ctx.ui.select(
-		"Open subagent artifact",
-		actions.map((action) => action.label),
+export async function openSubagentInspector(ctx: ExtensionCommandContext, run: InspectableSubagentRun): Promise<void> {
+	await showSubagentInspector(
+		ctx,
+		buildRunInspectorModel({
+			...run,
+			parentSessionFile: run.parentSessionFile ?? ctx.sessionManager.getSessionFile(),
+		}),
 	);
-	const selected = actions.find((action) => action.label === selectedLabel);
-	if (selected) {
-		await selected.open();
-	}
 }
+
+export { buildRunInspectorModel };

@@ -1,6 +1,7 @@
 import path from "node:path";
 import { minimatch } from "minimatch";
 import { createCodingTools, type Tool } from "../tools/index.js";
+import { createSkillTool } from "../tools/skill.js";
 import type { SubagentDefinition, SubagentPolicy } from "./types.js";
 
 const WRITE_TOOLS = new Set(["write", "edit", "hashline_edit"]);
@@ -54,8 +55,16 @@ function extractPathArg(toolName: string, params: Record<string, unknown>): stri
 	}
 }
 
+function getAvailableSubagentTools(cwd: string, policy: SubagentPolicy): Tool[] {
+	const tools = createCodingTools(cwd);
+	if (policy.allowedTools.includes("skill")) {
+		tools.push(createSkillTool({ cwd }));
+	}
+	return tools;
+}
+
 export function createSubagentTools(cwd: string, policy: SubagentPolicy): Tool[] {
-	return createCodingTools(cwd)
+	return getAvailableSubagentTools(cwd, policy)
 		.filter((tool) => policy.allowedTools.includes(tool.name))
 		.map((tool) => {
 			if (!WRITE_TOOLS.has(tool.name) && !READ_TOOLS.has(tool.name)) {

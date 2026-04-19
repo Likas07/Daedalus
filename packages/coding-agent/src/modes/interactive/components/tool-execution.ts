@@ -1,5 +1,19 @@
-import { Box, type Component, Container, getCapabilities, Image, Spacer, Text, type TUI } from "@daedalus-pi/tui";
+import {
+	Box,
+	type Component,
+	Container,
+	type Focusable,
+	getCapabilities,
+	Image,
+	Key,
+	matchesKey,
+	Spacer,
+	Text,
+	type TUI,
+	truncateToWidth,
+} from "@daedalus-pi/tui";
 import type { ToolDefinition, ToolRenderContext } from "../../../core/extensions/types.js";
+import type { AppKeybinding, KeybindingsManager } from "../../../core/keybindings.js";
 import { allToolDefinitions } from "../../../core/tools/index.js";
 import { getTextOutput as getRenderedTextOutput } from "../../../core/tools/render-utils.js";
 import { convertToPng } from "../../../utils/image-convert.js";
@@ -7,14 +21,18 @@ import { theme } from "../theme/theme.js";
 
 export interface ToolExecutionOptions {
 	showImages?: boolean;
+	keybindings?: Pick<KeybindingsManager, "matches">;
+	onPrimaryAction?: (payload: unknown) => void | Promise<void>;
+	onCycleActionable?: () => void;
+	onReleaseFocus?: () => void;
 }
 
-export class ToolExecutionComponent extends Container {
+export class ToolExecutionComponent extends Container implements Focusable {
 	private contentBox: Box;
 	private contentText: Text;
 	private callRendererComponent?: Component;
 	private resultRendererComponent?: Component;
-	private rendererState: any = {};
+	private rendererState: Record<string, unknown> = {};
 	private imageComponents: Image[] = [];
 	private imageSpacers: Spacer[] = [];
 	private toolName: string;
@@ -36,6 +54,10 @@ export class ToolExecutionComponent extends Container {
 	};
 	private convertedImages: Map<number, { data: string; mimeType: string }> = new Map();
 	private hideComponent = false;
+	private readonly options: ToolExecutionOptions;
+	private primaryActionData?: unknown;
+	private primaryActionLabel?: string;
+	private _focused = false;
 
 	constructor(
 		toolName: string,
@@ -53,13 +75,12 @@ export class ToolExecutionComponent extends Container {
 		this.toolDefinition = toolDefinition;
 		this.builtInToolDefinition = allToolDefinitions[toolName as keyof typeof allToolDefinitions];
 		this.showImages = options.showImages ?? true;
+		this.options = options;
 		this.ui = ui;
 		this.cwd = cwd;
 
 		this.addChild(new Spacer(1));
 
-		// Always create both. contentBox is used for tools with renderer-based call/result composition.
-		// contentText is reserved for generic fallback rendering when no tool definition exists.
 		this.contentBox = new Box(1, 1, (text: string) => theme.bg("toolPendingBg", text));
 		this.contentText = new Text("", 1, 1, (text: string) => theme.bg("toolPendingBg", text));
 
@@ -70,6 +91,38 @@ export class ToolExecutionComponent extends Container {
 		}
 
 		this.updateDisplay();
+	}
+
+	get focused(): boolean {
+		return this._focused;
+	}
+
+	set focused(value: boolean) {
+		this._focused = value;
+		this.updateDisplay();
+	}
+
+	hasPrimaryAction(): boolean {
+		return this.primaryActionData !== undefined && !!this.options.onPrimaryAction;
+	}
+
+	async activatePrimaryAction(): Promise<void> {
+		if (!this.hasPrimaryAction()) return;
+		await this.options.onPrimaryAction?.(this.primaryActionData);
+	}
+
+	handleInput(data: string): void {
+		if (this.options.keybindings?.matches(data, "app.tools.focusLatestActionable" satisfies AppKeybinding)) {
+			this.options.onCycleActionable?.();
+			return;
+		}
+		if (matchesKey(data, Key.enter)) {
+			void this.activatePrimaryAction();
+			return;
+		}
+		if (matchesKey(data, Key.escape)) {
+			this.options.onReleaseFocus?.();
+		}
 	}
 
 	private getCallRenderer(): ToolDefinition<any, any>["renderCall"] | undefined {
@@ -114,6 +167,12 @@ export class ToolExecutionComponent extends Container {
 			showImages: this.showImages,
 			isError: this.result?.isError ?? false,
 		};
+	}
+
+	private syncPrimaryActionState(): void {
+		this.primaryActionData = this.rendererState.primaryActionData;
+		this.primaryActionLabel =
+			typeof this.rendererState.primaryActionLabel === "string" ? this.rendererState.primaryActionLabel : undefined;
 	}
 
 	private createCallFallback(): Component {
@@ -201,7 +260,14 @@ export class ToolExecutionComponent extends Container {
 		if (this.hideComponent) {
 			return [];
 		}
-		return super.render(width);
+		const lines = super.render(width);
+		if (!this.focused || !this.hasPrimaryAction()) {
+			return lines;
+		}
+		return lines.map((line, index) => {
+			const marker = index === 0 ? theme.fg("accent", "▌ ") : theme.fg("accent", "│ ");
+			return truncateToWidth(`${marker}${line}`, width);
+		});
 	}
 
 	private updateDisplay(): void {
@@ -213,6 +279,10 @@ export class ToolExecutionComponent extends Container {
 
 		let hasContent = false;
 		this.hideComponent = false;
+		this.primaryActionData = undefined;
+		this.primaryActionLabel = undefined;
+		delete this.rendererState.primaryActionData;
+		delete this.rendererState.primaryActionLabel;
 		if (this.hasRendererDefinition()) {
 			this.contentBox.setBgFn(bgFn);
 			this.contentBox.clear();
@@ -252,6 +322,7 @@ export class ToolExecutionComponent extends Container {
 						);
 						this.resultRendererComponent = component;
 						this.contentBox.addChild(component);
+						this.syncPrimaryActionState();
 						hasContent = true;
 					} catch {
 						this.resultRendererComponent = undefined;
@@ -322,6 +393,9 @@ export class ToolExecutionComponent extends Container {
 		const output = this.getTextOutput();
 		if (output) {
 			text += `\n${output}`;
+		}
+		if (this.focused && this.hasPrimaryAction()) {
+			text += `\n${this.primaryActionLabel ?? "Activate"}: Enter · Back to editor: Esc`;
 		}
 		return text;
 	}

@@ -2,16 +2,23 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { TUI } from "@daedalus-pi/tui";
+import { Container, type TUI } from "@daedalus-pi/tui";
 import stripAnsi from "strip-ansi";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.js";
 import { loadExtensions } from "../src/core/extensions/loader.js";
 import { ExtensionRunner } from "../src/core/extensions/runner.js";
-import type { ExtensionActions, ExtensionContextActions, ExtensionUIContext } from "../src/core/extensions/types.js";
+import type {
+	ExtensionActions,
+	ExtensionCommandContextActions,
+	ExtensionContextActions,
+	ExtensionUIContext,
+} from "../src/core/extensions/types.js";
+import { KeybindingsManager } from "../src/core/keybindings.js";
 import { ModelRegistry } from "../src/core/model-registry.js";
 import { SessionManager } from "../src/core/session-manager.js";
 import { ToolExecutionComponent } from "../src/modes/interactive/components/tool-execution.js";
+import { InteractiveMode } from "../src/modes/interactive/interactive-mode.js";
 import { initTheme } from "../src/modes/interactive/theme/theme.js";
 
 function createFakeTui(): TUI {
@@ -50,6 +57,23 @@ function createUiContext(overrides: Partial<ExtensionUIContext> = {}): Extension
 		setToolsExpanded: () => {},
 		...overrides,
 	};
+}
+
+function createCommandActions(overrides: Partial<ExtensionCommandContextActions> = {}): ExtensionCommandContextActions {
+	return {
+		waitForIdle: async () => {},
+		newSession: async () => ({ cancelled: false }),
+		fork: async () => ({ cancelled: false }),
+		navigateTree: async () => ({ cancelled: false }),
+		switchSession: async () => ({ cancelled: false }),
+		reload: async () => {},
+		...overrides,
+	};
+}
+
+async function flushMicrotasks(): Promise<void> {
+	await Promise.resolve();
+	await Promise.resolve();
 }
 
 describe("starter-pack subagent extension", () => {
@@ -127,6 +151,7 @@ describe("starter-pack subagent extension", () => {
 			registerProvider: () => {},
 			unregisterProvider: () => {},
 		});
+		runner.bindCommandContext(createCommandActions());
 		if (uiOverrides) {
 			runner.setUIContext(createUiContext(uiOverrides));
 		}
@@ -160,7 +185,9 @@ describe("starter-pack subagent extension", () => {
 		expect(textContent?.text ?? "").toContain("[DAEDALUS]");
 		expect(textContent?.text ?? "").toContain("Daedalus is a master artisan");
 		expect(textContent?.text ?? "").toContain("Delegate focused work when it improves quality, speed, or safety.");
-		expect(textContent?.text ?? "").toContain("Default to delegation for non-trivial, multi-step, or ambiguous work.");
+		expect(textContent?.text ?? "").toContain(
+			"Default to delegation for non-trivial, multi-step, or ambiguous work.",
+		);
 		expect(textContent?.text ?? "").toContain(
 			"Parallelize everything that is independent; serialize only when later work depends on earlier results.",
 		);
@@ -194,7 +221,7 @@ describe("starter-pack subagent extension", () => {
 		expect(JSON.stringify(notice.mock.calls)).not.toContain("orchestrator");
 	});
 
-	it("renders the active agent name and live progress details instead of a generic subagent label", async () => {
+	it("renders the active agent name, live progress details, and an inspect affordance", async () => {
 		const runner = await createRunner();
 		const definition = runner.getToolDefinition("subagent");
 		expect(definition).toBeDefined();
@@ -218,6 +245,7 @@ describe("starter-pack subagent extension", () => {
 					summary: "Trace auth flow",
 					activity: "grep /Authorization/ in src",
 					recentActivity: ["read src/auth.ts", "grep /Authorization/ in src"],
+					childSessionFile: "/tmp/parent/subagents/run-1.jsonl",
 				},
 				isError: false,
 			},
@@ -229,6 +257,169 @@ describe("starter-pack subagent extension", () => {
 		expect(rendered).toContain("Trace auth flow");
 		expect(rendered).toContain("grep /Authorization/ in src");
 		expect(rendered).toContain("read src/auth.ts");
+		expect(rendered).toContain("Inspect (");
+	});
+
+	it("activates the focused subagent tool row with Enter", async () => {
+		const runner = await createRunner();
+		const definition = runner.getToolDefinition("subagent");
+		const onPrimaryAction = vi.fn(async () => {});
+
+		const component = new ToolExecutionComponent(
+			"subagent",
+			"tool-activate",
+			{ agent: "worker", goal: "Inspect auth", assignment: "Review auth flow." },
+			{ onPrimaryAction },
+			definition,
+			createFakeTui(),
+			tempDir,
+		);
+		component.updateResult(
+			{
+				content: [{ type: "text", text: "done" }],
+				details: {
+					runId: "run-1",
+					agent: "worker",
+					goal: "Inspect auth",
+					status: "completed",
+					summary: "Reviewed auth flow",
+					childSessionFile: "/tmp/parent/subagents/run-1.jsonl",
+				},
+				isError: false,
+			},
+			false,
+		);
+
+		expect(component.hasPrimaryAction()).toBe(true);
+		component.focused = true;
+		component.handleInput("\r");
+		await flushMicrotasks();
+
+		expect(onPrimaryAction).toHaveBeenCalledWith({
+			toolName: "subagent",
+			details: {
+				runId: "run-1",
+				agent: "worker",
+				goal: "Inspect auth",
+				status: "completed",
+				summary: "Reviewed auth flow",
+				childSessionFile: "/tmp/parent/subagents/run-1.jsonl",
+			},
+		});
+	});
+
+	it("cycles focused actionable subagent rows newest-to-oldest and wraps", async () => {
+		const runner = await createRunner();
+		const definition = runner.getToolDefinition("subagent");
+		const makeActionableComponent = (toolCallId: string, goal: string) => {
+			const component = new ToolExecutionComponent(
+				"subagent",
+				toolCallId,
+				{ agent: "worker", goal, assignment: `${goal}.` },
+				{ onPrimaryAction: vi.fn(async () => {}) },
+				definition,
+				createFakeTui(),
+				tempDir,
+			);
+			component.updateResult(
+				{
+					content: [{ type: "text", text: goal }],
+					details: {
+						runId: toolCallId,
+						agent: "worker",
+						goal,
+						status: "completed",
+						summary: goal,
+						childSessionFile: `/tmp/parent/subagents/${toolCallId}.jsonl`,
+					},
+					isError: false,
+				},
+				false,
+			);
+			return component;
+		};
+
+		const older = makeActionableComponent("tool-older", "Inspect auth");
+		const newer = makeActionableComponent("tool-newer", "Inspect logs");
+		let focused: ToolExecutionComponent | undefined;
+		const fakeThis: any = {
+			chatContainer: new Container(),
+			showStatus: vi.fn(),
+			getActionableToolComponents: Reflect.get(InteractiveMode.prototype, "getActionableToolComponents"),
+			ui: {
+				setFocus: (component: ToolExecutionComponent) => {
+					if (focused) focused.focused = false;
+					focused = component;
+					component.focused = true;
+				},
+				requestRender: vi.fn(),
+			},
+		};
+		fakeThis.chatContainer.addChild(older);
+		fakeThis.chatContainer.addChild(newer);
+
+		const cycleActionableTools = Reflect.get(InteractiveMode.prototype, "focusLatestActionableTool") as (
+			this: typeof fakeThis,
+		) => void;
+
+		cycleActionableTools.call(fakeThis);
+		expect(newer.focused).toBe(true);
+		expect(older.focused).toBe(false);
+
+		cycleActionableTools.call(fakeThis);
+		expect(older.focused).toBe(true);
+		expect(newer.focused).toBe(false);
+
+		cycleActionableTools.call(fakeThis);
+		expect(newer.focused).toBe(true);
+		expect(older.focused).toBe(false);
+		expect(fakeThis.showStatus).not.toHaveBeenCalled();
+	});
+
+	it("cycles from a focused subagent tool row with Ctrl+Alt+I and releases focus with Escape", async () => {
+		const runner = await createRunner();
+		const definition = runner.getToolDefinition("subagent");
+		const onCycleActionable = vi.fn();
+		const onReleaseFocus = vi.fn();
+		const onPrimaryAction = vi.fn(async () => {});
+
+		const component = new ToolExecutionComponent(
+			"subagent",
+			"tool-cycle",
+			{ agent: "worker", goal: "Inspect auth", assignment: "Review auth flow." },
+			{
+				keybindings: new KeybindingsManager(),
+				onCycleActionable,
+				onPrimaryAction,
+				onReleaseFocus,
+			},
+			definition,
+			createFakeTui(),
+			tempDir,
+		);
+		component.updateResult(
+			{
+				content: [{ type: "text", text: "done" }],
+				details: {
+					runId: "run-1",
+					agent: "worker",
+					goal: "Inspect auth",
+					status: "completed",
+					summary: "Reviewed auth flow",
+					childSessionFile: "/tmp/parent/subagents/run-1.jsonl",
+				},
+				isError: false,
+			},
+			false,
+		);
+
+		component.focused = true;
+		component.handleInput("\u001b\t");
+		expect(onCycleActionable).toHaveBeenCalledTimes(1);
+		expect(onPrimaryAction).not.toHaveBeenCalled();
+
+		component.handleInput("\u001b");
+		expect(onReleaseFocus).toHaveBeenCalledTimes(1);
 	});
 
 	it("shows active runs first with status and activity labels", async () => {
@@ -373,29 +564,50 @@ describe("starter-pack subagent extension", () => {
 		expect(text).not.toContain("I’m Daedalus");
 	});
 
-	it("opens transcript, context, and result artifact actions from /subagents", async () => {
+	it("opens a real inspector overlay from /subagents and keeps transcript/context/result/meta actions available", async () => {
+		const parentSessionFile = path.join(tempDir, "parent.jsonl");
 		const sessionFile = path.join(tempDir, "run-1.jsonl");
 		const contextFile = path.join(tempDir, "run-1.context.md");
 		const resultFile = path.join(tempDir, "run-1.result.json");
+		const metaFile = path.join(tempDir, "run-1.meta.json");
 		fs.writeFileSync(sessionFile, "assistant: finished\n");
 		fs.writeFileSync(contextFile, "Focus on src/auth.ts\n");
 		fs.writeFileSync(resultFile, JSON.stringify({ changedFiles: ["src/auth.ts"] }, null, 2));
+		fs.writeFileSync(metaFile, JSON.stringify({ parentSessionFile }, null, 2));
 
 		const select = vi.fn(async (title: string, options: string[]) => {
 			if (title === "Inspect subagent run") return options[0];
-			if (title === "Open subagent artifact") return "Result JSON";
 			return undefined;
 		});
 		const renderedScreens: string[] = [];
+		const overlayFlags: boolean[] = [];
 		let customCalls = 0;
-		const custom: ExtensionUIContext["custom"] = async <T>(factory: Parameters<ExtensionUIContext["custom"]>[0]) => {
+		const custom: ExtensionUIContext["custom"] = async <T>(factory, options) => {
 			customCalls += 1;
+			overlayFlags.push(Boolean(options?.overlay));
 			const component = await factory(createFakeTui(), {} as any, {} as any, () => {});
 			renderedScreens.push(stripAnsi(component.render(120).join("\n")));
+			if (customCalls === 1) {
+				component.handleInput?.("3");
+				await flushMicrotasks();
+			}
 			return undefined as T;
 		};
 		const runner = await createRunner(
 			{
+				getActiveSubagentRuns: () => [
+					{
+						runId: "run-1",
+						agent: "worker",
+						parentSessionFile,
+						status: "completed",
+						summary: "Updated auth flow",
+						startedAt: 1,
+						updatedAt: 2,
+						childSessionFile: sessionFile,
+						contextArtifactPath: contextFile,
+					},
+				],
 				listSubagentRuns: async () => [
 					{
 						runId: "run-1",
@@ -414,14 +626,113 @@ describe("starter-pack subagent extension", () => {
 		const command = runner.getRegisteredCommands().find((entry) => entry.invocationName === "subagents");
 		await command!.handler("", runner.createCommandContext());
 
-		expect(select).toHaveBeenNthCalledWith(1, "Inspect subagent run", ["✓ worker · Updated auth flow"]);
-		expect(select).toHaveBeenNthCalledWith(2, "Open subagent artifact", [
-			"Transcript",
-			"Context packet",
-			"Result JSON",
-		]);
-		expect(customCalls).toBe(1);
-		expect(renderedScreens[0]).toContain("worker result");
-		expect(renderedScreens[0]).toContain('"changedFiles": [');
+		expect(select).toHaveBeenCalledTimes(1);
+		expect(select).toHaveBeenCalledWith("Inspect subagent run", ["✓ worker · Updated auth flow"]);
+		expect(customCalls).toBe(2);
+		expect(overlayFlags).toEqual([true, true]);
+		expect(renderedScreens[0]).toContain("worker · completed");
+		expect(renderedScreens[0]).toContain("Actions:");
+		expect(renderedScreens[0]).toContain("1. Transcript");
+		expect(renderedScreens[0]).toContain("2. Context packet");
+		expect(renderedScreens[0]).toContain("3. Result JSON");
+		expect(renderedScreens[0]).toContain("4. Metadata");
+		expect(renderedScreens[0]).toContain("5. Open child session");
+		expect(renderedScreens[0]).toContain("6. Back to parent");
+		expect(renderedScreens[1]).toContain("worker result");
+		expect(renderedScreens[1]).toContain('"changedFiles": [');
+	});
+
+	it("opens the child session from the inspector", async () => {
+		const parentSessionFile = path.join(tempDir, "parent.jsonl");
+		const sessionFile = path.join(tempDir, "run-2.jsonl");
+		fs.writeFileSync(sessionFile, "assistant: child\n");
+		fs.writeFileSync(path.join(tempDir, "run-2.meta.json"), JSON.stringify({ parentSessionFile }, null, 2));
+
+		const switchSession = vi.fn(async () => ({ cancelled: false }));
+		const custom: ExtensionUIContext["custom"] = async <T>(factory) => {
+			const component = await factory(createFakeTui(), {} as any, {} as any, () => {});
+			component.handleInput?.("3");
+			await flushMicrotasks();
+			return undefined as T;
+		};
+		const runner = await createRunner(
+			{
+				getActiveSubagentRuns: () => [
+					{
+						runId: "run-2",
+						agent: "worker",
+						parentSessionFile,
+						status: "completed",
+						summary: "Updated auth flow",
+						startedAt: 1,
+						updatedAt: 2,
+						childSessionFile: sessionFile,
+					},
+				],
+				listSubagentRuns: async () => [
+					{
+						runId: "run-2",
+						agent: "worker",
+						status: "completed",
+						summary: "Updated auth flow",
+						childSessionFile: sessionFile,
+					},
+				],
+			},
+			{ select: async (_title, options) => options[0], custom },
+		);
+		runner.bindCommandContext(createCommandActions({ switchSession }));
+
+		const command = runner.getRegisteredCommands().find((entry) => entry.invocationName === "subagents");
+		await command!.handler("", runner.createCommandContext());
+
+		expect(switchSession).toHaveBeenCalledWith(sessionFile);
+	});
+
+	it("returns to the parent session from the inspector", async () => {
+		const parentSessionFile = path.join(tempDir, "parent.jsonl");
+		const sessionFile = path.join(tempDir, "run-3.jsonl");
+		fs.writeFileSync(sessionFile, "assistant: child\n");
+		fs.writeFileSync(path.join(tempDir, "run-3.meta.json"), JSON.stringify({ parentSessionFile }, null, 2));
+
+		const switchSession = vi.fn(async () => ({ cancelled: false }));
+		const custom: ExtensionUIContext["custom"] = async <T>(factory) => {
+			const component = await factory(createFakeTui(), {} as any, {} as any, () => {});
+			component.handleInput?.("4");
+			await flushMicrotasks();
+			return undefined as T;
+		};
+		const runner = await createRunner(
+			{
+				getActiveSubagentRuns: () => [
+					{
+						runId: "run-3",
+						agent: "worker",
+						parentSessionFile,
+						status: "completed",
+						summary: "Updated auth flow",
+						startedAt: 1,
+						updatedAt: 2,
+						childSessionFile: sessionFile,
+					},
+				],
+				listSubagentRuns: async () => [
+					{
+						runId: "run-3",
+						agent: "worker",
+						status: "completed",
+						summary: "Updated auth flow",
+						childSessionFile: sessionFile,
+					},
+				],
+			},
+			{ select: async (_title, options) => options[0], custom },
+		);
+		runner.bindCommandContext(createCommandActions({ switchSession }));
+
+		const command = runner.getRegisteredCommands().find((entry) => entry.invocationName === "subagents");
+		await command!.handler("", runner.createCommandContext());
+
+		expect(switchSession).toHaveBeenCalledWith(parentSessionFile);
 	});
 });
