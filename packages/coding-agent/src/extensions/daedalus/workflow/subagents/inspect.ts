@@ -5,20 +5,7 @@ import { formatAgentLabel } from "./task-progress-renderer.js";
 import { showSubagentInspector } from "./viewer.js";
 
 export interface InspectableSubagentRun extends InspectorRunSource {
-	runId: string;
-	agent: string;
-	displayName?: string;
 	status: SubagentRunStatus;
-	summary: string;
-	startedAt?: number;
-	updatedAt?: number;
-	activity?: string;
-	recentActivity?: string[];
-	childSessionFile?: string;
-	contextArtifactPath?: string;
-	resultArtifactPath?: string;
-	goal?: string;
-	parentSessionFile?: string;
 }
 
 function rankStatus(status: SubagentRunStatus): number {
@@ -32,7 +19,7 @@ export function buildInspectorOptions(
 	const byRunId = new Map<string, InspectableSubagentRun>();
 
 	for (const run of persisted) {
-		byRunId.set(run.runId, run);
+		byRunId.set(run.runId, { ...run, parentSessionFile: undefined });
 	}
 	for (const run of active) {
 		byRunId.set(run.runId, {

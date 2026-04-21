@@ -283,10 +283,9 @@ export class SubagentRunner {
 			if (schemaError) {
 				const updatedAt = Date.now();
 				this.#registry.finish(runId, {
-				status: "failed",
-				summary: "Subagent returned invalid structured output.",
-				deliverable: undefined,
-			});
+					status: "failed",
+					summary: "Subagent returned invalid structured output.",
+				});
 				await queuePersist({
 				status: "failed",
 				summary: "Subagent returned invalid structured output.",

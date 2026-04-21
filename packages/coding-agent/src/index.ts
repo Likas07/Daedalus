@@ -213,9 +213,8 @@ export {
 	type PackageSource,
 	type RetrySettings,
 	SettingsManager,
-	type SubagentRoleOverride,
-	type SubagentSettings,
 } from "./core/settings-manager.js";
+export type { SubagentRoleOverride, SubagentSettings } from "./core/settings-schema.js";
 // Skills
 export {
 	formatSkillsForPrompt,

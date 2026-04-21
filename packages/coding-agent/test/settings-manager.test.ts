@@ -215,6 +215,26 @@ describe("SettingsManager", () => {
 		});
 	});
 
+	describe("compaction ergonomics", () => {
+		it("updates compaction token settings and branch summary ergonomics", async () => {
+			const sandbox = createSandbox();
+			const manager = SettingsManager.create(sandbox.projectDir, sandbox.agentDir);
+
+			manager.setCompactionReserveTokens(8192);
+			manager.setCompactionKeepRecentTokens(12000);
+			manager.setBranchSummaryReserveTokens(4096);
+			manager.setBranchSummarySkipPrompt(true);
+			await manager.flush();
+
+			expect(manager.getCompactionSettings()).toEqual({ enabled: true, reserveTokens: 8192, keepRecentTokens: 12000 });
+			expect(manager.getBranchSummarySettings()).toEqual({ reserveTokens: 4096, skipPrompt: true });
+
+			const saved = JSON.parse(readFileSync(sandbox.globalSettingsPath, "utf-8"));
+			expect(saved.compaction).toEqual({ reserveTokens: 8192, keepRecentTokens: 12000 });
+			expect(saved.branchSummary).toEqual({ reserveTokens: 4096, skipPrompt: true });
+		});
+	});
+
 	describe("project settings directory creation", () => {
 		it("does not create the project config dir when only reading project settings", () => {
 			const sandbox = createSandbox();

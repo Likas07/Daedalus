@@ -1,4 +1,4 @@
-import type { ActiveSubagentRun, SubagentRunResult } from "../../../../core/subagents/index.js";
+import type { SubagentRunStatus } from "../../../../core/subagents/index.js";
 import { createSubagentSessionLink } from "./session-link.js";
 import { formatAgentLabel } from "./task-progress-renderer.js";
 
@@ -24,10 +24,21 @@ export interface RunInspectorModel {
 	actions: InspectorAction[];
 }
 
-export type InspectorRunSource = (ActiveSubagentRun | SubagentRunResult) & {
+export type InspectorRunSource = {
+	runId: string;
+	agent: string;
+	status: SubagentRunStatus;
+	summary: string;
 	displayName?: string;
 	goal?: string;
 	parentSessionFile?: string;
+	startedAt?: number;
+	updatedAt?: number;
+	activity?: string;
+	recentActivity?: string[];
+	childSessionFile?: string;
+	contextArtifactPath?: string;
+	resultArtifactPath?: string;
 };
 
 export function buildRunInspectorModel(run: InspectorRunSource): RunInspectorModel {

@@ -117,14 +117,21 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 	};
 
 	const hasBash = tools.includes("bash");
+	const hasFsSearch = tools.includes("fs_search");
 	const hasGrep = tools.includes("grep");
 	const hasFind = tools.includes("find");
 	const hasLs = tools.includes("ls");
 	const hasRead = tools.includes("read");
+	const hasSemSearch = tools.includes("sem_search");
 	const hasSkill = tools.includes("skill");
 
 	// File exploration guidelines
-	if (hasBash && !hasGrep && !hasFind && !hasLs) {
+	if (hasSemSearch) {
+		addGuideline("Use sem_search for concept-level discovery when you do not know exact identifiers yet");
+	}
+	if (hasFsSearch) {
+		addGuideline("Prefer fs_search over grep/find/ls for exact discovery and paginated search results");
+	} else if (hasBash && !hasGrep && !hasFind && !hasLs) {
 		addGuideline("Use bash for file operations like ls, rg, find");
 	} else if (hasBash && (hasGrep || hasFind || hasLs)) {
 		addGuideline("Prefer grep/find/ls tools over bash for file exploration (faster, respects .gitignore)");

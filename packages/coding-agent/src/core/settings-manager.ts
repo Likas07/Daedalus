@@ -30,6 +30,10 @@ export interface RetrySettings {
 	maxDelayMs?: number; // default: 60000 (max server-requested delay before failing)
 }
 
+export interface PendingWorkSettings {
+	enabled?: boolean; // default: true
+}
+
 export interface TerminalSettings {
 	showImages?: boolean; // default: true (only relevant if terminal supports images)
 	clearOnShrink?: boolean; // default: false (clear empty rows when content shrinks)
@@ -80,6 +84,7 @@ export interface Settings {
 	compaction?: CompactionSettings;
 	branchSummary?: BranchSummarySettings;
 	retry?: RetrySettings;
+	pendingWork?: PendingWorkSettings;
 	hideThinkingBlock?: boolean;
 	shellPath?: string; // Custom shell path (e.g., for Cygwin users on Windows)
 	quietStartup?: boolean;
@@ -818,8 +823,26 @@ export class SettingsManager {
 		return this.settings.compaction?.reserveTokens ?? 16384;
 	}
 
+	setCompactionReserveTokens(reserveTokens: number): void {
+		if (!this.globalSettings.compaction) {
+			this.globalSettings.compaction = {};
+		}
+		this.globalSettings.compaction.reserveTokens = reserveTokens;
+		this.markModified("compaction", "reserveTokens");
+		this.save();
+	}
+
 	getCompactionKeepRecentTokens(): number {
 		return this.settings.compaction?.keepRecentTokens ?? 20000;
+	}
+
+	setCompactionKeepRecentTokens(keepRecentTokens: number): void {
+		if (!this.globalSettings.compaction) {
+			this.globalSettings.compaction = {};
+		}
+		this.globalSettings.compaction.keepRecentTokens = keepRecentTokens;
+		this.markModified("compaction", "keepRecentTokens");
+		this.save();
 	}
 
 	getCompactionSettings(): { enabled: boolean; reserveTokens: number; keepRecentTokens: number } {
@@ -837,8 +860,26 @@ export class SettingsManager {
 		};
 	}
 
+	setBranchSummaryReserveTokens(reserveTokens: number): void {
+		if (!this.globalSettings.branchSummary) {
+			this.globalSettings.branchSummary = {};
+		}
+		this.globalSettings.branchSummary.reserveTokens = reserveTokens;
+		this.markModified("branchSummary", "reserveTokens");
+		this.save();
+	}
+
 	getBranchSummarySkipPrompt(): boolean {
 		return this.settings.branchSummary?.skipPrompt ?? false;
+	}
+
+	setBranchSummarySkipPrompt(skipPrompt: boolean): void {
+		if (!this.globalSettings.branchSummary) {
+			this.globalSettings.branchSummary = {};
+		}
+		this.globalSettings.branchSummary.skipPrompt = skipPrompt;
+		this.markModified("branchSummary", "skipPrompt");
+		this.save();
 	}
 
 	getRetryEnabled(): boolean {
@@ -860,6 +901,25 @@ export class SettingsManager {
 			maxRetries: this.settings.retry?.maxRetries ?? 3,
 			baseDelayMs: this.settings.retry?.baseDelayMs ?? 2000,
 			maxDelayMs: this.settings.retry?.maxDelayMs ?? 60000,
+		};
+	}
+
+	getPendingWorkEnabled(): boolean {
+		return this.settings.pendingWork?.enabled ?? true;
+	}
+
+	setPendingWorkEnabled(enabled: boolean): void {
+		if (!this.globalSettings.pendingWork) {
+			this.globalSettings.pendingWork = {};
+		}
+		this.globalSettings.pendingWork.enabled = enabled;
+		this.markModified("pendingWork", "enabled");
+		this.save();
+	}
+
+	getPendingWorkSettings(): { enabled: boolean } {
+		return {
+			enabled: this.getPendingWorkEnabled(),
 		};
 	}
 

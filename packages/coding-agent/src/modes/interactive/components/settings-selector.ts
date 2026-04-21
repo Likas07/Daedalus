@@ -14,6 +14,7 @@ import { buildSettingsSections } from "./settings-sections.js";
 export interface SettingsSubagentRole {
 	name: string;
 	description: string;
+	displayName?: string;
 }
 
 export interface SettingsSubagentRoleOverride {

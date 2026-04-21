@@ -77,7 +77,7 @@ import type { SettingsManager } from "./settings-manager.js";
 import { loadSkillDocument } from "./skills.js";
 import type { SlashCommandInfo } from "./slash-commands.js";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.js";
-import { createTaskManager, TaskHistory } from "./control-plane/index.js";
+import { createTaskManager, LoopDetector, TaskHistory } from "./control-plane/index.js";
 import {
 	createSubagentResourceLoader,
 	createSubagentTools,
@@ -95,6 +95,14 @@ import { type BashOperations, createLocalBashOperations } from "./tools/bash.js"
 import { DEFAULT_ACTIVE_TOOL_NAMES } from "./tools/defaults.js";
 import { createAllToolDefinitions } from "./tools/index.js";
 import { createToolDefinitionFromAgentTool, wrapToolDefinition } from "./tools/tool-definition-wrapper.js";
+import {
+	extractTodoSnapshotFromCustomEntry,
+	extractTodoSnapshotFromDetails,
+	formatActiveTodoReminder,
+	hasActiveTodos,
+	serializeActiveTodoSignature,
+	type TodoSnapshot,
+} from "../extensions/daedalus/tools/todo-state.js";
 
 // ============================================================================
 // Skill Block Parsing
@@ -271,6 +279,7 @@ export class AgentSession {
 	private _followUpMessages: string[] = [];
 	/** Messages queued to be included with the next user prompt as context ("asides"). */
 	private _pendingNextTurnMessages: CustomMessage[] = [];
+	private _loopDetector = new LoopDetector({ maxRepeats: 3, maxCompletionAttempts: 3 });
 
 	// Compaction state
 	private _compactionAbortController: AbortController | undefined = undefined;
@@ -590,6 +599,9 @@ export class AgentSession {
 
 			this._resolveRetry();
 			await this._checkCompaction(msg);
+			if (msg.stopReason !== "aborted") {
+				await this._maybeEnforcePendingWork(msg);
+			}
 		}
 	}
 
@@ -600,6 +612,122 @@ export class AgentSession {
 			this._retryResolve = undefined;
 			this._retryPromise = undefined;
 		}
+	}
+
+	private _getLatestTodoSnapshotFromBranch(): TodoSnapshot | undefined {
+		let snapshot: TodoSnapshot | undefined;
+		for (const entry of this.sessionManager.getBranch()) {
+			if (entry.type === "custom") {
+				const customSnapshot = extractTodoSnapshotFromCustomEntry(entry.customType, entry.data);
+				if (customSnapshot) {
+					snapshot = customSnapshot;
+				}
+				continue;
+			}
+			if (entry.type !== "message") continue;
+			const message = entry.message;
+			if (message.role !== "toolResult") continue;
+			const nextSnapshot = extractTodoSnapshotFromDetails(message.toolName, message.details);
+			if (nextSnapshot) {
+				snapshot = nextSnapshot;
+			}
+		}
+		return snapshot;
+	}
+
+	private _getLatestCustomSignature(customType: string): string | undefined {
+		let signature: string | undefined;
+		for (const entry of this.sessionManager.getBranch()) {
+			if (entry.type !== "custom" || entry.customType !== customType) continue;
+			const data = entry.data as { signature?: unknown } | undefined;
+			if (typeof data?.signature === "string") {
+				signature = data.signature;
+			}
+		}
+		return signature;
+	}
+
+	private _looksLikeCompletionAttempt(message: AssistantMessage): boolean {
+		if (message.content.some((block) => block.type === "toolCall")) {
+			return false;
+		}
+		const text = message.content
+			.filter((block): block is TextContent => block.type === "text")
+			.map((block) => block.text)
+			.join("\n")
+			.toLowerCase();
+		if (!text.trim()) {
+			return false;
+		}
+		return [
+			/\bdone\b/,
+			/\bcomplete(?:d)?\b/,
+			/\bfinish(?:ed)?\b/,
+			/\ball set\b/,
+			/\bnothing (?:left|else)\b/,
+			/\bno further\b/,
+			/\bwrapped up\b/,
+		].some((pattern) => pattern.test(text));
+	}
+
+	private async _maybeEnforcePendingWork(lastAssistantMessage?: AssistantMessage): Promise<void> {
+		if (!this.settingsManager.getPendingWorkSettings().enabled) {
+			return;
+		}
+		if (this.pendingMessageCount > 0) {
+			return;
+		}
+
+		const snapshot = this._getLatestTodoSnapshotFromBranch();
+		if (!snapshot || !hasActiveTodos(snapshot.todos)) {
+			this._loopDetector.resetCompletion();
+			return;
+		}
+
+		const signature = serializeActiveTodoSignature(snapshot.todos);
+		if (!signature) {
+			this._loopDetector.resetCompletion();
+			return;
+		}
+
+		const completionAttempt = lastAssistantMessage ? this._looksLikeCompletionAttempt(lastAssistantMessage) : false;
+		if (!completionAttempt) {
+			this._loopDetector.resetCompletion();
+		} 
+
+		const triggeredLoopWarning = completionAttempt ? this._loopDetector.recordCompletionAttempt(signature) : false;
+		if (triggeredLoopWarning && signature !== this._getLatestCustomSignature("doom-loop-reminder-state")) {
+			const loopReminder =
+				"You are repeating completion attempts while active todo items remain. Change strategy: inspect the current todo state, update the plan, or use different discovery/debugging tools before concluding again.";
+			this.sessionManager.appendCustomEntry("doom-loop-reminder-state", { signature });
+			await this.sendCustomMessage(
+				{
+					customType: "doom-loop-reminder",
+					content: loopReminder,
+					display: true,
+					details: { todos: snapshot.todos },
+				},
+				{ triggerTurn: false },
+			);
+			await this.sendUserMessage(loopReminder);
+		}
+
+		if (signature === this._getLatestCustomSignature("pending-work-reminder-state")) {
+			return;
+		}
+
+		const reminder = formatActiveTodoReminder(snapshot.todos);
+		this.sessionManager.appendCustomEntry("pending-work-reminder-state", { signature });
+		await this.sendCustomMessage(
+			{
+				customType: "pending-work-reminder",
+				content: reminder,
+				display: true,
+				details: { todos: snapshot.todos },
+			},
+			{ triggerTurn: false },
+		);
+		await this.sendUserMessage(reminder);
 	}
 
 	/** Extract text content from a message */

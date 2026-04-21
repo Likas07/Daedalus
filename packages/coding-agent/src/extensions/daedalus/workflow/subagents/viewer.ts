@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import type { ExtensionCommandContext } from "@daedalus-pi/coding-agent";
 import { type Component, Key, matchesKey, Text, truncateToWidth } from "@daedalus-pi/tui";
+import type { SubagentRunStatus } from "../../../../core/subagents/index.js";
 import { buildRunInspectorModel, type InspectorAction, type RunInspectorModel } from "./inspector.js";
 
 async function showArtifactContent(ctx: ExtensionCommandContext, title: string, content: string): Promise<void> {
@@ -91,8 +92,8 @@ function createInspectorComponent(
 		const action = model.actions[index];
 		if (!action) return;
 		await runInspectorAction(ctx, model, action);
-		if (action.kind === "open-child" || action.kind === "back-to-parent") {
-			done();
+			if (action.kind === "open-child" || action.kind === "back-to-parent") {
+				done(undefined);
 			return;
 		}
 		refresh();
@@ -124,7 +125,7 @@ function createInspectorComponent(
 				return;
 			}
 			if (matchesKey(input, Key.escape) || input === "q") {
-				done();
+				done(undefined);
 			}
 		},
 		render: (width: number) => {
@@ -177,7 +178,7 @@ export async function openSubagentInspectorFromDetails(
 		runId?: string;
 		agent: string;
 		goal?: string;
-		status: string;
+		status: SubagentRunStatus;
 		summary: string;
 		activity?: string;
 		recentActivity?: string[];
@@ -191,7 +192,7 @@ export async function openSubagentInspectorFromDetails(
 		buildRunInspectorModel({
 			runId: details.runId ?? "subagent-run",
 			agent: details.agent,
-			status: details.status as RunInspectorModel["status"],
+			status: details.status,
 			summary: details.summary,
 			goal: details.goal,
 			activity: details.activity,
