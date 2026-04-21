@@ -38,6 +38,7 @@ tui-debug.log
 coverage/
 .nyc_output/
 packages/ai/test/.temp-images/
+testing/results/
 
 # Project specific
 .omp/
@@ -48,6 +49,7 @@ packages/ai/test/.temp-images/
 compaction-results/
 changes/
 __pycache__/
+packages/coding-agent/auth.json
 
 # Scratch files
 syntax.jsonl
