@@ -1,0 +1,25 @@
+schema_version = "1.1"
+
+[task]
+name = "daedalus/legacy-script-modernization"
+description = "Replace a broken Python 2 analysis script with a modern Python implementation and dependency manifest."
+authors = [{ name = "Oh My Pi", email = "noreply@example.com" }]
+keywords = ["python", "modernization", "legacy", "data-processing"]
+
+[metadata]
+category = "software-engineering"
+difficulty = "easy"
+expert_time_estimate_min = 15
+
+[verifier]
+timeout_sec = 60
+
+[agent]
+timeout_sec = 300
+
+[environment]
+build_timeout_sec = 300
+cpus = 1
+memory_mb = 1024
+storage_mb = 4096
+allow_internet = true

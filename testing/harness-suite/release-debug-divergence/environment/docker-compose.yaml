@@ -1,0 +1,5 @@
+services:
+  main:
+    network_mode: host
+    build:
+      network: host

@@ -1,0 +1,129 @@
+[[harness]]
+name = "codex"
+mode = "built_in"
+agent = "codex"
+model = "openai/gpt-5.4"
+agent_kwargs = { reasoning_effort = "high" }
+
+[[harness.auth]]
+env = "CODEX_AUTH_JSON_PATH"
+kind = "file"
+default = "~/.codex/auth.json"
+label = "Codex auth.json"
+container_target = "/logs/agent/auth.json"
+required = true
+login_hint = "Run `codex` and sign in with ChatGPT."
+
+[[harness]]
+name = "daedalus"
+mode = "custom"
+agent_import_path = "harbor_custom_agents:DaedalusAgent"
+repo_path = "/home/likas/Research/Daedalus"
+model = "openai-codex/gpt-5.4"
+
+[[harness.auth]]
+env = "DAEDALUS_AUTH_PATH"
+kind = "file"
+default = "~/.daedalus/agent/auth.json"
+label = "Daedalus auth.json"
+container_target = "/tmp/daedalus-agent/auth.json"
+required = true
+login_hint = "Run `daedalus`, then `/login openai-codex`."
+json_keys_any = ["openai-codex"]
+
+[[harness]]
+name = "oh-my-pi"
+mode = "custom"
+agent_import_path = "harbor_custom_agents:OhMyPiAgent"
+repo_path = "/home/likas/Research/harnesses/oh-my-pi"
+model = "openai-codex/gpt-5.4"
+
+agent_setup_timeout_multiplier = 5.0
+[[harness.auth]]
+env = "OMP_AGENT_DB_PATH"
+kind = "sqlite-db"
+default = "~/.omp/agent/agent.db"
+label = "Oh My Pi agent.db"
+container_target = "/tmp/omp-agent/agent.db"
+required = true
+login_hint = "Run `omp`, then `/login openai-codex`."
+
+[[harness]]
+name = "opencode"
+mode = "custom"
+agent_import_path = "harbor_custom_agents:OpenCodeLocalAgent"
+repo_path = "/home/likas/Research/harnesses/opencode"
+model = "openai/gpt-5.4"
+agent_setup_timeout_multiplier = 5.0
+
+[[harness.auth]]
+env = "OPENCODE_AUTH_ROOT"
+kind = "dir"
+default = "~/.local/share/opencode"
+label = "OpenCode data directory"
+container_target = "/tmp/opencode-xdg/share/opencode"
+required = true
+login_hint = "Run `opencode auth login` and confirm the data directory exists."
+json_file = "auth.json"
+json_keys_any = ["openai"]
+
+[[harness.auth]]
+env = "OPENCODE_CONFIG_ROOT"
+kind = "dir"
+default = "~/.config/opencode"
+label = "OpenCode config directory"
+container_target = "/tmp/opencode-xdg/config/opencode"
+required = false
+login_hint = "Optional; used when present."
+
+[[harness.auth]]
+env = "OPENCODE_STATE_ROOT"
+kind = "dir"
+default = "~/.local/state/opencode"
+label = "OpenCode state directory"
+container_target = "/tmp/opencode-xdg/state/opencode"
+required = false
+login_hint = "Optional; used when present."
+
+[[harness.auth]]
+env = "OPENCODE_CACHE_ROOT"
+kind = "dir"
+default = "~/.cache/opencode"
+label = "OpenCode cache directory"
+container_target = "/tmp/opencode-xdg/cache/opencode"
+required = false
+login_hint = "Optional; used when present."
+
+[[harness]]
+name = "free-code"
+mode = "custom"
+agent_import_path = "harbor_custom_agents:FreeCodeAgent"
+repo_path = "/home/likas/Research/harnesses/free-code"
+model = "openai/gpt-5.4"
+
+[[harness.auth]]
+env = "FREE_CODE_AUTH_PATH"
+kind = "file"
+default_strategy = "free_code_auth_file"
+label = "free-code global auth file"
+container_target = "/tmp/free-code-config/.claude.json"
+required = true
+login_hint = "Run `./cli /login` from the free-code repo root."
+json_keys_any = ["openaiOauthTokens", "codexOAuth"]
+
+[[harness]]
+name = "forgecode"
+mode = "custom"
+agent_import_path = "harbor_custom_agents:ForgeCodeAgent"
+repo_path = "/home/likas/Research/harnesses/forgecode"
+model = "openai/gpt-5.4"
+
+agent_setup_timeout_multiplier = 5.0
+[[harness.auth]]
+env = "FORGE_CONFIG_PATH"
+kind = "dir"
+default_strategy = "forge_config_dir"
+label = "Forge config directory"
+container_target = "/tmp/forge-config"
+required = true
+login_hint = "Run `forge provider login`."
