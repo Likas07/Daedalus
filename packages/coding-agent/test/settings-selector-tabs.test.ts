@@ -31,11 +31,11 @@ function makeConfig(): SettingsConfig {
 		autocompleteMaxVisible: 5,
 		quietStartup: false,
 		clearOnShrink: false,
-		subagents: {
-			delegationAggressiveness: "balanced",
-			maxDepth: 2,
-			maxConcurrency: 4,
-			backgroundRoles: ["explore", "reviewer"],
+			subagents: {
+				delegationAggressiveness: "balanced",
+				maxDepth: 2,
+				maxConcurrency: 4,
+				backgroundRoles: ["sage"],
 			branchIsolation: {
 				enabled: true,
 				mutationThreshold: "high-risk",

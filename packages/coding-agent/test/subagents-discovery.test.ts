@@ -111,17 +111,17 @@ describe("discoverSubagents", () => {
 
 	it("does not expose Daedalus as a bundled subagent", () => {
 		const agents = getBundledStarterAgents();
-		expect(agents.map((agent) => agent.name)).toEqual(["scout", "planner", "worker", "reviewer"]);
+		expect(agents.map((agent) => agent.name)).toEqual(["sage", "muse", "worker"]);
 		expect(agents.some((agent) => agent.displayName === "Daedalus")).toBe(false);
 	});
 
-	it("bundled planner prompt maximizes parallel execution and marks serialization boundaries", () => {
-		const planner = getBundledStarterAgents().find((agent) => agent.name === "planner");
-		const prompt = planner?.systemPrompt ?? "";
+	it("bundled muse prompt creates durable plans with explicit dependencies", () => {
+		const muse = getBundledStarterAgents().find((agent) => agent.name === "muse");
+		const prompt = muse?.systemPrompt ?? "";
 
-		expect(prompt).toContain("maximize safe parallel execution");
-		expect(prompt).toContain("serialization boundaries");
-		expect(prompt).toContain("parallel lanes and serialized steps");
+		expect(prompt).toContain("Create durable plan artifacts under `plans/`");
+		expect(prompt).toContain("Parallel Lanes and Dependencies");
+		expect(prompt).toContain("verification criteria");
 	});
 
 	it("bundled worker prompt includes execution anti-patterns, finish-fully doctrine, and dependency reporting", () => {
@@ -131,18 +131,15 @@ describe("discoverSubagents", () => {
 		expect(prompt).toContain("Operating Mode");
 		expect(prompt).toContain("do not become another orchestrator");
 		expect(prompt).toContain("finish the assigned task fully");
-		expect(prompt).toContain("report blocked prerequisites clearly");
 		expect(prompt).toContain("leave final synthesis and user-facing judgment to Daedalus");
 	});
 
-	it("bundled scout and reviewer prompts reinforce non-overlap and scoped findings", () => {
-		const scout = getBundledStarterAgents().find((agent) => agent.name === "scout");
-		const reviewer = getBundledStarterAgents().find((agent) => agent.name === "reviewer");
+	it("bundled sage prompt reinforces bounded read-only findings", () => {
+		const sage = getBundledStarterAgents().find((agent) => agent.name === "sage");
 
-		expect(scout?.systemPrompt ?? "").toContain("avoid overlapping reconnaissance already likely assigned elsewhere");
-		expect(scout?.systemPrompt ?? "").toContain("stop once enough evidence exists for the next lane to proceed");
-		expect(reviewer?.systemPrompt ?? "").toContain("avoid re-implementing or re-scouting");
-		expect(reviewer?.systemPrompt ?? "").toContain("Daedalus to synthesize");
+		expect(sage?.systemPrompt ?? "").toContain("Read-Only Investigation");
+		expect(sage?.systemPrompt ?? "").toContain("Stop once enough evidence exists");
+		expect(sage?.systemPrompt ?? "").toContain("Return the minimum evidence-backed findings needed");
 	});
 });
 
@@ -164,13 +161,14 @@ describe("createSubagentResourceLoader", () => {
 			reload: async () => {},
 		};
 
-		const child = createSubagentResourceLoader(parent, ["Subagent append prompt", "Task packet"]);
+		const child = createSubagentResourceLoader(parent, ["Subagent append prompt", "Runtime overlay", "Task packet"]);
 
 		expect(child.getExtensions().extensions).toEqual([]);
 		expect(child.getSkills().skills).toHaveLength(1);
 		expect(child.getPrompts().prompts).toHaveLength(1);
 		expect(child.getAgentsFiles().agentsFiles[0]?.path).toBe("/tmp/AGENTS.md");
 		expect(child.getSystemPrompt()).toContain("Subagent append prompt");
+		expect(child.getSystemPrompt()).toContain("Runtime overlay");
 		expect(child.getSystemPrompt()).toContain("Task packet");
 		expect(child.getSystemPrompt()).not.toContain("The primary assistant is Daedalus");
 		expect(child.getAppendSystemPrompt()).toEqual([]);

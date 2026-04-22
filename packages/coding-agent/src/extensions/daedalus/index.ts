@@ -13,6 +13,7 @@ export { default as dynamicTools } from "./tools/dynamic-tools.js";
 export { default as fsSearch } from "./tools/fs-search.js";
 export { default as question } from "./tools/question.js";
 export { default as questionnaire } from "./tools/questionnaire.js";
+export { default as readAgentResultOutput } from "./tools/read-agent-result-output.js";
 export { default as semSearch } from "./tools/sem-search.js";
 export { default as semanticWorkspaceTools } from "./tools/semantic-workspace-tools.js";
 export { default as ssh } from "./tools/ssh.js";
@@ -28,5 +29,6 @@ export { default as statusLine } from "./ui/status-line.js";
 export { default as handoff } from "./workflow/handoff.js";
 export { default as planExecution } from "./workflow/plan-execution/index.js";
 export { default as planMode } from "./workflow/plan-mode/index.js";
+export { default as primaryRoleMode } from "./workflow/primary-role/index.js";
 // Workflow extensions
 export { default as qna } from "./workflow/qna.js";

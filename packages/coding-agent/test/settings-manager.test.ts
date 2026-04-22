@@ -111,9 +111,9 @@ describe("SettingsManager", () => {
 
 			const manager = SettingsManager.create(sandbox.projectDir, sandbox.agentDir);
 			manager.setSubagentDelegationAggressiveness("aggressive");
-			manager.setSubagentBackgroundRoles(["explore"]);
+			manager.setSubagentBackgroundRoles(["sage"]);
 			manager.setSubagentBranchIsolationThreshold("always");
-			manager.setSubagentRoleThinkingLevel("scout", "low");
+			manager.setSubagentRoleThinkingLevel("sage", "low");
 			await manager.flush();
 
 			const saved = JSON.parse(readFileSync(sandbox.globalSettingsPath, "utf-8"));
@@ -121,9 +121,9 @@ describe("SettingsManager", () => {
 			expect(saved.extensions).toEqual(["/tmp/ext.ts"]);
 			expect(saved.subagents).toEqual({
 				delegationAggressiveness: "aggressive",
-				backgroundRoles: ["explore"],
+				backgroundRoles: ["sage"],
 				branchIsolation: { mutationThreshold: "always" },
-				agents: { scout: { thinkingLevel: "low" } },
+				agents: { sage: { thinkingLevel: "low" } },
 			});
 		});
 	});

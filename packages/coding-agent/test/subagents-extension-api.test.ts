@@ -35,7 +35,7 @@ describe("subagent extension API", () => {
               const active = pi.getActiveSubagentRuns();
               if (active.length !== 0) throw new Error("expected empty registry before run");
               const result = await pi.runSubagent({
-                agent: { name: "scout", description: "scout", systemPrompt: "Find files", source: "bundled" },
+                agent: { name: "sage", description: "sage", systemPrompt: "Find files", source: "bundled" },
                 parentSessionFile: "/tmp/parent.jsonl",
                 goal: "Locate auth",
                 assignment: "Search the repo",
@@ -59,9 +59,22 @@ describe("subagent extension API", () => {
 
 		const runSubagent = vi.fn(async () => ({
 			runId: "run-1",
-			agent: "scout",
+			resultId: "run-1",
+			agent: "sage",
 			status: "completed" as const,
 			summary: "Found auth files",
+			task: "Locate auth",
+			conversationId: "/tmp/parent/subagents/run-1.jsonl",
+			output: "src/auth.ts\nsrc/tokens.ts",
+			reference: {
+				resultId: "run-1",
+				agentId: "sage",
+				conversationId: "/tmp/parent/subagents/run-1.jsonl",
+				task: "Locate auth",
+				status: "completed",
+				summary: "Found auth files",
+				note: "If you want the full output, use read_agent_result_output(run-1).",
+			},
 			childSessionFile: "/tmp/parent/subagents/run-1.jsonl",
 		}));
 
@@ -85,9 +98,22 @@ describe("subagent extension API", () => {
 			listSubagentRuns: async () => [
 				{
 					runId: "run-1",
-					agent: "scout",
+					resultId: "run-1",
+					agent: "sage",
 					status: "completed" as const,
 					summary: "Found auth files",
+					task: "Locate auth",
+					conversationId: "/tmp/parent/subagents/run-1.jsonl",
+					output: "src/auth.ts\nsrc/tokens.ts",
+					reference: {
+						resultId: "run-1",
+						agentId: "sage",
+						conversationId: "/tmp/parent/subagents/run-1.jsonl",
+						task: "Locate auth",
+						status: "completed",
+						summary: "Found auth files",
+						note: "If you want the full output, use read_agent_result_output(run-1).",
+					},
 					childSessionFile: "/tmp/parent/subagents/run-1.jsonl",
 				},
 			],

@@ -8,14 +8,14 @@ describe("SettingsManager subagent settings", () => {
 				delegationAggressiveness: "aggressive",
 				maxDepth: 3,
 				maxConcurrency: 6,
-				backgroundRoles: ["explore", "reviewer"],
+				backgroundRoles: ["sage"],
 				branchIsolation: {
 					enabled: true,
 					mutationThreshold: "always",
 					namingTemplate: "subagent/{parentBranch}/{agent}/{runId}",
 				},
 				agents: {
-					explore: {
+					sage: {
 						model: "anthropic/claude-sonnet-4-5",
 						thinkingLevel: "low",
 						executionModePreference: "background",
@@ -28,14 +28,14 @@ describe("SettingsManager subagent settings", () => {
 			delegationAggressiveness: "aggressive",
 			maxDepth: 3,
 			maxConcurrency: 6,
-			backgroundRoles: ["explore", "reviewer"],
+			backgroundRoles: ["sage"],
 			branchIsolation: {
 				enabled: true,
 				mutationThreshold: "always",
 				namingTemplate: "subagent/{parentBranch}/{agent}/{runId}",
 			},
 			agents: {
-				explore: {
+				sage: {
 					model: "anthropic/claude-sonnet-4-5",
 					thinkingLevel: "low",
 					executionModePreference: "background",
@@ -51,7 +51,7 @@ describe("SettingsManager subagent settings", () => {
 			delegationAggressiveness: "balanced",
 			maxDepth: 2,
 			maxConcurrency: 4,
-			backgroundRoles: ["explore", "reviewer"],
+			backgroundRoles: ["sage"],
 			branchIsolation: {
 				enabled: true,
 				mutationThreshold: "high-risk",
@@ -66,14 +66,14 @@ describe("SettingsManager subagent settings", () => {
 		manager.setSubagentDelegationAggressiveness("conservative");
 		manager.setSubagentMaxDepth(3);
 		manager.setSubagentMaxConcurrency(6);
-		manager.setSubagentBackgroundRoles(["planner"]);
+		manager.setSubagentBackgroundRoles(["muse"]);
 		manager.setSubagentBranchIsolationThreshold("always");
 
 		expect(manager.getSubagentSettings()).toEqual({
 			delegationAggressiveness: "conservative",
 			maxDepth: 3,
 			maxConcurrency: 6,
-			backgroundRoles: ["planner"],
+			backgroundRoles: ["muse"],
 			branchIsolation: {
 				enabled: true,
 				mutationThreshold: "always",
@@ -85,19 +85,19 @@ describe("SettingsManager subagent settings", () => {
 
 	it("stores and clears v2 per-role overrides", () => {
 		const manager = SettingsManager.inMemory();
-		manager.setSubagentRoleModel("explore", "anthropic/claude-sonnet-4-5");
-		manager.setSubagentRoleThinkingLevel("explore", "low");
-		manager.setSubagentRoleExecutionModePreference("explore", "background");
-		manager.setSubagentRoleIsolationPreference("explore", "shared-branch");
+		manager.setSubagentRoleModel("sage", "anthropic/claude-sonnet-4-5");
+		manager.setSubagentRoleThinkingLevel("sage", "low");
+		manager.setSubagentRoleExecutionModePreference("sage", "background");
+		manager.setSubagentRoleIsolationPreference("sage", "shared-branch");
 
-		expect(manager.getSubagentSettings().agents.explore).toEqual({
+		expect(manager.getSubagentSettings().agents.sage).toEqual({
 			model: "anthropic/claude-sonnet-4-5",
 			thinkingLevel: "low",
 			executionModePreference: "background",
 			isolationPreference: "shared-branch",
 		});
 
-		manager.clearSubagentRoleOverride("explore");
-		expect(manager.getSubagentSettings().agents.explore).toBeUndefined();
+		manager.clearSubagentRoleOverride("sage");
+		expect(manager.getSubagentSettings().agents.sage).toBeUndefined();
 	});
 });

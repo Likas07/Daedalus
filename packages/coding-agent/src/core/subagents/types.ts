@@ -7,7 +7,32 @@ import type {
 import type { BranchIsolationMetadata } from "./branch-isolation.js";
 
 export type SubagentSource = "bundled" | "user" | "project";
-export type SubagentRunStatus = "running" | "completed" | "failed" | "aborted";
+export type SubagentRunStatus = "running" | "completed" | "partial" | "blocked" | "failed" | "aborted";
+
+export type SubagentEnvelopeStatus = "completed" | "partial" | "blocked";
+
+export interface SubagentResultEnvelope {
+	task: string;
+	status: SubagentEnvelopeStatus;
+	summary: string;
+	output: string;
+}
+
+export interface SubagentResultSidecarRecord extends SubagentResultEnvelope {
+	resultId: string;
+	agentId: string;
+	conversationId: string;
+}
+
+export interface SubagentResultReference {
+	resultId: string;
+	agentId: string;
+	conversationId: string;
+	task: string;
+	status: SubagentEnvelopeStatus;
+	summary: string;
+	note: string;
+}
 
 export interface SubagentDefinition {
 	name: string;
@@ -75,6 +100,7 @@ export interface SubagentRunRequest {
 	goal: string;
 	assignment: string;
 	context?: string;
+	conversationId?: string;
 	outputSchema?: unknown;
 	policy?: Partial<SubagentPolicy>;
 	taskLabel?: string;
@@ -84,9 +110,14 @@ export interface SubagentRunRequest {
 
 export interface SubagentRunResult {
 	runId: string;
+	resultId?: string;
 	agent: string;
 	status: SubagentRunStatus;
 	summary: string;
+	task?: string;
+	conversationId?: string;
+	output?: string;
+	reference?: SubagentResultReference;
 	deliverable?: unknown;
 	goal?: string;
 	startedAt?: number;

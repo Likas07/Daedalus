@@ -124,9 +124,22 @@ describe("starter-pack subagent extension", () => {
 			setThinkingLevel: () => {},
 			runSubagent: vi.fn(async () => ({
 				runId: "run-1",
+				resultId: "run-1",
 				agent: "scout",
 				status: "completed" as const,
 				summary: "Found auth files",
+				task: "Locate auth",
+				conversationId: "/tmp/parent/subagents/run-1.jsonl",
+				output: "src/auth.ts\nsrc/tokens.ts",
+				reference: {
+					resultId: "run-1",
+					agentId: "scout",
+					conversationId: "/tmp/parent/subagents/run-1.jsonl",
+					task: "Locate auth",
+					status: "completed",
+					summary: "Found auth files",
+					note: "If you want the full output, use read_agent_result_output(run-1).",
+				},
 				childSessionFile: "/tmp/parent/subagents/run-1.jsonl",
 			})),
 			getActiveSubagentRuns: () => [],
@@ -192,15 +205,16 @@ describe("starter-pack subagent extension", () => {
 			"Parallelize everything that is independent; serialize only when later work depends on earlier results.",
 		);
 		expect(textContent?.text ?? "").toContain(
-			"Use planner when the task needs decomposition or dependency-aware sequencing.",
+			"Use Muse when the task needs decomposition or dependency-aware sequencing.",
 		);
-		expect(textContent?.text ?? "").toContain("Keep final synthesis in Daedalus; subagents return scoped results.");
+		expect(textContent?.text ?? "").toContain("Keep final synthesis in Daedalus; subagents return scoped lightweight references.");
+		expect(textContent?.text ?? "").toContain("Use summary first when consuming subagent results.");
+		expect(textContent?.text ?? "").toContain("read_agent_result_output(result_id)");
 		expect(textContent?.text ?? "").toContain("Avoid duplicate or overly granular delegations.");
 		expect(textContent?.text ?? "").toContain("Use compact task packets and inspectable task results.");
-		expect(textContent?.text ?? "").toContain('Use agent="scout" for Icarus (scout)');
-		expect(textContent?.text ?? "").toContain('Use agent="planner" for Prometheus (planner)');
+		expect(textContent?.text ?? "").toContain('Use agent="sage" for Sage (sage)');
+		expect(textContent?.text ?? "").toContain('Use agent="muse" for Muse (muse)');
 		expect(textContent?.text ?? "").toContain('Use agent="worker" for Hephaestus (worker)');
-		expect(textContent?.text ?? "").toContain('Use agent="reviewer" for Athena (reviewer)');
 	});
 
 	it("exposes the subagent tool in the prompt via a prompt snippet", async () => {
@@ -462,14 +476,26 @@ describe("starter-pack subagent extension", () => {
 		]);
 	});
 
-	it("renders deliverable text instead of meta-summary when deliverable exists", async () => {
+	it("returns a lightweight reference record instead of injecting full output", async () => {
 		const runner = await createRunner({
 			runSubagent: vi.fn(async () => ({
 				runId: "run-1",
+				resultId: "run-1",
 				agent: "worker",
 				status: "completed" as const,
 				summary: "Drafted a short introduction",
-				deliverable: "I am Hephaestus, a focused implementation specialist.",
+				task: "Introduce yourself",
+				conversationId: "/tmp/parent/subagents/run-1.jsonl",
+				output: "I am Hephaestus, a focused implementation specialist.",
+				reference: {
+					resultId: "run-1",
+					agentId: "worker",
+					conversationId: "/tmp/parent/subagents/run-1.jsonl",
+					task: "Introduce yourself",
+					status: "completed",
+					summary: "Drafted a short introduction",
+					note: "If you want the full output, use read_agent_result_output(run-1).",
+				},
 				childSessionFile: "/tmp/parent/subagents/run-1.jsonl",
 			})),
 		});
@@ -492,18 +518,38 @@ describe("starter-pack subagent extension", () => {
 
 		expect(result.content[0]).toEqual({
 			type: "text",
-			text: "I am Hephaestus, a focused implementation specialist.",
+			text: JSON.stringify({
+				resultId: "run-1",
+				agentId: "worker",
+				conversationId: "/tmp/parent/subagents/run-1.jsonl",
+				task: "Introduce yourself",
+				status: "completed",
+				summary: "Drafted a short introduction",
+				note: "If you want the full output, use read_agent_result_output(run-1).",
+			}),
 		});
 	});
 
-	it("shows the actual introduction text instead of a meta-summary", async () => {
+	it("does not inject the deferred full output into the parent-visible content", async () => {
 		const runner = await createRunner({
 			runSubagent: vi.fn(async () => ({
 				runId: "run-1",
+				resultId: "run-1",
 				agent: "worker",
 				status: "completed" as const,
 				summary: "Prepared a concise introduction",
-				deliverable: "I am Hephaestus, a focused implementation specialist who finishes the task fully.",
+				task: "Introduce yourself",
+				conversationId: "/tmp/parent/subagents/run-1.jsonl",
+				output: "I am Hephaestus, a focused implementation specialist who finishes the task fully.",
+				reference: {
+					resultId: "run-1",
+					agentId: "worker",
+					conversationId: "/tmp/parent/subagents/run-1.jsonl",
+					task: "Introduce yourself",
+					status: "completed",
+					summary: "Prepared a concise introduction",
+					note: "If you want the full output, use read_agent_result_output(run-1).",
+				},
 				childSessionFile: "/tmp/parent/subagents/run-1.jsonl",
 			})),
 		});
@@ -526,19 +572,39 @@ describe("starter-pack subagent extension", () => {
 
 		expect(result.content[0]).toEqual({
 			type: "text",
-			text: "I am Hephaestus, a focused implementation specialist who finishes the task fully.",
+			text: JSON.stringify({
+				resultId: "run-1",
+				agentId: "worker",
+				conversationId: "/tmp/parent/subagents/run-1.jsonl",
+				task: "Introduce yourself",
+				status: "completed",
+				summary: "Prepared a concise introduction",
+				note: "If you want the full output, use read_agent_result_output(run-1).",
+			}),
 		});
-		expect(JSON.stringify(result.content[0])).not.toContain("Prepared a concise introduction");
+		expect(JSON.stringify(result.content[0])).not.toContain("focused implementation specialist who finishes the task fully");
 	});
 
 	it("does not let the worker identify itself as Daedalus when asked directly", async () => {
 		const runner = await createRunner({
 			runSubagent: vi.fn(async () => ({
 				runId: "run-1",
+				resultId: "run-1",
 				agent: "worker",
 				status: "completed" as const,
 				summary: "Generated worker introduction",
-				deliverable: "I’m Hephaestus, a code-focused implementation specialist and software craftsperson.",
+				task: "Introduce yourself",
+				conversationId: "/tmp/parent/subagents/run-1.jsonl",
+				output: "I’m Hephaestus, a code-focused implementation specialist and software craftsperson.",
+				reference: {
+					resultId: "run-1",
+					agentId: "worker",
+					conversationId: "/tmp/parent/subagents/run-1.jsonl",
+					task: "Introduce yourself",
+					status: "completed",
+					summary: "Generated worker introduction",
+					note: "If you want the full output, use read_agent_result_output(run-1).",
+				},
 				childSessionFile: "/tmp/parent/subagents/run-1.jsonl",
 			})),
 		});
@@ -560,7 +626,7 @@ describe("starter-pack subagent extension", () => {
 		);
 
 		const text = (result.content[0] as { type: "text"; text: string }).text;
-		expect(text).toContain("Hephaestus");
+		expect(text).toContain("Generated worker introduction");
 		expect(text).not.toContain("I’m Daedalus");
 	});
 

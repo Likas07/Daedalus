@@ -5,16 +5,25 @@ import { getSubagentArtifactPaths } from "./artifacts.js";
 import { writePersistedSubagentRun } from "./persisted-runs.js";
 import { resolveSubagentPolicy } from "./policy.js";
 import { SubagentRegistry } from "./registry.js";
-import { validateSubagentResult } from "./result-validation.js";
+import { isSubagentResultEnvelope, validateSubagentEnvelope, validateSubagentResult } from "./result-validation.js";
 import type { SubmitResultPayload } from "./submit-result-tool.js";
 import { buildTaskPacket } from "./task-packet.js";
-import type { SubagentRunProgress, SubagentRunRequest, SubagentRunResult } from "./types.js";
+import type {
+	SubagentEnvelopeStatus,
+	SubagentResultEnvelope,
+	SubagentResultReference,
+	SubagentResultSidecarRecord,
+	SubagentRunProgress,
+	SubagentRunRequest,
+	SubagentRunResult,
+	SubagentRunStatus,
+} from "./types.js";
 
 const MAX_SUBMIT_REMINDERS = 2;
 const SUBMIT_REMINDER = [
 	"You must finish by calling submit_result exactly once.",
-	"If you succeeded, submit { summary, data }.",
-	"If you are blocked, submit { summary, error }.",
+	"Use the exact envelope { task, status, summary, output }.",
+	"Use status=blocked when a dependency prevents completion.",
 ].join(" ");
 
 export interface SubagentSessionHandle {
@@ -78,6 +87,45 @@ function pushRecentActivity(recent: string[], activity: string): string[] {
 	return next.slice(-4);
 }
 
+function createResultReference(input: {
+	resultId: string;
+	agentId: string;
+	conversationId: string;
+	envelope: SubagentResultEnvelope;
+}): SubagentResultReference {
+	return {
+		resultId: input.resultId,
+		agentId: input.agentId,
+		conversationId: input.conversationId,
+		task: input.envelope.task,
+		status: input.envelope.status,
+		summary: input.envelope.summary,
+		note: `If you want the full output, use read_agent_result_output(${input.resultId}).`,
+	};
+}
+
+function createSidecarRecord(input: {
+	resultId: string;
+	agentId: string;
+	conversationId: string;
+	envelope: SubagentResultEnvelope;
+}): SubagentResultSidecarRecord {
+	return {
+		resultId: input.resultId,
+		agentId: input.agentId,
+		conversationId: input.conversationId,
+		...input.envelope,
+	};
+}
+
+async function writeResultSidecar(path: string, record: SubagentResultSidecarRecord): Promise<void> {
+	await fs.writeFile(path, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+}
+
+function mapEnvelopeStatus(status: SubagentEnvelopeStatus): Exclude<SubagentRunStatus, "running"> {
+	return status;
+}
+
 export class SubagentRunner {
 	#createSession: CreateSubagentSession;
 	#registry: SubagentRegistry;
@@ -120,8 +168,14 @@ export class SubagentRunner {
 		this.assertCanRun(request);
 
 		const runId = randomUUID().slice(0, 8);
+		const resultId = runId;
 		const startedAt = Date.now();
-		const paths = getSubagentArtifactPaths(request.parentSessionFile, runId);
+		const paths = request.conversationId
+			? {
+				...getSubagentArtifactPaths(request.parentSessionFile, runId),
+				sessionFile: request.conversationId,
+			}
+			: getSubagentArtifactPaths(request.parentSessionFile, runId);
 		await fs.mkdir(paths.directory, { recursive: true });
 
 		const builtPacket = buildTaskPacket({
@@ -154,10 +208,13 @@ export class SubagentRunner {
 		let lastActivity = recentActivity[0];
 		let persistedRun: SubagentRunResult = {
 			runId,
+			resultId,
 			agent: request.agent.name,
 			status: "running",
 			summary: request.goal,
+			task: request.goal,
 			goal: request.goal,
+			conversationId: paths.sessionFile,
 			startedAt,
 			updatedAt: startedAt,
 			activity: lastActivity,
@@ -198,6 +255,7 @@ export class SubagentRunner {
 				activity: activity ?? lastActivity,
 				recentActivity,
 				childSessionFile: paths.sessionFile,
+				conversationId: paths.sessionFile,
 				contextArtifactPath,
 			});
 			const progress: SubagentRunProgress = {
@@ -252,21 +310,22 @@ export class SubagentRunner {
 				const updatedAt = Date.now();
 				this.#registry.finish(runId, { status: "failed", summary: "Subagent exited without submit_result." });
 				await queuePersist({
-				status: "failed",
-				summary: "Subagent exited without submit_result.",
-				deliverable: undefined,
-				updatedAt,
-				activity: lastActivity,
+					status: "failed",
+					summary: "Subagent exited without submit_result.",
+					updatedAt,
+					activity: lastActivity,
 					recentActivity,
 					error: "Subagent exited without submit_result.",
 				});
 				return {
 					runId,
+					resultId,
 					agent: request.agent.name,
-				status: "failed",
-				summary: "Subagent exited without submit_result.",
-				deliverable: undefined,
-				goal: request.goal,
+					status: "failed",
+					summary: "Subagent exited without submit_result.",
+					task: request.goal,
+					goal: request.goal,
+					conversationId: paths.sessionFile,
 					startedAt,
 					updatedAt,
 					activity: lastActivity,
@@ -277,9 +336,51 @@ export class SubagentRunner {
 				};
 			}
 
-			const schemaError = submitPayload.error
-				? undefined
-				: validateSubagentResult(submitPayload.data, request.outputSchema ?? request.agent.outputSchema);
+			const envelopeError = validateSubagentEnvelope(submitPayload);
+			if (envelopeError || !isSubagentResultEnvelope(submitPayload)) {
+				const updatedAt = Date.now();
+				this.#registry.finish(runId, {
+					status: "failed",
+					summary: "Subagent returned invalid result envelope.",
+				});
+				await queuePersist({
+					status: "failed",
+					summary: "Subagent returned invalid result envelope.",
+					updatedAt,
+					activity: lastActivity,
+					recentActivity,
+					error: envelopeError ?? "Invalid subagent result envelope.",
+				});
+				return {
+					runId,
+					resultId,
+					agent: request.agent.name,
+					status: "failed",
+					summary: "Subagent returned invalid result envelope.",
+					task: request.goal,
+					goal: request.goal,
+					conversationId: paths.sessionFile,
+					startedAt,
+					updatedAt,
+					activity: lastActivity,
+					recentActivity,
+					childSessionFile: paths.sessionFile,
+					contextArtifactPath,
+					error: envelopeError ?? "Invalid subagent result envelope.",
+				};
+			}
+
+			const structuredOutput = (() => {
+				try {
+					return JSON.parse(submitPayload.output);
+				} catch {
+					return submitPayload.output;
+				}
+			})();
+			const schemaError = validateSubagentResult(
+				structuredOutput,
+				request.outputSchema ?? request.agent.outputSchema,
+			);
 			if (schemaError) {
 				const updatedAt = Date.now();
 				this.#registry.finish(runId, {
@@ -287,21 +388,22 @@ export class SubagentRunner {
 					summary: "Subagent returned invalid structured output.",
 				});
 				await queuePersist({
-				status: "failed",
-				summary: "Subagent returned invalid structured output.",
-				deliverable: undefined,
-				updatedAt,
+					status: "failed",
+					summary: "Subagent returned invalid structured output.",
+					updatedAt,
 					activity: lastActivity,
 					recentActivity,
 					error: schemaError,
 				});
 				return {
 					runId,
+					resultId,
 					agent: request.agent.name,
-				status: "failed",
-				summary: "Subagent returned invalid structured output.",
-				deliverable: undefined,
-				goal: request.goal,
+					status: "failed",
+					summary: "Subagent returned invalid structured output.",
+					task: submitPayload.task,
+					goal: request.goal,
+					conversationId: paths.sessionFile,
 					startedAt,
 					updatedAt,
 					activity: lastActivity,
@@ -312,40 +414,55 @@ export class SubagentRunner {
 				};
 			}
 
-			const resultArtifactPath = submitPayload.data !== undefined ? paths.resultFile : undefined;
-			if (resultArtifactPath) {
-				await fs.writeFile(resultArtifactPath, JSON.stringify(submitPayload.data, null, 2), "utf8");
-			}
+			const sidecar = createSidecarRecord({
+				resultId,
+				agentId: request.agent.name,
+				conversationId: paths.sessionFile,
+				envelope: submitPayload,
+			});
+			await writeResultSidecar(paths.resultFile, sidecar);
+			const reference = createResultReference({
+				resultId,
+				agentId: request.agent.name,
+				conversationId: paths.sessionFile,
+				envelope: submitPayload,
+			});
 
-			const status = submitPayload.error ? "failed" : "completed";
+			const status = mapEnvelopeStatus(submitPayload.status);
 			const updatedAt = Date.now();
 			this.#registry.finish(runId, { status, summary: submitPayload.summary });
 			await queuePersist({
-			status,
-			summary: submitPayload.summary,
-			deliverable: submitPayload.deliverable,
-			updatedAt,
+				status,
+				summary: submitPayload.summary,
+				task: submitPayload.task,
+				conversationId: paths.sessionFile,
+				output: submitPayload.output,
+				reference,
+				updatedAt,
 				activity: lastActivity,
 				recentActivity,
-				resultArtifactPath,
-				error: submitPayload.error,
+				resultArtifactPath: paths.resultFile,
+				data: sidecar,
 			});
 			return {
 				runId,
+				resultId,
 				agent: request.agent.name,
-			status,
-			summary: submitPayload.summary,
-			deliverable: submitPayload.deliverable,
-			goal: request.goal,
+				status,
+				summary: submitPayload.summary,
+				task: submitPayload.task,
+				goal: request.goal,
+				conversationId: paths.sessionFile,
+				output: submitPayload.output,
+				reference,
 				startedAt,
 				updatedAt,
 				activity: lastActivity,
 				recentActivity,
 				childSessionFile: paths.sessionFile,
 				contextArtifactPath,
-				resultArtifactPath,
-				data: submitPayload.data,
-				error: submitPayload.error,
+				resultArtifactPath: paths.resultFile,
+				data: sidecar,
 			};
 		} finally {
 			unsubscribe?.();

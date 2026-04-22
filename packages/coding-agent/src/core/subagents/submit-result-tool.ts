@@ -1,35 +1,31 @@
 import { Type } from "@sinclair/typebox";
 import type { ToolDefinition } from "../extensions/types.js";
+import type { SubagentResultEnvelope } from "./types.js";
 
-export interface SubmitResultPayload {
-	summary: string;
-	deliverable?: unknown;
-	data?: unknown;
-	error?: string;
-}
+export interface SubmitResultPayload extends SubagentResultEnvelope {}
 
 export function createSubmitResultTool(onSubmit: (payload: SubmitResultPayload) => void): ToolDefinition {
 	let submitted = false;
 	const parameters = Type.Object({
+		task: Type.String(),
+		status: Type.Union([Type.Literal("completed"), Type.Literal("partial"), Type.Literal("blocked")]),
 		summary: Type.String(),
-		deliverable: Type.Optional(Type.Unknown()),
-		data: Type.Optional(Type.Unknown()),
-		error: Type.Optional(Type.String()),
+		output: Type.String(),
 	});
 
 	return {
 		name: "submit_result",
 		label: "Submit Result",
 		description:
-			"Submit the final structured result for this subagent run exactly once. Use `summary` for parent-facing status, `deliverable` for the actual requested output, and `error` when blocked.",
+			"Submit the final subagent result exactly once using { task, status, summary, output }. summary is the short parent-facing conclusion; output is the full deferred result body.",
 		parameters,
 		async execute(_toolCallId, rawParams) {
-			const params = rawParams as { summary: string; deliverable?: unknown; data?: unknown; error?: string };
+			const params = rawParams as SubmitResultPayload;
 			if (submitted) {
 				throw new Error("submit_result may only be called once");
 			}
 			submitted = true;
-			onSubmit({ summary: params.summary, deliverable: params.deliverable, data: params.data, error: params.error });
+			onSubmit(params);
 			return {
 				content: [{ type: "text", text: "Result submitted." }],
 				details: {},

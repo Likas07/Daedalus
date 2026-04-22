@@ -2,17 +2,17 @@ import { describe, expect, it } from "vitest";
 import { getBundledStarterAgents } from "../src/extensions/daedalus/workflow/subagents/bundled.js";
 
 describe("role-aware performance tuning", () => {
-	it("gives scout and planner semantic/exact discovery tools while keeping task-state writes scoped", () => {
+	it("gives sage and muse semantic/exact discovery tools while keeping task-state writes scoped", () => {
 		const agents = getBundledStarterAgents();
-		const scout = agents.find((agent) => agent.name === "scout");
-		const planner = agents.find((agent) => agent.name === "planner");
-		expect(scout?.toolPolicy?.allowedTools).toEqual(expect.arrayContaining(["sem_search", "fs_search", "todo_read"]));
-		expect(scout?.toolPolicy?.allowedTools).toEqual(
+		const sage = agents.find((agent) => agent.name === "sage");
+		const muse = agents.find((agent) => agent.name === "muse");
+		expect(sage?.toolPolicy?.allowedTools).toEqual(expect.arrayContaining(["sem_search", "fs_search", "todo_read"]));
+		expect(sage?.toolPolicy?.allowedTools).toEqual(
 			expect.arrayContaining(["sem_workspace_status", "sem_workspace_init", "sem_workspace_sync"]),
 		);
-		expect(scout?.toolPolicy?.allowedTools).not.toContain("todo_write");
-		expect(scout?.toolPolicy?.allowedTools).not.toContain("bash");
-		expect(planner?.toolPolicy?.allowedTools).toEqual(
+		expect(sage?.toolPolicy?.allowedTools).not.toContain("todo_write");
+		expect(sage?.toolPolicy?.allowedTools).not.toContain("bash");
+		expect(muse?.toolPolicy?.allowedTools).toEqual(
 			expect.arrayContaining([
 				"sem_search",
 				"fs_search",
@@ -26,25 +26,23 @@ describe("role-aware performance tuning", () => {
 		);
 	});
 
-	it("tunes worker and reviewer toward exact search and narrow task-state access", () => {
+	it("tunes worker toward exact search and narrow task-state access while reviewer behavior is absorbed elsewhere", () => {
 		const agents = getBundledStarterAgents();
 		const worker = agents.find((agent) => agent.name === "worker");
-		const reviewer = agents.find((agent) => agent.name === "reviewer");
-		expect(worker?.toolPolicy?.allowedTools).toEqual(expect.arrayContaining(["fs_search", "todo_read", "todo_write", "execute_plan", "sem_workspace_status"]));
-		expect(reviewer?.toolPolicy?.allowedTools).toEqual(expect.arrayContaining(["fs_search", "todo_read"]));
-		expect(reviewer?.toolPolicy?.allowedTools).not.toContain("todo_write");
-		expect(reviewer?.toolPolicy?.allowedTools).not.toContain("bash");
+		expect(worker?.toolPolicy?.allowedTools).toEqual(
+			expect.arrayContaining(["fs_search", "todo_read", "todo_write", "execute_plan", "sem_workspace_status"]),
+		);
+		expect(agents.some((agent) => agent.name === "reviewer")).toBe(false);
 	});
 
 	it("adds role-specific prompt doctrine for search and execution-state behavior", () => {
 		const agents = getBundledStarterAgents();
-		const scout = agents.find((agent) => agent.name === "scout");
-		const planner = agents.find((agent) => agent.name === "planner");
+		const sage = agents.find((agent) => agent.name === "sage");
+		const muse = agents.find((agent) => agent.name === "muse");
 		const worker = agents.find((agent) => agent.name === "worker");
-		const reviewer = agents.find((agent) => agent.name === "reviewer");
-		expect(scout?.systemPrompt).toContain("Prefer sem_search for ambiguous discovery");
-		expect(planner?.systemPrompt).toContain("Use execute_plan when a markdown plan artifact should become active tracked execution state.");
+		expect(sage?.systemPrompt).toContain("Stop once enough evidence exists");
+		expect(muse?.systemPrompt).toContain("Create durable plan artifacts under `plans/`");
 		expect(worker?.systemPrompt).toContain("Use todo_write narrowly");
-		expect(reviewer?.systemPrompt).toContain("Prefer fs_search/read/todo_read");
+		expect(worker?.systemPrompt).toContain("leave final synthesis and user-facing judgment to Daedalus");
 	});
 });

@@ -2323,6 +2323,7 @@ export class AgentSession {
 			createSession: async ({ runId, childSessionFile, packetText, request, onSubmit }) => {
 				const sessionManager = SessionManager.create(this._cwd, dirname(childSessionFile));
 				sessionManager.setSessionFile(childSessionFile);
+				const isResume = existsSync(childSessionFile);
 				const runtime = resolveSubagentRuntimeConfig({
 					request,
 					packetText,
@@ -2346,6 +2347,11 @@ export class AgentSession {
 						depth: request.metadata?.depth ?? 1,
 						spawns: runtime.policy.spawns,
 						maxDepth: runtime.policy.maxDepth,
+					},
+					sessionStartEvent: {
+						type: "session_start",
+						reason: isResume ? "resume" : "startup",
+						previousSessionFile: isResume ? childSessionFile : undefined,
 					},
 				});
 

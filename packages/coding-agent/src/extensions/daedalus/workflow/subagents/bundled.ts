@@ -4,7 +4,7 @@ import { parseFrontmatter } from "../../../../utils/frontmatter.js";
 
 const mdGlob = "**/*.md";
 const toolPolicies: Record<string, SubagentDefinition["toolPolicy"]> = {
-	scout: {
+	sage: {
 		allowedTools: [
 			"read",
 			"grep",
@@ -23,7 +23,7 @@ const toolPolicies: Record<string, SubagentDefinition["toolPolicy"]> = {
 		spawns: [],
 		maxDepth: 1,
 	},
-	planner: {
+	muse: {
 		allowedTools: [
 			"read",
 			"grep",
@@ -66,12 +66,6 @@ const toolPolicies: Record<string, SubagentDefinition["toolPolicy"]> = {
 			"skill",
 		],
 		writableGlobs: ["**/*"],
-		spawns: [],
-		maxDepth: 1,
-	},
-	reviewer: {
-		allowedTools: ["read", "grep", "find", "ls", "fs_search", "todo_read", "write", "hashline_edit"],
-		writableGlobs: [mdGlob],
 		spawns: [],
 		maxDepth: 1,
 	},
@@ -146,5 +140,5 @@ function parseBundledAgent(source: string): SubagentDefinition {
 }
 
 export function getBundledStarterAgents(): SubagentDefinition[] {
-	return ["scout", "planner", "worker", "reviewer"].map((name) => parseBundledAgent(readAgentFile(name)));
+	return ["sage", "muse", "worker"].map((name) => parseBundledAgent(readAgentFile(name)));
 }

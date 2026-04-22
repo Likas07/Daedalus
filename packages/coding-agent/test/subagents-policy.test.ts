@@ -77,22 +77,21 @@ describe("createSubagentTools", () => {
 });
 
 describe("bundled starter agent policies", () => {
-	it("grants skill to planner and worker only", () => {
+	it("grants skill to muse and worker only", () => {
 		const policies = new Map(
 			getBundledStarterAgents().map((agent) => [agent.name, agent.toolPolicy?.allowedTools ?? []]),
 		);
 
-		expect(policies.get("planner")).toContain("skill");
+		expect(policies.get("muse")).toContain("skill");
 		expect(policies.get("worker")).toContain("skill");
-		expect(policies.get("scout")).not.toContain("skill");
-		expect(policies.get("reviewer")).not.toContain("skill");
+		expect(policies.get("sage")).not.toContain("skill");
 	});
 });
 
 describe("isSubagentSpawnAllowed", () => {
 	it("allows only configured child agent names unless wildcard is used", () => {
-		expect(isSubagentSpawnAllowed(["scout", "worker"], "worker")).toBe(true);
-		expect(isSubagentSpawnAllowed(["scout", "worker"], "reviewer")).toBe(false);
-		expect(isSubagentSpawnAllowed("*", "reviewer")).toBe(true);
+		expect(isSubagentSpawnAllowed(["sage", "worker"], "worker")).toBe(true);
+		expect(isSubagentSpawnAllowed(["sage", "worker"], "muse")).toBe(false);
+		expect(isSubagentSpawnAllowed("*", "worker")).toBe(true);
 	});
 });

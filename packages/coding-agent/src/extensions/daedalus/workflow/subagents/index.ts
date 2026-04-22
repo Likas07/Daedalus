@@ -10,11 +10,15 @@ import { formatTaskProgress } from "./task-progress-renderer.js";
 
 interface SubagentToolDetails {
 	runId?: string;
+	resultId?: string;
 	agent: string;
 	goal: string;
-	status: "running" | "completed" | "failed" | "aborted";
+	task?: string;
+	conversationId?: string;
+	status: "running" | "completed" | "partial" | "blocked" | "failed" | "aborted";
 	summary: string;
-	deliverable?: unknown;
+	output?: string;
+	reference?: unknown;
 	activity?: string;
 	recentActivity?: string[];
 	childSessionFile?: string;
@@ -62,7 +66,9 @@ function renderSubagentResult(
 		? theme.fg("warning", "⋯")
 		: details.status === "completed"
 			? theme.fg("success", "✓")
-			: theme.fg("error", "✗");
+			: details.status === "partial"
+				? theme.fg("warning", "~")
+				: theme.fg("error", "✗");
 	let text = `${icon} ${theme.fg("accent", details.agent)}`;
 	text += theme.fg("muted", ` · ${truncate(details.goal, 64)}`);
 
@@ -109,6 +115,7 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 			goal: Type.String(),
 			assignment: Type.String(),
 			context: Type.Optional(Type.String()),
+			conversation_id: Type.Optional(Type.String()),
 		}),
 		renderCall: (args, theme) => renderSubagentCall(args, theme),
 		renderResult: (result, options, theme, context) => renderSubagentResult(result, options, theme, context),
@@ -134,6 +141,7 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 				goal: params.goal,
 				assignment: params.assignment,
 				context: params.context,
+				conversationId: params.conversation_id,
 				onProgress: (progress) => {
 					onUpdate?.({
 						content: [
@@ -162,16 +170,28 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 				},
 			});
 
-			const visibleContent = typeof result.deliverable === "string" ? result.deliverable : result.summary;
+			const visibleContent = JSON.stringify(result.reference ?? {
+				result_id: result.resultId ?? result.runId,
+				agent_id: result.agent,
+				conversation_id: result.conversationId ?? result.childSessionFile,
+				task: result.task ?? params.goal,
+				status: result.status,
+				summary: result.summary,
+				note: `If you want the full output, use read_agent_result_output(${result.resultId ?? result.runId}).`,
+			});
 
 			return {
 				content: [{ type: "text", text: visibleContent }],
 				details: {
 					agent: result.agent,
 					goal: params.goal,
+					task: result.task,
 					status: result.status,
 					summary: result.summary,
-					deliverable: result.deliverable,
+					output: result.output,
+					reference: result.reference,
+					resultId: result.resultId,
+					conversationId: result.conversationId,
 					runId: result.runId,
 					childSessionFile: result.childSessionFile,
 					contextArtifactPath: result.contextArtifactPath,

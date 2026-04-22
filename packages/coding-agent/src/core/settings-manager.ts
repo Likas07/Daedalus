@@ -560,7 +560,7 @@ export class SettingsManager {
 			delegationAggressiveness: this.settings.subagents?.delegationAggressiveness ?? "balanced",
 			maxDepth: this.settings.subagents?.maxDepth ?? 2,
 			maxConcurrency: this.settings.subagents?.maxConcurrency ?? 4,
-			backgroundRoles: [...(this.settings.subagents?.backgroundRoles ?? ["explore", "reviewer"])],
+			backgroundRoles: [...(this.settings.subagents?.backgroundRoles ?? ["sage"])],
 			branchIsolation: {
 				enabled: this.settings.subagents?.branchIsolation?.enabled ?? true,
 				mutationThreshold: this.settings.subagents?.branchIsolation?.mutationThreshold ?? "high-risk",

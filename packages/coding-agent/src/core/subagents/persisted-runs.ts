@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { getSubagentArtifactPaths } from "./artifacts.js";
-import type { SubagentRunResult } from "./types.js";
+import type { SubagentResultSidecarRecord, SubagentRunResult } from "./types.js";
 
 export async function writePersistedSubagentRun(metaFile: string, run: SubagentRunResult): Promise<void> {
 	await fs.mkdir(dirname(metaFile), { recursive: true });
@@ -26,4 +26,16 @@ export async function listPersistedSubagentRuns(parentSessionFile: string | unde
 		if (updatedDiff !== 0) return updatedDiff;
 		return (b.startedAt ?? 0) - (a.startedAt ?? 0);
 	});
+}
+
+export async function readPersistedSubagentResult(
+	parentSessionFile: string | undefined,
+	resultId: string,
+): Promise<SubagentResultSidecarRecord | undefined> {
+	if (!parentSessionFile) return undefined;
+	const directory = getSubagentArtifactPaths(parentSessionFile, resultId).directory;
+	const resultFile = join(directory, `${resultId}.result.json`);
+	const content = await fs.readFile(resultFile, "utf8").catch(() => undefined);
+	if (!content) return undefined;
+	return JSON.parse(content) as SubagentResultSidecarRecord;
 }

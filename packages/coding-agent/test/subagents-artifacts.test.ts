@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getSubagentArtifactPaths, SubagentRegistry, shouldSpillSubagentContext } from "../src/core/subagents/index.js";
+import { getSubagentArtifactPaths, readPersistedSubagentResult, SubagentRegistry, shouldSpillSubagentContext } from "../src/core/subagents/index.js";
 
 describe("getSubagentArtifactPaths", () => {
 	it("stores child files under the parent session artifact directory", () => {
@@ -24,12 +24,19 @@ describe("SubagentRegistry", () => {
 	it("returns active runs in insertion order and updates statuses in place", () => {
 		const registry = new SubagentRegistry();
 
-		registry.start({ runId: "run-1", agent: "scout", summary: "Locate auth", parentSessionFile: "/tmp/a.jsonl" });
-		registry.start({ runId: "run-2", agent: "planner", summary: "Draft plan", parentSessionFile: "/tmp/a.jsonl" });
+		registry.start({ runId: "run-1", agent: "sage", summary: "Locate auth", parentSessionFile: "/tmp/a.jsonl" });
+		registry.start({ runId: "run-2", agent: "muse", summary: "Draft plan", parentSessionFile: "/tmp/a.jsonl" });
 		registry.finish("run-1", { status: "completed", summary: "Found 3 files" });
 
 		expect(registry.getActiveRuns().map((run) => run.runId)).toEqual(["run-2"]);
 		expect(registry.getRun("run-1")?.status).toBe("completed");
 		expect(registry.getRun("run-1")?.summary).toBe("Found 3 files");
+	});
+});
+
+describe("readPersistedSubagentResult", () => {
+	it("returns undefined when a result sidecar does not exist", async () => {
+		const result = await readPersistedSubagentResult("/tmp/parent.jsonl", "missing");
+		expect(result).toBeUndefined();
 	});
 });

@@ -8,6 +8,7 @@ import dynamicTools from "./tools/dynamic-tools.js";
 import fsSearch from "./tools/fs-search.js";
 import question from "./tools/question.js";
 import questionnaire from "./tools/questionnaire.js";
+import readAgentResultOutput from "./tools/read-agent-result-output.js";
 import semSearch from "./tools/sem-search.js";
 import semanticWorkspaceTools from "./tools/semantic-workspace-tools.js";
 import skill from "./tools/skill.js";
@@ -19,6 +20,7 @@ import statusLine from "./ui/status-line.js";
 import handoff from "./workflow/handoff.js";
 import planExecution from "./workflow/plan-execution/index.js";
 import planMode from "./workflow/plan-mode/index.js";
+import primaryRoleMode from "./workflow/primary-role/index.js";
 import qna from "./workflow/qna.js";
 import subagents from "./workflow/subagents/index.js";
 
@@ -33,6 +35,7 @@ export default function daedalusBundle(pi: ExtensionAPI) {
 	todo(pi);
 	question(pi);
 	questionnaire(pi);
+	readAgentResultOutput(pi);
 	dynamicTools(pi);
 	fsSearch(pi);
 	semSearch(pi);
@@ -46,6 +49,7 @@ export default function daedalusBundle(pi: ExtensionAPI) {
 	handoff(pi);
 	planExecution(pi);
 	planMode(pi);
+	primaryRoleMode(pi);
 	subagents(pi);
 	statusLine(pi);
 	dynamicResources(pi);

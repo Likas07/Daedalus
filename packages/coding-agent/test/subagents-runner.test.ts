@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildTaskPacket, type SubagentDefinition, SubagentRegistry, SubagentRunner } from "../src/core/subagents/index.js";
+import { buildTaskPacket, type SubagentDefinition, readPersistedSubagentResult, SubagentRegistry, SubagentRunner } from "../src/core/subagents/index.js";
 
 const worker: SubagentDefinition = {
 	name: "worker",
@@ -20,7 +20,47 @@ describe("SubagentRunner", () => {
 		}
 	});
 
-	it("writes child sessions under the parent artifact dir and returns submitted data", async () => {
+	it("reuses an existing child session file when conversationId is provided", async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "daedalus-subagent-resume-"));
+		tempRoots.push(root);
+		const parentSessionFile = path.join(root, "parent.jsonl");
+		const existingConversation = path.join(root, "parent", "subagents", "existing.jsonl");
+		fs.mkdirSync(path.dirname(existingConversation), { recursive: true });
+		fs.writeFileSync(existingConversation, "previous transcript\n");
+
+		const createSession = vi.fn(async (options: any) => ({
+			prompt: async () => {
+				options.onSubmit({
+					task: "Continue auth fix",
+					status: "completed",
+					summary: "Resumed and finished auth normalization.",
+					output: "Continued the existing session and completed auth normalization.",
+				});
+			},
+			waitForIdle: async () => {},
+			abort: async () => {},
+			dispose: () => {},
+		}));
+
+		const runner = new SubagentRunner({ createSession, registry: new SubagentRegistry() });
+		const result = await runner.run({
+			parentSessionFile,
+			agent: worker,
+			goal: "Continue auth fix",
+			assignment: "Resume the prior child session and finish the work.",
+			conversationId: existingConversation,
+		});
+
+		expect(createSession).toHaveBeenCalledWith(
+			expect.objectContaining({
+				childSessionFile: existingConversation,
+			}),
+		);
+		expect(result.childSessionFile).toBe(existingConversation);
+		expect(result.conversationId).toBe(existingConversation);
+	});
+
+	it("writes child sessions under the parent artifact dir and stores a result sidecar", async () => {
 		const root = fs.mkdtempSync(path.join(os.tmpdir(), "daedalus-subagent-runner-"));
 		tempRoots.push(root);
 		const parentSessionFile = path.join(root, "parent.jsonl");
@@ -28,7 +68,12 @@ describe("SubagentRunner", () => {
 		const createSession = vi.fn(async (options: any) => {
 			return {
 				prompt: async () => {
-					options.onSubmit({ summary: "changed auth flow", data: { changedFiles: ["src/auth.ts"] } });
+					options.onSubmit({
+						task: "Fix auth",
+						status: "completed",
+						summary: "Normalized auth headers.",
+						output: "Updated src/auth.ts to normalize Authorization headers before verification.",
+					});
 				},
 				waitForIdle: async () => {},
 				abort: async () => {},
@@ -46,7 +91,26 @@ describe("SubagentRunner", () => {
 
 		expect(result.status).toBe("completed");
 		expect(result.childSessionFile).toBe(path.join(root, "parent", "subagents", `${result.runId}.jsonl`));
-		expect(result.data).toEqual({ changedFiles: ["src/auth.ts"] });
+		expect(result.resultId).toBe(result.runId);
+		expect(result.reference).toEqual({
+			resultId: result.runId,
+			agentId: "worker",
+			conversationId: result.childSessionFile,
+			task: "Fix auth",
+			status: "completed",
+			summary: "Normalized auth headers.",
+			note: `If you want the full output, use read_agent_result_output(${result.runId}).`,
+		});
+		const sidecar = await readPersistedSubagentResult(parentSessionFile, result.runId);
+		expect(sidecar).toEqual({
+			resultId: result.runId,
+			agentId: "worker",
+			conversationId: result.childSessionFile,
+			task: "Fix auth",
+			status: "completed",
+			summary: "Normalized auth headers.",
+			output: "Updated src/auth.ts to normalize Authorization headers before verification.",
+		});
 	});
 
 	it("reports agent-specific progress while the child session is running", async () => {
@@ -77,7 +141,12 @@ describe("SubagentRunner", () => {
 							toolName: "grep",
 							args: { pattern: "Authorization", path: "src" },
 						});
-						options.onSubmit({ summary: "Mapped auth flow" });
+						options.onSubmit({
+							task: "Trace auth flow",
+							status: "completed",
+							summary: "Mapped the auth entrypoints.",
+							output: "Auth enters through src/auth.ts and is routed into verification helpers.",
+						});
 					},
 					waitForIdle: async () => {},
 					abort: async () => {},
@@ -89,7 +158,7 @@ describe("SubagentRunner", () => {
 
 		const result = await runner.run({
 			parentSessionFile,
-			agent: { ...worker, name: "scout" },
+			agent: { ...worker, name: "sage" },
 			goal: "Trace auth flow",
 			assignment: "Inspect the auth entrypoints and summarize them.",
 			onProgress: (progress) => {
@@ -102,7 +171,7 @@ describe("SubagentRunner", () => {
 		});
 
 		expect(result.status).toBe("completed");
-		expect(updates[0]?.agent).toBe("scout");
+		expect(updates[0]?.agent).toBe("sage");
 		expect(updates.some((update) => update.activity?.includes("read src/auth.ts"))).toBe(true);
 		expect(updates.some((update) => update.activity?.includes("grep /Authorization/ in src"))).toBe(true);
 		expect(updates.at(-1)?.recentActivity).toContain("read src/auth.ts");
@@ -139,6 +208,34 @@ describe("SubagentRunner", () => {
 		expect(prompts.at(-1)).toContain("submit_result");
 	});
 
+	it("fails the run when the result envelope shape is invalid", async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "daedalus-subagent-schema-"));
+		tempRoots.push(root);
+		const parentSessionFile = path.join(root, "parent.jsonl");
+
+		const runner = new SubagentRunner({
+			registry: new SubagentRegistry(),
+			createSession: async (options: any) => ({
+				prompt: async () => {
+					options.onSubmit({ summary: "Done", output: "auth.ts changed" });
+				},
+				waitForIdle: async () => {},
+				abort: async () => {},
+				dispose: () => {},
+			}),
+		});
+
+		const result = await runner.run({
+			agent: worker,
+			parentSessionFile,
+			goal: "Fix auth",
+			assignment: "Edit src/auth.ts",
+		});
+
+		expect(result.status).toBe("failed");
+		expect(result.summary).toContain("invalid result envelope");
+	});
+
 	it("fails the run when structured output does not match the schema", async () => {
 		const root = fs.mkdtempSync(path.join(os.tmpdir(), "daedalus-subagent-schema-"));
 		tempRoots.push(root);
@@ -148,7 +245,12 @@ describe("SubagentRunner", () => {
 			registry: new SubagentRegistry(),
 			createSession: async (options: any) => ({
 				prompt: async () => {
-					options.onSubmit({ summary: "Done", data: { changedFiles: "src/auth.ts" } });
+					options.onSubmit({
+						task: "Fix auth",
+						status: "completed",
+						summary: "Done",
+						output: '{"changedFiles":"src/auth.ts"}',
+					});
 				},
 				waitForIdle: async () => {},
 				abort: async () => {},
@@ -192,7 +294,7 @@ describe("SubagentRunner", () => {
 				parentSessionFile: "/tmp/parent.jsonl",
 				goal: "Nested work",
 				assignment: "Do work",
-				metadata: { depth: 3, parentAgent: "planner" },
+				metadata: { depth: 3, parentAgent: "muse" },
 			}),
 		).rejects.toThrow("maxDepth");
 	});
@@ -201,7 +303,7 @@ describe("SubagentRunner", () => {
 		const registry = new SubagentRegistry();
 		registry.start({
 			runId: "run-1",
-			agent: "scout",
+			agent: "sage",
 			summary: "Trace auth",
 			parentSessionFile: "/tmp/parent.jsonl",
 		});
@@ -236,15 +338,17 @@ describe("SubagentRunner", () => {
 		expect(packet.packetText).toContain("Context file: {contextArtifactPath}");
 	});
 
-	it("returns deliverable content separately from summary", async () => {
+	it("returns a lightweight reference instead of injecting full output", async () => {
 		const registry = new SubagentRegistry();
 		const runner = new SubagentRunner({
 			registry,
 			createSession: async (options: any) => ({
 				prompt: async () =>
 					options.onSubmit({
+						task: "Write an introduction",
+						status: "completed",
 						summary: "Drafted a short introduction",
-						deliverable: "I am Hephaestus, a focused implementation specialist.",
+						output: "I am Hephaestus, a focused implementation specialist.",
 					}),
 				waitForIdle: async () => {},
 				abort: async () => {},
@@ -260,6 +364,8 @@ describe("SubagentRunner", () => {
 		});
 
 		expect(result.summary).toBe("Drafted a short introduction");
-		expect(result.deliverable).toBe("I am Hephaestus, a focused implementation specialist.");
+		expect(result.output).toBe("I am Hephaestus, a focused implementation specialist.");
+		expect(result.reference?.summary).toBe("Drafted a short introduction");
+		expect(result.reference?.note).toContain("read_agent_result_output");
 	});
 });
