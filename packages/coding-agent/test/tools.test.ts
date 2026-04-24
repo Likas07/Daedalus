@@ -8,7 +8,7 @@ import { editTool } from "../src/core/tools/edit.js";
 import { findTool } from "../src/core/tools/find.js";
 import { grepTool } from "../src/core/tools/grep.js";
 import { lsTool } from "../src/core/tools/ls.js";
-import { readTool } from "../src/core/tools/read.js";
+import { createReadToolDefinition, readTool } from "../src/core/tools/read.js";
 import { writeTool } from "../src/core/tools/write.js";
 import * as shellModule from "../src/utils/shell.js";
 
@@ -37,6 +37,14 @@ describe("Coding Agent Tools", () => {
 	});
 
 	describe("read tool", () => {
+		it("read tool guidance encourages narrow reads", () => {
+			const read = createReadToolDefinition(process.cwd());
+			expect(read.promptGuidelines).toContain(
+				"Use offset/limit for large files and prefer reading only the relevant region after locating it with search or AST tools.",
+			);
+			expect(read.description).toContain("Prefer offset/limit for targeted reads");
+		});
+
 		it("should read file contents that fit within limits", async () => {
 			const testFile = join(testDir, "test.txt");
 			const content = "Hello, world!\nLine 2\nLine 3";
