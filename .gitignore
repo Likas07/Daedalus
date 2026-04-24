@@ -52,6 +52,8 @@ compaction-results/
 changes/
 __pycache__/
 packages/coding-agent/auth.json
+.daedalus/semantic-workspace.json
+.daedalus/semantic-store/
 
 # Scratch files
 syntax.jsonl
