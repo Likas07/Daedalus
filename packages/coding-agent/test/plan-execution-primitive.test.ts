@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getModel } from "@daedalus-pi/ai";
@@ -6,6 +6,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createAgentSession } from "../src/core/sdk.js";
 import { SessionManager } from "../src/core/session-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
+import {
+	planSidecarPath,
+	renderExecutablePlanMarkdown,
+	validateExecutablePlan,
+	writeExecutablePlanFiles,
+} from "../src/extensions/daedalus/workflow/plan-execution/schema.js";
 import {
 	hasUnfinishedPlanWork,
 	initializePlanExecution,
@@ -37,6 +43,96 @@ describe("execute_plan primitive", () => {
 
 	afterEach(() => {
 		if (tempDir && existsSync(tempDir)) rmSync(tempDir, { recursive: true, force: true });
+	});
+
+	it("validates and renders executable plan v1 artifacts", () => {
+		const plan = {
+			schemaVersion: 1 as const,
+			title: "Read Context Bloat Reduction",
+			goal: "Reduce repeated reads",
+			architecture: "Use structured plan packets and read telemetry.",
+			techStack: ["TypeScript", "Vitest"],
+			tasks: [
+				{
+					id: "task-read-guidance",
+					title: "Improve read guidance",
+					dependencies: [],
+					parallelGroup: "read-tooling",
+					canRunInParallel: true,
+					conflictsWith: [],
+					files: {
+						create: [],
+						modify: ["packages/coding-agent/src/core/tools/read.ts"],
+						test: ["packages/coding-agent/test/tools.test.ts"],
+					},
+					steps: [
+						{ title: "Write failing test", body: "Assert narrow-read guidance is present." },
+						{ title: "Implement guidance", body: "Update read tool description and prompt guidelines." },
+					],
+					verification: [
+						{ command: "bun test packages/coding-agent/test/tools.test.ts --grep narrow", expected: "PASS" },
+					],
+					commit: {
+						message: "docs: guide read toward targeted ranges",
+						paths: ["packages/coding-agent/src/core/tools/read.ts", "packages/coding-agent/test/tools.test.ts"],
+					},
+				},
+			],
+		};
+
+		expect(validateExecutablePlan(plan).ok).toBe(true);
+		const markdown = renderExecutablePlanMarkdown(plan);
+		expect(markdown).toContain("<!-- daedalus-plan: v1 -->");
+		expect(markdown).toContain("<!-- daedalus-task-id: task-read-guidance -->");
+		expect(markdown).toContain("<!-- daedalus-parallel-group: read-tooling -->");
+		expect(markdown).toContain("### Task 1: Improve read guidance");
+	});
+
+	it("writes executable plan markdown and sidecar JSON", () => {
+		const plan = {
+			schemaVersion: 1 as const,
+			title: "Tiny Plan",
+			goal: "Create a tiny valid plan",
+			architecture: "Write markdown and sidecar JSON.",
+			techStack: ["TypeScript"],
+			tasks: [
+				{
+					id: "task-one",
+					title: "Do one thing",
+					dependencies: [],
+					parallelGroup: "docs",
+					canRunInParallel: true,
+					conflictsWith: [],
+					files: { create: ["docs/example.md"], modify: [], test: [] },
+					steps: [{ title: "Write file", body: "Create docs/example.md." }],
+					verification: [{ command: "test -f docs/example.md", expected: "PASS" }],
+				},
+			],
+		};
+		const outputPath = join(tempDir, "docs", "plans", "tiny.md");
+		const result = writeExecutablePlanFiles(plan, outputPath);
+
+		expect(result.markdownPath).toBe(outputPath);
+		expect(result.sidecarPath).toBe(planSidecarPath(outputPath));
+		expect(readFileSync(outputPath, "utf8")).toContain("# Tiny Plan Implementation Plan");
+		expect(JSON.parse(readFileSync(result.sidecarPath, "utf8"))).toMatchObject({ schemaVersion: 1, title: "Tiny Plan" });
+	});
+
+	it("reports unsafe parallel groups that touch the same file", () => {
+		const plan = {
+			schemaVersion: 1 as const,
+			title: "Parallel Safety Plan",
+			goal: "Validate parallel metadata",
+			architecture: "Detect file overlap inside a parallel group.",
+			techStack: ["TypeScript"],
+			tasks: [
+				{ id: "task-a", title: "A", dependencies: [], parallelGroup: "g1", canRunInParallel: true, conflictsWith: [], files: { create: [], modify: ["src/a.ts"], test: [] }, steps: [{ title: "A", body: "A" }], verification: [{ command: "true", expected: "PASS" }] },
+				{ id: "task-b", title: "B", dependencies: [], parallelGroup: "g1", canRunInParallel: true, conflictsWith: [], files: { create: [], modify: ["src/a.ts"], test: [] }, steps: [{ title: "B", body: "B" }], verification: [{ command: "true", expected: "PASS" }] },
+			],
+		};
+
+		expect(validateExecutablePlan(plan).ok).toBe(false);
+		expect(validateExecutablePlan(plan).errors.join("\n")).toContain("parallel group g1 has overlapping file src/a.ts");
 	});
 
 	it("initializes execution state from a markdown plan artifact", async () => {
