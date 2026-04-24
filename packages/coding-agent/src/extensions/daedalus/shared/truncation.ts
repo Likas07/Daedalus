@@ -5,6 +5,7 @@ import {
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
 	formatSize,
+	formatVisiblePath,
 	type TruncationResult,
 	truncateHead,
 	withFileMutationQueue,
@@ -28,6 +29,6 @@ export function formatTruncationNotice(truncation: TruncationResult, fullOutputP
 		`\n\n[Output truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines` +
 		` (${formatSize(truncation.outputBytes)} of ${formatSize(truncation.totalBytes)}).` +
 		` ${truncatedLines} lines (${formatSize(truncatedBytes)}) omitted.` +
-		` Full output saved to: ${fullOutputPath}]`
+		` Full output saved to: ${formatVisiblePath(fullOutputPath)}]`
 	);
 }
