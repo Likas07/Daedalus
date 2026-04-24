@@ -596,6 +596,8 @@ Available built-in tools: `read`, `bash`, `edit`, `hashline_edit`, `fetch`, `ast
 
 `hashline_edit` is experimental and enabled in the default coding tool set. It pairs with `read` using `format: "hashline"`. Exact-text `edit` remains available, but is no longer in the default tool set. `fetch`, `ast_grep`, and `ast_edit` are also enabled in the default coding tool set.
 
+`hashline_edit` uses the clean bulk shape `{ edits: [{ path, op, pos?, end?, lines?, to? }] }`. Use `op: "replace"` for anchored line/range replacement, `append`/`prepend` for anchored or file-boundary insertion, and `delete`/`move` for file modes. All anchors in one call reference the original `read(format: "hashline")` snapshots.
+
 ### Resource Options
 
 | Option | Description |

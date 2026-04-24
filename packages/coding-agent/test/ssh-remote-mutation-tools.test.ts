@@ -160,16 +160,12 @@ describe.skipIf(process.platform === "win32")("SSH remote mutation tools", () =>
 		const result = await tool.execute(
 			"tool-8",
 			{
-				path: "file.ts",
 				edits: [
 					{
-						loc: {
-							range: {
-								pos: `2#${computeLineHash(2, "  old();")}`,
-								end: `2#${computeLineHash(2, "  old();")}`,
-							},
-						},
-						content: ["  next();"],
+						path: "file.ts",
+						op: "replace",
+						pos: `2#${computeLineHash(2, "  old();")}`,
+						lines: ["  next();"],
 					},
 				],
 			},
@@ -190,16 +186,12 @@ describe.skipIf(process.platform === "win32")("SSH remote mutation tools", () =>
 		await tool.execute(
 			"tool-9",
 			{
-				path: "file.txt",
 				edits: [
 					{
-						loc: {
-							range: {
-								pos: `2#${computeLineHash(2, "second")}`,
-								end: `2#${computeLineHash(2, "second")}`,
-							},
-						},
-						content: ["SECOND"],
+						path: "file.txt",
+						op: "replace",
+						pos: `2#${computeLineHash(2, "second")}`,
+						lines: ["SECOND"],
 					},
 				],
 			},
@@ -219,15 +211,7 @@ describe.skipIf(process.platform === "win32")("SSH remote mutation tools", () =>
 		await expect(
 			tool.execute(
 				"tool-10",
-				{
-					path: "stale.txt",
-					edits: [
-						{
-							loc: { range: { pos: "2#ZZ", end: "2#ZZ" } },
-							content: ["BETA"],
-						},
-					],
-				},
+				{ edits: [{ path: "stale.txt", op: "replace", pos: "2#ZZ", lines: ["BETA"] }] },
 				undefined,
 				undefined,
 				{} as any,
@@ -288,16 +272,12 @@ describe.skipIf(process.platform === "win32")("SSH remote mutation tools", () =>
 			hashlineTool.execute(
 				"tool-15",
 				{
-					path: "hashline-fail.txt",
 					edits: [
 						{
-							loc: {
-								range: {
-									pos: `2#${computeLineHash(2, "beta")}`,
-									end: `2#${computeLineHash(2, "beta")}`,
-								},
-							},
-							content: ["BETA"],
+							path: "hashline-fail.txt",
+							op: "replace",
+							pos: `2#${computeLineHash(2, "beta")}`,
+							lines: ["BETA"],
 						},
 					],
 				},

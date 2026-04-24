@@ -101,16 +101,12 @@ describe.skipIf(process.platform === "win32")("SSH extension wiring", () => {
 		await hashlineTool!.execute(
 			"tool-2",
 			{
-				path: "hashline.txt",
 				edits: [
 					{
-						loc: {
-							range: {
-								pos: `2#${computeLineHash(2, "beta")}`,
-								end: `2#${computeLineHash(2, "beta")}`,
-							},
-						},
-						content: ["BETA"],
+						path: "hashline.txt",
+						op: "replace",
+						pos: `2#${computeLineHash(2, "beta")}`,
+						lines: ["BETA"],
 					},
 				],
 			},

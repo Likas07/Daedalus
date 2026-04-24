@@ -570,6 +570,26 @@ export function findCutPoint(
 	const evictionCap = findEvictionCap(messageInfos, startIndex, endIndex, evictionWindow);
 	const cappedEndIndex = Math.min(endIndex, retentionCap, evictionCap);
 	const cutPoints = findValidCutPoints(entries, startIndex, cappedEndIndex);
+	if (cappedEndIndex < endIndex) {
+		const cutEntry = entries[cappedEndIndex];
+		if (!cutEntry) {
+			return { firstKeptEntryIndex: startIndex, turnStartIndex: -1, isSplitTurn: false };
+		}
+		const safeCutIndex =
+			cutEntry.type === "message" && cutEntry.message.role === "toolResult"
+				? (cutPoints[cutPoints.length - 1] ?? startIndex)
+				: cappedEndIndex;
+		const safeCutEntry = entries[safeCutIndex];
+		const isUserMessage = safeCutEntry.type === "message" && safeCutEntry.message.role === "user";
+		const turnStartIndex = isUserMessage ? -1 : findTurnStartIndex(entries, safeCutIndex, startIndex);
+		return {
+			firstKeptEntryIndex: safeCutIndex,
+			turnStartIndex,
+			isSplitTurn: !isUserMessage && turnStartIndex !== -1,
+		};
+	}
+
+
 
 	if (cutPoints.length === 0) {
 		return { firstKeptEntryIndex: startIndex, turnStartIndex: -1, isSplitTurn: false };
