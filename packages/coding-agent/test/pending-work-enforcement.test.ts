@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, registerFauxProvider } from "@daedalus-pi/ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { AgentSession } from "../src/core/agent-session.js";
 import { AuthStorage } from "../src/core/auth-storage.js";
 import { createAgentSession } from "../src/core/sdk.js";
 import { SessionManager } from "../src/core/session-manager.js";
@@ -34,6 +35,16 @@ function appendTodoState(
 		isError: false,
 		timestamp: Date.now(),
 	});
+}
+async function waitForAssistantCount(session: AgentSession, count: number): Promise<void> {
+	for (let i = 0; i < 50; i++) {
+		await session.agent.waitForIdle();
+		if (session.messages.filter((message) => message.role === "assistant").length >= count) {
+			return;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+	expect(session.messages.filter((message) => message.role === "assistant")).toHaveLength(count);
 }
 
 describe("pending work enforcement", () => {
@@ -76,12 +87,18 @@ describe("pending work enforcement", () => {
 		await session.bindExtensions({});
 
 		await session.prompt("Start");
+		await waitForAssistantCount(session, 2);
+		expect(session.isStreaming).toBe(false);
+		expect(session.getSteeringMessages()).toHaveLength(0);
+		expect(session.getFollowUpMessages()).toHaveLength(0);
+
 		let reminderMessages = session.messages.filter(
 			(message) => message.role === "custom" && message.customType === "pending-work-reminder",
 		);
 		expect(reminderMessages).toHaveLength(1);
 
 		await session.prompt("Continue");
+		await waitForAssistantCount(session, 3);
 		reminderMessages = session.messages.filter(
 			(message) => message.role === "custom" && message.customType === "pending-work-reminder",
 		);
@@ -116,8 +133,10 @@ describe("pending work enforcement", () => {
 		await session.bindExtensions({});
 
 		await session.prompt("Start");
+		await waitForAssistantCount(session, 2);
 		appendTodoState(sessionManager, [{ id: "task-2", content: "New active task", status: "pending" }]);
 		await session.prompt("Continue");
+		await waitForAssistantCount(session, 4);
 
 		const reminderMessages = session.messages.filter(
 			(message) => message.role === "custom" && message.customType === "pending-work-reminder",

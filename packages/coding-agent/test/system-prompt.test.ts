@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { createSubagentResourceLoader } from "../src/core/subagents/resource-loader.js";
 import { buildSystemPrompt } from "../src/core/system-prompt.js";
+import { createHashlineEditToolDefinition } from "../src/core/tools/hashline-edit.js";
 
 describe("buildSystemPrompt", () => {
 	describe("empty tools", () => {
@@ -121,6 +122,21 @@ describe("buildSystemPrompt", () => {
 
 			expect(prompt.match(/- Use dynamic_tool for summaries\./g)).toHaveLength(1);
 		});
+
+        test("includes clean bulk hashline_edit guidance", () => {
+            const tool = createHashlineEditToolDefinition(process.cwd());
+            const prompt = buildSystemPrompt({
+                selectedTools: ["hashline_edit"],
+                toolSnippets: { hashline_edit: tool.promptSnippet ?? "" },
+                promptGuidelines: tool.promptGuidelines,
+                contextFiles: [],
+                skills: [],
+            });
+
+            expect(prompt).toContain("op/pos/end/lines");
+            expect(prompt).toContain("clean bulk shape");
+            expect(prompt).toContain("ORIGINAL file snapshot");
+        });
 	});
 
 	describe("Daedalus prompt layering", () => {

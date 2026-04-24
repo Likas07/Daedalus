@@ -27,16 +27,12 @@ describe("hashline_edit tool", () => {
 		const result = await tool.execute(
 			"tool-1",
 			{
-				path: "file.ts",
 				edits: [
 					{
-						loc: {
-							range: {
-								pos: `2#${computeLineHash(2, "  old();")}`,
-								end: `2#${computeLineHash(2, "  old();")}`,
-							},
-						},
-						content: ["  next();"],
+						path: "file.ts",
+						op: "replace",
+						pos: `2#${computeLineHash(2, "  old();")}`,
+						lines: ["  next();"],
 					},
 				],
 			},
@@ -50,6 +46,87 @@ describe("hashline_edit tool", () => {
 		expect(result.details?.diff).toContain("next();");
 	});
 
+	test("applies bulk edits across multiple files", async () => {
+		const dir = await createTempDir();
+		await writeFile(join(dir, "a.txt"), "one\ntwo\n", "utf8");
+		await writeFile(join(dir, "b.txt"), "alpha\nbeta\n", "utf8");
+		const tool = createHashlineEditToolDefinition(dir);
+
+		const result = await tool.execute(
+			"tool-bulk",
+			{
+				edits: [
+					{ path: "a.txt", op: "replace", pos: `2#${computeLineHash(2, "two")}`, lines: ["TWO"] },
+					{ path: "b.txt", op: "append", pos: `1#${computeLineHash(1, "alpha")}`, lines: ["inserted"] },
+				],
+			},
+			undefined,
+			undefined,
+			{} as any,
+		);
+
+		const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+		expect(text).toContain("Updated a.txt");
+		expect(text).toContain("Updated b.txt");
+		expect(await readFile(join(dir, "a.txt"), "utf8")).toBe("one\nTWO\n");
+		expect(await readFile(join(dir, "b.txt"), "utf8")).toBe("alpha\ninserted\nbeta\n");
+		expect(result.details?.diff).toContain("TWO");
+		expect(result.details?.diff).toContain("inserted");
+	});
+
+	test("creates missing files from anchorless append or prepend", async () => {
+		const dir = await createTempDir();
+		const tool = createHashlineEditToolDefinition(dir);
+
+		await tool.execute(
+			"tool-create",
+			{ edits: [{ path: "new.txt", op: "append", lines: ["hello", "world"] }] },
+			undefined,
+			undefined,
+			{} as any,
+		);
+
+		expect(await readFile(join(dir, "new.txt"), "utf8")).toBe("hello\nworld");
+	});
+
+	test("deletes and moves files", async () => {
+		const dir = await createTempDir();
+		await writeFile(join(dir, "dead.txt"), "remove me", "utf8");
+		await writeFile(join(dir, "old.txt"), "keep me", "utf8");
+		const tool = createHashlineEditToolDefinition(dir);
+
+		const result = await tool.execute(
+			"tool-file-ops",
+			{ edits: [{ path: "dead.txt", op: "delete" }, { path: "old.txt", op: "move", to: "nested/new.txt" }] },
+			undefined,
+			undefined,
+			{} as any,
+		);
+
+		const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+		expect(text).toContain("Deleted dead.txt");
+		expect(text).toContain("Moved old.txt to nested/new.txt");
+		await expect(readFile(join(dir, "dead.txt"), "utf8")).rejects.toThrow();
+		await expect(readFile(join(dir, "old.txt"), "utf8")).rejects.toThrow();
+		expect(await readFile(join(dir, "nested/new.txt"), "utf8")).toBe("keep me");
+	});
+
+	test("rejects legacy top-level path shape", async () => {
+		const dir = await createTempDir();
+		await writeFile(join(dir, "file.txt"), "alpha\n", "utf8");
+		const tool = createHashlineEditToolDefinition(dir);
+
+		await expect(
+			tool.execute(
+				"tool-legacy",
+				{ path: "file.txt", edits: [{ loc: "append", content: ["beta"] }] } as never,
+				undefined,
+				undefined,
+				{} as any,
+			),
+		).rejects.toThrow(/hashline_edit now expects/);
+	});
+
 	test("fails on stale anchor without changing file", async () => {
 		const dir = await createTempDir();
 		const filePath = join(dir, "file.txt");
@@ -58,15 +135,7 @@ describe("hashline_edit tool", () => {
 		await expect(
 			tool.execute(
 				"tool-2",
-				{
-					path: "file.txt",
-					edits: [
-						{
-							loc: { range: { pos: "2#ZZ", end: "2#ZZ" } },
-							content: ["BETA"],
-						},
-					],
-				},
+				{ edits: [{ path: "file.txt", op: "replace", pos: "2#ZZ", lines: ["BETA"] }] },
 				undefined,
 				undefined,
 				{} as any,
@@ -83,20 +152,7 @@ describe("hashline_edit tool", () => {
 		const tool = createHashlineEditToolDefinition(dir);
 		await tool.execute(
 			"tool-3",
-			{
-				path: "file.txt",
-				edits: [
-					{
-						loc: {
-							range: {
-								pos: `2#${computeLineHash(2, "second")}`,
-								end: `2#${computeLineHash(2, "second")}`,
-							},
-						},
-						content: ["SECOND"],
-					},
-				],
-			},
+			{ edits: [{ path: "file.txt", op: "replace", pos: `2#${computeLineHash(2, "second")}`, lines: ["SECOND"] }] },
 			undefined,
 			undefined,
 			{} as any,

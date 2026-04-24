@@ -270,7 +270,19 @@ export function createRemoteHashlineEditOps(
 ): HashlineEditOperations {
 	const readOps = createRemoteReadOps(remote, remoteCwd, localCwd);
 	const writeOps = createRemoteWriteOps(remote, remoteCwd, localCwd);
-	return { readFile: readOps.readFile, access: readOps.access, writeFile: writeOps.writeFile };
+	return {
+		readFile: readOps.readFile,
+		access: readOps.access,
+		writeFile: writeOps.writeFile,
+		mkdir: writeOps.mkdir,
+		unlink: (p) => sshExec(remote, buildShellCommand(["rm", "-f", toRemotePath(localCwd, remoteCwd, p)])).then(() => {}),
+		rename: async (from, to) => {
+			const remoteFrom = toRemotePath(localCwd, remoteCwd, from);
+			const remoteTo = toRemotePath(localCwd, remoteCwd, to);
+			await writeOps.mkdir(nodePath.dirname(to));
+			await sshExec(remote, buildShellCommand(["mv", remoteFrom, remoteTo]));
+		},
+	};
 }
 
 export function createRemoteLsOps(remote: string, remoteCwd: string, localCwd: string): LsOperations {

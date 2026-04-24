@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, registerFauxProvider } from "@daedalus-pi/ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { AgentSession } from "../src/core/agent-session.js";
 import { AuthStorage } from "../src/core/auth-storage.js";
 import { createAgentSession } from "../src/core/sdk.js";
 import { SessionManager } from "../src/core/session-manager.js";
@@ -35,6 +36,16 @@ function appendTodoState(
 		timestamp: Date.now(),
 	});
 }
+async function waitForAssistantCount(session: AgentSession, count: number): Promise<void> {
+	for (let i = 0; i < 50; i++) {
+		await session.agent.waitForIdle();
+		if (session.messages.filter((message) => message.role === "assistant").length >= count) {
+			return;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+	expect(session.messages.filter((message) => message.role === "assistant")).toHaveLength(count);
+}
 
 describe("doom-loop detection", () => {
 	let tempDir: string;
@@ -58,6 +69,7 @@ describe("doom-loop detection", () => {
 			fauxAssistantMessage("I think this is done."),
 			fauxAssistantMessage("Still done."),
 			fauxAssistantMessage("Done again."),
+			fauxAssistantMessage("Continuing after doom-loop reminder."),
 		]);
 		const authStorage = AuthStorage.inMemory();
 		authStorage.setRuntimeApiKey(faux.getModel().provider, "faux-key");
@@ -76,8 +88,9 @@ describe("doom-loop detection", () => {
 		await session.bindExtensions({});
 
 		await session.prompt("Attempt 1");
+		await waitForAssistantCount(session, 2);
 		await session.prompt("Attempt 2");
-		await session.prompt("Attempt 3");
+		await waitForAssistantCount(session, 4);
 
 		const doomLoopMessages = session.messages.filter(
 			(message) => message.role === "custom" && message.customType === "doom-loop-reminder",
@@ -93,7 +106,14 @@ describe("doom-loop detection", () => {
 
 	it("does not warn when active work signature changes between attempts", async () => {
 		const faux = registerFauxProvider();
-		faux.setResponses([fauxAssistantMessage("Done?"), fauxAssistantMessage("Done?"), fauxAssistantMessage("Done?")]);
+		faux.setResponses([
+			fauxAssistantMessage("Done?"),
+			fauxAssistantMessage("Continue task 1."),
+			fauxAssistantMessage("Done?"),
+			fauxAssistantMessage("Continue task 2."),
+			fauxAssistantMessage("Done?"),
+			fauxAssistantMessage("Continue task 3."),
+		]);
 		const authStorage = AuthStorage.inMemory();
 		authStorage.setRuntimeApiKey(faux.getModel().provider, "faux-key");
 		const settingsManager = SettingsManager.inMemory({ pendingWork: { enabled: true } });
@@ -111,10 +131,13 @@ describe("doom-loop detection", () => {
 		await session.bindExtensions({});
 
 		await session.prompt("Attempt 1");
+		await waitForAssistantCount(session, 2);
 		appendTodoState(sessionManager, [{ id: "task-2", content: "Different task", status: "pending" }]);
 		await session.prompt("Attempt 2");
+		await waitForAssistantCount(session, 4);
 		appendTodoState(sessionManager, [{ id: "task-3", content: "Another task", status: "pending" }]);
 		await session.prompt("Attempt 3");
+		await waitForAssistantCount(session, 6);
 
 		const doomLoopMessages = session.messages.filter(
 			(message) => message.role === "custom" && message.customType === "doom-loop-reminder",
@@ -131,6 +154,7 @@ describe("doom-loop detection", () => {
 			fauxAssistantMessage("I am still investigating the issue and checking the auth flow."),
 			fauxAssistantMessage("I am gathering more evidence and reading the next file."),
 			fauxAssistantMessage("I am still debugging and have not finished yet."),
+			fauxAssistantMessage("I am continuing the investigation."),
 		]);
 		const authStorage = AuthStorage.inMemory();
 		authStorage.setRuntimeApiKey(faux.getModel().provider, "faux-key");
@@ -149,8 +173,10 @@ describe("doom-loop detection", () => {
 		await session.bindExtensions({});
 
 		await session.prompt("Attempt 1");
+		await waitForAssistantCount(session, 2);
 		await session.prompt("Attempt 2");
 		await session.prompt("Attempt 3");
+		await waitForAssistantCount(session, 4);
 
 		const doomLoopMessages = session.messages.filter(
 			(message) => message.role === "custom" && message.customType === "doom-loop-reminder",

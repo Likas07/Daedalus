@@ -47,6 +47,7 @@ await createAgentSession({
 console.log("Custom tools session created");
 
 // codingTools already includes hashline_edit, fetch, ast_grep, and ast_edit by default. Exact-text edit remains available separately.
+// hashline_edit calls use: { edits: [{ path, op: "replace" | "append" | "prepend" | "delete" | "move", pos?, end?, lines?, to? }] }.
 await createAgentSession({
 	tools: [readTool, hashlineEditTool],
 	sessionManager: SessionManager.inMemory(),

@@ -466,7 +466,7 @@ const { session } = await createAgentSession({
 const { session: hashlineSession } = await createAgentSession({
   tools: [readTool, hashlineEditTool, writeTool],
 });
-// Agent workflow: read({ path, format: "hashline" }) -> hashline_edit({ path, edits })
+// Agent workflow: read({ path, format: "hashline" }) -> hashline_edit({ edits: [{ path, op: "replace", pos, end?, lines }] })
 ```
 
 #### Tools with Custom cwd
@@ -509,6 +509,12 @@ const { session: hashlineSession2 } = await createAgentSession({
   cwd,
   tools: [createReadTool(cwd), createHashlineEditTool(cwd), createWriteTool(cwd)],
 });
+// Hashline bulk edits use per-entry paths, so one call can edit multiple files:
+await hashlineSession2.sendUserMessage(
+  'Read src/a.ts and src/b.ts with hashline format, then call hashline_edit with edits like ' +
+    '{ edits: [{ path: "src/a.ts", op: "replace", pos: "12#VK", lines: ["next"] }, ' +
+    '{ path: "src/b.ts", op: "append", pos: "30#QR", lines: ["export const enabled = true;"] }] }'
+);
 
 // Explicit custom selection including fetch + AST tools
 const { session: astSession } = await createAgentSession({

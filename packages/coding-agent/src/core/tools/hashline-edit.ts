@@ -1,73 +1,43 @@
 import type { AgentTool } from "@daedalus-pi/agent-core";
-import { type Static, Type } from "@sinclair/typebox";
 import { constants } from "fs";
-import { access as fsAccess, readFile as fsReadFile, writeFile as fsWriteFile } from "fs/promises";
+import {
+	access as fsAccess,
+	mkdir as fsMkdir,
+	readFile as fsReadFile,
+	rename as fsRename,
+	unlink as fsUnlink,
+	writeFile as fsWriteFile,
+} from "fs/promises";
 import type { ToolDefinition } from "../extensions/types.js";
 import type { EditToolDetails } from "./edit.js";
-import { detectLineEnding, generateDiffString, normalizeToLF, restoreLineEndings, stripBom } from "./edit-diff.js";
 import { createPathEditCallRenderer, createPathEditResultRenderer } from "./edit-render.js";
 import { withFileMutationQueue } from "./file-mutation-queue.js";
 import {
-	applyHashlineEditsToNormalizedContent,
-	type HashlineAnchor,
-	type HashlineEditOperation,
+	executeHashlineFileBatch,
+	type HashlineFileBatchResult,
+} from "./hashline/bulk-executor.js";
+import {
+	buildCompactHashlineDiffPreview,
+	hashlineEditSchema,
+	type HashlineEditToolInput,
 	HashlineMismatchError,
-	parseTag,
-	stripNewLinePrefixes,
+	normalizeHashlineBulkInput,
 } from "./hashline/index.js";
 import { resolveToCwd } from "./path-utils.js";
 import { type ReadLedgerLike, requirePriorRead } from "./read-ledger.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 
-const linesSchema = Type.Union([
-	Type.Array(Type.String(), { description: "Content lines (preferred)" }),
-	Type.String({ description: "Content string; split on real newlines" }),
-	Type.Null({ description: "Delete targeted range" }),
-]);
+export type { HashlineEditToolInput, RawHashlineEditEntry as HashlineEditEntry } from "./hashline/index.js";
 
-const locSchema = Type.Union(
-	[
-		Type.Literal("append"),
-		Type.Literal("prepend"),
-		Type.Object({ append: Type.String({ description: "Anchor in LINE#ID format" }) }),
-		Type.Object({ prepend: Type.String({ description: "Anchor in LINE#ID format" }) }),
-		Type.Object({
-			range: Type.Object({
-				pos: Type.String({ description: "First line to replace (inclusive)" }),
-				end: Type.String({ description: "Last line to replace (inclusive)" }),
-			}),
-		}),
-	],
-	{ description: "Edit location" },
-);
-
-const hashlineEditEntrySchema = Type.Object(
-	{
-		loc: locSchema,
-		content: linesSchema,
-	},
-	{ additionalProperties: false },
-);
-
-const hashlineEditSchema = Type.Object(
-	{
-		path: Type.String({ description: "Path to file to edit (relative or absolute)" }),
-		edits: Type.Array(hashlineEditEntrySchema, {
-			description: "Hashline edits for path. All anchors reference original file snapshot.",
-			minItems: 1,
-		}),
-	},
-	{ additionalProperties: false },
-);
-
-export type HashlineEditEntry = Static<typeof hashlineEditEntrySchema>;
-export type HashlineEditToolInput = Static<typeof hashlineEditSchema>;
 export interface HashlineEditToolDetails extends EditToolDetails {}
 
 export interface HashlineEditOperations {
 	readFile: (absolutePath: string) => Promise<Buffer>;
 	writeFile: (absolutePath: string, content: string) => Promise<void>;
 	access: (absolutePath: string) => Promise<void>;
+	unlink: (absolutePath: string) => Promise<void>;
+	rename: (fromAbsolutePath: string, toAbsolutePath: string) => Promise<void>;
+	mkdir: (absolutePath: string) => Promise<void>;
 }
 
 export interface HashlineEditToolOptions {
@@ -79,56 +49,41 @@ const defaultHashlineEditOperations: HashlineEditOperations = {
 	readFile: (path) => fsReadFile(path),
 	writeFile: (path, content) => fsWriteFile(path, content, "utf-8"),
 	access: (path) => fsAccess(path, constants.R_OK | constants.W_OK),
+	unlink: (path) => fsUnlink(path),
+	rename: (from, to) => fsRename(from, to),
+	mkdir: async (path) => {
+		await fsMkdir(path, { recursive: true });
+	},
 };
-
-function parseContent(content: string | string[] | null): string[] {
-	if (content === null) return [];
-	if (typeof content === "string") {
-		const normalized = content.endsWith("\n") ? content.slice(0, -1) : content;
-		return stripNewLinePrefixes(normalized.replaceAll("\r", "").split("\n"));
-	}
-	return stripNewLinePrefixes(content);
-}
-
-function parseAnchor(raw: string, field: string): HashlineAnchor {
-	try {
-		return parseTag(raw);
-	} catch (error) {
-		throw new Error(
-			`${field} requires valid LINE#ID anchor. ${error instanceof Error ? error.message : String(error)}`,
-		);
-	}
-}
-
-function resolveHashlineEdits(edits: HashlineEditEntry[]): HashlineEditOperation[] {
-	return edits.map((edit) => {
-		const lines = parseContent(edit.content);
-		if (edit.loc === "append") return { op: "append_file", lines };
-		if (edit.loc === "prepend") return { op: "prepend_file", lines };
-		if ("append" in edit.loc) return { op: "append_at", pos: parseAnchor(edit.loc.append, "append"), lines };
-		if ("prepend" in edit.loc) return { op: "prepend_at", pos: parseAnchor(edit.loc.prepend, "prepend"), lines };
-		return {
-			op: "replace_range",
-			pos: parseAnchor(edit.loc.range.pos, "range.pos"),
-			end: parseAnchor(edit.loc.range.end, "range.end"),
-			lines,
-		};
-	});
-}
-
-function buildNoChangeError(
-	path: string,
-	noopEdits?: Array<{ editIndex: number; loc: string; current: string }>,
-): Error {
-	let diagnostic = `No changes made to ${path}. The edits produced identical content.`;
-	if (noopEdits && noopEdits.length > 0) {
-		diagnostic += ` No-op edits: ${noopEdits.map((edit) => `edits[${edit.editIndex}] at ${edit.loc}`).join(", ")}.`;
-	}
-	return new Error(diagnostic);
-}
 
 const renderHashlineEditCall = createPathEditCallRenderer("hashline_edit");
 const renderHashlineEditResult = createPathEditResultRenderer();
+
+function requiresPriorRead(batch: { contentEdits: Array<{ op: string }> }): boolean {
+	return batch.contentEdits.some((edit) => edit.op !== "append_file" && edit.op !== "prepend_file");
+}
+
+function formatResultText(result: HashlineFileBatchResult): string {
+	const preview = result.diff ? buildCompactHashlineDiffPreview(result.diff) : undefined;
+	const previewBlock = preview
+		? `\nChanges: +${preview.addedLines} -${preview.removedLines}${preview.preview ? `\n\nDiff preview:\n${preview.preview}` : ""}`
+		: "";
+	const warnings = result.warnings?.length ? `\nWarnings:\n${result.warnings.join("\n")}` : "";
+	return `${result.text}${previewBlock}${warnings}`;
+}
+
+function aggregateResults(results: HashlineFileBatchResult[]): {
+	content: Array<{ type: "text"; text: string }>;
+	details: HashlineEditToolDetails | undefined;
+} {
+	return {
+		content: [{ type: "text", text: results.map(formatResultText).join("\n") }],
+		details: {
+			diff: results.map((result) => result.diff).filter(Boolean).join("\n"),
+			firstChangedLine: results.find((result) => result.firstChangedLine !== undefined)?.firstChangedLine,
+		},
+	};
+}
 
 export function createHashlineEditToolDefinition(
 	cwd: string,
@@ -139,106 +94,60 @@ export function createHashlineEditToolDefinition(
 		name: "hashline_edit",
 		label: "hashline_edit",
 		description:
-			'Edit a single file using LINE#ID anchors from read(format="hashline"). Read first, copy anchors exactly, batch all edits for one file in one call, then re-read before editing same file again.',
-		promptSnippet: 'Preferred stale-safe surgical file edits using LINE#ID anchors from read(format="hashline")',
+			'Bulk edit files using LINE#ID anchors from read(format="hashline"). Input is { edits: [{ path, op, pos?, end?, lines? }] } with op replace/append/prepend/delete/move.',
+		promptSnippet: "Preferred stale-safe bulk file edits using per-entry path plus op/pos/end/lines LINE#ID anchors",
 		promptGuidelines: [
-			'Prefer hashline_edit for ordinary surgical file edits; start with read({ path, format: "hashline" }) to get fresh LINE#ID anchors',
-			"hashline_edit is not exact-text edit: do not send oldText/newText style patterns or reproduce surrounding file text",
-			"Copy anchors exactly as LINE#ID from the latest hashline read output; do not guess, normalize, or partially copy them",
-			"Use range/append/prepend locations correctly and provide only the replacement or inserted content",
-			"Batch all edits for one file in one hashline_edit call, then re-read before another call on the same file",
+			'Read each anchored target file with read({ path, format: "hashline" }) before hashline_edit',
+			'Use the clean bulk shape only: { edits: [{ path, op: "replace"|"append"|"prepend"|"delete"|"move", pos?, end?, lines?, to? }] }',
+			"All edits in one call reference the ORIGINAL file snapshot; do not adjust line numbers for earlier edits in the same call",
+			"Batch independent edits across files in one hashline_edit call instead of writing ad hoc bash or Python mutation scripts",
+			"replace consumes pos..end inclusive; lines contains only replacement content, not unchanged surrounding lines",
+			"append/prepend with pos insert after/before the anchor; without pos they append/prepend at EOF/BOF and may create missing files",
+			"Use lines:null only with replace to delete the consumed line/range",
+			"Re-read a file before editing it again after a successful hashline_edit call",
 		],
 		parameters: hashlineEditSchema,
 		async execute(_toolCallId, input: HashlineEditToolInput, signal?: AbortSignal, _onUpdate?, ctx?) {
-			const { path, edits } = input;
-			const absolutePath = resolveToCwd(path, cwd);
-			const priorReadError = requirePriorRead(ctx?.readLedger ?? options?.readLedger, absolutePath, "hashline_edit");
-			if (priorReadError) return priorReadError;
-			const resolvedEdits = resolveHashlineEdits(edits);
+			const grouped = normalizeHashlineBulkInput(input);
+			const results: HashlineFileBatchResult[] = [];
 
-			return withFileMutationQueue(
-				absolutePath,
-				() =>
-					new Promise<{
-						content: Array<{ type: "text"; text: string }>;
-						details: HashlineEditToolDetails | undefined;
-					}>((resolve, reject) => {
-						if (signal?.aborted) {
-							reject(new Error("Operation aborted"));
-							return;
-						}
+			for (const batch of grouped.values()) {
+				if (signal?.aborted) throw new Error("Operation aborted");
+				const absolutePath = resolveToCwd(batch.path, cwd);
+				if (requiresPriorRead(batch)) {
+					const priorReadError = requirePriorRead(
+						ctx?.readLedger ?? options?.readLedger,
+						absolutePath,
+						"hashline_edit",
+					);
+					if (priorReadError) return priorReadError;
+				}
 
-						let aborted = false;
-						const onAbort = () => {
-							aborted = true;
-							reject(new Error("Operation aborted"));
-						};
-						signal?.addEventListener("abort", onAbort, { once: true });
+				try {
+					const result = await withFileMutationQueue(absolutePath, () =>
+						executeHashlineFileBatch({
+							path: batch.path,
+							absolutePath,
+							batch,
+							ops,
+							resolvePath: (target) => resolveToCwd(target, cwd),
+						}),
+					);
+					results.push(result);
+				} catch (error) {
+					if (error instanceof HashlineMismatchError) throw error;
+					throw error instanceof Error ? error : new Error(String(error));
+				}
+			}
 
-						void (async () => {
-							try {
-								try {
-									await ops.access(absolutePath);
-								} catch {
-									signal?.removeEventListener("abort", onAbort);
-									reject(new Error(`File not found: ${path}`));
-									return;
-								}
-								if (aborted) return;
-
-								const buffer = await ops.readFile(absolutePath);
-								const rawContent = buffer.toString("utf-8");
-								if (aborted) return;
-
-								const { bom, text } = stripBom(rawContent);
-								const originalEnding = detectLineEnding(text);
-								const normalizedContent = normalizeToLF(text);
-								const applyResult = applyHashlineEditsToNormalizedContent(
-									normalizedContent,
-									resolvedEdits,
-									path,
-								);
-								if (applyResult.baseContent === applyResult.newContent) {
-									throw buildNoChangeError(path, applyResult.noopEdits);
-								}
-								if (aborted) return;
-
-								const finalContent = bom + restoreLineEndings(applyResult.newContent, originalEnding);
-								await ops.writeFile(absolutePath, finalContent);
-								if (aborted) return;
-
-								signal?.removeEventListener("abort", onAbort);
-								const diffResult = generateDiffString(applyResult.baseContent, applyResult.newContent);
-								const warningsBlock = applyResult.warnings?.length
-									? `\nWarnings:\n${applyResult.warnings.join("\n")}`
-									: "";
-								resolve({
-									content: [
-										{
-											type: "text",
-											text: `Updated ${path} with ${resolvedEdits.length} hashline edit(s).${warningsBlock}`,
-										},
-									],
-									details: {
-										diff: diffResult.diff,
-										firstChangedLine: applyResult.firstChangedLine ?? diffResult.firstChangedLine,
-									},
-								});
-							} catch (error) {
-								signal?.removeEventListener("abort", onAbort);
-								if (aborted) return;
-								if (error instanceof HashlineMismatchError) {
-									reject(error);
-									return;
-								}
-								reject(error instanceof Error ? error : new Error(String(error)));
-							}
-						})();
-					}),
-			);
+			return aggregateResults(results);
 		},
-		renderCall: renderHashlineEditCall,
-		renderResult: renderHashlineEditResult,
+		renderCall: (args, theme, context) => renderHashlineEditCall({ path: args.edits[0]?.path }, theme, context),
+		renderResult: (result, options, theme, context) =>
+			renderHashlineEditResult(result, options, theme, {
+				...context,
+				args: context.args ? { path: context.args.edits[0]?.path } : undefined,
+			}),
 	};
 }
 

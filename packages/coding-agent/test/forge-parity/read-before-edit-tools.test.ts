@@ -52,7 +52,7 @@ describe("read-before-edit enforcement", () => {
 		const tool = createHashlineEditToolDefinition(dir, { readLedger: new ReadLedger(dir) });
 		const result = await tool.execute(
 			"tc",
-			{ path: "a.txt", edits: [{ loc: "append", content: ["x"] }] },
+			{ edits: [{ path: "a.txt", op: "replace", pos: "1#ZZ", lines: ["x"] }] },
 			undefined,
 			undefined,
 			undefined as any,

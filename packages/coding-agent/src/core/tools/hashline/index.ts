@@ -14,3 +14,18 @@ export type {
 	HashlineMismatch,
 } from "./types.js";
 export { normalizeTag, parseTag, validateTag, validateTags } from "./validation.js";
+
+export { buildCompactHashlineDiffPreview } from "./diff-preview.js";
+export type { CompactHashlineDiffOptions, CompactHashlineDiffPreview } from "./diff-preview.js";
+
+export {
+	hashlineEditEntrySchema,
+	hashlineEditSchema,
+	normalizeHashlineBulkInput,
+} from "./bulk-input.js";
+export type {
+	HashlineEditToolInput,
+	HashlineFileOp,
+	NormalizedHashlineFileBatch,
+	RawHashlineEditEntry,
+} from "./bulk-input.js";

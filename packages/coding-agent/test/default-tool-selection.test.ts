@@ -76,10 +76,10 @@ describe("default built-in tool selection", () => {
 		expect(session.systemPrompt).toContain("- ast_grep:");
 		expect(session.systemPrompt).toContain("- ast_edit:");
 		expect(session.systemPrompt).toContain(
-			'- Prefer hashline_edit for ordinary surgical file edits; start with read({ path, format: "hashline" }) to get fresh LINE#ID anchors',
+			'- Use the clean bulk shape only: { edits: [{ path, op: "replace"|"append"|"prepend"|"delete"|"move", pos?, end?, lines?, to? }] }',
 		);
 		expect(session.systemPrompt).toContain(
-			"- hashline_edit is not exact-text edit: do not send oldText/newText style patterns or reproduce surrounding file text",
+			"- All edits in one call reference the ORIGINAL file snapshot; do not adjust line numbers for earlier edits in the same call",
 		);
 		expect(session.systemPrompt).toContain("- Use ast_grep when syntax shape matters more than plain text");
 		expect(session.systemPrompt).toContain(

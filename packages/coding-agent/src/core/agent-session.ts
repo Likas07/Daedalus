@@ -289,6 +289,8 @@ export class AgentSession {
 	/** Messages queued to be included with the next user prompt as context ("asides"). */
 	private _pendingNextTurnMessages: CustomMessage[] = [];
 	private _loopDetector = new LoopDetector({ maxRepeats: 3, maxCompletionAttempts: 3 });
+	private _pendingPostRunContinuations: string[] = [];
+	private _postRunContinuationTimer: ReturnType<typeof setTimeout> | undefined = undefined;
 
 	// Compaction state
 	private _compactionAbortController: AbortController | undefined = undefined;
@@ -731,6 +733,44 @@ export class AgentSession {
 		].some((pattern) => pattern.test(text));
 	}
 
+	private _schedulePostRunContinuation(text: string): void {
+		this._pendingPostRunContinuations.push(text);
+		this._ensurePostRunContinuationScheduled();
+	}
+
+	private _ensurePostRunContinuationScheduled(): void {
+		if (this._postRunContinuationTimer) {
+			return;
+		}
+
+		this._postRunContinuationTimer = setTimeout(() => {
+			this._postRunContinuationTimer = undefined;
+			void this._drainPostRunContinuations().catch(() => {});
+		}, 0);
+	}
+
+	private async _drainPostRunContinuations(): Promise<void> {
+		await this.agent.waitForIdle();
+
+		if (this.pendingMessageCount > 0 || this.isStreaming) {
+			this._pendingPostRunContinuations = [];
+			return;
+		}
+
+		const next = this._pendingPostRunContinuations.shift();
+		if (!next) {
+			return;
+		}
+
+		try {
+			await this.sendUserMessage(next);
+		} finally {
+			if (this._pendingPostRunContinuations.length > 0) {
+				this._ensurePostRunContinuationScheduled();
+			}
+		}
+	}
+
 	private async _maybeEnforcePendingWork(lastAssistantMessage?: AssistantMessage): Promise<void> {
 		if (!this.settingsManager.getPendingWorkSettings().enabled) {
 			return;
@@ -770,7 +810,7 @@ export class AgentSession {
 				},
 				{ triggerTurn: false },
 			);
-			await this.sendUserMessage(loopReminder);
+			this._schedulePostRunContinuation(loopReminder);
 		}
 
 		const reminderDecision = decidePendingTodosReminder(
@@ -792,7 +832,7 @@ export class AgentSession {
 			},
 			{ triggerTurn: false },
 		);
-		await this.sendUserMessage(reminder);
+		this._schedulePostRunContinuation(reminder);
 	}
 
 	/** Extract text content from a message */
@@ -933,6 +973,11 @@ export class AgentSession {
 	 */
 	dispose(): void {
 		this._disconnectFromAgent();
+		if (this._postRunContinuationTimer) {
+			clearTimeout(this._postRunContinuationTimer);
+			this._postRunContinuationTimer = undefined;
+		}
+		this._pendingPostRunContinuations = [];
 		this._eventListeners = [];
 	}
 
