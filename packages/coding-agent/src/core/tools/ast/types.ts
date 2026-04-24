@@ -59,6 +59,7 @@ export interface AstScope {
 export interface AstFileSnapshot {
 	absolutePath: string;
 	relativePath: string;
+	originalContent: string;
 	bom: string;
 	originalEnding: "\n" | "\r\n";
 	normalizedContent: string;

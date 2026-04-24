@@ -63,6 +63,7 @@ async function collectOriginalFilesRecursive(
 		out.set(relativePath, {
 			absolutePath,
 			relativePath,
+			originalContent: raw,
 			bom,
 			originalEnding: detectLineEnding(text),
 			normalizedContent: normalizeToLF(text),
@@ -86,6 +87,7 @@ export async function createTempAstWorkspace(scope: AstScope): Promise<AstWorksp
 		files.set(relativePath, {
 			absolutePath: scope.absolutePath,
 			relativePath,
+			originalContent: raw,
 			bom,
 			originalEnding: detectLineEnding(text),
 			normalizedContent: normalizeToLF(text),
@@ -105,9 +107,9 @@ export async function finalizeAstWorkspace(workspace: AstWorkspace): Promise<{
 	changes: AstEditChange[];
 	diff: string;
 	firstChangedLine?: number;
-	changedFiles: Array<{ absolutePath: string; content: string }>;
+	changedFiles: Array<{ absolutePath: string; content: string; originalContent: string }>;
 }> {
-	const changedFiles: Array<{ absolutePath: string; content: string }> = [];
+	const changedFiles: Array<{ absolutePath: string; content: string; originalContent: string }> = [];
 	const changes: AstEditChange[] = [];
 	let combinedDiff = "";
 	let firstChangedLine: number | undefined;
@@ -117,7 +119,11 @@ export async function finalizeAstWorkspace(workspace: AstWorkspace): Promise<{
 		const newNormalized = await fsReadFile(tempPath, "utf-8").catch(() => snapshot.normalizedContent);
 		if (newNormalized === snapshot.normalizedContent) continue;
 		const finalContent = snapshot.bom + restoreLineEndings(newNormalized, snapshot.originalEnding);
-		changedFiles.push({ absolutePath: snapshot.absolutePath, content: finalContent });
+		changedFiles.push({
+			absolutePath: snapshot.absolutePath,
+			content: finalContent,
+			originalContent: snapshot.originalContent,
+		});
 		const diffResult = generateDiffString(snapshot.normalizedContent, newNormalized);
 		if (
 			firstChangedLine === undefined ||

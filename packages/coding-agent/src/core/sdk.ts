@@ -364,6 +364,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		transport: settingsManager.getTransport(),
 		thinkingBudgets: settingsManager.getThinkingBudgets(),
 		maxRetryDelayMs: settingsManager.getRetrySettings().maxDelayMs,
+		...settingsManager.getToolExecutionSettings(),
 	});
 
 	// Restore messages if session has existing data

@@ -38,7 +38,7 @@ You can also trigger manually with `/compact [instructions]`, where optional ins
 
 ### How It Works
 
-1. **Find cut point**: Walk backwards from newest message, accumulating token estimates until `keepRecentTokens` (default 20k, configurable in `~/.daedalus/agent/settings.json` or `<project-dir>/.daedalus/settings.json`) is reached
+1. **Find cut point**: Walk backwards from newest message, accumulating token estimates until the recent-context target is reached. By default this keeps the newest 10% of the active model context window (`keepRecentRatio: 0.1`) and compacts the older eligible context. If the model context window is unavailable, Daedalus falls back to `keepRecentTokens` (default 20k).
 2. **Extract messages**: Collect messages from the previous kept boundary (or session start) up to the cut point
 3. **Generate summary**: Call LLM to summarize with structured format, passing the previous summary as iterative context when present
 4. **Append entry**: Save `CompactionEntry` with summary and `firstKeptEntryId`
@@ -380,7 +380,9 @@ Configure compaction in `~/.daedalus/agent/settings.json` or `<project-dir>/.dae
   "compaction": {
     "enabled": true,
     "reserveTokens": 16384,
-    "keepRecentTokens": 20000
+    "keepRecentRatio": 0.1,
+    "keepRecentTokens": 20000,
+    "evictionWindow": 1
   }
 }
 ```
@@ -389,6 +391,8 @@ Configure compaction in `~/.daedalus/agent/settings.json` or `<project-dir>/.dae
 |---------|---------|-------------|
 | `enabled` | `true` | Enable auto-compaction |
 | `reserveTokens` | `16384` | Tokens to reserve for LLM response |
-| `keepRecentTokens` | `20000` | Recent tokens to keep (not summarized) |
+| `keepRecentRatio` | `0.1` | Fraction of the model context window to keep as recent live context; default keeps newest 10% and compacts older eligible context |
+| `keepRecentTokens` | `20000` | Fixed recent-token budget. If configured without `keepRecentRatio`, it overrides ratio-based retention; otherwise it is the fallback when the model context window is unavailable |
+| `evictionWindow` | `1` | Maximum fraction of eligible old context allowed to compact; default `1` allows compacting all older eligible context |
 
 Disable auto-compaction with `"enabled": false`. You can still compact manually with `/compact`.

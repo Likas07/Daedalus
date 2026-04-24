@@ -242,8 +242,12 @@ export class FooterDataProvider {
 			}
 			this.cachedBranch = nextBranch;
 		} finally {
+			const shouldRefreshAgain = this.refreshPending && !this.disposed;
 			this.refreshInFlight = false;
 			this.refreshPending = false;
+			if (shouldRefreshAgain) {
+				this.scheduleRefresh();
+			}
 		}
 	}
 

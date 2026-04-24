@@ -11,11 +11,24 @@ import type {
 	SubagentRoleOverride,
 	SubagentSettings,
 } from "./settings-schema.js";
+import {
+	DEFAULT_FETCH_MAX_CHARS,
+	DEFAULT_STDOUT_PREFIX_LINES,
+	DEFAULT_STDOUT_SUFFIX_LINES,
+} from "./tool-output-defaults.js";
 
 export interface CompactionSettings {
 	enabled?: boolean; // default: true
 	reserveTokens?: number; // default: 16384
-	keepRecentTokens?: number; // default: 20000
+	keepRecentTokens?: number; // fallback default: 20000 when model context window is unavailable
+	keepRecentRatio?: number; // default: 0.1 (keep newest 10% of the model context window)
+	tokenThreshold?: number;
+	turnThreshold?: number;
+	messageThreshold?: number;
+	retentionWindow?: number; // default: 0
+	evictionWindow?: number; // default: 1 (allow compacting all older eligible context)
+	compactOnTurnEnd?: boolean;
+	compactModel?: { provider: string; modelId: string };
 }
 
 export interface BranchSummarySettings {
@@ -30,7 +43,26 @@ export interface RetrySettings {
 	maxDelayMs?: number; // default: 60000 (max server-requested delay before failing)
 }
 
+export interface ToolExecutionSettings {
+	toolTimeoutMs?: number; // default: 300000 (5 minutes)
+	subagentToolTimeoutMs?: number; // default: undefined (infinite)
+}
+
+export interface ToolOutputSettings {
+	maxStdoutPrefixLines?: number; // default: 100
+	maxStdoutSuffixLines?: number; // default: 100
+	maxFetchChars?: number; // default: 40000
+}
+
+export interface FileTrackingSettings {
+	maxParallelFileReads?: number; // default: 4
+}
+
 export interface PendingWorkSettings {
+	enabled?: boolean; // default: true
+}
+
+export interface CodingDisciplineSettings {
 	enabled?: boolean; // default: true
 }
 
@@ -84,7 +116,11 @@ export interface Settings {
 	compaction?: CompactionSettings;
 	branchSummary?: BranchSummarySettings;
 	retry?: RetrySettings;
+	toolExecution?: ToolExecutionSettings;
+	toolOutputs?: ToolOutputSettings;
+	fileTracking?: FileTrackingSettings;
 	pendingWork?: PendingWorkSettings;
+	codingDiscipline?: CodingDisciplineSettings;
 	hideThinkingBlock?: boolean;
 	shellPath?: string; // Custom shell path (e.g., for Cygwin users on Windows)
 	quietStartup?: boolean;
@@ -845,11 +881,32 @@ export class SettingsManager {
 		this.save();
 	}
 
-	getCompactionSettings(): { enabled: boolean; reserveTokens: number; keepRecentTokens: number } {
+	getCompactionSettings(): {
+		enabled: boolean;
+		reserveTokens: number;
+		keepRecentTokens: number;
+		keepRecentRatio?: number;
+		tokenThreshold?: number;
+		turnThreshold?: number;
+		messageThreshold?: number;
+		retentionWindow: number;
+		evictionWindow: number;
+		compactOnTurnEnd?: boolean;
+		compactModel?: { provider: string; modelId: string };
+	} {
+		const compaction = this.settings.compaction;
 		return {
 			enabled: this.getCompactionEnabled(),
 			reserveTokens: this.getCompactionReserveTokens(),
 			keepRecentTokens: this.getCompactionKeepRecentTokens(),
+			keepRecentRatio: compaction?.keepRecentRatio ?? (compaction?.keepRecentTokens === undefined ? 0.1 : undefined),
+			tokenThreshold: compaction?.tokenThreshold,
+			turnThreshold: compaction?.turnThreshold,
+			messageThreshold: compaction?.messageThreshold,
+			retentionWindow: compaction?.retentionWindow ?? 0,
+			evictionWindow: compaction?.evictionWindow ?? 1,
+			compactOnTurnEnd: compaction?.compactOnTurnEnd,
+			compactModel: compaction?.compactModel,
 		};
 	}
 
@@ -894,13 +951,34 @@ export class SettingsManager {
 		this.markModified("retry", "enabled");
 		this.save();
 	}
-
 	getRetrySettings(): { enabled: boolean; maxRetries: number; baseDelayMs: number; maxDelayMs: number } {
+		const retry = this.settings.retry ?? {};
 		return {
-			enabled: this.getRetryEnabled(),
-			maxRetries: this.settings.retry?.maxRetries ?? 3,
-			baseDelayMs: this.settings.retry?.baseDelayMs ?? 2000,
-			maxDelayMs: this.settings.retry?.maxDelayMs ?? 60000,
+			enabled: retry.enabled ?? true,
+			maxRetries: retry.maxRetries ?? 3,
+			baseDelayMs: retry.baseDelayMs ?? 2000,
+			maxDelayMs: retry.maxDelayMs ?? 60000,
+		};
+	}
+
+	getToolExecutionSettings(): ToolExecutionSettings {
+		return {
+			toolTimeoutMs: this.settings.toolExecution?.toolTimeoutMs ?? 300000,
+			subagentToolTimeoutMs: this.settings.toolExecution?.subagentToolTimeoutMs,
+		};
+	}
+
+	getToolOutputSettings(): Required<ToolOutputSettings> {
+		return {
+			maxStdoutPrefixLines: this.settings.toolOutputs?.maxStdoutPrefixLines ?? DEFAULT_STDOUT_PREFIX_LINES,
+			maxStdoutSuffixLines: this.settings.toolOutputs?.maxStdoutSuffixLines ?? DEFAULT_STDOUT_SUFFIX_LINES,
+			maxFetchChars: this.settings.toolOutputs?.maxFetchChars ?? DEFAULT_FETCH_MAX_CHARS,
+		};
+	}
+
+	getFileTrackingSettings(): Required<FileTrackingSettings> {
+		return {
+			maxParallelFileReads: this.settings.fileTracking?.maxParallelFileReads ?? 4,
 		};
 	}
 
@@ -920,6 +998,36 @@ export class SettingsManager {
 	getPendingWorkSettings(): { enabled: boolean } {
 		return {
 			enabled: this.getPendingWorkEnabled(),
+		};
+	}
+
+	getCodingDisciplineEnabled(): boolean {
+		return this.settings.codingDiscipline?.enabled ?? true;
+	}
+
+	setCodingDisciplineEnabled(enabled: boolean, scope: SettingsScope = "global"): void {
+		if (scope === "project") {
+			const projectSettings = structuredClone(this.projectSettings);
+			if (!projectSettings.codingDiscipline) {
+				projectSettings.codingDiscipline = {};
+			}
+			projectSettings.codingDiscipline.enabled = enabled;
+			this.markProjectModified("codingDiscipline", "enabled");
+			this.saveProjectSettings(projectSettings);
+			return;
+		}
+
+		if (!this.globalSettings.codingDiscipline) {
+			this.globalSettings.codingDiscipline = {};
+		}
+		this.globalSettings.codingDiscipline.enabled = enabled;
+		this.markModified("codingDiscipline", "enabled");
+		this.save();
+	}
+
+	getCodingDisciplineSettings(): { enabled: boolean } {
+		return {
+			enabled: this.getCodingDisciplineEnabled(),
 		};
 	}
 

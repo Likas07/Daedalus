@@ -2,6 +2,7 @@
  * Process @file CLI arguments into text content and image attachments
  */
 
+import { createHash } from "node:crypto";
 import { access, readFile, stat } from "node:fs/promises";
 import type { ImageContent } from "@daedalus-pi/ai";
 import chalk from "chalk";
@@ -13,6 +14,7 @@ import { detectSupportedImageMimeTypeFromFile } from "../utils/mime.js";
 export interface ProcessedFiles {
 	text: string;
 	images: ImageContent[];
+	readFiles: Array<{ path: string; contentHash: string }>;
 }
 
 export interface ProcessFileOptions {
@@ -25,6 +27,7 @@ export async function processFileArguments(fileArgs: string[], options?: Process
 	const autoResizeImages = options?.autoResizeImages ?? true;
 	let text = "";
 	const images: ImageContent[] = [];
+	const readFiles: Array<{ path: string; contentHash: string }> = [];
 
 	for (const fileArg of fileArgs) {
 		// Expand and resolve path (handles ~ expansion and macOS screenshot Unicode spaces)
@@ -45,12 +48,14 @@ export async function processFileArguments(fileArgs: string[], options?: Process
 			continue;
 		}
 
+		const rawContent = await readFile(absolutePath);
+		readFiles.push({ path: absolutePath, contentHash: createHash("sha256").update(rawContent).digest("hex") });
+
 		const mimeType = await detectSupportedImageMimeTypeFromFile(absolutePath);
 
 		if (mimeType) {
 			// Handle image file
-			const content = await readFile(absolutePath);
-			const base64Content = content.toString("base64");
+			const base64Content = rawContent.toString("base64");
 
 			let attachment: ImageContent;
 			let dimensionNote: string | undefined;
@@ -86,7 +91,7 @@ export async function processFileArguments(fileArgs: string[], options?: Process
 		} else {
 			// Handle text file
 			try {
-				const content = await readFile(absolutePath, "utf-8");
+				const content = rawContent.toString("utf-8");
 				text += `<file name="${absolutePath}">\n${content}\n</file>\n`;
 			} catch (error: unknown) {
 				const message = error instanceof Error ? error.message : String(error);
@@ -96,5 +101,5 @@ export async function processFileArguments(fileArgs: string[], options?: Process
 		}
 	}
 
-	return { text, images };
+	return { text, images, readFiles };
 }

@@ -179,4 +179,54 @@ describe("AgentSession dynamic tool registration", () => {
 
 		session.dispose();
 	});
+	it("keeps defaultActive false tools registered but inactive until explicitly enabled", async () => {
+		const settingsManager = SettingsManager.create(tempDir, agentDir);
+		const sessionManager = SessionManager.inMemory();
+
+		const resourceLoader = new DefaultResourceLoader({
+			cwd: tempDir,
+			agentDir,
+			settingsManager,
+			extensionFactories: [
+				(pi) => {
+					pi.on("session_start", () => {
+						pi.registerTool({
+							name: "diagnostic_tool",
+							label: "Diagnostic Tool",
+							description: "Tool registered for diagnostics only",
+							promptSnippet: "Run diagnostics",
+							defaultActive: false,
+							parameters: Type.Object({}),
+							execute: async () => ({
+								content: [{ type: "text", text: "diagnostic ok" }],
+								details: {},
+							}),
+						});
+					});
+				},
+			],
+		});
+		await resourceLoader.reload();
+
+		const { session } = await createAgentSession({
+			cwd: tempDir,
+			agentDir,
+			model: getModel("anthropic", "claude-sonnet-4-5")!,
+			settingsManager,
+			sessionManager,
+			resourceLoader,
+		});
+		await session.bindExtensions({});
+
+		expect(session.getAllTools().map((tool) => tool.name)).toContain("diagnostic_tool");
+		expect(session.getActiveToolNames()).not.toContain("diagnostic_tool");
+		expect(session.systemPrompt).not.toContain("- diagnostic_tool: Run diagnostics");
+
+		session.setActiveToolsByName([...session.getActiveToolNames(), "diagnostic_tool"]);
+
+		expect(session.getActiveToolNames()).toContain("diagnostic_tool");
+		expect(session.systemPrompt).toContain("- diagnostic_tool: Run diagnostics");
+
+		session.dispose();
+	});
 });

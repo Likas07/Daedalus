@@ -1,3 +1,5 @@
+import { DEFAULT_FETCH_MAX_CHARS } from "../../tool-output-defaults.js";
+
 const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
 
 export function normalizeFetchUrl(input: string): string {
@@ -24,7 +26,7 @@ export function normalizeTimeoutSeconds(value: number | undefined, fallback = 15
 	return Math.min(normalized, 60);
 }
 
-export function normalizeMaxChars(value: number | undefined, fallback = 20_000): number {
+export function normalizeMaxChars(value: number | undefined, fallback = DEFAULT_FETCH_MAX_CHARS): number {
 	if (value === undefined) return fallback;
 	const normalized = Math.floor(value);
 	if (!Number.isFinite(normalized) || normalized < 500) {

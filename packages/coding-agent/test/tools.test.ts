@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { executeBash } from "../src/core/bash-executor.js";
+import { executeBash, executeBashWithOperations } from "../src/core/bash-executor.js";
 import { bashTool, createBashTool, createLocalBashOperations } from "../src/core/tools/bash.js";
 import { editTool } from "../src/core/tools/edit.js";
 import { findTool } from "../src/core/tools/find.js";
@@ -47,7 +47,10 @@ describe("Coding Agent Tools", () => {
 			expect(getTextOutput(result)).toBe(content);
 			// No truncation message since file fits within limits
 			expect(getTextOutput(result)).not.toContain("Use offset=");
-			expect(result.details).toBeUndefined();
+			expect(result.details).toMatchObject({
+				absolutePath: testFile,
+				contentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+			});
 		});
 
 		it("should handle non-existent files", async () => {
@@ -453,8 +456,9 @@ describe("Coding Agent Tools", () => {
 			expect(result.details?.truncation?.truncated).toBe(true);
 			expect(result.details?.truncation?.truncatedBy).toBe("lines");
 			expect(fullOutputPath).toBeDefined();
-			expect(output).toMatch(/\[Showing lines \d+-\d+ of \d+\. Full output: /);
-			expect(output).not.toContain("Full output: undefined");
+			expect(output).toContain("[Showing first 100 and last 100 lines of");
+			expect(output).not.toContain("Full output saved to artifact file: undefined");
+			expect(output).not.toContain(fullOutputPath!);
 
 			for (let i = 0; i < 20 && (!fullOutputPath || !existsSync(fullOutputPath)); i++) {
 				await new Promise((resolve) => setTimeout(resolve, 10));
@@ -465,6 +469,34 @@ describe("Coding Agent Tools", () => {
 			const fullOutput = readFileSync(fullOutputPath!, "utf-8");
 			expect(fullOutput).toContain("1\n2\n3");
 			expect(fullOutput).toContain("2998\n2999\n3000");
+		});
+
+		it("executeBash should preserve the true stdout head when output exceeds the rolling buffer", async () => {
+			const output = Array.from({ length: 12_000 }, (_, index) => `Line ${index + 1}: ${"x".repeat(16)}`).join("\n");
+			const chunkSize = 2048;
+			const operations = {
+				exec: async (_command: string, _cwd: string, options: { onData: (data: Buffer) => void }) => {
+					for (let offset = 0; offset < output.length; offset += chunkSize) {
+						options.onData(Buffer.from(output.slice(offset, offset + chunkSize), "utf8"));
+					}
+					return { exitCode: 0 };
+				},
+			};
+
+			const result = await executeBashWithOperations("generate", testDir, operations as any);
+			const visibleLines = result.output.split("\n");
+
+			expect(result.truncated).toBe(true);
+			expect(visibleLines.slice(0, 5)).toEqual([
+				"Line 1: xxxxxxxxxxxxxxxx",
+				"Line 2: xxxxxxxxxxxxxxxx",
+				"Line 3: xxxxxxxxxxxxxxxx",
+				"Line 4: xxxxxxxxxxxxxxxx",
+				"Line 5: xxxxxxxxxxxxxxxx",
+			]);
+			expect(result.output).toContain("[... 11800 lines truncated ...]");
+			expect(result.output).toContain("Line 12000: xxxxxxxxxxxxxxxx");
+			expect(result.fullOutputPath).toBeDefined();
 		});
 
 		it("executeBash should persist full output when truncation happens by line count only", async () => {

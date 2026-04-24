@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { AgentTool } from "@daedalus-pi/agent-core";
 import type { ImageContent, TextContent } from "@daedalus-pi/ai";
 import { Text } from "@daedalus-pi/tui";
@@ -30,6 +31,10 @@ export type ReadToolInput = Static<typeof readSchema>;
 
 export interface ReadToolDetails {
 	truncation?: TruncationResult;
+	/** Absolute normalized path that was successfully read. Used by read-before-edit ledger. */
+	absolutePath?: string;
+	/** SHA-256 of the full file bytes at read time. Reserved for external-change detection. */
+	contentHash?: string;
 }
 
 /**
@@ -167,9 +172,11 @@ export function createReadToolDefinition(
 							const mimeType = ops.detectImageMimeType ? await ops.detectImageMimeType(absolutePath) : undefined;
 							let content: (TextContent | ImageContent)[];
 							let details: ReadToolDetails | undefined;
+							let contentHash: string | undefined;
 							if (mimeType) {
 								// Read image as binary.
 								const buffer = await ops.readFile(absolutePath);
+								contentHash = createHash("sha256").update(buffer).digest("hex");
 								const base64 = buffer.toString("base64");
 								if (autoResizeImages) {
 									// Resize image if needed before sending it back to the model.
@@ -199,6 +206,7 @@ export function createReadToolDefinition(
 							} else {
 								// Read text content.
 								const buffer = await ops.readFile(absolutePath);
+								contentHash = createHash("sha256").update(buffer).digest("hex");
 								const textContent = buffer.toString("utf-8");
 								const allLines = textContent.split("\n");
 								const totalFileLines = allLines.length;
@@ -256,6 +264,8 @@ export function createReadToolDefinition(
 							}
 
 							if (aborted) return;
+							details = { ...(details ?? {}), absolutePath, ...(contentHash ? { contentHash } : {}) };
+							_ctx?.readLedger?.markRead(absolutePath, contentHash);
 							signal?.removeEventListener("abort", onAbort);
 							resolve({ content, details });
 						} catch (error: any) {

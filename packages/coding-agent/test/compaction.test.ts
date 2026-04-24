@@ -9,10 +9,10 @@ import {
 	calculateContextTokens,
 	compact,
 	DEFAULT_COMPACTION_SETTINGS,
-	estimateContextTokens,
 	findCutPoint,
 	getLastAssistantUsage,
 	prepareCompaction,
+	resolveKeepRecentTokens,
 	shouldCompact,
 } from "../src/core/compaction/index.js";
 import {
@@ -63,6 +63,30 @@ function createAssistantMessage(text: string, usage?: Usage): AssistantMessage {
 		api: "anthropic-messages",
 		provider: "anthropic",
 		model: "claude-sonnet-4-5",
+	};
+}
+
+function createToolCallingAssistant(toolCallIds: string[]): AssistantMessage {
+	return {
+		...createAssistantMessage("", createMockUsage(0, 100)),
+		content: toolCallIds.map((id) => ({
+			type: "toolCall" as const,
+			id,
+			name: "test_tool",
+			arguments: {},
+		})),
+		stopReason: "toolUse",
+	};
+}
+
+function createToolResultMessage(toolCallId: string, text: string): AgentMessage {
+	return {
+		role: "toolResult",
+		toolCallId,
+		toolName: "test_tool",
+		content: [{ type: "text", text }],
+		isError: false,
+		timestamp: Date.now(),
 	};
 }
 
@@ -307,6 +331,21 @@ describe("findCutPoint", () => {
 			expect(result.turnStartIndex).toBe(2); // Turn 2 starts at index 2
 		}
 	});
+
+	it("should not cut at eviction cap when it lands on a tool result", () => {
+		const assistant = createMessageEntry(createToolCallingAssistant(["call_1", "call_2"]));
+		const entries: SessionEntry[] = [
+			createMessageEntry(createUserMessage("Use tools")),
+			assistant,
+			createMessageEntry(createToolResultMessage("call_1", "x".repeat(50_000))),
+			createMessageEntry(createToolResultMessage("call_2", "ok")),
+		];
+
+		const result = findCutPoint(entries, 0, entries.length, 1, { evictionWindow: 0.2 });
+
+		expect(entries[result.firstKeptEntryIndex].id).toBe(assistant.id);
+		expect((entries[result.firstKeptEntryIndex] as SessionMessageEntry).message.role).toBe("assistant");
+	});
 });
 
 describe("buildSessionContext", () => {
@@ -341,6 +380,28 @@ describe("buildSessionContext", () => {
 		expect(loaded.messages.length).toBe(5);
 		expect(loaded.messages[0].role).toBe("compactionSummary");
 		expect((loaded.messages[0] as any).summary).toContain("Summary of 1,a,2,b");
+	});
+
+	it("should repair compaction boundaries that start at a tool result", () => {
+		const user = createMessageEntry(createUserMessage("Use tools"));
+		const assistant = createMessageEntry(createToolCallingAssistant(["call_1", "call_2"]));
+		const firstResult = createMessageEntry(createToolResultMessage("call_1", "one"));
+		const secondResult = createMessageEntry(createToolResultMessage("call_2", "two"));
+		const compaction = createCompactionEntry("Summary", secondResult.id);
+
+		const loaded = buildSessionContext([user, assistant, firstResult, secondResult, compaction]);
+
+		expect(loaded.messages.map((message) => message.role)).toEqual([
+			"compactionSummary",
+			"assistant",
+			"toolResult",
+			"toolResult",
+		]);
+		expect(
+			(loaded.messages[1] as AssistantMessage).content.some(
+				(block) => block.type === "toolCall" && block.id === "call_2",
+			),
+		).toBe(true);
 	});
 
 	it("should handle multiple compactions (only latest matters)", () => {
@@ -395,8 +456,34 @@ describe("buildSessionContext", () => {
 	});
 });
 
+describe("10% recent-context compaction policy", () => {
+	it("resolves the recent-token budget from the model context window", () => {
+		expect(resolveKeepRecentTokens(DEFAULT_COMPACTION_SETTINGS, 1_000_000)).toBe(100_000);
+		expect(resolveKeepRecentTokens({ ...DEFAULT_COMPACTION_SETTINGS, keepRecentRatio: 0.25 }, 200_000)).toBe(50_000);
+		expect(resolveKeepRecentTokens({ ...DEFAULT_COMPACTION_SETTINGS, keepRecentRatio: undefined }, 200_000)).toBe(
+			DEFAULT_COMPACTION_SETTINGS.keepRecentTokens,
+		);
+	});
+
+	it("keeps only the newest 10 percent of context tokens when contextWindow is provided", () => {
+		const entries = Array.from({ length: 20 }, (_, index) =>
+			createMessageEntry(
+				index % 2 === 0
+					? createUserMessage(`${index}: ${"u".repeat(40)}`)
+					: createAssistantMessage(`${index}: ${"a".repeat(40)}`),
+			),
+		);
+
+		const preparation = prepareCompaction(entries, DEFAULT_COMPACTION_SETTINGS, process.cwd(), 200);
+
+		expect(preparation).toBeDefined();
+		expect(preparation!.firstKeptEntryId).toBe(entries[18]!.id);
+		expect(preparation!.messagesToSummarize).toHaveLength(18);
+	});
+});
+
 describe("prepareCompaction with previous compaction", () => {
-	it("should preserve kept messages across repeated compactions when they still fit", () => {
+	it("should skip repeated compaction when previously kept messages still fit", () => {
 		const u1 = createMessageEntry(createUserMessage("user msg 1 (summarized by compaction1)"));
 		const a1 = createMessageEntry(createAssistantMessage("assistant msg 1"));
 		const u2 = createMessageEntry(createUserMessage("user msg 2 - kept by compaction1"));
@@ -408,29 +495,9 @@ describe("prepareCompaction with previous compaction", () => {
 		const a4 = createMessageEntry(createAssistantMessage("assistant msg 4", createMockUsage(8000, 2000)));
 
 		const pathEntries = [u1, a1, u2, a2, u3, a3, compaction1, u4, a4];
-		const contextBefore = buildSessionContext(pathEntries);
-		const preparation = prepareCompaction(pathEntries, DEFAULT_COMPACTION_SETTINGS);
+		const preparation = prepareCompaction(pathEntries, { ...DEFAULT_COMPACTION_SETTINGS, evictionWindow: 1 });
 
-		expect(preparation).toBeDefined();
-		expect(preparation!.firstKeptEntryId).toBe(u2.id);
-		expect(preparation!.previousSummary).toBe("First summary");
-		expect(extractText(preparation!.messagesToSummarize)).not.toContain("First summary");
-		expect(preparation!.tokensBefore).toBe(estimateContextTokens(contextBefore.messages).tokens);
-
-		const compaction2: CompactionEntry = {
-			type: "compaction",
-			id: "compaction2-id",
-			parentId: a4.id,
-			timestamp: new Date().toISOString(),
-			summary: "Second summary",
-			firstKeptEntryId: preparation!.firstKeptEntryId,
-			tokensBefore: preparation!.tokensBefore,
-		};
-		const contextAfter = buildSessionContext([...pathEntries, compaction2]);
-		const contextAfterText = extractText(contextAfter.messages);
-
-		expect(contextAfterText).toContain("user msg 2 - kept by compaction1");
-		expect(contextAfterText).toContain("user msg 3 - kept by compaction1");
+		expect(preparation).toBeUndefined();
 	});
 
 	it("should re-summarize previously kept messages when the recent window moves past them", () => {
@@ -447,6 +514,7 @@ describe("prepareCompaction with previous compaction", () => {
 		const settings: CompactionSettings = {
 			...DEFAULT_COMPACTION_SETTINGS,
 			keepRecentTokens: 100,
+			evictionWindow: 1,
 		};
 		const preparation = prepareCompaction([u1, a1, u2, a2, u3, a3, compaction1, u4, a4], settings);
 

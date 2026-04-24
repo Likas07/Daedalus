@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { createWriteStream, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import type { AgentTool } from "@daedalus-pi/agent-core";
 import { Container, Text, truncateToWidth } from "@daedalus-pi/tui";
 import { type Static, Type } from "@sinclair/typebox";
@@ -12,9 +13,13 @@ import { theme } from "../../modes/interactive/theme/theme.js";
 import { waitForChildProcess } from "../../utils/child-process.js";
 import { getShellConfig, getShellEnv, killProcessTree } from "../../utils/shell.js";
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.js";
+import type { ToolOutputSettings } from "../settings-manager.js";
+import { DEFAULT_STDOUT_PREFIX_LINES, DEFAULT_STDOUT_SUFFIX_LINES } from "../tool-output-defaults.js";
+import type { ArtifactStore } from "./artifact-store.js";
 import { getTextOutput, invalidArgText, str } from "./render-utils.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, type TruncationResult, truncateTail } from "./truncate.js";
+import { formatVisiblePath } from "./visible-path.js";
 
 /**
  * Generate a unique temp file path for bash output.
@@ -34,6 +39,8 @@ export type BashToolInput = Static<typeof bashSchema>;
 export interface BashToolDetails {
 	truncation?: TruncationResult;
 	fullOutputPath?: string;
+	stdoutArtifactPath?: string;
+	stderrArtifactPath?: string;
 }
 
 /**
@@ -53,6 +60,8 @@ export interface BashOperations {
 		cwd: string,
 		options: {
 			onData: (data: Buffer) => void;
+			onStdout?: (data: Buffer) => void;
+			onStderr?: (data: Buffer) => void;
 			signal?: AbortSignal;
 			timeout?: number;
 			env?: NodeJS.ProcessEnv;
@@ -68,7 +77,7 @@ export interface BashOperations {
  */
 export function createLocalBashOperations(): BashOperations {
 	return {
-		exec: (command, cwd, { onData, signal, timeout, env }) => {
+		exec: (command, cwd, { onData, onStdout, onStderr, signal, timeout, env }) => {
 			return new Promise((resolve, reject) => {
 				const { shell, args } = getShellConfig();
 				if (!existsSync(cwd)) {
@@ -91,8 +100,14 @@ export function createLocalBashOperations(): BashOperations {
 					}, timeout * 1000);
 				}
 				// Stream stdout and stderr.
-				child.stdout?.on("data", onData);
-				child.stderr?.on("data", onData);
+				child.stdout?.on("data", (data: Buffer) => {
+					onData(data);
+					onStdout?.(data);
+				});
+				child.stderr?.on("data", (data: Buffer) => {
+					onData(data);
+					onStderr?.(data);
+				});
 				// Handle abort signal by killing the entire process tree.
 				const onAbort = () => {
 					if (child.pid) killProcessTree(child.pid);
@@ -143,6 +158,10 @@ function resolveSpawnContext(command: string, cwd: string, spawnHook?: BashSpawn
 export interface BashToolOptions {
 	/** Custom operations for command execution. Default: local shell */
 	operations?: BashOperations;
+	/** Per-session artifact store for full stdout/stderr sidecar files. */
+	artifactStore?: ArtifactStore;
+	/** Output truncation/artifact thresholds. */
+	toolOutputs?: ToolOutputSettings;
 	/** Command prefix prepended to every command (for example shell setup commands) */
 	commandPrefix?: string;
 	/** Hook to adjust command, cwd, or env before execution */
@@ -150,6 +169,103 @@ export interface BashToolOptions {
 }
 
 const BASH_PREVIEW_LINES = 5;
+
+function getMaxStdoutLines(settings?: ToolOutputSettings): number {
+	return getStdoutPrefixLines(settings) + getStdoutSuffixLines(settings);
+}
+
+function getStdoutPrefixLines(settings?: ToolOutputSettings): number {
+	return settings?.maxStdoutPrefixLines ?? DEFAULT_STDOUT_PREFIX_LINES;
+}
+
+function getStdoutSuffixLines(settings?: ToolOutputSettings): number {
+	return settings?.maxStdoutSuffixLines ?? DEFAULT_STDOUT_SUFFIX_LINES;
+}
+
+function formatArtifactNotice(kind: "stdout" | "stderr", artifactPath: string, truncation: TruncationResult): string {
+	return `[Full ${kind} saved to artifact file: ${artifactPath}; showing ${truncation.outputLines} of ${truncation.totalLines} lines]`;
+}
+
+class HeadTailLineTracker {
+	private readonly head: string[] = [];
+	private readonly tail: string[] = [];
+	private pending = "";
+	private sawAnyText = false;
+	private endedWithNewline = false;
+	private totalLines = 0;
+
+	constructor(
+		private readonly prefixLines: number,
+		private readonly suffixLines: number,
+	) {}
+
+	push(text: string): void {
+		if (!text) return;
+		this.sawAnyText = true;
+		this.endedWithNewline = text.endsWith("\n");
+		const combined = this.pending + text;
+		const parts = combined.split("\n");
+		this.pending = parts.pop() ?? "";
+		for (const line of parts) this.recordLine(line);
+	}
+
+	finish(finalChunk = ""): TruncationResult {
+		this.push(finalChunk);
+		if (this.pending.length > 0 || (this.sawAnyText && this.endedWithNewline)) {
+			this.recordLine(this.pending);
+			this.pending = "";
+			this.endedWithNewline = false;
+		}
+		const totalBytes = Buffer.byteLength(this.renderFullContent(), "utf-8");
+		if (this.totalLines <= this.prefixLines + this.suffixLines) {
+			const content = [...this.head, ...this.tail].join("\n");
+			return {
+				content,
+				truncated: false,
+				truncatedBy: null,
+				totalLines: this.totalLines,
+				totalBytes,
+				outputLines: this.totalLines,
+				outputBytes: Buffer.byteLength(content, "utf-8"),
+				lastLinePartial: false,
+				firstLineExceedsLimit: false,
+				maxLines: this.prefixLines + this.suffixLines,
+				maxBytes: DEFAULT_MAX_BYTES,
+			};
+		}
+		const omittedLines = this.totalLines - this.head.length - this.tail.length;
+		const content = [...this.head, `[... ${omittedLines} lines omitted ...]`, ...this.tail].join("\n");
+		return {
+			content,
+			truncated: true,
+			truncatedBy: "lines",
+			totalLines: this.totalLines,
+			totalBytes,
+			outputLines: this.head.length + this.tail.length + 1,
+			outputBytes: Buffer.byteLength(content, "utf-8"),
+			lastLinePartial: false,
+			firstLineExceedsLimit: false,
+			maxLines: this.prefixLines + this.suffixLines,
+			maxBytes: DEFAULT_MAX_BYTES,
+		};
+	}
+
+	private recordLine(line: string): void {
+		this.totalLines += 1;
+		if (this.head.length < this.prefixLines) {
+			this.head.push(line);
+			return;
+		}
+		if (this.suffixLines === 0) return;
+		this.tail.push(line);
+		if (this.tail.length > this.suffixLines) this.tail.shift();
+	}
+
+	private renderFullContent(): string {
+		if (this.totalLines <= this.prefixLines) return this.head.join("\n");
+		return [...this.head, ...this.tail].join("\n");
+	}
+}
 
 type BashRenderState = {
 	startedAt: number | undefined;
@@ -238,7 +354,7 @@ function rebuildBashResultRenderComponent(
 	if (truncation?.truncated || fullOutputPath) {
 		const warnings: string[] = [];
 		if (fullOutputPath) {
-			warnings.push(`Full output: ${fullOutputPath}`);
+			warnings.push(`Full output: ${formatVisiblePath(fullOutputPath)}`);
 		}
 		if (truncation?.truncated) {
 			if (truncation.truncatedBy === "lines") {
@@ -264,6 +380,8 @@ export function createBashToolDefinition(
 	options?: BashToolOptions,
 ): ToolDefinition<typeof bashSchema, BashToolDetails | undefined, BashRenderState> {
 	const ops = options?.operations ?? createLocalBashOperations();
+	const artifactStore = options?.artifactStore;
+	const toolOutputs = options?.toolOutputs;
 	const commandPrefix = options?.commandPrefix;
 	const spawnHook = options?.spawnHook;
 	return {
@@ -271,9 +389,12 @@ export function createBashToolDefinition(
 		label: "bash",
 		description: `Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds.`,
 		promptSnippet: "Execute bash commands (ls, grep, find, etc.)",
+		promptGuidelines: [
+			"Use specialized tools (read/edit/write/fs_search) instead of bash for file operations. Reserve bash for actual system/terminal commands.",
+		],
 		parameters: bashSchema,
 		async execute(
-			_toolCallId,
+			toolCallId,
 			{ command, timeout }: { command: string; timeout?: number },
 			signal?: AbortSignal,
 			onUpdate?,
@@ -288,7 +409,14 @@ export function createBashToolDefinition(
 				let tempFilePath: string | undefined;
 				let tempFileStream: ReturnType<typeof createWriteStream> | undefined;
 				let totalBytes = 0;
+				const combinedDecoder = new StringDecoder("utf8");
+				const combinedTracker = new HeadTailLineTracker(
+					getStdoutPrefixLines(toolOutputs),
+					getStdoutSuffixLines(toolOutputs),
+				);
 				const chunks: Buffer[] = [];
+				const stdoutChunks: Buffer[] = [];
+				const stderrChunks: Buffer[] = [];
 				let chunksBytes = 0;
 				const maxChunksBytes = DEFAULT_MAX_BYTES * 2;
 
@@ -301,6 +429,7 @@ export function createBashToolDefinition(
 
 				const handleData = (data: Buffer) => {
 					totalBytes += data.length;
+					combinedTracker.push(combinedDecoder.write(data));
 					// Start writing to a temp file once output exceeds the in-memory threshold.
 					if (totalBytes > DEFAULT_MAX_BYTES) {
 						ensureTempFile();
@@ -319,7 +448,7 @@ export function createBashToolDefinition(
 					if (onUpdate) {
 						const fullBuffer = Buffer.concat(chunks);
 						const fullText = fullBuffer.toString("utf-8");
-						const truncation = truncateTail(fullText);
+						const truncation = truncateTail(fullText, { maxLines: getMaxStdoutLines(toolOutputs) });
 						if (truncation.truncated) {
 							ensureTempFile();
 						}
@@ -332,40 +461,72 @@ export function createBashToolDefinition(
 						});
 					}
 				};
+				const handleStdout = (data: Buffer) => stdoutChunks.push(data);
+				const handleStderr = (data: Buffer) => stderrChunks.push(data);
 
 				ops.exec(spawnContext.command, spawnContext.cwd, {
 					onData: handleData,
+					onStdout: handleStdout,
+					onStderr: handleStderr,
 					signal,
 					timeout,
 					env: spawnContext.env,
 				})
 					.then(({ exitCode }) => {
-						// Combine the rolling buffer chunks.
-						const fullBuffer = Buffer.concat(chunks);
-						const fullOutput = fullBuffer.toString("utf-8");
-						// Apply tail truncation for the final display payload.
-						const truncation = truncateTail(fullOutput);
+						// Finish the prefix+suffix tracker for final display.
+						const truncation = combinedTracker.finish(combinedDecoder.end());
+						truncation.totalBytes = totalBytes;
 						if (truncation.truncated) {
 							ensureTempFile();
 						}
+						const stdoutText = Buffer.concat(stdoutChunks).toString("utf-8");
+						const stderrText = Buffer.concat(stderrChunks).toString("utf-8");
+						const stdoutTruncation = truncateTail(stdoutText, { maxLines: getMaxStdoutLines(toolOutputs) });
+						const stderrTruncation = truncateTail(stderrText, { maxLines: getMaxStdoutLines(toolOutputs) });
+						const stdoutArtifactPath =
+							stdoutText && stdoutTruncation.truncated && artifactStore
+								? artifactStore.writeArtifact("stdout", toolCallId, stdoutText)
+								: undefined;
+						const stderrArtifactPath =
+							stderrText && stderrTruncation.truncated && artifactStore
+								? artifactStore.writeArtifact("stderr", toolCallId, stderrText)
+								: undefined;
 						// Close temp file stream before building the final result.
 						if (tempFileStream) tempFileStream.end();
 						let outputText = truncation.content || "(no output)";
 						let details: BashToolDetails | undefined;
-						if (truncation.truncated) {
+						if (truncation.truncated || stdoutArtifactPath || stderrArtifactPath) {
 							// Build truncation details and an actionable notice.
-							details = { truncation, fullOutputPath: tempFilePath };
-							const startLine = truncation.totalLines - truncation.outputLines + 1;
-							const endLine = truncation.totalLines;
-							if (truncation.lastLinePartial) {
-								// Edge case: the last line alone is larger than the byte limit.
-								const lastLineSize = formatSize(Buffer.byteLength(fullOutput.split("\n").pop() || "", "utf-8"));
-								outputText += `\n\n[Showing last ${formatSize(truncation.outputBytes)} of line ${endLine} (line is ${lastLineSize}). Full output: ${tempFilePath}]`;
-							} else if (truncation.truncatedBy === "lines") {
-								outputText += `\n\n[Showing lines ${startLine}-${endLine} of ${truncation.totalLines}. Full output: ${tempFilePath}]`;
-							} else {
-								outputText += `\n\n[Showing lines ${startLine}-${endLine} of ${truncation.totalLines} (${formatSize(DEFAULT_MAX_BYTES)} limit). Full output: ${tempFilePath}]`;
+							details = {
+								truncation: truncation.truncated ? truncation : undefined,
+								fullOutputPath: tempFilePath,
+								stdoutArtifactPath,
+								stderrArtifactPath,
+							};
+							if (stdoutArtifactPath) {
+								outputText += `\n\n${formatArtifactNotice(
+									"stdout",
+									artifactStore?.getVisiblePath(stdoutArtifactPath, cwd) ?? stdoutArtifactPath,
+									stdoutTruncation,
+								)}`;
 							}
+							if (stderrArtifactPath) {
+								outputText += `\n\n${formatArtifactNotice(
+									"stderr",
+									artifactStore?.getVisiblePath(stderrArtifactPath, cwd) ?? stderrArtifactPath,
+									stderrTruncation,
+								)}`;
+							}
+						}
+						if (truncation.truncated) {
+							const visibleFullOutputPath = tempFilePath
+								? (artifactStore?.getVisiblePath(tempFilePath, cwd) ?? formatVisiblePath(tempFilePath))
+								: "artifact.txt";
+							const omittedLines = Math.max(
+								0,
+								truncation.totalLines - getStdoutPrefixLines(toolOutputs) - getStdoutSuffixLines(toolOutputs),
+							);
+							outputText += `\n\n[Showing first ${getStdoutPrefixLines(toolOutputs)} and last ${getStdoutSuffixLines(toolOutputs)} lines of ${truncation.totalLines}; omitted ${omittedLines} middle lines. Full output saved to artifact file: ${visibleFullOutputPath}]`;
 						}
 						if (exitCode !== 0 && exitCode !== null) {
 							outputText += `\n\nCommand exited with code ${exitCode}`;

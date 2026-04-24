@@ -171,9 +171,13 @@ describe("buildSystemPrompt", () => {
 			const prompt = buildSystemPrompt({ selectedTools: [], contextFiles: [], skills: [] });
 
 			expect(prompt).toContain("parallelize everything that is independent, including subagent lanes");
-			expect(prompt).toContain("Daedalus consumes subagent results summary-first and inspects deferred output only when needed.");
+			expect(prompt).toContain(
+				"Daedalus consumes subagent results summary-first and inspects deferred output only when needed.",
+			);
 			expect(prompt).toContain("do not blindly forward raw subagent output to the user");
-			expect(prompt).toContain("Muse should maximize safe parallel execution and mark serialization boundaries explicitly");
+			expect(prompt).toContain(
+				"Muse should maximize safe parallel execution and mark serialization boundaries explicitly",
+			);
 		});
 
 		test("subagent sessions do not reuse the parent Daedalus identity prompt", () => {

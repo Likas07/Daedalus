@@ -44,6 +44,17 @@ export interface TruncationOptions {
 	maxBytes?: number;
 }
 
+export interface HeadTailTruncationOptions {
+	/** Maximum number of lines to keep from the beginning */
+	maxPrefixLines?: number;
+	/** Maximum number of bytes to keep from the beginning */
+	maxPrefixBytes?: number;
+	/** Maximum number of lines to keep from the end */
+	maxSuffixLines?: number;
+	/** Maximum number of bytes to keep from the end */
+	maxSuffixBytes?: number;
+}
+
 /**
  * Format bytes as human-readable size.
  */
@@ -229,6 +240,68 @@ export function truncateTail(content: string, options: TruncationOptions = {}): 
 	};
 }
 
+export function truncateHeadAndTail(content: string, options: HeadTailTruncationOptions = {}): TruncationResult {
+	const totalBytes = Buffer.byteLength(content, "utf-8");
+	const lines = content.split("\n");
+	const totalLines = lines.length;
+
+	const maxPrefixLines = normalizeLimit(options.maxPrefixLines, totalLines);
+	const maxSuffixLines = normalizeLimit(options.maxSuffixLines, totalLines);
+	const maxPrefixBytes = normalizeLimit(options.maxPrefixBytes, totalBytes);
+	const maxSuffixBytes = normalizeLimit(options.maxSuffixBytes, totalBytes);
+
+	const prefixByLines = takePrefixLines(content, maxPrefixLines);
+	const prefixByBytes = takePrefixBytes(content, maxPrefixBytes);
+	const suffixByLines = takeSuffixLines(content, maxSuffixLines);
+	const suffixByBytes = takeSuffixBytes(content, maxSuffixBytes);
+	const prefixEnd = Math.min(prefixByLines.end, prefixByBytes.end);
+	const suffixStart = Math.max(suffixByLines.start, suffixByBytes.start);
+
+	if (
+		prefixEnd >= suffixStart ||
+		(totalLines <= maxPrefixLines + maxSuffixLines && totalBytes <= maxPrefixBytes + maxSuffixBytes)
+	) {
+		return {
+			content,
+			truncated: false,
+			truncatedBy: null,
+			totalLines,
+			totalBytes,
+			outputLines: totalLines,
+			outputBytes: totalBytes,
+			lastLinePartial: false,
+			firstLineExceedsLimit: false,
+			maxLines: maxPrefixLines + maxSuffixLines,
+			maxBytes: maxPrefixBytes + maxSuffixBytes,
+		};
+	}
+
+	const prefix = content.slice(0, prefixEnd);
+	const suffix = content.slice(suffixStart);
+	const omittedContent = content.slice(prefixEnd, suffixStart);
+	const omittedBytes = Buffer.byteLength(omittedContent, "utf-8");
+	const omittedLines = countOmittedLines(content, prefixEnd, suffixStart);
+	const marker =
+		omittedLines > 0 ? `[... ${omittedLines} lines truncated ...]` : `[... ${omittedBytes} bytes truncated ...]`;
+	const outputContent = joinHeadTailSegments(prefix, marker, suffix);
+	const outputBytes = Buffer.byteLength(outputContent, "utf-8");
+	const outputLines = outputContent.length === 0 ? 0 : outputContent.split("\n").length;
+
+	return {
+		content: outputContent,
+		truncated: true,
+		truncatedBy: omittedLines > 0 ? "lines" : "bytes",
+		totalLines,
+		totalBytes,
+		outputLines,
+		outputBytes,
+		lastLinePartial: false,
+		firstLineExceedsLimit: false,
+		maxLines: maxPrefixLines + maxSuffixLines,
+		maxBytes: maxPrefixBytes + maxSuffixBytes,
+	};
+}
+
 /**
  * Truncate a string to fit within a byte limit (from the end).
  * Handles multi-byte UTF-8 characters correctly.
@@ -248,6 +321,83 @@ function truncateStringToBytesFromEnd(str: string, maxBytes: number): string {
 	}
 
 	return buf.slice(start).toString("utf-8");
+}
+
+function normalizeLimit(value: number | undefined, fallback: number): number {
+	if (value === undefined) return fallback;
+	if (!Number.isFinite(value)) return fallback;
+	return Math.max(0, Math.floor(value));
+}
+
+function takePrefixLines(content: string, maxLines: number): { end: number } {
+	if (maxLines <= 0 || content.length === 0) return { end: 0 };
+	const lines = content.split("\n");
+	if (lines.length <= maxLines) return { end: content.length };
+	return { end: lines.slice(0, maxLines).join("\n").length };
+}
+
+function takeSuffixLines(content: string, maxLines: number): { start: number } {
+	if (maxLines <= 0 || content.length === 0) return { start: content.length };
+	const lines = content.split("\n");
+	if (lines.length <= maxLines) return { start: 0 };
+	const suffix = lines.slice(-maxLines).join("\n");
+	return { start: content.length - suffix.length };
+}
+
+function takePrefixBytes(content: string, maxBytes: number): { end: number } {
+	if (maxBytes <= 0 || content.length === 0) return { end: 0 };
+	let bytes = 0;
+	let end = 0;
+	for (const char of content) {
+		const charBytes = Buffer.byteLength(char, "utf-8");
+		if (bytes + charBytes > maxBytes) break;
+		bytes += charBytes;
+		end += char.length;
+	}
+	return { end };
+}
+
+function takeSuffixBytes(content: string, maxBytes: number): { start: number } {
+	if (maxBytes <= 0 || content.length === 0) return { start: content.length };
+	let bytes = 0;
+	let start = content.length;
+	let index = content.length;
+	while (index > 0) {
+		const codeUnit = content.charCodeAt(index - 1);
+		const charLength = codeUnit >= 0xdc00 && codeUnit <= 0xdfff ? 2 : 1;
+		const charStart = index - charLength;
+		const char = content.slice(charStart, index);
+		const charBytes = Buffer.byteLength(char, "utf-8");
+		if (bytes + charBytes > maxBytes) break;
+		bytes += charBytes;
+		start = charStart;
+		index = charStart;
+	}
+	return { start };
+}
+
+function countOmittedLines(content: string, prefixEnd: number, suffixStart: number): number {
+	const lines = content.split("\n");
+	let cursor = 0;
+	let omitted = 0;
+	for (let index = 0; index < lines.length; index++) {
+		const line = lines[index] ?? "";
+		const lineStart = cursor;
+		const lineEnd = cursor + line.length;
+		if (lineStart >= prefixEnd && lineEnd < suffixStart) {
+			omitted += 1;
+		}
+		cursor = lineEnd + 1;
+	}
+	return omitted;
+}
+
+function joinHeadTailSegments(prefix: string, marker: string, suffix: string): string {
+	const segments: string[] = [];
+	if (prefix) segments.push(prefix);
+	segments.push(marker);
+	if (suffix) segments.push(suffix);
+	return segments.join("\n");
 }
 
 /**

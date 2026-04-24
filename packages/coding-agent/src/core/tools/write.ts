@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import type { AgentTool } from "@daedalus-pi/agent-core";
 import { Container, Text } from "@daedalus-pi/tui";
 import { type Static, Type } from "@sinclair/typebox";
@@ -8,6 +9,7 @@ import { getLanguageFromPath, highlightCode } from "../../modes/interactive/them
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.js";
 import { withFileMutationQueue } from "./file-mutation-queue.js";
 import { resolveToCwd } from "./path-utils.js";
+import { type ReadLedgerLike, requirePriorRead } from "./read-ledger.js";
 import { invalidArgText, normalizeDisplayText, replaceTabs, shortenPath, str } from "./render-utils.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 
@@ -27,16 +29,21 @@ export interface WriteOperations {
 	writeFile: (absolutePath: string, content: string) => Promise<void>;
 	/** Create directory recursively */
 	mkdir: (dir: string) => Promise<void>;
+	/** Check whether a file exists before writing. */
+	exists?: (absolutePath: string) => boolean | Promise<boolean>;
 }
 
 const defaultWriteOperations: WriteOperations = {
 	writeFile: (path, content) => fsWriteFile(path, content, "utf-8"),
 	mkdir: (dir) => fsMkdir(dir, { recursive: true }).then(() => {}),
+	exists: (path) => existsSync(path),
 };
 
 export interface WriteToolOptions {
 	/** Custom operations for file writing. Default: local filesystem */
 	operations?: WriteOperations;
+	/** Per-session ledger used to enforce read-before-overwrite. */
+	readLedger?: ReadLedgerLike;
 }
 
 type WriteHighlightCache = {
@@ -196,7 +203,7 @@ export function createWriteToolDefinition(
 			{ path, content }: { path: string; content: string },
 			signal?: AbortSignal,
 			_onUpdate?,
-			_ctx?,
+			ctx?,
 		) {
 			const absolutePath = resolveToCwd(path, cwd);
 			const dir = dirname(absolutePath);
@@ -220,6 +227,21 @@ export function createWriteToolDefinition(
 									// Create parent directories if needed.
 									await ops.mkdir(dir);
 									if (aborted) return;
+									// Check for overwrite under the per-file mutation queue immediately before writing.
+									const isOverwrite = ops.exists ? await ops.exists(absolutePath) : existsSync(absolutePath);
+									if (aborted) return;
+									if (isOverwrite) {
+										const priorReadError = requirePriorRead(
+											ctx?.readLedger ?? options?.readLedger,
+											absolutePath,
+											"write",
+										);
+										if (priorReadError) {
+											signal?.removeEventListener("abort", onAbort);
+											resolve(priorReadError);
+											return;
+										}
+									}
 									// Write the file contents.
 									await ops.writeFile(absolutePath, content);
 									if (aborted) return;

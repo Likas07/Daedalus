@@ -14,25 +14,36 @@
  */
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import type { Agent, AgentEvent, AgentMessage, AgentState, AgentTool, ThinkingLevel } from "@daedalus-pi/agent-core";
 import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@daedalus-pi/ai";
 import { isContextOverflow, modelsAreEqual, resetApiProviders, supportsFastMode, supportsXhigh } from "@daedalus-pi/ai";
-import { getDocsPath } from "../config.js";
+import { getAgentDir, getDocsPath } from "../config.js";
+import {
+	extractTodoSnapshotFromCustomEntry,
+	extractTodoSnapshotFromDetails,
+	hasActiveTodos,
+	serializeActiveTodoSignature,
+	type TodoSnapshot,
+} from "../extensions/daedalus/tools/todo-state.js";
+import { decidePendingTodosReminder } from "../extensions/daedalus/workflow/pending-todos-hook.js";
 import { theme } from "../modes/interactive/theme/theme.js";
 import { sleep } from "../utils/sleep.js";
-
 import { type BashResult, executeBashWithOperations } from "./bash-executor.js";
 import {
+	type CompactionPreparation,
 	type CompactionResult,
 	calculateContextTokens,
 	collectEntriesForBranchSummary,
 	compact,
+	createFileOps,
 	estimateContextTokens,
 	generateBranchSummary,
 	prepareCompaction,
 	shouldCompact,
+	shouldCompactOnTurnEnd,
 } from "./compaction/index.js";
+import { createTaskManager, LoopDetector, TaskHistory } from "./control-plane/index.js";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.js";
 import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.js";
 import { createToolHtmlRenderer } from "./export-html/tool-renderer.js";
@@ -77,7 +88,6 @@ import type { SettingsManager } from "./settings-manager.js";
 import { loadSkillDocument } from "./skills.js";
 import type { SlashCommandInfo } from "./slash-commands.js";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.js";
-import { createTaskManager, LoopDetector, TaskHistory } from "./control-plane/index.js";
 import {
 	createSubagentResourceLoader,
 	createSubagentTools,
@@ -91,18 +101,13 @@ import { resolveSubagentRuntimeConfig } from "./subagents/runtime-config.js";
 import type { SubagentSessionContext } from "./subagents/types.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import { logToolDebug, summarizeToolTransition } from "./tool-debug.js";
+import { ArtifactStore } from "./tools/artifact-store.js";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.js";
 import { DEFAULT_ACTIVE_TOOL_NAMES } from "./tools/defaults.js";
+import { type FileChange, FileChangeDetector } from "./tools/file-change-detector.js";
 import { createAllToolDefinitions } from "./tools/index.js";
+import { ReadLedger } from "./tools/read-ledger.js";
 import { createToolDefinitionFromAgentTool, wrapToolDefinition } from "./tools/tool-definition-wrapper.js";
-import {
-	extractTodoSnapshotFromCustomEntry,
-	extractTodoSnapshotFromDetails,
-	formatActiveTodoReminder,
-	hasActiveTodos,
-	serializeActiveTodoSignature,
-	type TodoSnapshot,
-} from "../extensions/daedalus/tools/todo-state.js";
 
 // ============================================================================
 // Skill Block Parsing
@@ -257,6 +262,10 @@ const THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "hi
 /** Thinking levels including xhigh (for supported models) */
 const THINKING_LEVELS_WITH_XHIGH: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
 
+function escapeXmlText(value: string): string {
+	return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 // ============================================================================
 // AgentSession Class
 // ============================================================================
@@ -326,6 +335,8 @@ export class AgentSession {
 	private _toolDefinitions: Map<string, ToolDefinitionEntry> = new Map();
 	private _toolPromptSnippets: Map<string, string> = new Map();
 	private _toolPromptGuidelines: Map<string, string[]> = new Map();
+	private _readLedger: ReadLedger;
+	private readonly _fileChangeDetector = new FileChangeDetector();
 
 	// Base system prompt (without extension appends) - used to apply fresh appends each turn
 	private _baseSystemPrompt = "";
@@ -344,6 +355,7 @@ export class AgentSession {
 		this._baseToolsOverride = config.baseToolsOverride;
 		this._subagentContext = config.subagentContext;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
+		this._readLedger = new ReadLedger(this._cwd, this.sessionManager.getEntries());
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, extensions, auto-compaction, retry logic)
@@ -354,6 +366,43 @@ export class AgentSession {
 			activeToolNames: this._initialActiveToolNames,
 			includeAllExtensionTools: true,
 		});
+	}
+
+	get readLedger(): ReadLedger {
+		return this._readLedger;
+	}
+
+	private _formatExternalChangeReminder(changes: FileChange[]): string {
+		const files = changes
+			.map((change) => this._relativeDisplayPath(change.path))
+			.map((path) => `<file>${escapeXmlText(path)}</file>`)
+			.join("");
+		return `<information><critical>The following files have been modified externally. Please re-read them if its relevant for the task.</critical><files>${files}</files></information>`;
+	}
+
+	private _relativeDisplayPath(path: string): string {
+		const relativePath = relative(this._cwd, path);
+		return relativePath && !relativePath.startsWith("..") && !relativePath.startsWith("/") ? relativePath : path;
+	}
+
+	private async _externalChangeReminderMessage(): Promise<CustomMessage | undefined> {
+		const { maxParallelFileReads } = this.settingsManager.getFileTrackingSettings();
+		const changes = await this._fileChangeDetector.detect(this._readLedger, {
+			maxParallelReads: maxParallelFileReads,
+		});
+		if (changes.length === 0) return undefined;
+		for (const change of changes) {
+			this._readLedger.markRead(change.path, change.currentHash);
+		}
+		return {
+			role: "custom",
+			customType: "external-change-reminder",
+			content: this._formatExternalChangeReminder(changes),
+			display: false,
+			droppable: true,
+			details: { files: changes.map((change) => this._relativeDisplayPath(change.path)) },
+			timestamp: Date.now(),
+		};
 	}
 
 	/** Model registry for API key resolution and model discovery */
@@ -418,6 +467,17 @@ export class AgentSession {
 		};
 
 		this.agent.afterToolCall = async ({ toolCall, args, result, isError }) => {
+			if (toolCall.name === "read" && !isError) {
+				const details = result.details as { absolutePath?: unknown; contentHash?: unknown } | undefined;
+				const inputPath =
+					(args as { path?: unknown; file_path?: unknown } | undefined)?.path ??
+					(args as { file_path?: unknown } | undefined)?.file_path;
+				const path = typeof details?.absolutePath === "string" ? details.absolutePath : inputPath;
+				const hash = typeof details?.contentHash === "string" ? details.contentHash : undefined;
+				if (typeof path === "string") {
+					this._readLedger.markRead(path, hash);
+				}
+			}
 			const runner = this._extensionRunner;
 			if (!runner?.hasHandlers("tool_result")) {
 				return undefined;
@@ -553,6 +613,7 @@ export class AgentSession {
 					event.message.content,
 					event.message.display,
 					event.message.details,
+					{ droppable: event.message.droppable },
 				);
 			} else if (
 				event.message.role === "user" ||
@@ -693,7 +754,7 @@ export class AgentSession {
 		const completionAttempt = lastAssistantMessage ? this._looksLikeCompletionAttempt(lastAssistantMessage) : false;
 		if (!completionAttempt) {
 			this._loopDetector.resetCompletion();
-		} 
+		}
 
 		const triggeredLoopWarning = completionAttempt ? this._loopDetector.recordCompletionAttempt(signature) : false;
 		if (triggeredLoopWarning && signature !== this._getLatestCustomSignature("doom-loop-reminder-state")) {
@@ -712,12 +773,16 @@ export class AgentSession {
 			await this.sendUserMessage(loopReminder);
 		}
 
-		if (signature === this._getLatestCustomSignature("pending-work-reminder-state")) {
+		const reminderDecision = decidePendingTodosReminder(
+			snapshot.todos,
+			this._getLatestCustomSignature("pending-work-reminder-state"),
+		);
+		if (!reminderDecision.shouldInject || !reminderDecision.signature || !reminderDecision.reminder) {
 			return;
 		}
 
-		const reminder = formatActiveTodoReminder(snapshot.todos);
-		this.sessionManager.appendCustomEntry("pending-work-reminder-state", { signature });
+		const reminder = reminderDecision.reminder;
+		this.sessionManager.appendCustomEntry("pending-work-reminder-state", { signature: reminderDecision.signature });
 		await this.sendCustomMessage(
 			{
 				customType: "pending-work-reminder",
@@ -1078,6 +1143,7 @@ export class AgentSession {
 
 		return buildSystemPrompt({
 			cwd: this._cwd,
+			codingDisciplineEnabled: this.settingsManager.getCodingDisciplineEnabled(),
 			skills: loadedSkills,
 			contextFiles: loadedContextFiles,
 			customPrompt: loaderSystemPrompt,
@@ -1187,8 +1253,13 @@ export class AgentSession {
 			await this._checkCompaction(lastAssistant, false);
 		}
 
-		// Build messages array (custom message if any, then user message)
+		// Build messages array (external-change reminder if any, then custom messages/user message)
 		const messages: AgentMessage[] = [];
+
+		const externalChangeReminder = await this._externalChangeReminderMessage();
+		if (externalChangeReminder) {
+			messages.push(externalChangeReminder);
+		}
 
 		// Add user message
 		const userContent: (TextContent | ImageContent)[] = [{ type: "text", text: expandedText }];
@@ -1223,6 +1294,7 @@ export class AgentSession {
 						content: msg.content,
 						display: msg.display,
 						details: msg.details,
+						droppable: msg.droppable,
 						timestamp: Date.now(),
 					});
 				}
@@ -1406,7 +1478,7 @@ export class AgentSession {
 	 * @param options.deliverAs Delivery mode: "steer", "followUp", or "nextTurn"
 	 */
 	async sendCustomMessage<T = unknown>(
-		message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details">,
+		message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details" | "droppable">,
 		options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
 	): Promise<void> {
 		const appMessage = {
@@ -1415,6 +1487,7 @@ export class AgentSession {
 			content: message.content,
 			display: message.display,
 			details: message.details,
+			droppable: message.droppable,
 			timestamp: Date.now(),
 		} satisfies CustomMessage<T>;
 		if (options?.deliverAs === "nextTurn") {
@@ -1434,6 +1507,7 @@ export class AgentSession {
 				message.content,
 				message.display,
 				message.details,
+				{ droppable: message.droppable },
 			);
 			this._emit({ type: "message_start", message: appMessage });
 			this._emit({ type: "message_end", message: appMessage });
@@ -1776,12 +1850,33 @@ export class AgentSession {
 				throw new Error("No model selected");
 			}
 
-			const { apiKey, headers } = await this._getRequiredRequestAuth(this.model);
-
 			const pathEntries = this.sessionManager.getBranch();
 			const settings = this.settingsManager.getCompactionSettings();
+			const compactionModel = this._resolveCompactionModel(this.model, settings);
+			const { apiKey, headers } = await this._getRequiredRequestAuth(compactionModel);
 
-			const preparation = prepareCompaction(pathEntries, settings);
+			let preparation = prepareCompaction(
+				pathEntries,
+				settings,
+				this.sessionManager.getCwd(),
+				this.model.contextWindow,
+			);
+			if (!preparation && this._extensionRunner?.hasHandlers("session_before_compact")) {
+				const sessionContext = this.sessionManager.buildSessionContext();
+				const firstKeptEntryId = pathEntries[0]?.id;
+				if (firstKeptEntryId) {
+					preparation = {
+						firstKeptEntryId,
+						messagesToSummarize: sessionContext.messages,
+						turnPrefixMessages: [],
+						isSplitTurn: false,
+						tokensBefore: estimateContextTokens(sessionContext.messages).tokens,
+						fileOps: createFileOps(),
+						settings,
+						cwd: this.sessionManager.getCwd(),
+					} satisfies CompactionPreparation;
+				}
+			}
 			if (!preparation) {
 				// Check why we can't compact
 				const lastEntry = pathEntries[pathEntries.length - 1];
@@ -1828,7 +1923,7 @@ export class AgentSession {
 				// Generate compaction result
 				const result = await compact(
 					preparation,
-					this.model,
+					compactionModel,
 					apiKey,
 					headers,
 					customInstructions,
@@ -1995,9 +2090,26 @@ export class AgentSession {
 		} else {
 			contextTokens = calculateContextTokens(assistantMessage.usage);
 		}
-		if (shouldCompact(contextTokens, contextWindow, settings)) {
+		const messages = this.agent.state.messages;
+		const turnEndMessages =
+			messages.length > 0 && messages[messages.length - 1] === assistantMessage ? messages.slice(0, -1) : messages;
+		if (
+			shouldCompact(contextTokens, contextWindow, settings, messages) ||
+			shouldCompactOnTurnEnd(turnEndMessages, settings)
+		) {
 			await this._runAutoCompaction("threshold", false);
 		}
+	}
+
+	private _resolveCompactionModel(
+		activeModel: Model<any>,
+		settings: { compactModel?: Model<any> | { provider: string; modelId: string } },
+	): Model<any> {
+		const compactModel = settings.compactModel;
+		if (!compactModel) return activeModel;
+		if ("id" in compactModel) return compactModel;
+		const resolved = this._modelRegistry.find(compactModel.provider, compactModel.modelId);
+		return resolved ?? activeModel;
 	}
 
 	/**
@@ -2021,7 +2133,8 @@ export class AgentSession {
 				return;
 			}
 
-			const authResult = await this._modelRegistry.getApiKeyAndHeaders(this.model);
+			const compactionModel = this._resolveCompactionModel(this.model, settings);
+			const authResult = await this._modelRegistry.getApiKeyAndHeaders(compactionModel);
 			if (!authResult.ok || !authResult.apiKey) {
 				this._emit({
 					type: "compaction_end",
@@ -2036,7 +2149,12 @@ export class AgentSession {
 
 			const pathEntries = this.sessionManager.getBranch();
 
-			const preparation = prepareCompaction(pathEntries, settings);
+			const preparation = prepareCompaction(
+				pathEntries,
+				settings,
+				this.sessionManager.getCwd(),
+				this.model.contextWindow,
+			);
 			if (!preparation) {
 				this._emit({
 					type: "compaction_end",
@@ -2092,7 +2210,7 @@ export class AgentSession {
 				// Generate compaction result
 				const compactResult = await compact(
 					preparation,
-					this.model,
+					compactionModel,
 					apiKey,
 					headers,
 					undefined,
@@ -2549,11 +2667,14 @@ export class AgentSession {
 
 		if (options?.includeAllExtensionTools) {
 			for (const tool of wrappedExtensionTools) {
-				nextActiveToolNames.push(tool.name);
+				const entry = this._toolDefinitions.get(tool.name);
+				if (entry?.definition.defaultActive !== false) {
+					nextActiveToolNames.push(tool.name);
+				}
 			}
 		} else if (!options?.activeToolNames) {
-			for (const toolName of this._toolRegistry.keys()) {
-				if (!previousRegistryNames.has(toolName)) {
+			for (const [toolName, entry] of this._toolDefinitions.entries()) {
+				if (!previousRegistryNames.has(toolName) && entry.definition.defaultActive !== false) {
 					nextActiveToolNames.push(toolName);
 				}
 			}
@@ -2593,6 +2714,8 @@ export class AgentSession {
 	}): void {
 		const autoResizeImages = this.settingsManager.getImageAutoResize();
 		const shellCommandPrefix = this.settingsManager.getShellCommandPrefix();
+		const toolOutputSettings = this.settingsManager.getToolOutputSettings();
+		const artifactStore = new ArtifactStore(this.sessionId, getAgentDir());
 		const baseToolDefinitions = this._baseToolsOverride
 			? Object.fromEntries(
 					Object.entries(this._baseToolsOverride).map(([name, tool]) => [
@@ -2602,7 +2725,9 @@ export class AgentSession {
 				)
 			: createAllToolDefinitions(this._cwd, {
 					read: { autoResizeImages },
-					bash: { commandPrefix: shellCommandPrefix },
+					bash: { commandPrefix: shellCommandPrefix, artifactStore, toolOutputs: toolOutputSettings },
+					fetch: { artifactStore, toolOutputs: toolOutputSettings },
+					readLedger: this._readLedger,
 				});
 
 		this._baseToolDefinitions = new Map(
@@ -2626,6 +2751,7 @@ export class AgentSession {
 						this._cwd,
 						this.sessionManager,
 						this._modelRegistry,
+						this._readLedger,
 					)
 				: undefined;
 		if (this._extensionRunnerRef) {

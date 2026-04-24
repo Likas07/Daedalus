@@ -16,6 +16,7 @@ import {
 	stripNewLinePrefixes,
 } from "./hashline/index.js";
 import { resolveToCwd } from "./path-utils.js";
+import { type ReadLedgerLike, requirePriorRead } from "./read-ledger.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 
 const linesSchema = Type.Union([
@@ -71,6 +72,7 @@ export interface HashlineEditOperations {
 
 export interface HashlineEditToolOptions {
 	operations?: HashlineEditOperations;
+	readLedger?: ReadLedgerLike;
 }
 
 const defaultHashlineEditOperations: HashlineEditOperations = {
@@ -147,9 +149,11 @@ export function createHashlineEditToolDefinition(
 			"Batch all edits for one file in one hashline_edit call, then re-read before another call on the same file",
 		],
 		parameters: hashlineEditSchema,
-		async execute(_toolCallId, input: HashlineEditToolInput, signal?: AbortSignal) {
+		async execute(_toolCallId, input: HashlineEditToolInput, signal?: AbortSignal, _onUpdate?, ctx?) {
 			const { path, edits } = input;
 			const absolutePath = resolveToCwd(path, cwd);
+			const priorReadError = requirePriorRead(ctx?.readLedger ?? options?.readLedger, absolutePath, "hashline_edit");
+			if (priorReadError) return priorReadError;
 			const resolvedEdits = resolveHashlineEdits(edits);
 
 			return withFileMutationQueue(

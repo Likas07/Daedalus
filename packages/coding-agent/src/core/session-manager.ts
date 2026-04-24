@@ -16,6 +16,7 @@ import {
 import { readdir, readFile, stat } from "fs/promises";
 import { join, resolve } from "path";
 import { getAgentDir as getDefaultAgentDir, getSessionsDir } from "../config.js";
+import { injectReasoningIntoFirstEmptyAssistant, type ReasoningSnapshot } from "./compaction/reasoning-preservation.js";
 import {
 	type BashExecutionMessage,
 	type CustomMessage,
@@ -136,6 +137,7 @@ export interface CustomMessageEntry<T = unknown> extends SessionEntryBase {
 	content: string | (TextContent | ImageContent)[];
 	details?: T;
 	display: boolean;
+	droppable?: boolean;
 }
 
 /** Session entry - has id/parentId for tree structure (returned by "read" methods in SessionManager) */
@@ -309,6 +311,14 @@ export function getLatestCompactionEntry(entries: SessionEntry[]): CompactionEnt
 	return null;
 }
 
+function isDroppableSessionMessageEntry(entry: SessionEntry): boolean {
+	if (entry.type === "custom_message") return entry.droppable === true;
+	if (entry.type === "message" && entry.message.role === "custom") {
+		return (entry.message as { droppable?: boolean }).droppable === true;
+	}
+	return false;
+}
+
 /**
  * Build the session context from entries using tree traversal.
  * If leafId is provided, walks from that entry to root.
@@ -380,12 +390,44 @@ export function buildSessionContext(
 	// 3. Emit messages after compaction
 	const messages: AgentMessage[] = [];
 
-	const appendMessage = (entry: SessionEntry) => {
+	const findCompactionKeptStartIndex = (compactionEntry: CompactionEntry, compactionIdx: number): number => {
+		const firstKeptIndex = path.findIndex(
+			(entry, index) => index < compactionIdx && entry.id === compactionEntry.firstKeptEntryId,
+		);
+		if (firstKeptIndex === -1) return compactionIdx;
+
+		const firstKeptEntry = path[firstKeptIndex];
+		if (firstKeptEntry.type !== "message" || firstKeptEntry.message.role !== "toolResult") {
+			return firstKeptIndex;
+		}
+
+		// Older compaction entries could point at a toolResult. Replaying that to
+		// OpenAI Responses emits function_call_output without the matching
+		// function_call item, which fails provider validation. Back up to the
+		// assistant message that created this result so the kept history is valid.
+		const toolCallId = firstKeptEntry.message.toolCallId;
+		for (let i = firstKeptIndex - 1; i >= 0; i--) {
+			const entry = path[i];
+			if (entry.type !== "message") continue;
+			const message = entry.message;
+			if (message.role !== "assistant") continue;
+			if (message.content.some((block) => block.type === "toolCall" && block.id === toolCallId)) {
+				return i;
+			}
+		}
+
+		return firstKeptIndex;
+	};
+
+	const appendMessage = (entry: SessionEntry, options?: { skipDroppable?: boolean }) => {
+		if (options?.skipDroppable && isDroppableSessionMessageEntry(entry)) return;
 		if (entry.type === "message") {
 			messages.push(entry.message);
 		} else if (entry.type === "custom_message") {
 			messages.push(
-				createCustomMessage(entry.customType, entry.content, entry.display, entry.details, entry.timestamp),
+				createCustomMessage(entry.customType, entry.content, entry.display, entry.details, entry.timestamp, {
+					droppable: entry.droppable,
+				}),
 			);
 		} else if (entry.type === "branch_summary" && entry.summary) {
 			messages.push(createBranchSummaryMessage(entry.summary, entry.fromId, entry.timestamp));
@@ -399,28 +441,30 @@ export function buildSessionContext(
 		// Find compaction index in path
 		const compactionIdx = path.findIndex((e) => e.type === "compaction" && e.id === compaction.id);
 
-		// Emit kept messages (before compaction, starting from firstKeptEntryId)
-		let foundFirstKept = false;
-		for (let i = 0; i < compactionIdx; i++) {
+		// Emit kept messages (before compaction, starting from firstKeptEntryId).
+		// If a historical/bad compaction starts at a tool result, include its
+		// assistant tool call as well so provider replay remains valid.
+		const keptStartIndex = findCompactionKeptStartIndex(compaction, compactionIdx);
+		for (let i = keptStartIndex; i < compactionIdx; i++) {
 			const entry = path[i];
-			if (entry.id === compaction.firstKeptEntryId) {
-				foundFirstKept = true;
-			}
-			if (foundFirstKept) {
-				appendMessage(entry);
-			}
+			appendMessage(entry, { skipDroppable: true });
 		}
 
 		// Emit messages after compaction
 		for (let i = compactionIdx + 1; i < path.length; i++) {
 			const entry = path[i];
-			appendMessage(entry);
+			appendMessage(entry, { skipDroppable: true });
 		}
 	} else {
 		// No compaction - emit all messages, handle branch summaries and custom messages
 		for (const entry of path) {
 			appendMessage(entry);
 		}
+	}
+
+	if (compaction) {
+		const details = compaction.details as { reasoningSnapshot?: ReasoningSnapshot } | undefined;
+		injectReasoningIntoFirstEmptyAssistant(messages, details?.reasoningSnapshot);
 	}
 
 	return { messages, thinkingLevel, fastMode, model };
@@ -965,6 +1009,7 @@ export class SessionManager {
 		content: string | (TextContent | ImageContent)[],
 		display: boolean,
 		details?: T,
+		options?: { droppable?: boolean },
 	): string {
 		const entry: CustomMessageEntry<T> = {
 			type: "custom_message",
@@ -972,6 +1017,7 @@ export class SessionManager {
 			content,
 			display,
 			details,
+			droppable: options?.droppable,
 			id: generateId(this.byId),
 			parentId: this.leafId,
 			timestamp: new Date().toISOString(),

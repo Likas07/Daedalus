@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildSubagentAppendPrompts } from "../src/core/subagents/runtime-config.js";
-import { getBundledStarterAgents } from "../src/extensions/daedalus/workflow/subagents/bundled.js";
 import { buildSystemPrompt } from "../src/core/system-prompt.js";
+import { getBundledStarterAgents } from "../src/extensions/daedalus/workflow/subagents/bundled.js";
 
 describe("main prompt model overrides", () => {
 	it("applies GPT override text when the model looks like GPT", () => {

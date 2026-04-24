@@ -15,6 +15,12 @@ import {
 	createCustomMessage,
 } from "../messages.js";
 import { buildSessionContext, type CompactionEntry, type SessionEntry } from "../session-manager.js";
+import { buildFrameFromMessages } from "./build-frame.js";
+import type { OperationFrame } from "./operation-frame.js";
+import type { ReasoningSnapshot } from "./reasoning-preservation.js";
+import { extractLastReasoning } from "./reasoning-preservation.js";
+import { renderFrame } from "./render-frame.js";
+import { runSummaryPipeline } from "./transformers/pipeline.js";
 import {
 	computeFileLists,
 	createFileOps,
@@ -33,6 +39,9 @@ import {
 export interface CompactionDetails {
 	readFiles: string[];
 	modifiedFiles: string[];
+	operationFrame?: OperationFrame;
+	reasoningSnapshot?: ReasoningSnapshot;
+	usage?: Usage;
 }
 
 /**
@@ -81,7 +90,9 @@ function getMessageFromEntry(entry: SessionEntry): AgentMessage | undefined {
 		return entry.message;
 	}
 	if (entry.type === "custom_message") {
-		return createCustomMessage(entry.customType, entry.content, entry.display, entry.details, entry.timestamp);
+		return createCustomMessage(entry.customType, entry.content, entry.display, entry.details, entry.timestamp, {
+			droppable: entry.droppable,
+		});
 	}
 	if (entry.type === "branch_summary") {
 		return createBranchSummaryMessage(entry.summary, entry.fromId, entry.timestamp);
@@ -92,8 +103,24 @@ function getMessageFromEntry(entry: SessionEntry): AgentMessage | undefined {
 	return undefined;
 }
 
+export function isDroppableSessionEntry(entry: SessionEntry): boolean {
+	if (entry.type === "custom_message") return entry.droppable === true;
+	if (entry.type === "message" && entry.message.role === "custom") {
+		return (entry.message as { droppable?: boolean }).droppable === true;
+	}
+	return false;
+}
+
+export function filterDroppableForCompaction(entries: SessionEntry[]): SessionEntry[] {
+	return entries.filter((entry) => !isDroppableSessionEntry(entry));
+}
+
+export function removeDroppableAfterCompaction(entries: SessionEntry[]): SessionEntry[] {
+	return filterDroppableForCompaction(entries);
+}
+
 function getMessageFromEntryForCompaction(entry: SessionEntry): AgentMessage | undefined {
-	if (entry.type === "compaction") {
+	if (entry.type === "compaction" || isDroppableSessionEntry(entry)) {
 		return undefined;
 	}
 	return getMessageFromEntry(entry);
@@ -115,14 +142,36 @@ export interface CompactionResult<T = unknown> {
 export interface CompactionSettings {
 	enabled: boolean;
 	reserveTokens: number;
+	/** Fallback fixed recent-token budget when contextWindow is unavailable. */
 	keepRecentTokens: number;
+	/** Fraction of the model context window to keep as recent live context. Default: 0.1. */
+	keepRecentRatio?: number;
+	tokenThreshold?: number;
+	turnThreshold?: number;
+	messageThreshold?: number;
+	retentionWindow?: number;
+	evictionWindow?: number;
+	compactOnTurnEnd?: boolean;
+	compactModel?: Model<any> | { provider: string; modelId: string };
 }
 
 export const DEFAULT_COMPACTION_SETTINGS: CompactionSettings = {
 	enabled: true,
 	reserveTokens: 16384,
 	keepRecentTokens: 20000,
+	keepRecentRatio: 0.1,
+	retentionWindow: 0,
+	evictionWindow: 1,
 };
+
+export function resolveKeepRecentTokens(settings: CompactionSettings, contextWindow?: number): number {
+	const ratio = settings.keepRecentRatio;
+	if (ratio !== undefined && contextWindow !== undefined && contextWindow > 0) {
+		const clampedRatio = Math.min(1, Math.max(0, ratio));
+		return Math.max(1, Math.floor(contextWindow * clampedRatio));
+	}
+	return settings.keepRecentTokens;
+}
 
 // ============================================================================
 // Token calculation
@@ -148,6 +197,42 @@ function getAssistantUsage(msg: AgentMessage): Usage | undefined {
 		}
 	}
 	return undefined;
+}
+
+function emptyUsage(): Usage {
+	return {
+		input: 0,
+		output: 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+		totalTokens: 0,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+	};
+}
+
+function addUsage(target: Usage, usage: Usage): void {
+	target.input += usage.input ?? 0;
+	target.output += usage.output ?? 0;
+	target.cacheRead += usage.cacheRead ?? 0;
+	target.cacheWrite += usage.cacheWrite ?? 0;
+	target.totalTokens += usage.totalTokens ?? calculateContextTokens(usage);
+	target.cost.input += usage.cost?.input ?? 0;
+	target.cost.output += usage.cost?.output ?? 0;
+	target.cost.cacheRead += usage.cost?.cacheRead ?? 0;
+	target.cost.cacheWrite += usage.cost?.cacheWrite ?? 0;
+	target.cost.total += usage.cost?.total ?? 0;
+}
+
+export function accumulateUsage(messages: AgentMessage[]): Usage | undefined {
+	const total = emptyUsage();
+	let found = false;
+	for (const message of messages) {
+		const usage = getAssistantUsage(message);
+		if (!usage) continue;
+		addUsage(total, usage);
+		found = true;
+	}
+	return found ? total : undefined;
 }
 
 /**
@@ -216,9 +301,39 @@ export function estimateContextTokens(messages: AgentMessage[]): ContextUsageEst
 /**
  * Check if compaction should trigger based on context usage.
  */
-export function shouldCompact(contextTokens: number, contextWindow: number, settings: CompactionSettings): boolean {
+export function shouldCompactByTokens(contextTokens: number, settings: CompactionSettings): boolean {
+	return settings.tokenThreshold !== undefined && contextTokens >= settings.tokenThreshold;
+}
+
+export function shouldCompactByTurns(messages: AgentMessage[] | undefined, settings: CompactionSettings): boolean {
+	if (settings.turnThreshold === undefined || !messages) return false;
+	return messages.filter((message) => message.role === "user").length >= settings.turnThreshold;
+}
+
+export function shouldCompactByMessages(messages: AgentMessage[] | undefined, settings: CompactionSettings): boolean {
+	if (settings.messageThreshold === undefined || !messages) return false;
+	return messages.length >= settings.messageThreshold;
+}
+
+export function shouldCompactOnTurnEnd(messages: AgentMessage[] | undefined, settings: CompactionSettings): boolean {
+	if (!settings.compactOnTurnEnd || !messages || messages.length === 0) return false;
+	return messages[messages.length - 1]?.role === "user";
+}
+
+export function shouldCompact(
+	contextTokens: number,
+	contextWindow: number,
+	settings: CompactionSettings,
+	messages?: AgentMessage[],
+): boolean {
 	if (!settings.enabled) return false;
-	return contextTokens > contextWindow - settings.reserveTokens;
+	return (
+		contextTokens > contextWindow - settings.reserveTokens ||
+		shouldCompactByTokens(contextTokens, settings) ||
+		shouldCompactByTurns(messages, settings) ||
+		shouldCompactByMessages(messages, settings) ||
+		shouldCompactOnTurnEnd(messages, settings)
+	);
 }
 
 // ============================================================================
@@ -336,6 +451,64 @@ function findValidCutPoints(entries: SessionEntry[], startIndex: number, endInde
 	return cutPoints;
 }
 
+interface ContextMessageInfo {
+	entryIndex: number;
+	message: AgentMessage;
+	tokens: number;
+}
+
+function getContextMessageInfos(entries: SessionEntry[], startIndex: number, endIndex: number): ContextMessageInfo[] {
+	const infos: ContextMessageInfo[] = [];
+	for (let i = startIndex; i < endIndex; i++) {
+		const message = getMessageFromEntryForCompaction(entries[i]);
+		if (message) {
+			infos.push({ entryIndex: i, message, tokens: estimateTokens(message) });
+		}
+	}
+	return infos;
+}
+
+function findRetentionCap(messageInfos: ContextMessageInfo[], endIndex: number, retentionWindow: number): number {
+	if (retentionWindow <= 0 || messageInfos.length <= retentionWindow) {
+		return endIndex;
+	}
+	return messageInfos[messageInfos.length - retentionWindow].entryIndex;
+}
+
+function findEvictionCap(
+	messageInfos: ContextMessageInfo[],
+	startIndex: number,
+	endIndex: number,
+	evictionWindow: number,
+): number {
+	if (evictionWindow <= 0 || messageInfos.length === 0) {
+		return startIndex;
+	}
+	if (evictionWindow >= 1) {
+		return endIndex;
+	}
+
+	const totalTokens = messageInfos.reduce((sum, info) => sum + info.tokens, 0);
+	const budget = Math.floor(totalTokens * evictionWindow);
+	if (budget <= 0) {
+		return startIndex;
+	}
+
+	let accumulatedTokens = 0;
+	let cap = startIndex;
+	for (const info of messageInfos) {
+		if (cap > startIndex && accumulatedTokens + info.tokens > budget) {
+			break;
+		}
+		accumulatedTokens += info.tokens;
+		cap = info.entryIndex + 1;
+		if (accumulatedTokens >= budget) {
+			break;
+		}
+	}
+	return cap;
+}
+
 /**
  * Find the user message (or bashExecution) that starts the turn containing the given entry index.
  * Returns -1 if no turn start found before the index.
@@ -388,8 +561,15 @@ export function findCutPoint(
 	startIndex: number,
 	endIndex: number,
 	keepRecentTokens: number,
+	settings?: Pick<CompactionSettings, "retentionWindow" | "evictionWindow">,
 ): CutPointResult {
-	const cutPoints = findValidCutPoints(entries, startIndex, endIndex);
+	const retentionWindow = Math.max(0, settings?.retentionWindow ?? 0);
+	const evictionWindow = Math.min(1, Math.max(0, settings?.evictionWindow ?? 1));
+	const messageInfos = getContextMessageInfos(entries, startIndex, endIndex);
+	const retentionCap = findRetentionCap(messageInfos, endIndex, retentionWindow);
+	const evictionCap = findEvictionCap(messageInfos, startIndex, endIndex, evictionWindow);
+	const cappedEndIndex = Math.min(endIndex, retentionCap, evictionCap);
+	const cutPoints = findValidCutPoints(entries, startIndex, cappedEndIndex);
 
 	if (cutPoints.length === 0) {
 		return { firstKeptEntryIndex: startIndex, turnStartIndex: -1, isSplitTurn: false };
@@ -397,19 +577,25 @@ export function findCutPoint(
 
 	// Walk backwards from newest, accumulating estimated message sizes
 	let accumulatedTokens = 0;
-	let cutIndex = cutPoints[0]; // Default: keep from first message (not header)
+	let cutIndex = cutPoints[0]; // Default: keep everything when all messages fit within budget
+	let exceededBudget = false;
 
 	for (let i = endIndex - 1; i >= startIndex; i--) {
-		const entry = entries[i];
-		if (entry.type !== "message") continue;
+		const message = getMessageFromEntryForCompaction(entries[i]);
+		if (!message) continue;
 
 		// Estimate this message's size
-		const messageTokens = estimateTokens(entry.message);
+		const messageTokens = estimateTokens(message);
 		accumulatedTokens += messageTokens;
 
 		// Check if we've exceeded the budget
 		if (accumulatedTokens >= keepRecentTokens) {
-			// Find the closest valid cut point at or after this entry
+			exceededBudget = true;
+			// Default to the latest valid cut point before the capped range end.
+			// The cap can land on a non-message/toolResult entry; using it directly can
+			// orphan a kept toolResult without its assistant tool call.
+			cutIndex = cutPoints[cutPoints.length - 1];
+			// Find the closest valid cut point at or after this entry.
 			for (let c = 0; c < cutPoints.length; c++) {
 				if (cutPoints[c] >= i) {
 					cutIndex = cutPoints[c];
@@ -420,19 +606,8 @@ export function findCutPoint(
 		}
 	}
 
-	// Scan backwards from cutIndex to include any non-message entries (bash, settings, etc.)
-	while (cutIndex > startIndex) {
-		const prevEntry = entries[cutIndex - 1];
-		// Stop at session header or compaction boundaries
-		if (prevEntry.type === "compaction") {
-			break;
-		}
-		if (prevEntry.type === "message") {
-			// Stop if we hit any message
-			break;
-		}
-		// Include this non-message entry (bash, settings change, etc.)
-		cutIndex--;
+	if (exceededBudget) {
+		cutIndex = Math.min(cutIndex, cappedEndIndex);
 	}
 
 	// Determine if this is a split turn
@@ -607,11 +782,17 @@ export interface CompactionPreparation {
 	fileOps: FileOperations;
 	/** Compaction settions from settings.jsonl	*/
 	settings: CompactionSettings;
+	/** Working directory used for deterministic operation-frame path normalization */
+	cwd: string;
+	/** Previous deterministic operation frame, merged with the current frame on repeated compactions. */
+	previousOperationFrame?: OperationFrame;
 }
 
 export function prepareCompaction(
 	pathEntries: SessionEntry[],
 	settings: CompactionSettings,
+	cwd = process.cwd(),
+	contextWindow?: number,
 ): CompactionPreparation | undefined {
 	if (pathEntries.length > 0 && pathEntries[pathEntries.length - 1].type === "compaction") {
 		return undefined;
@@ -626,10 +807,13 @@ export function prepareCompaction(
 	}
 
 	let previousSummary: string | undefined;
+	let previousOperationFrame: OperationFrame | undefined;
 	let boundaryStart = 0;
 	if (prevCompactionIndex >= 0) {
 		const prevCompaction = pathEntries[prevCompactionIndex] as CompactionEntry;
 		previousSummary = prevCompaction.summary;
+		const details = prevCompaction.details as CompactionDetails | undefined;
+		previousOperationFrame = details?.operationFrame;
 		const firstKeptEntryIndex = pathEntries.findIndex((entry) => entry.id === prevCompaction.firstKeptEntryId);
 		boundaryStart = firstKeptEntryIndex >= 0 ? firstKeptEntryIndex : prevCompactionIndex + 1;
 	}
@@ -637,7 +821,11 @@ export function prepareCompaction(
 
 	const tokensBefore = estimateContextTokens(buildSessionContext(pathEntries).messages).tokens;
 
-	const cutPoint = findCutPoint(pathEntries, boundaryStart, boundaryEnd, settings.keepRecentTokens);
+	if (settings.evictionWindow === 0) {
+		return undefined;
+	}
+	const keepRecentTokens = resolveKeepRecentTokens(settings, contextWindow);
+	const cutPoint = findCutPoint(pathEntries, boundaryStart, boundaryEnd, keepRecentTokens, settings);
 
 	// Get UUID of first kept entry
 	const firstKeptEntry = pathEntries[cutPoint.firstKeptEntryIndex];
@@ -664,6 +852,10 @@ export function prepareCompaction(
 		}
 	}
 
+	if (messagesToSummarize.length === 0 && turnPrefixMessages.length === 0) {
+		return undefined;
+	}
+
 	// Extract file operations from messages and previous compaction
 	const fileOps = extractFileOperations(messagesToSummarize, pathEntries, prevCompactionIndex);
 
@@ -683,6 +875,8 @@ export function prepareCompaction(
 		previousSummary,
 		fileOps,
 		settings,
+		cwd,
+		previousOperationFrame,
 	};
 }
 
@@ -729,7 +923,20 @@ export async function compact(
 		previousSummary,
 		fileOps,
 		settings,
+		cwd,
+		previousOperationFrame,
 	} = preparation;
+
+	const compactedMessages = [...messagesToSummarize, ...turnPrefixMessages];
+	const reasoningSnapshot = extractLastReasoning(compactedMessages);
+	const usage = accumulateUsage(compactedMessages);
+	const currentOperationFrame = buildFrameFromMessages(compactedMessages, cwd);
+	const operationFrameInput = previousOperationFrame
+		? { cwd, messages: [...previousOperationFrame.messages, ...currentOperationFrame.messages] }
+		: currentOperationFrame;
+	const operationFrame = runSummaryPipeline(operationFrameInput, cwd);
+	const renderedOperationFrame = renderFrame(operationFrame);
+	const summaryModel = settings.compactModel && "id" in settings.compactModel ? settings.compactModel : model;
 
 	// Generate summaries (can be parallel if both needed) and merge into one
 	let summary: string;
@@ -740,7 +947,7 @@ export async function compact(
 			messagesToSummarize.length > 0
 				? generateSummary(
 						messagesToSummarize,
-						model,
+						summaryModel,
 						settings.reserveTokens,
 						apiKey,
 						headers,
@@ -749,7 +956,7 @@ export async function compact(
 						previousSummary,
 					)
 				: Promise.resolve("No prior history."),
-			generateTurnPrefixSummary(turnPrefixMessages, model, settings.reserveTokens, apiKey, headers, signal),
+			generateTurnPrefixSummary(turnPrefixMessages, summaryModel, settings.reserveTokens, apiKey, headers, signal),
 		]);
 		// Merge into single summary
 		summary = `${historyResult}\n\n---\n\n**Turn Context (split turn):**\n\n${turnPrefixResult}`;
@@ -757,7 +964,7 @@ export async function compact(
 		// Just generate history summary
 		summary = await generateSummary(
 			messagesToSummarize,
-			model,
+			summaryModel,
 			settings.reserveTokens,
 			apiKey,
 			headers,
@@ -767,9 +974,10 @@ export async function compact(
 		);
 	}
 
-	// Compute file lists and append to summary
+	// Compute file lists and append deterministic summaries
 	const { readFiles, modifiedFiles } = computeFileLists(fileOps);
 	summary += formatFileOperations(readFiles, modifiedFiles);
+	summary = `${summary}\n\n${renderedOperationFrame}`;
 
 	if (!firstKeptEntryId) {
 		throw new Error("First kept entry has no UUID - session may need migration");
@@ -779,7 +987,7 @@ export async function compact(
 		summary,
 		firstKeptEntryId,
 		tokensBefore,
-		details: { readFiles, modifiedFiles } as CompactionDetails,
+		details: { readFiles, modifiedFiles, operationFrame, reasoningSnapshot, usage } as CompactionDetails,
 	};
 }
 

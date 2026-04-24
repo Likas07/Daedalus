@@ -1,4 +1,5 @@
 import { parseHTML } from "linkedom";
+import { truncateHeadAndTail } from "../truncate.js";
 import type { FetchExtractionOptions, FetchExtractionResult } from "./types.js";
 
 function collapseWhitespace(text: string): string {
@@ -63,9 +64,29 @@ export function extractFetchedText(
 			? extractHtmlAsText(body)
 			: body.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
 	const originalLength = extracted.length;
-	const truncated = extracted.length > options.maxChars;
-	const text = truncated
-		? `${extracted.slice(0, options.maxChars)}\n\n[Truncated: output exceeded ${options.maxChars} chars]`
-		: extracted;
-	return { text, contentType: normalizedType || contentType, truncated, originalLength };
+	if (extracted.length <= options.maxChars) {
+		return {
+			text: extracted,
+			contentType: normalizedType || contentType,
+			truncated: false,
+			originalLength,
+		};
+	}
+
+	const prefixChars = Math.ceil(options.maxChars / 2);
+	const suffixChars = Math.floor(options.maxChars / 2);
+	const prefixBytes = Buffer.byteLength(Array.from(extracted).slice(0, prefixChars).join(""), "utf-8");
+	const suffixBytes = Buffer.byteLength(Array.from(extracted).slice(-suffixChars).join(""), "utf-8");
+	const truncation = truncateHeadAndTail(extracted, {
+		maxPrefixBytes: prefixBytes,
+		maxSuffixBytes: suffixBytes,
+	});
+	const text = `${truncation.content}\n\n[Truncated: output exceeded ${options.maxChars} chars]`;
+	return {
+		text,
+		contentType: normalizedType || contentType,
+		truncated: true,
+		originalLength,
+		truncation,
+	};
 }

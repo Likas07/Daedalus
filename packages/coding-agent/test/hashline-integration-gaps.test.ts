@@ -27,6 +27,6 @@ describe("hashline integration gaps", () => {
 
 	test("generated export template includes hashline_edit rendering", () => {
 		expect(TEMPLATE_JS).toContain("case 'hashline_edit':");
-		expect(TEMPLATE_JS).toContain("[${name}:");
+		expect(TEMPLATE_JS).toContain(`[\${name}:`);
 	});
 });

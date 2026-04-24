@@ -11,6 +11,7 @@ import type { KeybindingsConfig } from "../keybindings.js";
 import type { ModelRegistry } from "../model-registry.js";
 import type { SessionManager } from "../session-manager.js";
 import type { Skill } from "../skills.js";
+import type { ReadLedgerLike } from "../tools/read-ledger.js";
 import type {
 	BeforeAgentStartEvent,
 	BeforeAgentStartEventResult,
@@ -207,6 +208,7 @@ export class ExtensionRunner {
 	private cwd: string;
 	private sessionManager: SessionManager;
 	private modelRegistry: ModelRegistry;
+	private readLedger?: ReadLedgerLike;
 	private errorListeners: Set<ExtensionErrorListener> = new Set();
 	private getModel: () => Model<any> | undefined = () => undefined;
 	private isIdleFn: () => boolean = () => true;
@@ -234,6 +236,7 @@ export class ExtensionRunner {
 		cwd: string,
 		sessionManager: SessionManager,
 		modelRegistry: ModelRegistry,
+		readLedger?: ReadLedgerLike,
 	) {
 		this.extensions = extensions;
 		this.runtime = runtime;
@@ -241,6 +244,7 @@ export class ExtensionRunner {
 		this.cwd = cwd;
 		this.sessionManager = sessionManager;
 		this.modelRegistry = modelRegistry;
+		this.readLedger = readLedger;
 	}
 
 	bindCore(
@@ -549,6 +553,7 @@ export class ExtensionRunner {
 			ui: this.uiContext,
 			hasUI: this.hasUI(),
 			cwd: this.cwd,
+			readLedger: this.readLedger,
 			sessionManager: this.sessionManager,
 			modelRegistry: this.modelRegistry,
 			get model() {

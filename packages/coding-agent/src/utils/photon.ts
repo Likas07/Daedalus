@@ -16,7 +16,7 @@
 import type { PathOrFileDescriptor } from "fs";
 import { createRequire } from "module";
 import * as path from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, URL as NodeURL } from "url";
 
 const require = createRequire(import.meta.url);
 const fs = require("fs") as typeof import("fs");
@@ -36,7 +36,7 @@ function pathOrNull(file: PathOrFileDescriptor): string | null {
 	if (typeof file === "string") {
 		return file;
 	}
-	if (file instanceof URL) {
+	if (file instanceof NodeURL) {
 		return fileURLToPath(file);
 	}
 	return null;

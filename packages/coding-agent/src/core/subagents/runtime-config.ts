@@ -3,8 +3,8 @@ import type { Api, Model } from "@daedalus-pi/ai";
 import type { ModelRegistry } from "../model-registry.js";
 import type { SettingsManager } from "../settings-manager.js";
 import { resolveSubagentPolicy } from "./policy.js";
-import type { SubagentPolicy, SubagentRunRequest } from "./types.js";
 import subagentBaseContract from "./subagent-base-contract.md" with { type: "text" };
+import type { SubagentPolicy, SubagentRunRequest } from "./types.js";
 
 export interface ResolvedSubagentRuntimeConfig {
 	model?: Model<Api>;
@@ -33,7 +33,7 @@ function buildDelegatedResultEnvelopeOverlay(): string {
 		"Execution contract for this delegated run:",
 		"- Your final handoff must be returned by calling submit_result exactly once.",
 		"- Use this exact JSON shape:",
-		"  { \"task\": \"string\", \"status\": \"completed | partial | blocked\", \"summary\": \"string\", \"output\": \"string\" }",
+		'  { "task": "string", "status": "completed | partial | blocked", "summary": "string", "output": "string" }',
 		"- summary must be brief and high-signal for the parent and subagent card UI.",
 		"- output must contain the fuller deferred body that the parent may inspect later.",
 		"- The parent receives a lightweight reference by default and can fetch full output with read_agent_result_output(result_id).",

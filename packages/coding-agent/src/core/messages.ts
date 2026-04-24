@@ -7,6 +7,7 @@
 
 import type { AgentMessage } from "@daedalus-pi/agent-core";
 import type { ImageContent, Message, TextContent } from "@daedalus-pi/ai";
+import { formatVisiblePath } from "./tools/visible-path.js";
 
 export const COMPACTION_SUMMARY_PREFIX = `The conversation history before this point was compacted into the following summary:
 
@@ -49,6 +50,8 @@ export interface CustomMessage<T = unknown> {
 	content: string | (TextContent | ImageContent)[];
 	display: boolean;
 	details?: T;
+	/** If true, excluded from compaction input and removable after compaction. */
+	droppable?: boolean;
 	timestamp: number;
 }
 
@@ -92,7 +95,7 @@ export function bashExecutionToText(msg: BashExecutionMessage): string {
 		text += `\n\nCommand exited with code ${msg.exitCode}`;
 	}
 	if (msg.truncated && msg.fullOutputPath) {
-		text += `\n\n[Output truncated. Full output: ${msg.fullOutputPath}]`;
+		text += `\n\n[Output truncated. Full output: ${formatVisiblePath(msg.fullOutputPath)}]`;
 	}
 	return text;
 }
@@ -126,6 +129,7 @@ export function createCustomMessage(
 	display: boolean,
 	details: unknown | undefined,
 	timestamp: string,
+	options?: { droppable?: boolean },
 ): CustomMessage {
 	return {
 		role: "custom",
@@ -133,6 +137,7 @@ export function createCustomMessage(
 		content,
 		display,
 		details,
+		droppable: options?.droppable,
 		timestamp: new Date(timestamp).getTime(),
 	};
 }

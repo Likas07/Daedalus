@@ -66,14 +66,18 @@ Use `Tab` / `Shift+Tab` or `Left` / `Right` to switch tabs.
 |---------|------|---------|-------------|
 | `compaction.enabled` | boolean | `true` | Enable auto-compaction |
 | `compaction.reserveTokens` | number | `16384` | Tokens reserved for LLM response |
-| `compaction.keepRecentTokens` | number | `20000` | Recent tokens to keep (not summarized) |
+| `compaction.keepRecentRatio` | number | `0.1` | Fraction of the model context window to keep as recent live context; default keeps newest 10% |
+| `compaction.keepRecentTokens` | number | `20000` | Fixed recent-token budget. If configured without `keepRecentRatio`, it overrides ratio-based retention; otherwise it is the fallback when context window is unavailable |
+| `compaction.evictionWindow` | number | `1` | Fraction of older eligible context allowed to compact; default allows compacting all older eligible context |
 
 ```json
 {
   "compaction": {
     "enabled": true,
     "reserveTokens": 16384,
-    "keepRecentTokens": 20000
+    "keepRecentRatio": 0.1,
+    "keepRecentTokens": 20000,
+    "evictionWindow": 1
   }
 }
 ```
@@ -298,7 +302,9 @@ See [packages.md](packages.md) for package management details.
   "compaction": {
     "enabled": true,
     "reserveTokens": 16384,
-    "keepRecentTokens": 20000
+    "keepRecentRatio": 0.1,
+    "keepRecentTokens": 20000,
+    "evictionWindow": 1
   },
   "retry": {
     "enabled": true,

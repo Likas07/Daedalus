@@ -172,9 +172,9 @@ export class SubagentRunner {
 		const startedAt = Date.now();
 		const paths = request.conversationId
 			? {
-				...getSubagentArtifactPaths(request.parentSessionFile, runId),
-				sessionFile: request.conversationId,
-			}
+					...getSubagentArtifactPaths(request.parentSessionFile, runId),
+					sessionFile: request.conversationId,
+				}
 			: getSubagentArtifactPaths(request.parentSessionFile, runId);
 		await fs.mkdir(paths.directory, { recursive: true });
 

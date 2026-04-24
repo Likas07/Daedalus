@@ -5,11 +5,7 @@ export interface BuiltTaskPacket {
 	contextToPersist?: string;
 }
 
-export function buildTaskPacket(input: {
-	goal: string;
-	assignment: string;
-	context?: string;
-}): BuiltTaskPacket {
+export function buildTaskPacket(input: { goal: string; assignment: string; context?: string }): BuiltTaskPacket {
 	const packetText = [
 		`Goal: ${input.goal}`,
 		"",
@@ -19,7 +15,9 @@ export function buildTaskPacket(input: {
 
 	if (input.context && shouldSpillSubagentContext(packetText)) {
 		return {
-			packetText: [`Goal: ${input.goal}`, "", input.assignment, "", "Context file: {contextArtifactPath}"].join("\n"),
+			packetText: [`Goal: ${input.goal}`, "", input.assignment, "", "Context file: {contextArtifactPath}"].join(
+				"\n",
+			),
 			contextToPersist: input.context,
 		};
 	}

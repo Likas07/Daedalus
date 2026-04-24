@@ -5,11 +5,11 @@ describe("ConcurrencyBudget", () => {
 	it("limits tasks per model key", () => {
 		const budget = new ConcurrencyBudget({ perModel: 1, perRole: 2, perRoot: 3 });
 
-		expect(
-			budget.tryReserve({ modelKey: "anthropic/claude-sonnet-4-5", role: "worker", rootId: "root-1" }),
-		).toBe(true);
-		expect(
-			budget.tryReserve({ modelKey: "anthropic/claude-sonnet-4-5", role: "reviewer", rootId: "root-1" }),
-		).toBe(false);
+		expect(budget.tryReserve({ modelKey: "anthropic/claude-sonnet-4-5", role: "worker", rootId: "root-1" })).toBe(
+			true,
+		);
+		expect(budget.tryReserve({ modelKey: "anthropic/claude-sonnet-4-5", role: "reviewer", rootId: "root-1" })).toBe(
+			false,
+		);
 	});
 });

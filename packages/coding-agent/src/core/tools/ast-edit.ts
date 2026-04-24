@@ -17,6 +17,7 @@ import {
 } from "./ast/index.js";
 import { createPathEditCallRenderer, createPathEditResultRenderer } from "./edit-render.js";
 import { withFileMutationQueue } from "./file-mutation-queue.js";
+import { type ReadLedgerLike, requirePriorRead } from "./read-ledger.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 
 const astEditOpSchema = Type.Object({
@@ -52,6 +53,7 @@ export interface AstEditOperations {
 export interface AstEditToolOptions {
 	backend?: AstBackend;
 	operations?: AstEditOperations;
+	readLedger?: ReadLedgerLike;
 }
 
 const defaultOperations: AstEditOperations = {
@@ -59,6 +61,9 @@ const defaultOperations: AstEditOperations = {
 	writeFile: (absolutePath, content) => fsWriteFile(absolutePath, content, "utf-8"),
 	removeDir: (dir) => fsRm(dir, { recursive: true, force: true }),
 };
+
+const AST_EDIT_STALE_WRITE_ERROR =
+	"ast_edit aborted because the file changed after ast_edit read its snapshot. Reread the file and retry ast_edit.";
 
 function groupByFile(matches: AstMatch[], cwd: string): Map<string, AstMatch[]> {
 	const grouped = new Map<string, AstMatch[]>();
@@ -88,7 +93,7 @@ export function createAstEditToolDefinition(
 			"Use ast_grep first when you are not certain the structural match set is correct",
 		],
 		parameters: astEditSchema,
-		async execute(_toolCallId, input: AstEditToolInput, signal?: AbortSignal) {
+		async execute(_toolCallId, input: AstEditToolInput, signal?: AbortSignal, _onUpdate?, ctx?) {
 			const rewriteOps = normalizeRewriteOps(input.ops);
 			const limit = normalizePositiveInt(input.limit, "limit", Number.MAX_SAFE_INTEGER);
 			const scope = await resolveAstScope(input.path, cwd, input.glob);
@@ -132,9 +137,35 @@ export function createAstEditToolDefinition(
 					};
 				}
 				for (const changedFile of finalResult.changedFiles) {
-					await withFileMutationQueue(changedFile.absolutePath, () =>
-						ops.writeFile(changedFile.absolutePath, changedFile.content),
+					const priorReadError = requirePriorRead(
+						ctx?.readLedger ?? options?.readLedger,
+						changedFile.absolutePath,
+						"ast_edit",
 					);
+					if (priorReadError) return priorReadError;
+				}
+				for (const changedFile of finalResult.changedFiles) {
+					const writeError = await withFileMutationQueue(changedFile.absolutePath, async () => {
+						const priorReadError = requirePriorRead(
+							ctx?.readLedger ?? options?.readLedger,
+							changedFile.absolutePath,
+							"ast_edit",
+						);
+						if (priorReadError) return priorReadError;
+
+						const currentContent = await ops.readFile(changedFile.absolutePath);
+						if (currentContent !== changedFile.originalContent) {
+							return {
+								content: [{ type: "text" as const, text: AST_EDIT_STALE_WRITE_ERROR }],
+								isError: true as const,
+								details: undefined,
+							};
+						}
+
+						await ops.writeFile(changedFile.absolutePath, changedFile.content);
+						return undefined;
+					});
+					if (writeError) return writeError;
 				}
 				return {
 					content: [

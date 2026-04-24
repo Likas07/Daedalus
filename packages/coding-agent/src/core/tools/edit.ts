@@ -15,6 +15,7 @@ import {
 import { createPathEditCallRenderer, createPathEditResultRenderer } from "./edit-render.js";
 import { withFileMutationQueue } from "./file-mutation-queue.js";
 import { resolveToCwd } from "./path-utils.js";
+import { type ReadLedgerLike, requirePriorRead } from "./read-ledger.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 
 type EditRenderState = Record<string, never>;
@@ -76,6 +77,8 @@ const defaultEditOperations: EditOperations = {
 export interface EditToolOptions {
 	/** Custom operations for file editing. Default: local filesystem */
 	operations?: EditOperations;
+	/** Per-session ledger used to enforce read-before-edit. */
+	readLedger?: ReadLedgerLike;
 }
 
 function prepareEditArguments(input: unknown): EditToolInput {
@@ -124,9 +127,11 @@ export function createEditToolDefinition(
 		],
 		parameters: editSchema,
 		prepareArguments: prepareEditArguments,
-		async execute(_toolCallId, input: EditToolInput, signal?: AbortSignal, _onUpdate?, _ctx?) {
+		async execute(_toolCallId, input: EditToolInput, signal?: AbortSignal, _onUpdate?, ctx?) {
 			const { path, edits } = validateEditInput(input);
 			const absolutePath = resolveToCwd(path, cwd);
+			const priorReadError = requirePriorRead(ctx?.readLedger ?? options?.readLedger, absolutePath, "edit");
+			if (priorReadError) return priorReadError;
 
 			return withFileMutationQueue(
 				absolutePath,

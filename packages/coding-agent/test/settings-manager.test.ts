@@ -226,12 +226,57 @@ describe("SettingsManager", () => {
 			manager.setBranchSummarySkipPrompt(true);
 			await manager.flush();
 
-			expect(manager.getCompactionSettings()).toEqual({ enabled: true, reserveTokens: 8192, keepRecentTokens: 12000 });
+			expect(manager.getCompactionSettings()).toEqual({
+				compactModel: undefined,
+				compactOnTurnEnd: undefined,
+				enabled: true,
+				evictionWindow: 1,
+				keepRecentRatio: undefined,
+				keepRecentTokens: 12000,
+				messageThreshold: undefined,
+				reserveTokens: 8192,
+				retentionWindow: 0,
+				tokenThreshold: undefined,
+				turnThreshold: undefined,
+			});
 			expect(manager.getBranchSummarySettings()).toEqual({ reserveTokens: 4096, skipPrompt: true });
 
 			const saved = JSON.parse(readFileSync(sandbox.globalSettingsPath, "utf-8"));
 			expect(saved.compaction).toEqual({ reserveTokens: 8192, keepRecentTokens: 12000 });
 			expect(saved.branchSummary).toEqual({ reserveTokens: 4096, skipPrompt: true });
+		});
+	});
+
+	describe("codingDiscipline", () => {
+		it("persists the global enabled flag", async () => {
+			const sandbox = createSandbox();
+			const manager = SettingsManager.create(sandbox.projectDir, sandbox.agentDir);
+
+			manager.setCodingDisciplineEnabled(false);
+			await manager.flush();
+
+			expect(manager.getCodingDisciplineEnabled()).toBe(false);
+			expect(manager.getCodingDisciplineSettings()).toEqual({ enabled: false });
+
+			const saved = JSON.parse(readFileSync(sandbox.globalSettingsPath, "utf-8"));
+			expect(saved.codingDiscipline).toEqual({ enabled: false });
+		});
+
+		it("persists the project enabled flag and overrides global", async () => {
+			const sandbox = createSandbox();
+			writeFileSync(sandbox.globalSettingsPath, JSON.stringify({ codingDiscipline: { enabled: true } }));
+			const manager = SettingsManager.create(sandbox.projectDir, sandbox.agentDir);
+
+			manager.setCodingDisciplineEnabled(false, "project");
+			await manager.flush();
+
+			expect(manager.getCodingDisciplineEnabled()).toBe(false);
+			expect(manager.getCodingDisciplineSettings()).toEqual({ enabled: false });
+
+			const globalSaved = JSON.parse(readFileSync(sandbox.globalSettingsPath, "utf-8"));
+			const projectSaved = JSON.parse(readFileSync(sandbox.projectSettingsPath, "utf-8"));
+			expect(globalSaved.codingDiscipline).toEqual({ enabled: true });
+			expect(projectSaved.codingDiscipline).toEqual({ enabled: false });
 		});
 	});
 

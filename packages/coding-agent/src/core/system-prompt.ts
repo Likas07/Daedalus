@@ -3,12 +3,13 @@
  */
 
 import { getDocsPath, getExamplesPath, getReadmePath } from "../config.js";
+import codingDisciplinePrompt from "./prompts/coding-discipline.md" with { type: "text" };
+import constitutionPrompt from "./prompts/daedalus-constitution.md" with { type: "text" };
+import claudeOverride from "./prompts/daedalus-overrides-claude.md" with { type: "text" };
+import gptOverride from "./prompts/daedalus-overrides-gpt.md" with { type: "text" };
+import personaPrompt from "./prompts/daedalus-persona.md" with { type: "text" };
 import { formatSkillsForPrompt, type Skill } from "./skills.js";
 import { DEFAULT_ACTIVE_TOOL_NAMES } from "./tools/defaults.js";
-import constitutionPrompt from "./prompts/daedalus-constitution.md" with { type: "text" };
-import personaPrompt from "./prompts/daedalus-persona.md" with { type: "text" };
-import gptOverride from "./prompts/daedalus-overrides-gpt.md" with { type: "text" };
-import claudeOverride from "./prompts/daedalus-overrides-claude.md" with { type: "text" };
 
 export interface BuildSystemPromptOptions {
 	/** Custom system prompt (replaces default). */
@@ -29,6 +30,8 @@ export interface BuildSystemPromptOptions {
 	skills?: Skill[];
 	/** Optional model identifier used for prompt override selection. */
 	modelId?: string;
+	/** Whether the coding discipline overlay is enabled. Default: true. */
+	codingDisciplineEnabled?: boolean;
 }
 
 function resolveMainPromptOverride(modelId: string | undefined): string | undefined {
@@ -50,6 +53,7 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 		contextFiles: providedContextFiles,
 		skills: providedSkills,
 		modelId,
+		codingDisciplineEnabled = true,
 	} = options;
 	const resolvedCwd = cwd ?? process.cwd();
 	const promptCwd = resolvedCwd.replace(/\\/g, "/");
@@ -151,7 +155,14 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 	const guidelines = guidelinesList.map((g) => `- ${g}`).join("\n");
 
 	const override = resolveMainPromptOverride(modelId);
-	const baseIdentity = [constitutionPrompt.trim(), personaPrompt.trim(), override].filter(Boolean).join("\n\n");
+	const baseIdentity = [
+		constitutionPrompt.trim(),
+		personaPrompt.trim(),
+		codingDisciplineEnabled ? codingDisciplinePrompt.trim() : undefined,
+		override,
+	]
+		.filter(Boolean)
+		.join("\n\n");
 
 	let prompt = `${baseIdentity}
 

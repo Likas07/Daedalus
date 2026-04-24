@@ -118,18 +118,22 @@ async function prepareInitialMessage(
 ): Promise<{
 	initialMessage?: string;
 	initialImages?: ImageContent[];
+	initialReadFiles?: Array<{ path: string; contentHash: string }>;
 }> {
 	if (parsed.fileArgs.length === 0) {
 		return buildInitialMessage({ parsed, stdinContent });
 	}
 
-	const { text, images } = await processFileArguments(parsed.fileArgs, { autoResizeImages });
-	return buildInitialMessage({
-		parsed,
-		fileText: text,
-		fileImages: images,
-		stdinContent,
-	});
+	const { text, images, readFiles } = await processFileArguments(parsed.fileArgs, { autoResizeImages });
+	return {
+		...buildInitialMessage({
+			parsed,
+			fileText: text,
+			fileImages: images,
+			stdinContent,
+		}),
+		initialReadFiles: readFiles,
+	};
 }
 
 /** Result from resolving a session argument */
@@ -644,12 +648,17 @@ export async function main(args: string[]) {
 	}
 	time("readPipedStdin");
 
-	const { initialMessage, initialImages } = await prepareInitialMessage(
+	const { initialMessage, initialImages, initialReadFiles } = await prepareInitialMessage(
 		parsed,
 		settingsManager.getImageAutoResize(),
 		stdinContent,
 	);
 	time("prepareInitialMessage");
+	if (initialReadFiles) {
+		for (const file of initialReadFiles) {
+			session.readLedger.markRead(file.path, file.contentHash);
+		}
+	}
 	initTheme(settingsManager.getTheme(), appMode === "interactive");
 	time("initTheme");
 

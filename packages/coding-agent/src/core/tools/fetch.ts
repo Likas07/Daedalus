@@ -2,6 +2,9 @@ import type { AgentTool } from "@daedalus-pi/agent-core";
 import { Text } from "@daedalus-pi/tui";
 import { type Static, Type } from "@sinclair/typebox";
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.js";
+import type { ToolOutputSettings } from "../settings-manager.js";
+import { DEFAULT_FETCH_MAX_CHARS } from "../tool-output-defaults.js";
+import type { ArtifactStore } from "./artifact-store.js";
 import {
 	extractFetchedText,
 	type FetchOperations,
@@ -12,12 +15,15 @@ import {
 } from "./fetch/index.js";
 import { getTextOutput, invalidArgText, shortenPath, str } from "./render-utils.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
+import type { TruncationResult } from "./truncate.js";
 
 const fetchSchema = Type.Object({
 	url: Type.String({ description: "HTTP or HTTPS URL to fetch" }),
 	raw: Type.Optional(Type.Boolean({ description: "Return raw response text instead of cleaned HTML extraction" })),
 	timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (default: 15)" })),
-	maxChars: Type.Optional(Type.Number({ description: "Maximum output chars before truncation (default: 20000)" })),
+	maxChars: Type.Optional(
+		Type.Number({ description: `Maximum output chars before truncation (default: ${DEFAULT_FETCH_MAX_CHARS})` }),
+	),
 });
 
 export type FetchToolInput = Static<typeof fetchSchema>;
@@ -26,10 +32,14 @@ export interface FetchToolDetails {
 	contentType: string;
 	truncated: boolean;
 	status: number;
+	truncation?: TruncationResult;
+	fetchArtifactPath?: string;
 }
 
 export interface FetchToolOptions {
 	operations?: FetchOperations;
+	artifactStore?: ArtifactStore;
+	toolOutputs?: ToolOutputSettings;
 }
 
 const defaultOperations: FetchOperations = {
@@ -64,10 +74,12 @@ function formatFetchResult(
 }
 
 export function createFetchToolDefinition(
-	_cwd: string,
+	cwd: string,
 	options?: FetchToolOptions,
 ): ToolDefinition<typeof fetchSchema, FetchToolDetails | undefined> {
 	const ops = options?.operations ?? defaultOperations;
+	const artifactStore = options?.artifactStore;
+	const maxFetchChars = options?.toolOutputs?.maxFetchChars ?? DEFAULT_FETCH_MAX_CHARS;
 	return {
 		name: "fetch",
 		label: "fetch",
@@ -80,10 +92,10 @@ export function createFetchToolDefinition(
 			"Use raw mode only when cleaned HTML extraction is losing needed detail",
 		],
 		parameters: fetchSchema,
-		async execute(_toolCallId, input: FetchToolInput, signal?: AbortSignal) {
+		async execute(toolCallId, input: FetchToolInput, signal?: AbortSignal) {
 			const url = normalizeFetchUrl(input.url);
 			const timeoutSeconds = normalizeTimeoutSeconds(input.timeout);
-			const maxChars = normalizeMaxChars(input.maxChars);
+			const maxChars = normalizeMaxChars(input.maxChars ?? maxFetchChars);
 			const timeoutSignal = AbortSignal.timeout(timeoutSeconds * 1000);
 			const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 			const response = await ops.fetch(url, {
@@ -100,13 +112,27 @@ export function createFetchToolDefinition(
 			}
 			const body = await response.text();
 			const extracted = extractFetchedText(body, contentType, { raw: input.raw, maxChars });
+			const fetchArtifactPath =
+				extracted.truncated && artifactStore
+					? artifactStore.writeArtifact("fetch", toolCallId, body, {
+							extension: extensionForContentType(extracted.contentType),
+						})
+					: undefined;
+			const visibleArtifactPath = fetchArtifactPath
+				? (artifactStore?.getVisiblePath(fetchArtifactPath, cwd) ?? formatVisibleArtifactPath(fetchArtifactPath))
+				: undefined;
+			const text = visibleArtifactPath
+				? `${extracted.text}\n\n[Full fetch content saved to artifact file: ${visibleArtifactPath}]`
+				: extracted.text;
 			return {
-				content: [{ type: "text", text: extracted.text }],
+				content: [{ type: "text", text }],
 				details: {
 					url: response.url || url,
 					contentType: extracted.contentType,
 					truncated: extracted.truncated,
 					status: response.status,
+					truncation: extracted.truncation,
+					fetchArtifactPath,
 				},
 			};
 		},
@@ -125,6 +151,17 @@ export function createFetchToolDefinition(
 
 export function createFetchTool(cwd: string, options?: FetchToolOptions): AgentTool<typeof fetchSchema> {
 	return wrapToolDefinition(createFetchToolDefinition(cwd, options));
+}
+
+function extensionForContentType(contentType: string): ".html" | ".json" | ".txt" {
+	const normalized = contentType.split(";")[0].trim().toLowerCase();
+	if (normalized === "text/html" || normalized === "application/xhtml+xml") return ".html";
+	if (normalized === "application/json" || normalized === "application/ld+json") return ".json";
+	return ".txt";
+}
+
+function formatVisibleArtifactPath(artifactPath: string): string {
+	return artifactPath.split(/[/\\]/).pop() || artifactPath;
 }
 
 export const fetchToolDefinition = createFetchToolDefinition(process.cwd());

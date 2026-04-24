@@ -36,6 +36,7 @@ import type { Static, TSchema } from "@sinclair/typebox";
 import type { Theme } from "../../modes/interactive/theme/theme.js";
 import type { BashResult } from "../bash-executor.js";
 import type { CompactionPreparation, CompactionResult } from "../compaction/index.js";
+import type { TaskRecord } from "../control-plane/index.js";
 import type { EventBus } from "../event-bus.js";
 import type { ExecOptions, ExecResult } from "../exec.js";
 import type { ReadonlyFooterDataProvider } from "../footer-data-provider.js";
@@ -52,7 +53,6 @@ import type {
 import type { Skill } from "../skills.js";
 import type { SlashCommandInfo } from "../slash-commands.js";
 import type { SourceInfo } from "../source-info.js";
-import type { TaskRecord } from "../control-plane/index.js";
 import type { ActiveSubagentRun, SubagentRunRequest, SubagentRunResult } from "../subagents/index.js";
 import type { BashOperations } from "../tools/bash.js";
 import type { EditToolDetails } from "../tools/edit.js";
@@ -70,6 +70,7 @@ import type {
 	ReadToolInput,
 	WriteToolInput,
 } from "../tools/index.js";
+import type { ReadLedgerLike } from "../tools/read-ledger.js";
 
 export type { ExecOptions, ExecResult } from "../exec.js";
 export type { AppKeybinding, KeybindingsManager } from "../keybindings.js";
@@ -267,6 +268,8 @@ export interface ExtensionContext {
 	hasUI: boolean;
 	/** Current working directory */
 	cwd: string;
+	/** Per-session ledger of files successfully read with the read tool. */
+	readLedger?: ReadLedgerLike;
 	/** Session manager (read-only) */
 	sessionManager: ReadonlySessionManager;
 	/** Model registry for API key resolution */
@@ -374,6 +377,12 @@ export interface ToolDefinition<TParams extends TSchema = TSchema, TDetails = un
 	label: string;
 	/** Description for LLM */
 	description: string;
+	/**
+	 * Whether this tool should be active immediately after registration.
+	 * Defaults to true. Set false for diagnostic/rare tools that should appear in
+	 * getAllTools() and /tools but not be exposed to the model until enabled.
+	 */
+	defaultActive?: boolean;
 	/** Optional one-line snippet for the Available tools section in the default system prompt. Custom tools are omitted from that section when this is not provided. */
 	promptSnippet?: string;
 	/** Optional guideline bullets appended to the default system prompt Guidelines section when this tool is active. */
@@ -910,7 +919,7 @@ export interface ToolResultEventResult {
 }
 
 export interface BeforeAgentStartEventResult {
-	message?: Pick<CustomMessage, "customType" | "content" | "display" | "details">;
+	message?: Pick<CustomMessage, "customType" | "content" | "display" | "details" | "droppable">;
 	/** Replace the system prompt for this turn. If multiple extensions return this, they are chained. */
 	systemPrompt?: string;
 }
@@ -1077,7 +1086,7 @@ export interface ExtensionAPI {
 
 	/** Send a custom message to the session. */
 	sendMessage<T = unknown>(
-		message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details">,
+		message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details" | "droppable">,
 		options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
 	): void;
 
@@ -1321,7 +1330,7 @@ export interface ExtensionShortcut {
 type HandlerFn = (...args: unknown[]) => Promise<unknown>;
 
 export type SendMessageHandler = <T = unknown>(
-	message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details">,
+	message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details" | "droppable">,
 	options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
 ) => void;
 
