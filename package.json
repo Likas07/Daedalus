@@ -7,7 +7,7 @@
 		"dev": "bun --cwd=packages/coding-agent src/cli.ts",
 		"build:binary": "bun --cwd=packages/coding-agent run build:binary",
 		"test": "bun run --workspaces --if-present --parallel test",
-		"check": "biome check . && tsgo -p tsconfig.json",
+		"check": "biome check . && bun --cwd=packages/agent run check && bun --cwd=packages/ai run check && bun --cwd=packages/tui run check && bun --cwd=packages/coding-agent run check",
 		"lint": "biome lint .",
 		"fmt": "biome format --write ."
 	},
