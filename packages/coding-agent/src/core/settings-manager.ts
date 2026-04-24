@@ -87,6 +87,14 @@ export interface MarkdownSettings {
 	codeBlockIndent?: string; // default: "  "
 }
 
+export type SemanticSettingsIndexProfile = "minimal" | "normal" | "broad" | "exhaustive";
+
+export interface SemanticSettings {
+	embeddingHost?: string;
+	embeddingModel?: string;
+	indexProfile?: SemanticSettingsIndexProfile;
+}
+
 export type TransportSetting = Transport;
 
 /**
@@ -145,6 +153,7 @@ export interface Settings {
 	markdown?: MarkdownSettings;
 	sessionDir?: string; // Custom session storage directory (same format as --session-dir CLI flag)
 	subagents?: SubagentSettings; // Subagent runtime defaults and per-role overrides
+	semantic?: SemanticSettings; // Semantic-search embedding backend and profile preferences
 }
 
 /** Deep merge settings: project/overrides take precedence, nested objects merge recursively */
@@ -570,6 +579,28 @@ export class SettingsManager {
 		const drained = [...this.errors];
 		this.errors = [];
 		return drained;
+	}
+
+	getSemanticSettings(): SemanticSettings {
+		return { ...(this.settings.semantic ?? {}) };
+	}
+
+	setSemanticSettings(settings: SemanticSettings, scope: SettingsScope = "project"): void {
+		const target =
+			scope === "project" ? { ...(this.projectSettings.semantic ?? {}) } : { ...(this.globalSettings.semantic ?? {}) };
+		const next: SemanticSettings = { ...target };
+		if (settings.embeddingHost !== undefined) next.embeddingHost = settings.embeddingHost;
+		if (settings.embeddingModel !== undefined) next.embeddingModel = settings.embeddingModel;
+		if (settings.indexProfile !== undefined) next.indexProfile = settings.indexProfile;
+		if (scope === "project") {
+			this.projectSettings.semantic = next;
+			this.markProjectModified("semantic");
+			this.saveProjectSettings(this.projectSettings);
+		} else {
+			this.globalSettings.semantic = next;
+			this.markModified("semantic");
+			this.save();
+		}
 	}
 
 	getLastChangelogVersion(): string | undefined {

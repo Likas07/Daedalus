@@ -128,6 +128,33 @@ describe("SettingsManager", () => {
 		});
 	});
 
+
+	describe("semantic settings", () => {
+		it("defaults semantic settings to unset values", () => {
+			const manager = SettingsManager.inMemory();
+			expect(manager.getSemanticSettings()).toEqual({});
+		});
+
+		it("persists semantic embedding config in project scope", async () => {
+			const sandbox = createSandbox();
+			const manager = SettingsManager.create(sandbox.projectDir, sandbox.agentDir);
+			manager.setSemanticSettings({
+				embeddingHost: "http://embed:11434",
+				embeddingModel: "embeddinggemma",
+				indexProfile: "broad",
+			});
+			await manager.flush();
+
+			const saved = JSON.parse(readFileSync(sandbox.projectSettingsPath, "utf-8"));
+			expect(saved.semantic).toEqual({
+				embeddingHost: "http://embed:11434",
+				embeddingModel: "embeddinggemma",
+				indexProfile: "broad",
+			});
+			expect(SettingsManager.create(sandbox.projectDir, sandbox.agentDir).getSemanticSettings()).toEqual(saved.semantic);
+		});
+	});
+
 	describe("packages migration", () => {
 		it("keeps local-only extensions in the extensions array", () => {
 			const sandbox = createSandbox();

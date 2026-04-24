@@ -2,13 +2,14 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { CONFIG_DIR_NAME } from "../../../config.js";
+import { SettingsManager, type SemanticSettings } from "../../../core/settings-manager.js";
 import {
 	DEFAULT_OLLAMA_EMBED_MODEL,
 	DEFAULT_OLLAMA_HOST,
+	DEFAULT_SEMANTIC_INDEX_PROFILE,
 	resolveSemanticIndexProfile,
 	type SemanticIndexProfile,
 } from "./semantic-config.js";
-import { createOllamaSemanticEmbedder } from "./semantic-embedder.js";
 import { collectSemanticCandidateFiles } from "./semantic-file-discovery.js";
 import { createSemanticStoreRuntime, type SemanticStoreProgress } from "./semantic-store.js";
 import type { SemanticSkipCounts } from "./semantic-types.js";
@@ -91,6 +92,27 @@ export interface SemanticWorkspaceStatus {
 
 export interface SemanticWorkspaceProgress extends SemanticStoreProgress {}
 
+export interface SemanticBootstrapOptions extends SemanticSettings {}
+
+function semanticSettingsFor(cwd: string): SettingsManager {
+	return SettingsManager.create(cwd);
+}
+
+function resolveSemanticSettings(cwd: string, overrides: SemanticBootstrapOptions = {}): Required<SemanticSettings> {
+	const settings = semanticSettingsFor(cwd).getSemanticSettings();
+	return {
+		embeddingHost: overrides.embeddingHost ?? settings.embeddingHost ?? DEFAULT_OLLAMA_HOST,
+		embeddingModel: overrides.embeddingModel ?? settings.embeddingModel ?? DEFAULT_OLLAMA_EMBED_MODEL,
+		indexProfile: overrides.indexProfile ?? settings.indexProfile ?? resolveSemanticIndexProfile() ?? DEFAULT_SEMANTIC_INDEX_PROFILE,
+	};
+}
+
+async function persistSemanticSettings(cwd: string, settings: Required<SemanticSettings>): Promise<void> {
+	const manager = semanticSettingsFor(cwd);
+	manager.setSemanticSettings(settings, "project");
+	await manager.flush();
+}
+
 const CURRENT_CHUNKING_VERSION = "v2";
 const CURRENT_SYNC_STRATEGY_VERSION = "incremental-v2";
 
@@ -138,44 +160,54 @@ export function loadSemanticWorkspace(cwd: string): SemanticWorkspacePersistedSt
 export async function initSemanticWorkspace(
 	cwd: string,
 	onProgress?: (progress: SemanticWorkspaceProgress) => void,
+	options: SemanticBootstrapOptions = {},
 ): Promise<SemanticWorkspacePersistedState> {
 	const startedAt = Date.now();
 	const emitProgress = (progress: Omit<SemanticWorkspaceProgress, "elapsedMs">): void => {
 		onProgress?.({ ...progress, elapsedMs: Date.now() - startedAt });
 	};
+	const semantic = resolveSemanticSettings(cwd, options);
 	emitProgress({ phase: "preparing", message: "Preparing semantic workspace directories" });
 	ensureWorkspaceDir(cwd);
 	mkdirSync(databaseDirPath(cwd), { recursive: true });
-	emitProgress({ phase: "preparing", message: "Connecting local semantic store" });
-	await createSemanticStoreRuntime({
-		databaseDir: databaseDirPath(cwd),
-		workspaceRoot: cwd,
-		host: DEFAULT_OLLAMA_HOST,
-		model: DEFAULT_OLLAMA_EMBED_MODEL,
-	});
-	emitProgress({ phase: "preparing", message: "Loading embedding model metadata" });
-	const embedder = await createOllamaSemanticEmbedder({
-		host: DEFAULT_OLLAMA_HOST,
-		model: DEFAULT_OLLAMA_EMBED_MODEL,
-	});
-	const info = await embedder.getModelInfo();
-	const state: SemanticWorkspacePersistedState = {
-		version: 2,
-		root: cwd,
-		initializedAt: Date.now(),
-		chunkCount: 0,
-		databaseDir: databaseDirPath(cwd),
-		embeddingProvider: info.provider,
-		embeddingModel: info.model,
-		embeddingHost: info.host,
-		embeddingDimension: info.dimension,
-		chunkingVersion: CURRENT_CHUNKING_VERSION,
-		syncStrategyVersion: CURRENT_SYNC_STRATEGY_VERSION,
-		chunkTableName: "semantic_chunks",
-		manifestTableName: "semantic_indexed_files",
-	};
+	await persistSemanticSettings(cwd, semantic);
+	const current = loadSemanticWorkspace(cwd);
+	const backendChanged =
+		current && (current.embeddingHost !== semantic.embeddingHost || current.embeddingModel !== semantic.embeddingModel);
+	const state: SemanticWorkspacePersistedState =
+		current && !backendChanged
+			? {
+					...current,
+					root: cwd,
+					databaseDir: current.databaseDir ?? databaseDirPath(cwd),
+					embeddingProvider: current.embeddingProvider ?? "ollama",
+					embeddingModel: semantic.embeddingModel,
+					embeddingHost: semantic.embeddingHost,
+					chunkingVersion: CURRENT_CHUNKING_VERSION,
+					syncStrategyVersion: CURRENT_SYNC_STRATEGY_VERSION,
+					chunkTableName: current.chunkTableName ?? "semantic_chunks",
+					manifestTableName: current.manifestTableName ?? "semantic_indexed_files",
+				}
+			: {
+					version: 2,
+					root: cwd,
+					initializedAt: current?.initializedAt ?? Date.now(),
+					chunkCount: 0,
+					databaseDir: databaseDirPath(cwd),
+					embeddingProvider: "ollama",
+					embeddingModel: semantic.embeddingModel,
+					embeddingHost: semantic.embeddingHost,
+					chunkingVersion: CURRENT_CHUNKING_VERSION,
+					syncStrategyVersion: CURRENT_SYNC_STRATEGY_VERSION,
+					chunkTableName: "semantic_chunks",
+					manifestTableName: "semantic_indexed_files",
+				};
 	writeSemanticWorkspace(cwd, state);
-	emitProgress({ phase: "complete", message: "Semantic workspace initialized", chunks: 0 });
+	emitProgress({
+		phase: "complete",
+		message: "Semantic workspace configured and initialized; run /workspace-sync to build the index",
+		chunks: state.chunkCount,
+	});
 	return state;
 }
 
@@ -191,12 +223,14 @@ export async function syncSemanticWorkspace(
 		cwd,
 	});
 	ensureWorkspaceDir(cwd);
-	const current = loadSemanticWorkspace(cwd) ?? (await initSemanticWorkspace(cwd, onProgress));
+	const configured = resolveSemanticSettings(cwd);
+	const current = loadSemanticWorkspace(cwd) ?? (await initSemanticWorkspace(cwd, onProgress, configured));
 	const runtime = await createSemanticStoreRuntime({
 		databaseDir: current.databaseDir,
 		workspaceRoot: cwd,
-		host: current.embeddingHost,
-		model: current.embeddingModel,
+		host: current.embeddingHost ?? configured.embeddingHost,
+		model: current.embeddingModel ?? configured.embeddingModel,
+		indexProfile: configured.indexProfile,
 	});
 	const syncInfo = await runtime.sync(emitProgress);
 	const fingerprint = buildFingerprint(cwd, syncInfo.indexProfile ?? resolveSemanticIndexProfile());
@@ -240,7 +274,7 @@ export async function syncSemanticWorkspace(
 			candidateFiles: syncInfo.scannedFiles,
 			skippedFiles: syncInfo.skippedFiles ?? 0,
 			skippedByReason: syncInfo.skippedByReason ?? {},
-			indexProfile: syncInfo.indexProfile ?? "normal",
+			indexProfile: syncInfo.indexProfile ?? configured.indexProfile,
 		},
 		lastIndexRefreshAt:
 			syncInfo.insertedChunks > 0 || syncInfo.removedChunks > 0

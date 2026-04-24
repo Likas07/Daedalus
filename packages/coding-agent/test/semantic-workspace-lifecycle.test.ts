@@ -2,11 +2,11 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getModel } from "@daedalus-pi/ai";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAgentSession } from "../src/core/sdk.js";
 import { SessionManager } from "../src/core/session-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
-import { getSemanticWorkspaceStatus } from "../src/extensions/daedalus/tools/semantic-workspace.js";
+import { getSemanticWorkspaceStatus, initSemanticWorkspace } from "../src/extensions/daedalus/tools/semantic-workspace.js";
 
 function getText(result: any): string {
 	return result.content
@@ -71,6 +71,37 @@ describe("semantic workspace lifecycle", () => {
 		).rejects.toThrow(/sem_workspace_init|workspace.*uninitialized/i);
 
 		session.dispose();
+	});
+
+
+	it("bootstraps semantic workspace without probing the embedding endpoint", async () => {
+		const originalFetch = globalThis.fetch;
+		globalThis.fetch = vi.fn(async () => {
+			throw new Error("bootstrap must not contact embedding host");
+		});
+		try {
+			const state = await initSemanticWorkspace(tempDir, undefined, {
+				embeddingHost: "http://offline-ollama:11434",
+				embeddingModel: "offline-model",
+				indexProfile: "minimal",
+			});
+			expect(state.embeddingHost).toBe("http://offline-ollama:11434");
+			expect(state.embeddingModel).toBe("offline-model");
+			expect(state.embeddingDimension).toBeUndefined();
+			expect(state.indexedAt).toBeUndefined();
+			expect(existsSync(join(tempDir, ".daedalus", "semantic-store"))).toBe(true);
+			expect(globalThis.fetch).not.toHaveBeenCalled();
+
+			const settings = JSON.parse(readFileSync(join(tempDir, ".daedalus", "settings.json"), "utf-8"));
+			expect(settings.semantic).toEqual({
+				embeddingHost: "http://offline-ollama:11434",
+				embeddingModel: "offline-model",
+				indexProfile: "minimal",
+			});
+			expect(getSemanticWorkspaceStatus(tempDir).state).toBe("initialized");
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
 	});
 
 	it("initializes, syncs, and then serves indexed semantic results", async () => {
