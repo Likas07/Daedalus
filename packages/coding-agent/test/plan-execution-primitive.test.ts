@@ -190,6 +190,57 @@ describe("execute_plan primitive", () => {
 		session.dispose();
 	});
 
+	it("execute_plan prefers executable sidecar JSON over markdown parsing", async () => {
+		const settingsManager = SettingsManager.create(tempDir, agentDir);
+		const sessionManager = SessionManager.inMemory();
+		const { session } = await createAgentSession({
+			cwd: tempDir,
+			agentDir,
+			model: getModel("anthropic", "claude-sonnet-4-5")!,
+			settingsManager,
+			sessionManager,
+		});
+		await session.bindExtensions({});
+		const planCreate = session.getToolDefinition("plan_create")!;
+		await planCreate.execute(
+			"plan-create-sidecar",
+			{
+				path: "docs/plans/sidecar.md",
+				title: "Sidecar Plan",
+				goal: "Use sidecar",
+				architecture: "Prefer JSON sidecar for task details.",
+				tech_stack: ["TypeScript"],
+				tasks: [
+					{
+						id: "task-sidecar",
+						title: "Sidecar task",
+						dependencies: [],
+						parallel_group: "sidecar",
+						can_run_parallel: true,
+						conflicts_with: [],
+						files: { create: [], modify: ["src/a.ts"], test: [] },
+						steps: [{ title: "Do it", body: "Use detail from JSON." }],
+						verification: [{ command: "bun test", expected: "PASS" }],
+					},
+				],
+			},
+			undefined,
+			undefined,
+			{ cwd: tempDir } as any,
+		);
+
+		const executePlan = session.getToolDefinition("execute_plan")!;
+		const result = await executePlan.execute("execute-sidecar", { path: "docs/plans/sidecar.md" }, undefined, undefined, {
+			cwd: tempDir,
+		} as any);
+
+		expect(result.details.plan.format).toBe("executable-plan-v1");
+		expect(result.details.todos[0]).toMatchObject({ id: "task-sidecar", content: "Task 1: Sidecar task" });
+		expect(getText(result)).toContain("Ready parallel group sidecar: task-sidecar");
+
+		session.dispose();
+	});
+
 	it("initializes execution state from a markdown plan artifact", async () => {
 		const settingsManager = SettingsManager.create(tempDir, agentDir);
 		const sessionManager = SessionManager.inMemory();

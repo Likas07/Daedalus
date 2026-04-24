@@ -1,12 +1,14 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { TodoItem } from "../../tools/todo-state.js";
+import { markdownHash, planSidecarPath, validateExecutablePlan } from "./schema.js";
 import {
 	createTodoSnapshot,
 	replaceTodoList,
 	type TodoSnapshot,
 	type TodoWriteResult,
 } from "../../tools/todo-state.js";
+import { markdownHash, planSidecarPath, validateExecutablePlan } from "./schema.js";
 
 export interface PlanArtifactStep {
 	step: number;
@@ -23,7 +25,7 @@ export interface PlanArtifactStep {
 }
 
 export interface PlanArtifact {
-	format: "markdown-numbered-steps-v1" | "markdown-task-sections-v1";
+	format: "markdown-numbered-steps-v1" | "markdown-task-sections-v1" | "executable-plan-v1";
 	path?: string;
 	steps: PlanArtifactStep[];
 }
@@ -124,9 +126,51 @@ export function parsePlanArtifactText(text: string, sourcePath?: string): PlanAr
 	};
 }
 
+function renderExecutableTaskDetail(task: any, step: number): string {
+	const lines: string[] = [`# Task ${step}: ${task.title}`, "", "Files:"];
+	for (const file of task.files.create ?? []) lines.push(`- Create: ${file}`);
+	for (const file of task.files.modify ?? []) lines.push(`- Modify: ${file}`);
+	for (const file of task.files.test ?? []) lines.push(`- Test: ${file}`);
+	lines.push("", "Steps:");
+	for (const [index, item] of (task.steps ?? []).entries()) {
+		lines.push(`${index + 1}. ${item.title}`, item.body, "");
+		if (item.command) lines.push(`Run: ${item.command}`);
+		if (item.expected) lines.push(`Expected: ${item.expected}`);
+	}
+	lines.push("Verification:");
+	for (const item of task.verification ?? []) lines.push(`- ${item.command} (${item.expected})`);
+	return lines.join("\n").trim();
+}
+
 export function loadPlanArtifact(filePath: string, cwd: string): PlanArtifact {
 	const resolved = resolve(cwd, filePath);
 	const text = readFileSync(resolved, "utf-8");
+	const sidecarPath = planSidecarPath(resolved);
+	if (existsSync(sidecarPath)) {
+		const sidecar = JSON.parse(readFileSync(sidecarPath, "utf-8"));
+		const validation = validateExecutablePlan(sidecar);
+		if (!validation.ok) throw new Error(`Invalid executable plan sidecar:\n${validation.errors.join("\n")}`);
+		if (sidecar.markdownHash && sidecar.markdownHash !== markdownHash(text)) {
+			throw new Error("Executable plan markdown changed since sidecar generation. Run plan_validate or plan_create overwrite=true.");
+		}
+		return {
+			format: "executable-plan-v1",
+			path: resolved,
+			steps: sidecar.tasks.map((task: any, index: number) => ({
+				step: index + 1,
+				content: `Task ${index + 1}: ${task.title}`,
+				id: task.id,
+				detail: renderExecutableTaskDetail(task, index + 1),
+				files: [...task.files.create, ...task.files.modify, ...task.files.test].sort(),
+				verification: task.verification.map((item: any) => item.command).join(" && "),
+				lane: task.parallelGroup,
+				dependsOn: task.dependencies ?? [],
+				parallelGroup: task.parallelGroup ?? "default",
+				canRunInParallel: task.canRunInParallel !== false,
+				conflictsWith: task.conflictsWith ?? [],
+			})),
+		};
+	}
 	return parsePlanArtifactText(text, resolved);
 }
 
