@@ -60,11 +60,7 @@ describe("validateToolArguments", () => {
 			name: "todo_write",
 			description: "Todo tool",
 			parameters: Type.Object({
-				status: Type.Union([
-					Type.Literal("pending"),
-					Type.Literal("in_progress"),
-					Type.Literal("completed"),
-				]),
+				status: Type.Union([Type.Literal("pending"), Type.Literal("in_progress"), Type.Literal("completed")]),
 			}),
 		};
 		const toolCall: ToolCall = {

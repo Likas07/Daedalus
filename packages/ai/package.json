@@ -65,7 +65,7 @@
 	"scripts": {
 		"check": "tsgo -p tsconfig.json",
 		"generate-models": "bun scripts/generate-models.ts",
-		"test": "bun test"
+		"test": "vitest run"
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "^0.73.0",

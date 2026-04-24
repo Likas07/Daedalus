@@ -41,7 +41,7 @@ afterEach(() => {
 
 describe("openai fast mode", () => {
 	it("sets service_tier priority and doubles pricing for supported models", async () => {
-		const model = getModel("openai", "gpt-5.4");
+		const model = getModel("openai", "gpt-5.5");
 		let capturedPayload: Record<string, unknown> | undefined;
 
 		vi.spyOn(globalThis, "fetch").mockResolvedValue(

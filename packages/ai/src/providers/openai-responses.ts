@@ -2,7 +2,16 @@ import OpenAI from "openai";
 import type { ResponseCreateParamsStreaming } from "openai/resources/responses/responses.js";
 import { getEnvApiKey } from "../env-api-keys.js";
 import { supportsFastMode, supportsXhigh } from "../models.js";
-import type { Api, AssistantMessage, CacheRetention, Context, Model, SimpleStreamOptions, StreamFunction, StreamOptions } from "../types.js";
+import type {
+	Api,
+	AssistantMessage,
+	CacheRetention,
+	Context,
+	Model,
+	SimpleStreamOptions,
+	StreamFunction,
+	StreamOptions,
+} from "../types.js";
 import { AssistantMessageEventStream } from "../utils/event-stream.js";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.js";
 import {

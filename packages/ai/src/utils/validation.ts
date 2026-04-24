@@ -213,7 +213,12 @@ export function validateToolCall(tools: Tool[], toolCall: ToolCall): any {
 export function validateToolArguments(tool: Tool, toolCall: ToolCall): any {
 	const repairs: ToolArgumentRepair[] = [];
 	const parsedArguments = maybeParseArguments(toolCall.arguments, repairs);
-	const repairedInput = repairValueAgainstSchema(parsedArguments, tool.parameters as JsonSchemaLike | undefined, "", repairs);
+	const repairedInput = repairValueAgainstSchema(
+		parsedArguments,
+		tool.parameters as JsonSchemaLike | undefined,
+		"",
+		repairs,
+	);
 
 	// Skip validation in environments where runtime code generation is unavailable.
 	if (!ajv || !canUseRuntimeCodegen()) {
