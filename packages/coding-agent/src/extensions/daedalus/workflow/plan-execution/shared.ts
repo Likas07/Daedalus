@@ -14,10 +14,16 @@ export interface PlanArtifactStep {
 	id: string;
 	verification?: string;
 	lane?: string;
+	detail?: string;
+	files?: string[];
+	dependsOn?: string[];
+	parallelGroup?: string;
+	canRunInParallel?: boolean;
+	conflictsWith?: string[];
 }
 
 export interface PlanArtifact {
-	format: "markdown-numbered-steps-v1";
+	format: "markdown-numbered-steps-v1" | "markdown-task-sections-v1";
 	path?: string;
 	steps: PlanArtifactStep[];
 }
@@ -42,7 +48,50 @@ function parsePlanBody(text: string): string {
 	return match[1];
 }
 
+function extractFiles(detail: string): string[] {
+	const files = new Set<string>();
+	for (const match of detail.matchAll(/`([^`]+)`/g)) {
+		const value = match[1]?.trim();
+		if (!value) continue;
+		if (value.includes("/") || value.startsWith("packages/") || value.startsWith("docs/")) files.add(value);
+	}
+	return [...files].sort();
+}
+
+function maskFencedCode(text: string): string {
+	return text.replace(/^```[\s\S]*?^```/gm, (block) => block.replace(/[^\n]/g, " "));
+}
+
+function parseTaskSectionArtifact(text: string, sourcePath?: string): PlanArtifact | undefined {
+	const headingRegex = /^###\s+Task\s+(\d+)\s*:\s*(.+)$/gm;
+	const maskedText = maskFencedCode(text);
+	const headings = [...maskedText.matchAll(headingRegex)];
+	if (headings.length === 0) return undefined;
+	const steps: PlanArtifactStep[] = headings.map((heading, index) => {
+		const step = Number(heading[1]);
+		const title = `Task ${step}: ${(heading[2] ?? "").trim()}`;
+		const detailStart = (heading.index ?? 0) + heading[0].length;
+		const nextHeading = headings[index + 1];
+		const detailEnd = nextHeading?.index ?? text.length;
+		const detail = text.slice(detailStart, detailEnd).trim();
+		return {
+			step,
+			content: title,
+			id: `plan-task-${step}-${slugify(title) || step}`,
+			detail,
+			files: extractFiles(detail),
+			dependsOn: [],
+			parallelGroup: "default",
+			canRunInParallel: true,
+			conflictsWith: [],
+		};
+	});
+	return { format: "markdown-task-sections-v1", path: sourcePath, steps };
+}
+
 export function parsePlanArtifactText(text: string, sourcePath?: string): PlanArtifact {
+	const taskSectionPlan = parseTaskSectionArtifact(text, sourcePath);
+	if (taskSectionPlan) return taskSectionPlan;
 	const body = parsePlanBody(text);
 	const stepRegex = /^\s*(\d+)[.)]\s+(.*)$/gm;
 	const steps: PlanArtifactStep[] = [];

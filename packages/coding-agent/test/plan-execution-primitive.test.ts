@@ -86,6 +86,45 @@ describe("execute_plan primitive", () => {
 		expect(hasUnfinishedPlanWork(progressed)).toBe(false);
 	});
 
+	it("parses writing-plans task sections into compact todos and task details", () => {
+		const plan = parsePlanArtifactText(
+			[
+				"# Example Implementation Plan",
+				"",
+				"### Task 1: Add read guidance",
+				"",
+				"**Files:**",
+				"- Modify: `packages/coding-agent/src/core/tools/read.ts`",
+				"- Test: `packages/coding-agent/test/tools.test.ts`",
+				"",
+				"- [ ] **Step 1: Write the failing test**",
+				"",
+				"```ts",
+				"expect(true).toBe(true);",
+				"```",
+				"",
+				"- [ ] **Step 2: Run focused test**",
+				"",
+				"Run: `bun test packages/coding-agent/test/tools.test.ts`",
+				"Expected: PASS",
+				"",
+				"### Task 2: Profile reads",
+				"",
+				"**Files:**",
+				"- Modify: `packages/coding-agent/src/extensions/daedalus/tools/context-profile/analyzer.ts`",
+				"",
+				"- [ ] **Step 1: Add analyzer test**",
+			].join("\n"),
+		);
+
+		expect(plan.format).toBe("markdown-task-sections-v1");
+		expect(plan.steps).toHaveLength(2);
+		expect(plan.steps.map((step) => step.content)).toEqual(["Task 1: Add read guidance", "Task 2: Profile reads"]);
+		expect(plan.steps[0]).toMatchObject({ step: 1, content: "Task 1: Add read guidance" });
+		expect(plan.steps[0].detail).toContain("Write the failing test");
+		expect(plan.steps[0].files).toContain("packages/coding-agent/src/core/tools/read.ts");
+	});
+
 	it("parses stable plan metadata for lanes and verification criteria", () => {
 		const plan = parsePlanArtifactText(
 			"Plan:\n1. [lane:auth] Inspect auth flow | verify: identify login handler\n2. Add refresh tests | verify: tests fail before implementation\n",
