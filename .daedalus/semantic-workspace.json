@@ -2,7 +2,7 @@
   "version": 2,
   "root": "/home/likas/Research/Daedalus",
   "initializedAt": 1776974770580,
-  "chunkCount": 2914,
+  "chunkCount": 2929,
   "databaseDir": "/home/likas/Research/Daedalus/.daedalus/semantic-store",
   "embeddingProvider": "ollama",
   "embeddingModel": "embeddinggemma",
@@ -12,21 +12,21 @@
   "syncStrategyVersion": "incremental-v2",
   "chunkTableName": "semantic_chunks",
   "manifestTableName": "semantic_indexed_files",
-  "indexedAt": 1777005045350,
-  "fingerprint": "4ccee10a9755c779c11e6d3677227ab745dccd4e4ccd293d01fe9e94067e7d7f",
+  "indexedAt": 1777006209120,
+  "fingerprint": "1a63d0f60eeac7a64a6508e9793e93e3c8fc531270fcb15c2a3e4fecc96f9914",
   "vectorIndexName": "vector_idx",
   "ftsIndexName": "search_text_idx",
   "lastSyncSummary": {
-    "scannedFiles": 1073,
-    "changedFiles": 8,
+    "scannedFiles": 1075,
+    "changedFiles": 10,
     "deletedFiles": 0,
     "unchangedFiles": 1061,
     "failedFiles": 0,
-    "insertedChunks": 89,
-    "removedChunks": 0
+    "insertedChunks": 40,
+    "removedChunks": 25
   },
   "lastDiscoverySummary": {
-    "candidateFiles": 1073,
+    "candidateFiles": 1075,
     "skippedFiles": 10,
     "skippedByReason": {
       "hardExclude": 6,
@@ -35,7 +35,7 @@
     },
     "indexProfile": "normal"
   },
-  "lastIndexRefreshAt": "2026-04-24T04:30:45.350Z",
-  "lastIndexRefreshChunkCount": 2914,
+  "lastIndexRefreshAt": "2026-04-24T04:50:09.120Z",
+  "lastIndexRefreshChunkCount": 2929,
   "indexRefreshStrategyVersion": 1
 }
