@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
 import { Text } from "@daedalus-pi/tui";
 import { Type } from "@sinclair/typebox";
@@ -12,6 +14,13 @@ import {
 	resumePlanExecution,
 	type PlanExecutionState,
 } from "./shared.js";
+import {
+	type ExecutablePlanV1,
+	markdownHash,
+	planSidecarPath,
+	validateExecutablePlan,
+	writeExecutablePlanFiles,
+} from "./schema.js";
 
 const ExecutePlanParams = Type.Object({
 	path: Type.String({ description: "Path to a markdown plan artifact containing a numbered Plan: section" }),
@@ -23,6 +32,51 @@ const ExecutePlanParams = Type.Object({
 const PlanTaskReadParams = Type.Object({
 	selector: Type.Optional(Type.String({ description: "Task id, step number, active, or next (default: active)" })),
 });
+
+const PlanCreateParams = Type.Object({
+	path: Type.String({ description: "Output markdown path under docs/plans, ending in .md" }),
+	title: Type.String(),
+	goal: Type.String(),
+	architecture: Type.String(),
+	tech_stack: Type.Array(Type.String()),
+	tasks: Type.Array(
+		Type.Object({
+			id: Type.String(),
+			title: Type.String(),
+			dependencies: Type.Optional(Type.Array(Type.String())),
+			parallel_group: Type.Optional(Type.String()),
+			can_run_parallel: Type.Optional(Type.Boolean()),
+			conflicts_with: Type.Optional(Type.Array(Type.String())),
+			files: Type.Object({ create: Type.Array(Type.String()), modify: Type.Array(Type.String()), test: Type.Array(Type.String()) }),
+			steps: Type.Array(
+				Type.Object({
+					title: Type.String(),
+					body: Type.String(),
+					codeBlocks: Type.Optional(Type.Array(Type.Object({ language: Type.Optional(Type.String()), content: Type.String() }))),
+					command: Type.Optional(Type.String()),
+					expected: Type.Optional(Type.String()),
+				}),
+			),
+			verification: Type.Array(Type.Object({ command: Type.String(), expected: Type.String() })),
+			commit: Type.Optional(Type.Object({ message: Type.String(), paths: Type.Array(Type.String()) })),
+		}),
+	),
+	overwrite: Type.Optional(Type.Boolean({ description: "Allow replacing existing plan files" })),
+});
+
+const PlanValidateParams = Type.Object({
+	path: Type.String({ description: "Markdown plan path to validate" }),
+});
+
+function resolvePlanOutputPath(cwd: string, requested: string): string {
+	const resolved = resolve(cwd, requested);
+	const plansRoot = resolve(cwd, "docs", "plans");
+	if (!resolved.startsWith(`${plansRoot}/`) && resolved !== plansRoot) {
+		throw new Error("plan_create only writes under docs/plans");
+	}
+	if (!resolved.endsWith(".md")) throw new Error("plan_create path must end in .md");
+	return resolved;
+}
 
 function summarizeExecution(result: ReturnType<typeof initializePlanExecution>): string {
 	const unfinished = result.todos.filter((todo) => todo.status === "pending" || todo.status === "in_progress").length;
@@ -66,6 +120,84 @@ export default function planExecutionExtension(pi: ExtensionAPI): void {
 
 	pi.on("session_start", async (_event, ctx) => rebuildFromSession(ctx));
 	pi.on("session_tree", async (_event, ctx) => rebuildFromSession(ctx));
+
+	pi.registerTool({
+		name: "plan_create",
+		label: "Plan Create",
+		description: "Create a schema-valid executable plan markdown file plus .plan.json sidecar from structured input.",
+		promptSnippet: "Create validated executable plan artifacts from structured task input",
+		promptGuidelines: [
+			"Use plan_create when writing implementation plans that should later be executed with execute_plan.",
+			"Decompose work into the smallest safe independent tasks and provide parallel_group/conflicts_with metadata for worker dispatch.",
+		],
+		parameters: PlanCreateParams,
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const outputPath = resolvePlanOutputPath(ctx.cwd, params.path);
+			const sidecarPath = planSidecarPath(outputPath);
+			if (!params.overwrite && (existsSync(outputPath) || existsSync(sidecarPath))) {
+				throw new Error("Plan already exists. Pass overwrite=true to replace it.");
+			}
+			const plan: ExecutablePlanV1 = {
+				schemaVersion: 1,
+				title: params.title,
+				goal: params.goal,
+				architecture: params.architecture,
+				techStack: params.tech_stack,
+				tasks: params.tasks.map((task) => ({
+					id: task.id,
+					title: task.title,
+					dependencies: task.dependencies ?? [],
+					parallelGroup: task.parallel_group,
+					canRunInParallel: task.can_run_parallel,
+					conflictsWith: task.conflicts_with ?? [],
+					files: task.files,
+					steps: task.steps,
+					verification: task.verification,
+					...(task.commit ? { commit: task.commit } : {}),
+				})),
+			};
+			const result = writeExecutablePlanFiles(plan, outputPath);
+			return {
+				content: [
+					{
+						type: "text",
+						text: `Created executable plan: ${result.markdownPath}\nSidecar: ${result.sidecarPath}\nValidation: PASS\nTasks: ${plan.tasks.length}`,
+					},
+				],
+				details: result,
+			};
+		},
+	});
+
+	pi.registerTool({
+		name: "plan_validate",
+		label: "Plan Validate",
+		description: "Validate an executable plan markdown file and sidecar JSON without mutating plan execution state.",
+		promptSnippet: "Validate executable plan artifacts before execution",
+		promptGuidelines: ["Use plan_validate after plan_create or manual plan edits before execute_plan."],
+		parameters: PlanValidateParams,
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const markdownPath = resolve(ctx.cwd, params.path);
+			const sidecarPath = planSidecarPath(markdownPath);
+			if (!existsSync(sidecarPath)) throw new Error(`Missing sidecar: ${sidecarPath}`);
+			const markdown = readFileSync(markdownPath, "utf8");
+			const sidecar = JSON.parse(readFileSync(sidecarPath, "utf8"));
+			const validation = validateExecutablePlan(sidecar);
+			const hashMatches = sidecar.markdownHash === markdownHash(markdown);
+			if (!validation.ok || !hashMatches) {
+				const errors = [...validation.errors, ...(hashMatches ? [] : ["markdown hash does not match sidecar"] )];
+				return {
+					content: [{ type: "text", text: `Invalid executable plan v1\n${errors.map((error) => `- ${error}`).join("\n")}` }],
+					isError: true,
+					details: { errors },
+				};
+			}
+			return {
+				content: [{ type: "text", text: `Valid executable plan v1\nTasks: ${sidecar.tasks.length}\nSidecar: ${sidecarPath}` }],
+				details: sidecar,
+			};
+		},
+	});
 
 	pi.registerTool({
 		name: "execute_plan",

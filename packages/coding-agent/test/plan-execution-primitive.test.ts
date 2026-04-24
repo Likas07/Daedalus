@@ -135,6 +135,61 @@ describe("execute_plan primitive", () => {
 		expect(validateExecutablePlan(plan).errors.join("\n")).toContain("parallel group g1 has overlapping file src/a.ts");
 	});
 
+	it("creates and validates executable plans through plan_create and plan_validate", async () => {
+		const settingsManager = SettingsManager.create(tempDir, agentDir);
+		const sessionManager = SessionManager.inMemory();
+		const { session } = await createAgentSession({
+			cwd: tempDir,
+			agentDir,
+			model: getModel("anthropic", "claude-sonnet-4-5")!,
+			settingsManager,
+			sessionManager,
+		});
+		await session.bindExtensions({});
+
+		const planCreate = session.getToolDefinition("plan_create");
+		const planValidate = session.getToolDefinition("plan_validate");
+		expect(planCreate).toBeDefined();
+		expect(planValidate).toBeDefined();
+
+		const createResult = await planCreate!.execute(
+			"plan-create-1",
+			{
+				path: "docs/plans/generated.md",
+				title: "Generated Plan",
+				goal: "Generate a valid executable plan",
+				architecture: "Use the plan_create tool schema and deterministic renderer.",
+				tech_stack: ["TypeScript", "Vitest"],
+				tasks: [
+					{
+						id: "task-generated",
+						title: "Generate fixture",
+						dependencies: [],
+						parallel_group: "docs",
+						can_run_parallel: true,
+						conflicts_with: [],
+						files: { create: ["docs/generated.md"], modify: [], test: [] },
+						steps: [{ title: "Write file", body: "Create docs/generated.md." }],
+						verification: [{ command: "test -f docs/generated.md", expected: "PASS" }],
+					},
+				],
+			},
+			undefined,
+			undefined,
+			{ cwd: tempDir } as any,
+		);
+		expect(getText(createResult)).toContain("Created executable plan");
+		expect(existsSync(join(tempDir, "docs", "plans", "generated.md"))).toBe(true);
+		expect(existsSync(join(tempDir, "docs", "plans", "generated.plan.json"))).toBe(true);
+
+		const validateResult = await planValidate!.execute("plan-validate-1", { path: "docs/plans/generated.md" }, undefined, undefined, {
+			cwd: tempDir,
+		} as any);
+		expect(getText(validateResult)).toContain("Valid executable plan v1");
+
+		session.dispose();
+	});
+
 	it("initializes execution state from a markdown plan artifact", async () => {
 		const settingsManager = SettingsManager.create(tempDir, agentDir);
 		const sessionManager = SessionManager.inMemory();
