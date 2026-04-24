@@ -35,6 +35,11 @@ export interface ReadToolDetails {
 	absolutePath?: string;
 	/** SHA-256 of the full file bytes at read time. Reserved for external-change detection. */
 	contentHash?: string;
+	/** Repeated-read metadata used for context-bloat diagnostics and model hints. */
+	readLedger?: {
+		repeatedRead: boolean;
+		previousHash?: string;
+	};
 }
 
 /**
@@ -152,9 +157,11 @@ export function createReadToolDefinition(
 			}: { path: string; offset?: number; limit?: number; format?: "plain" | "hashline" },
 			signal?: AbortSignal,
 			_onUpdate?,
-			_ctx?,
+			ctx?,
 		) {
 			const absolutePath = resolveReadPath(path, cwd);
+			const repeatedRead = ctx?.readLedger?.hasRead(absolutePath) ?? false;
+			const previousHash = ctx?.readLedger?.getHash(absolutePath);
 			return new Promise<{ content: (TextContent | ImageContent)[]; details: ReadToolDetails | undefined }>(
 				(resolve, reject) => {
 					if (signal?.aborted) {
@@ -268,8 +275,22 @@ export function createReadToolDefinition(
 							}
 
 							if (aborted) return;
-							details = { ...(details ?? {}), absolutePath, ...(contentHash ? { contentHash } : {}) };
-							_ctx?.readLedger?.markRead(absolutePath, contentHash);
+							const readLedgerDetails = {
+								repeatedRead,
+								...(previousHash ? { previousHash } : {}),
+							};
+							const textBlock = content.find((block): block is TextContent => block.type === "text");
+							if (repeatedRead && textBlock) {
+								textBlock.text +=
+									"\n[Read hint: this file was already read earlier in this session. Prefer offset/limit or avoid rereading unchanged content.]";
+							}
+							details = {
+								...(details ?? {}),
+								absolutePath,
+								...(contentHash ? { contentHash } : {}),
+								readLedger: readLedgerDetails,
+							};
+							ctx?.readLedger?.markRead(absolutePath, contentHash);
 							signal?.removeEventListener("abort", onAbort);
 							resolve({ content, details });
 						} catch (error: any) {
