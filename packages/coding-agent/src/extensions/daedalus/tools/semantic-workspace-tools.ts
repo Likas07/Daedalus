@@ -9,6 +9,7 @@ import { createSemanticBackgroundSyncController } from "./semantic-background-sy
 import {
 	getSemanticWorkspaceStatus,
 	initSemanticWorkspace,
+	type SemanticBootstrapOptions,
 	type SemanticWorkspaceProgress,
 	syncSemanticWorkspace,
 } from "./semantic-workspace.js";
@@ -19,6 +20,28 @@ const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", 
 
 type WorkspaceCommandKind = "init" | "sync";
 type WorkspacePhase = SemanticWorkspaceProgress["phase"];
+
+
+function parseWorkspaceInitArgs(args: string): SemanticBootstrapOptions {
+	const options: SemanticBootstrapOptions = {};
+	const tokens = args.trim().split(/\s+/).filter(Boolean);
+	for (let index = 0; index < tokens.length; index += 1) {
+		const token = tokens[index];
+		const [rawKey, inlineValue] = token.startsWith("--") ? token.slice(2).split("=", 2) : [undefined, undefined];
+		if (!rawKey) continue;
+		const value = inlineValue ?? tokens[index + 1];
+		if (inlineValue === undefined) index += 1;
+		if (!value) continue;
+		if (rawKey === "host" || rawKey === "embedding-host") options.embeddingHost = value;
+		if (rawKey === "model" || rawKey === "embedding-model") options.embeddingModel = value;
+		if (rawKey === "profile" || rawKey === "index-profile") {
+			if (value === "minimal" || value === "normal" || value === "broad" || value === "exhaustive") {
+				options.indexProfile = value;
+			}
+		}
+	}
+	return options;
+}
 
 function formatStatus(status: ReturnType<typeof getSemanticWorkspaceStatus>): string {
 	const lines = [
@@ -170,6 +193,18 @@ function progressWidgetLines(kind: WorkspaceCommandKind, progress: SemanticWorks
 		.map(([reason, count]) => `${reason} ${count}`)
 		.join(", ");
 	if (topSkipReasons) lines.push(`Skip reasons: ${topSkipReasons}`);
+	if (progress.embeddingRequestsTotal != null) {
+		lines.push(`Embedding reqs: ${progress.embeddingRequestsCompleted ?? 0}/${progress.embeddingRequestsTotal}`);
+	}
+	if (progress.embeddingTextsPerSecond != null) {
+		lines.push(`Embed throughput: ${Math.round(progress.embeddingTextsPerSecond)} texts/s`);
+	}
+	if (progress.dbInsertBatchesTotal != null) {
+		lines.push(`DB inserts: ${progress.dbInsertBatchesCompleted ?? 0}/${progress.dbInsertBatchesTotal}`);
+	}
+	if (progress.dbInsertMsPerBatchAvg != null) {
+		lines.push(`DB insert avg: ${progress.dbInsertMsPerBatchAvg}ms/batch`);
+	}
 	if (progress.embeddingBatchesTotal != null) {
 		lines.push(`Embedding batches: ${progress.embeddingBatchesCompleted ?? 0}/${progress.embeddingBatchesTotal}`);
 	}
@@ -192,7 +227,7 @@ function buildCompletionSummary(
 ): string {
 	const elapsed = formatDuration(progress?.elapsedMs);
 	if (kind === "init") {
-		return `Semantic workspace initialized for ${cwd}${elapsed === "--" ? "" : ` in ${elapsed}`}.`;
+		return `Semantic workspace configured for ${cwd}${elapsed === "--" ? "" : ` in ${elapsed}`}; not indexed yet. Run /workspace-sync next.`;
 	}
 	const details = [
 		progress?.changedFiles != null
@@ -330,13 +365,17 @@ export default function semanticWorkspaceExtension(pi: ExtensionAPI): void {
 
 	pi.registerCommand("workspace-init", {
 		description: "Initialize semantic workspace for the current project",
-		handler: async (_args, ctx) =>
-			runWorkspaceCommand(pi, ctx, "init", (onProgress) => initSemanticWorkspace(ctx.cwd, onProgress)),
+		handler: async (args, ctx) =>
+			runWorkspaceCommand(pi, ctx, "init", (onProgress) =>
+				initSemanticWorkspace(ctx.cwd, onProgress, parseWorkspaceInitArgs(args)),
+			),
 	});
 	pi.registerCommand("sync-init", {
 		description: "Alias for /workspace-init",
-		handler: async (_args, ctx) =>
-			runWorkspaceCommand(pi, ctx, "init", (onProgress) => initSemanticWorkspace(ctx.cwd, onProgress)),
+		handler: async (args, ctx) =>
+			runWorkspaceCommand(pi, ctx, "init", (onProgress) =>
+				initSemanticWorkspace(ctx.cwd, onProgress, parseWorkspaceInitArgs(args)),
+			),
 	});
 
 	pi.registerCommand("workspace-sync", {
