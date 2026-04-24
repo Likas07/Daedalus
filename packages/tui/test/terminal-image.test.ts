@@ -2,8 +2,8 @@
  * Tests for terminal image detection and line handling
  */
 
+import { describe, it } from "bun:test";
 import assert from "node:assert";
-import { describe, it } from "node:test";
 import { isImageLine } from "../src/terminal-image.js";
 
 describe("isImageLine", () => {

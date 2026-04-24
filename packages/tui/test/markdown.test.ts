@@ -1,5 +1,5 @@
+import { describe, it } from "bun:test";
 import assert from "node:assert";
-import { describe, it } from "node:test";
 import type { Terminal as XtermTerminalType } from "@xterm/headless";
 import { Chalk } from "chalk";
 import { Markdown } from "../src/components/markdown.js";
@@ -592,6 +592,8 @@ describe("Markdown component", () => {
 			const component = new MarkdownWithInput(markdown);
 			tui.addChild(component);
 			tui.start();
+			tui.requestRender(true);
+			await new Promise((r) => process.nextTick(r));
 			await terminal.flush();
 
 			assert.ok(component.markdownLineCount > 0);

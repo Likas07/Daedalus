@@ -1,5 +1,5 @@
+import { describe, it } from "bun:test";
 import assert from "node:assert";
-import { describe, it } from "node:test";
 import { type Component, TUI } from "../src/tui.js";
 import { VirtualTerminal } from "./virtual-terminal.js";
 
@@ -33,6 +33,7 @@ describe("TUI overlay with short content", () => {
 
 		// Trigger render
 		tui.start();
+		tui.requestRender(true);
 		await new Promise((r) => process.nextTick(r));
 		await terminal.flush();
 

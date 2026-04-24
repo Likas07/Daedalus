@@ -12,8 +12,8 @@
  * 2. That the fix works correctly
  */
 
+import { describe, it } from "bun:test";
 import assert from "node:assert";
-import { describe, it } from "node:test";
 
 describe("Bug regression: isImageLine() crash with image escape sequences", () => {
 	describe("Bug scenario: Terminal without image support", () => {

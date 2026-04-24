@@ -1,5 +1,5 @@
+import { describe, it } from "bun:test";
 import assert from "node:assert";
-import { describe, it } from "node:test";
 import type { Terminal as XtermTerminalType } from "@xterm/headless";
 import { type Component, TUI } from "../src/tui.js";
 import { VirtualTerminal } from "./virtual-terminal.js";

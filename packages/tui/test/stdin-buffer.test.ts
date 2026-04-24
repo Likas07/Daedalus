@@ -5,8 +5,8 @@
  * MIT License - Copyright (c) 2025 opentui
  */
 
+import { beforeEach, describe, it } from "bun:test";
 import assert from "node:assert";
-import { beforeEach, describe, it } from "node:test";
 import { StdinBuffer } from "../src/stdin-buffer.js";
 
 describe("StdinBuffer", () => {

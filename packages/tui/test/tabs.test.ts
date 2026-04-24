@@ -1,5 +1,5 @@
+import { describe, it } from "bun:test";
 import assert from "node:assert";
-import { describe, it } from "node:test";
 import { Tabs } from "../src/components/tabs.js";
 import type { Component } from "../src/tui.js";
 
