@@ -7,31 +7,26 @@ describe("role-aware performance tuning", () => {
 		const sage = agents.find((agent) => agent.name === "sage");
 		const muse = agents.find((agent) => agent.name === "muse");
 		expect(sage?.toolPolicy?.allowedTools).toEqual(expect.arrayContaining(["sem_search", "fs_search", "todo_read"]));
-		expect(sage?.toolPolicy?.allowedTools).toEqual(
-			expect.arrayContaining(["sem_workspace_status", "sem_workspace_init", "sem_workspace_sync"]),
-		);
+		expect(sage?.toolPolicy?.allowedTools).not.toContain("sem_workspace_status");
+		expect(sage?.toolPolicy?.allowedTools).not.toContain("sem_workspace_init");
+		expect(sage?.toolPolicy?.allowedTools).not.toContain("sem_workspace_sync");
 		expect(sage?.toolPolicy?.allowedTools).not.toContain("todo_write");
 		expect(sage?.toolPolicy?.allowedTools).not.toContain("bash");
 		expect(muse?.toolPolicy?.allowedTools).toEqual(
-			expect.arrayContaining([
-				"sem_search",
-				"fs_search",
-				"sem_workspace_status",
-				"sem_workspace_init",
-				"sem_workspace_sync",
-				"todo_read",
-				"todo_write",
-				"execute_plan",
-			]),
+			expect.arrayContaining(["sem_search", "fs_search", "todo_read", "todo_write", "execute_plan"]),
 		);
+		expect(muse?.toolPolicy?.allowedTools).not.toContain("sem_workspace_status");
+		expect(muse?.toolPolicy?.allowedTools).not.toContain("sem_workspace_init");
+		expect(muse?.toolPolicy?.allowedTools).not.toContain("sem_workspace_sync");
 	});
 
 	it("tunes worker toward exact search and narrow task-state access while reviewer behavior is absorbed elsewhere", () => {
 		const agents = getBundledStarterAgents();
 		const worker = agents.find((agent) => agent.name === "worker");
 		expect(worker?.toolPolicy?.allowedTools).toEqual(
-			expect.arrayContaining(["fs_search", "todo_read", "todo_write", "execute_plan", "sem_workspace_status"]),
+			expect.arrayContaining(["fs_search", "todo_read", "todo_write", "execute_plan"]),
 		);
+		expect(worker?.toolPolicy?.allowedTools).not.toContain("sem_workspace_status");
 		expect(agents.some((agent) => agent.name === "reviewer")).toBe(false);
 	});
 

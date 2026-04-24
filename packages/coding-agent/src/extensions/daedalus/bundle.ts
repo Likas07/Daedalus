@@ -4,6 +4,7 @@ import confirmDestructive from "./safety/confirm-destructive.js";
 import dirtyRepoGuard from "./safety/dirty-repo-guard.js";
 import permissionGate from "./safety/permission-gate.js";
 import protectedPaths from "./safety/protected-paths.js";
+import contextProfile from "./tools/context-profile/index.js";
 import dynamicTools from "./tools/dynamic-tools.js";
 import fsSearch from "./tools/fs-search.js";
 import question from "./tools/question.js";
@@ -42,6 +43,7 @@ export default function daedalusBundle(pi: ExtensionAPI) {
 	semanticWorkspaceTools(pi);
 	truncatedTool(pi);
 	tools(pi);
+	contextProfile(pi);
 
 	skill(pi);
 	statusDashboard(pi);

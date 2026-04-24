@@ -31,7 +31,8 @@ describe("subagent system prompt", () => {
 		});
 
 		expect(prompt).toContain("Execution contract: use { task, status, summary, output }.");
-		expect(prompt.indexOf("Execution contract: use { task, status, summary, output }."))
-			.toBeLessThan(prompt.indexOf("Delegated task packet:"));
+		expect(prompt.indexOf("Execution contract: use { task, status, summary, output }.")).toBeLessThan(
+			prompt.indexOf("Delegated task packet:"),
+		);
 	});
 });

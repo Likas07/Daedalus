@@ -23,7 +23,9 @@ describe("legacy subagent artifact cleanup", () => {
 		];
 
 		for (const artifact of legacyArtifacts) {
-			expect(fs.existsSync(new URL(`../src/extensions/daedalus/workflow/subagents/agents/${artifact}`, import.meta.url))).toBe(false);
+			expect(
+				fs.existsSync(new URL(`../src/extensions/daedalus/workflow/subagents/agents/${artifact}`, import.meta.url)),
+			).toBe(false);
 		}
 	});
 });

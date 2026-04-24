@@ -8,7 +8,10 @@ import { createAgentSession } from "../src/core/sdk.js";
 import { SessionManager } from "../src/core/session-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
 
-function appendTodoState(sessionManager: SessionManager, todos: Array<{ id: string; content: string; status: string }>): void {
+function appendTodoState(
+	sessionManager: SessionManager,
+	todos: Array<{ id: string; content: string; status: string }>,
+): void {
 	sessionManager.appendMessage({
 		role: "toolResult",
 		toolCallId: `todo-${Date.now()}-${Math.random().toString(36).slice(2)}`,

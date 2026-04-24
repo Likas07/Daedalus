@@ -12,7 +12,7 @@ export interface RecentSession {
  * Inspired by OhMyPi's WelcomeComponent, adapted for Daedalus aesthetics.
  */
 export class WelcomeComponent implements Component {
-	private recentSessions: RecentSession[];
+	public recentSessions: RecentSession[];
 
 	constructor(
 		private readonly version: string,

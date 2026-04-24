@@ -1,4 +1,6 @@
-export function getOrchestratorGuidance(subagents: Array<{ name: string; displayName?: string; description?: string }>): string {
+export function getOrchestratorGuidance(
+	subagents: Array<{ name: string; displayName?: string; description?: string }>,
+): string {
 	const roster = subagents
 		.map(
 			(agent) =>

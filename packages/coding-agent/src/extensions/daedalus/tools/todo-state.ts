@@ -136,10 +136,7 @@ export function mergeTodoLists(existing: TodoItem[], updates: TodoItem[]): TodoW
 		if (!replacement) {
 			return todo;
 		}
-		if (
-			replacement.content !== todo.content ||
-			replacement.status !== todo.status
-		) {
+		if (replacement.content !== todo.content || replacement.status !== todo.status) {
 			changes.push({ kind: "updated", id: todo.id, before: todo, after: replacement });
 		}
 		return replacement;
@@ -167,10 +164,7 @@ export function replaceTodoList(existing: TodoItem[], replacement: TodoItem[]): 
 			changes.push({ kind: "removed", id: todo.id, before: todo, after: null });
 			continue;
 		}
-		if (
-			replacementTodo.content !== todo.content ||
-			replacementTodo.status !== todo.status
-		) {
+		if (replacementTodo.content !== todo.content || replacementTodo.status !== todo.status) {
 			changes.push({ kind: "updated", id: todo.id, before: todo, after: replacementTodo });
 		}
 	}
@@ -247,7 +241,8 @@ export function extractTodoSnapshotFromCustomEntry(customType: string, data: unk
 	if (!data || typeof data !== "object") {
 		return undefined;
 	}
-	const maybeTodos = (data as { todos?: unknown; planTodos?: unknown }).todos ?? (data as { planTodos?: unknown }).planTodos;
+	const maybeTodos =
+		(data as { todos?: unknown; planTodos?: unknown }).todos ?? (data as { planTodos?: unknown }).planTodos;
 	if (!Array.isArray(maybeTodos)) {
 		return undefined;
 	}
@@ -277,8 +272,19 @@ export function formatActiveTodoReminder(todos: TodoItem[]): string {
 	if (active.length === 0) {
 		return "";
 	}
-	const lines = active.map((todo, index) => `${index + 1}. [${todo.status}] ${todo.content} (${todo.id})`);
-	return `You still have unfinished todo items. Continue working instead of concluding yet. Remaining active todos:\n${lines.join("\n")}`;
+	const lines = active.map((todo) => `- [${todo.status.toUpperCase()}] ${todo.content}`);
+	return `You have pending todo items that must be completed before finishing the task:\n\n${lines.join("\n")}\n\nComplete these before yielding.`;
+}
+
+export function formatCurrentTaskList(todos: TodoItem[]): string {
+	if (todos.length === 0) {
+		return "**Current task list:**";
+	}
+	const lines = todos.map((todo) => {
+		const status = todo.status === "completed" ? "DONE" : todo.status.toUpperCase();
+		return `- [${status}] ${todo.content}`;
+	});
+	return `**Current task list:**\n\n${lines.join("\n")}`;
 }
 
 export function toLegacyView(todos: TodoItem[]): LegacyTodo[] {
@@ -297,8 +303,9 @@ export function toggleLegacyTodo(todos: TodoItem[], legacyId: number): TodoWrite
 		throw new Error(`Todo #${legacyId} not found`);
 	}
 	const nextStatus: TodoItem["status"] = existing.status === "completed" ? "pending" : "completed";
-	const next = current.map((todo, todoIndex) =>
-		todoIndex === index ? { ...todo, status: nextStatus } : todo,
+	const next = current.map((todo, todoIndex) => (todoIndex === index ? { ...todo, status: nextStatus } : todo));
+	return mergeTodoLists(
+		current,
+		next.filter((_, todoIndex) => todoIndex === index),
 	);
-	return mergeTodoLists(current, next.filter((_, todoIndex) => todoIndex === index));
 }

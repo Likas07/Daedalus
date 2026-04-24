@@ -1,12 +1,12 @@
 import type { ThinkingLevel } from "@daedalus-pi/agent-core";
 import type { Transport } from "@daedalus-pi/ai";
+import { Container, getCapabilities, SettingsList, Tabs } from "@daedalus-pi/tui";
 import type {
 	SubagentBranchIsolationThreshold,
 	SubagentDelegationAggressiveness,
 	SubagentExecutionModePreference,
 	SubagentIsolationPreference,
 } from "../../../core/settings-schema.js";
-import { Container, getCapabilities, SettingsList, Tabs } from "@daedalus-pi/tui";
 import { getSettingsListTheme, getTabsTheme } from "../theme/theme.js";
 import { DynamicBorder } from "./dynamic-border.js";
 import { buildSettingsSections } from "./settings-sections.js";

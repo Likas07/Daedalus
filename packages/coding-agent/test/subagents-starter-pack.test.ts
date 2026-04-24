@@ -207,7 +207,9 @@ describe("starter-pack subagent extension", () => {
 		expect(textContent?.text ?? "").toContain(
 			"Use Muse when the task needs decomposition or dependency-aware sequencing.",
 		);
-		expect(textContent?.text ?? "").toContain("Keep final synthesis in Daedalus; subagents return scoped lightweight references.");
+		expect(textContent?.text ?? "").toContain(
+			"Keep final synthesis in Daedalus; subagents return scoped lightweight references.",
+		);
 		expect(textContent?.text ?? "").toContain("Use summary first when consuming subagent results.");
 		expect(textContent?.text ?? "").toContain("read_agent_result_output(result_id)");
 		expect(textContent?.text ?? "").toContain("Avoid duplicate or overly granular delegations.");
@@ -582,7 +584,9 @@ describe("starter-pack subagent extension", () => {
 				note: "If you want the full output, use read_agent_result_output(run-1).",
 			}),
 		});
-		expect(JSON.stringify(result.content[0])).not.toContain("focused implementation specialist who finishes the task fully");
+		expect(JSON.stringify(result.content[0])).not.toContain(
+			"focused implementation specialist who finishes the task fully",
+		);
 	});
 
 	it("does not let the worker identify itself as Daedalus when asked directly", async () => {

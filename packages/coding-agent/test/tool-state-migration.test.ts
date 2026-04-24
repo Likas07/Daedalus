@@ -72,7 +72,15 @@ describe("tool state migration", () => {
 		expect(session.getActiveToolNames()).toEqual(["read", "bash", "grep", "find", "ls", "questionnaire"]);
 
 		await session.prompt("/plan");
-		expect(session.getActiveToolNames()).toEqual(["read", "bash", "hashline_edit", "write", "todo_read", "todo_write", "execute_plan"]);
+		expect(session.getActiveToolNames()).toEqual([
+			"read",
+			"bash",
+			"hashline_edit",
+			"write",
+			"todo_read",
+			"todo_write",
+			"execute_plan",
+		]);
 
 		session.dispose();
 	});

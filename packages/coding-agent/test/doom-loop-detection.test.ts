@@ -8,7 +8,10 @@ import { createAgentSession } from "../src/core/sdk.js";
 import { SessionManager } from "../src/core/session-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
 
-function appendTodoState(sessionManager: SessionManager, todos: Array<{ id: string; content: string; status: string }>): void {
+function appendTodoState(
+	sessionManager: SessionManager,
+	todos: Array<{ id: string; content: string; status: string }>,
+): void {
 	sessionManager.appendMessage({
 		role: "toolResult",
 		toolCallId: `todo-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -90,11 +93,7 @@ describe("doom-loop detection", () => {
 
 	it("does not warn when active work signature changes between attempts", async () => {
 		const faux = registerFauxProvider();
-		faux.setResponses([
-			fauxAssistantMessage("Done?"),
-			fauxAssistantMessage("Done?"),
-			fauxAssistantMessage("Done?"),
-		]);
+		faux.setResponses([fauxAssistantMessage("Done?"), fauxAssistantMessage("Done?"), fauxAssistantMessage("Done?")]);
 		const authStorage = AuthStorage.inMemory();
 		authStorage.setRuntimeApiKey(faux.getModel().provider, "faux-key");
 		const settingsManager = SettingsManager.inMemory({ pendingWork: { enabled: true } });

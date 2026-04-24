@@ -92,8 +92,8 @@ function createInspectorComponent(
 		const action = model.actions[index];
 		if (!action) return;
 		await runInspectorAction(ctx, model, action);
-			if (action.kind === "open-child" || action.kind === "back-to-parent") {
-				done(undefined);
+		if (action.kind === "open-child" || action.kind === "back-to-parent") {
+			done(undefined);
 			return;
 		}
 		refresh();

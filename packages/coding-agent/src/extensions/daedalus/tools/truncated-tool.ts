@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
+import { type ExtensionAPI, formatVisiblePath } from "@daedalus-pi/coding-agent";
 import { Text } from "@daedalus-pi/tui";
 import { Type } from "@sinclair/typebox";
 import {
@@ -142,7 +142,7 @@ export default function (pi: ExtensionAPI) {
 				}
 
 				if (details.fullOutputPath) {
-					text += `\n${theme.fg("dim", `Full output: ${details.fullOutputPath}`)}`;
+					text += `\n${theme.fg("dim", `Full output: ${formatVisiblePath(details.fullOutputPath)}`)}`;
 				}
 			}
 

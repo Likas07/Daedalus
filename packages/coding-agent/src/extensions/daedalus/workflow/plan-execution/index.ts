@@ -1,12 +1,14 @@
+import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
 import { Text } from "@daedalus-pi/tui";
 import { Type } from "@sinclair/typebox";
-import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
 import { extractTodoSnapshotFromCustomEntry, type TodoSnapshot } from "../../tools/todo-state.js";
 import { hasUnfinishedPlanWork, initializePlanExecution, loadPlanArtifact, resumePlanExecution } from "./shared.js";
 
 const ExecutePlanParams = Type.Object({
 	path: Type.String({ description: "Path to a markdown plan artifact containing a numbered Plan: section" }),
-	resume: Type.Optional(Type.Boolean({ description: "Resume matching completed steps from existing execution state" })),
+	resume: Type.Optional(
+		Type.Boolean({ description: "Resume matching completed steps from existing execution state" }),
+	),
 });
 
 function summarizeExecution(result: ReturnType<typeof initializePlanExecution>): string {
@@ -27,7 +29,9 @@ export default function planExecutionExtension(pi: ExtensionAPI): void {
 			if (entry.type === "message") {
 				const msg = entry.message;
 				if (msg.role === "toolResult" && msg.toolName === "execute_plan") {
-					const details = msg.details as { todos?: TodoSnapshot["todos"]; summary?: TodoSnapshot["summary"] } | undefined;
+					const details = msg.details as
+						| { todos?: TodoSnapshot["todos"]; summary?: TodoSnapshot["summary"] }
+						| undefined;
 					if (details?.todos && details.summary) {
 						latestExecution = { todos: details.todos, summary: details.summary };
 					}
@@ -42,7 +46,8 @@ export default function planExecutionExtension(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "execute_plan",
 		label: "Execute Plan",
-		description: "Load a plan artifact, convert it into structured execution state, and initialize/resume tracked progress.",
+		description:
+			"Load a plan artifact, convert it into structured execution state, and initialize/resume tracked progress.",
 		promptSnippet: "Initialize or resume structured execution from a markdown plan artifact",
 		promptGuidelines: [
 			"Use execute_plan when a plan artifact should become active tracked execution state.",

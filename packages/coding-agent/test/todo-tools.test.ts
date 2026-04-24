@@ -8,7 +8,10 @@ import { SessionManager } from "../src/core/session-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
 
 function getText(result: any): string {
-	return result.content.filter((block: any) => block.type === "text").map((block: any) => block.text).join("\n");
+	return result.content
+		.filter((block: any) => block.type === "text")
+		.map((block: any) => block.text)
+		.join("\n");
 }
 
 describe("todo_read/todo_write tools", () => {

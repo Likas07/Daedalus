@@ -2,7 +2,13 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildTaskPacket, type SubagentDefinition, readPersistedSubagentResult, SubagentRegistry, SubagentRunner } from "../src/core/subagents/index.js";
+import {
+	buildTaskPacket,
+	readPersistedSubagentResult,
+	type SubagentDefinition,
+	SubagentRegistry,
+	SubagentRunner,
+} from "../src/core/subagents/index.js";
 
 const worker: SubagentDefinition = {
 	name: "worker",

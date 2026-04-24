@@ -31,7 +31,13 @@ describe("plan-mode / todo convergence", () => {
 			],
 			summary: { total: 2, active: 1, pending: 0, in_progress: 1, completed: 1, cancelled: 0 },
 		});
-		const { session } = await createAgentSession({ cwd: tempDir, agentDir, model: getModel("anthropic", "claude-sonnet-4-5")!, settingsManager, sessionManager });
+		const { session } = await createAgentSession({
+			cwd: tempDir,
+			agentDir,
+			model: getModel("anthropic", "claude-sonnet-4-5")!,
+			settingsManager,
+			sessionManager,
+		});
 		await session.bindExtensions({});
 
 		const todoRead = session.getToolDefinition("todo_read");
@@ -55,7 +61,13 @@ describe("plan-mode / todo convergence", () => {
 				{ id: "plan-step-2", content: "Implement refresh", status: "pending" },
 			],
 		});
-		const { session } = await createAgentSession({ cwd: tempDir, agentDir, model: getModel("anthropic", "claude-sonnet-4-5")!, settingsManager, sessionManager });
+		const { session } = await createAgentSession({
+			cwd: tempDir,
+			agentDir,
+			model: getModel("anthropic", "claude-sonnet-4-5")!,
+			settingsManager,
+			sessionManager,
+		});
 		await session.bindExtensions({});
 
 		const todoRead = session.getToolDefinition("todo_read");

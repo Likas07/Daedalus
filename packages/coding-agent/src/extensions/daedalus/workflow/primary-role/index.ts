@@ -1,6 +1,7 @@
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@daedalus-pi/coding-agent";
-import sagePrimaryPrompt from "./prompts/sage-primary.md" with { type: "text" };
+import { applySemanticToolExposure, rememberSemanticDesiredTools } from "../../tools/semantic-tool-availability.js";
 import musePrimaryPrompt from "./prompts/muse-primary.md" with { type: "text" };
+import sagePrimaryPrompt from "./prompts/sage-primary.md" with { type: "text" };
 
 type PrimaryRoleMode = "daedalus" | "sage" | "muse";
 
@@ -17,9 +18,6 @@ const SAGE_TOOLS = [
 	"ls",
 	"fs_search",
 	"sem_search",
-	"sem_workspace_status",
-	"sem_workspace_init",
-	"sem_workspace_sync",
 	"read_agent_result_output",
 	"todo_read",
 	"status_overview",
@@ -34,9 +32,6 @@ const MUSE_TOOLS = [
 	"ls",
 	"fs_search",
 	"sem_search",
-	"sem_workspace_status",
-	"sem_workspace_init",
-	"sem_workspace_sync",
 	"read_agent_result_output",
 	"todo_read",
 	"todo_write",
@@ -79,10 +74,14 @@ export default function primaryRoleMode(pi: ExtensionAPI): void {
 	function applyRoleMode(ctx?: ExtensionContext | ExtensionCommandContext): void {
 		const toolList = toolsForRole(currentRole);
 		if (toolList) {
-			pi.setActiveTools(toolList);
+			rememberSemanticDesiredTools(toolList);
+			pi.setActiveTools(ctx ? applySemanticToolExposure(toolList, ctx.cwd) : toolList);
 		}
 		if (ctx?.hasUI) {
-			ctx.ui.setStatus("primary-role-mode", currentRole === "daedalus" ? undefined : ctx.ui.theme.fg("accent", `role:${currentRole}`));
+			ctx.ui.setStatus(
+				"primary-role-mode",
+				currentRole === "daedalus" ? undefined : ctx.ui.theme.fg("accent", `role:${currentRole}`),
+			);
 		}
 	}
 
@@ -93,7 +92,8 @@ export default function primaryRoleMode(pi: ExtensionAPI): void {
 			.filter((entry) => entry.type === "custom" && entry.customType === "primary-role-mode")
 			.at(-1) as { data?: { role?: string; baselineTools?: string[] } } | undefined;
 		const flagged = pi.getFlag("role");
-		const fromFlag = typeof flagged === "string" && isPrimaryRoleMode(flagged) && flagged !== "daedalus" ? flagged : undefined;
+		const fromFlag =
+			typeof flagged === "string" && isPrimaryRoleMode(flagged) && flagged !== "daedalus" ? flagged : undefined;
 		const fromSession = latest?.data?.role && isPrimaryRoleMode(latest.data.role) ? latest.data.role : undefined;
 		currentRole = fromFlag ?? fromSession ?? "daedalus";
 		baselineTools = latest?.data?.baselineTools ?? baselineTools;
@@ -124,7 +124,15 @@ export default function primaryRoleMode(pi: ExtensionAPI): void {
 			currentRole = requested;
 			applyRoleMode(ctx);
 			persistRoleMode();
-			pi.sendMessage({ customType: "primary-role-mode", content: `Primary role switched to ${PRIMARY_ROLE_LABELS[currentRole]}.`, display: true, details: { role: currentRole } }, { triggerTurn: false });
+			pi.sendMessage(
+				{
+					customType: "primary-role-mode",
+					content: `Primary role switched to ${PRIMARY_ROLE_LABELS[currentRole]}.`,
+					display: true,
+					details: { role: currentRole },
+				},
+				{ triggerTurn: false },
+			);
 		},
 	});
 

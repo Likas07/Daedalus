@@ -1,7 +1,12 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { TodoItem } from "../../tools/todo-state.js";
-import { createTodoSnapshot, replaceTodoList, type TodoSnapshot, type TodoWriteResult } from "../../tools/todo-state.js";
+import {
+	createTodoSnapshot,
+	replaceTodoList,
+	type TodoSnapshot,
+	type TodoWriteResult,
+} from "../../tools/todo-state.js";
 
 export interface PlanArtifactStep {
 	step: number;
@@ -84,7 +89,10 @@ export function planArtifactToTodos(plan: PlanArtifact): TodoItem[] {
 	}));
 }
 
-export function initializePlanExecution(plan: PlanArtifact, existing?: TodoSnapshot): TodoWriteResult & { plan: PlanArtifact } {
+export function initializePlanExecution(
+	plan: PlanArtifact,
+	existing?: TodoSnapshot,
+): TodoWriteResult & { plan: PlanArtifact } {
 	const base = planArtifactToTodos(plan);
 	const existingById = new Map(existing?.todos.map((todo) => [todo.id, todo.status]) ?? []);
 	const resumed = base.map((todo) => {

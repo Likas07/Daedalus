@@ -5,20 +5,7 @@ import { parseFrontmatter } from "../../../../utils/frontmatter.js";
 const mdGlob = "**/*.md";
 const toolPolicies: Record<string, SubagentDefinition["toolPolicy"]> = {
 	sage: {
-		allowedTools: [
-			"read",
-			"grep",
-			"find",
-			"ls",
-			"fs_search",
-			"sem_search",
-			"sem_workspace_status",
-			"sem_workspace_init",
-			"sem_workspace_sync",
-			"todo_read",
-			"write",
-			"hashline_edit",
-		],
+		allowedTools: ["read", "grep", "find", "ls", "fs_search", "sem_search", "todo_read", "write", "hashline_edit"],
 		writableGlobs: [mdGlob],
 		spawns: [],
 		maxDepth: 1,
@@ -31,9 +18,6 @@ const toolPolicies: Record<string, SubagentDefinition["toolPolicy"]> = {
 			"ls",
 			"fs_search",
 			"sem_search",
-			"sem_workspace_status",
-			"sem_workspace_init",
-			"sem_workspace_sync",
 			"todo_read",
 			"todo_write",
 			"execute_plan",
@@ -49,7 +33,6 @@ const toolPolicies: Record<string, SubagentDefinition["toolPolicy"]> = {
 		allowedTools: [
 			"read",
 			"bash",
-			"sem_workspace_status",
 			"todo_read",
 			"todo_write",
 			"hashline_edit",

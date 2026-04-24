@@ -11,7 +11,8 @@ export default function readAgentResultOutput(pi: ExtensionAPI): void {
 		name: "read_agent_result_output",
 		label: "Read Agent Result Output",
 		description: "Read the deferred full output body for a previously completed subagent result by result_id.",
-		promptSnippet: "Read the deferred full output body for a subagent result when the summary reference is not enough.",
+		promptSnippet:
+			"Read the deferred full output body for a subagent result when the summary reference is not enough.",
 		parameters: Params,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const result = await getAgentResultOutput({

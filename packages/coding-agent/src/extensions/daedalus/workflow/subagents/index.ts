@@ -110,6 +110,11 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 		label: "Subagent",
 		description: "Run a bundled or discovered subagent with a compact task packet.",
 		promptSnippet: "Delegate a focused sub-task to an available specialist.",
+		promptGuidelines: [
+			"Do not launch subagents for initial codebase exploration or simple lookups. Use sem_search first.",
+			"When launching multiple independent tasks, call subagent once per independent task in parallel (single assistant message, multiple tool calls).",
+			"Keep Daedalus summary-first result semantics: inspect the returned summary/reference first and read deferred full output only when needed.",
+		],
 		parameters: Type.Object({
 			agent: Type.String(),
 			goal: Type.String(),
@@ -170,15 +175,17 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 				},
 			});
 
-			const visibleContent = JSON.stringify(result.reference ?? {
-				result_id: result.resultId ?? result.runId,
-				agent_id: result.agent,
-				conversation_id: result.conversationId ?? result.childSessionFile,
-				task: result.task ?? params.goal,
-				status: result.status,
-				summary: result.summary,
-				note: `If you want the full output, use read_agent_result_output(${result.resultId ?? result.runId}).`,
-			});
+			const visibleContent = JSON.stringify(
+				result.reference ?? {
+					result_id: result.resultId ?? result.runId,
+					agent_id: result.agent,
+					conversation_id: result.conversationId ?? result.childSessionFile,
+					task: result.task ?? params.goal,
+					status: result.status,
+					summary: result.summary,
+					note: `If you want the full output, use read_agent_result_output(${result.resultId ?? result.runId}).`,
+				},
+			);
 
 			return {
 				content: [{ type: "text", text: visibleContent }],

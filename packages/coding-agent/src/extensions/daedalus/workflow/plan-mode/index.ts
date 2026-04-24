@@ -6,9 +6,9 @@ import { createTodoSnapshot, type TodoItem as StructuredTodoItem } from "../../t
 import {
 	hasUnfinishedPlanWork,
 	markPlanStepsCompleted,
+	type PlanArtifact,
 	parsePlanArtifactText,
 	planArtifactToTodos,
-	type PlanArtifact,
 } from "../plan-execution/shared.js";
 import { extractDoneSteps, extractTodoItems, isSafeCommand } from "./utils.js";
 
@@ -68,7 +68,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		if (executionMode && planTodos.length > 0) {
 			const lines = planTodos.map((todo) => {
 				if (todo.status === "completed") {
-					return ctx.ui.theme.fg("success", "☑ ") + ctx.ui.theme.fg("muted", ctx.ui.theme.strikethrough(todo.content));
+					return (
+						ctx.ui.theme.fg("success", "☑ ") + ctx.ui.theme.fg("muted", ctx.ui.theme.strikethrough(todo.content))
+					);
 				}
 				if (todo.status === "in_progress") {
 					return `${ctx.ui.theme.fg("accent", "▶ ")}${todo.content}`;
@@ -116,7 +118,10 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 				return;
 			}
 			const list = planTodos
-				.map((todo, i) => `${i + 1}. ${todo.status === "completed" ? "✓" : todo.status === "in_progress" ? "▶" : "○"} ${todo.content}`)
+				.map(
+					(todo, i) =>
+						`${i + 1}. ${todo.status === "completed" ? "✓" : todo.status === "in_progress" ? "▶" : "○"} ${todo.content}`,
+				)
 				.join("\n");
 			ctx.ui.notify(`Plan Progress:\n${list}`, "info");
 		},
@@ -148,7 +153,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 				const content = msg.content;
 				if (typeof content === "string") return !content.includes("[PLAN MODE ACTIVE]");
 				if (Array.isArray(content)) {
-					return !content.some((c) => c.type === "text" && (c as TextContent).text?.includes("[PLAN MODE ACTIVE]"));
+					return !content.some(
+						(c) => c.type === "text" && (c as TextContent).text?.includes("[PLAN MODE ACTIVE]"),
+					);
 				}
 				return true;
 			}),
@@ -216,9 +223,17 @@ After completing a step, include a [DONE:n] tag in your response.`,
 
 	pi.on("agent_end", async (event, ctx) => {
 		if (executionMode && planTodos.length > 0) {
-			if (!hasUnfinishedPlanWork({ ...createTodoSnapshot(planTodos), plan: currentPlan ?? buildFallbackPlanFromTodos(planTodos) })) {
+			if (
+				!hasUnfinishedPlanWork({
+					...createTodoSnapshot(planTodos),
+					plan: currentPlan ?? buildFallbackPlanFromTodos(planTodos),
+				})
+			) {
 				const completedList = planTodos.map((todo) => `~~${todo.content}~~`).join("\n");
-				pi.sendMessage({ customType: "plan-complete", content: `**Plan Complete!** ✓\n\n${completedList}`, display: true }, { triggerTurn: false });
+				pi.sendMessage(
+					{ customType: "plan-complete", content: `**Plan Complete!** ✓\n\n${completedList}`, display: true },
+					{ triggerTurn: false },
+				);
 				executionMode = false;
 				currentPlan = undefined;
 				planTodos = [];
@@ -241,7 +256,14 @@ After completing a step, include a [DONE:n] tag in your response.`,
 
 		if (planTodos.length > 0) {
 			const todoListText = planTodos.map((todo, i) => `${i + 1}. ☐ ${todo.content}`).join("\n");
-			pi.sendMessage({ customType: "plan-todo-list", content: `**Plan Steps (${planTodos.length}):**\n\n${todoListText}`, display: true }, { triggerTurn: false });
+			pi.sendMessage(
+				{
+					customType: "plan-todo-list",
+					content: `**Plan Steps (${planTodos.length}):**\n\n${todoListText}`,
+					display: true,
+				},
+				{ triggerTurn: false },
+			);
 		}
 
 		const choice = await ctx.ui.select("Plan mode - what next?", [
@@ -256,8 +278,14 @@ After completing a step, include a [DONE:n] tag in your response.`,
 			pi.setActiveTools(NORMAL_MODE_TOOLS);
 			persistState();
 			updateStatus(ctx);
-			const execMessage = planTodos.length > 0 ? `Execute the plan. Start with: ${planTodos[0]?.content ?? "step 1"}` : "Execute the plan you just created.";
-			pi.sendMessage({ customType: "plan-mode-execute", content: execMessage, display: true }, { triggerTurn: true });
+			const execMessage =
+				planTodos.length > 0
+					? `Execute the plan. Start with: ${planTodos[0]?.content ?? "step 1"}`
+					: "Execute the plan you just created.";
+			pi.sendMessage(
+				{ customType: "plan-mode-execute", content: execMessage, display: true },
+				{ triggerTurn: true },
+			);
 		} else if (choice === "Refine the plan") {
 			const refinement = await ctx.ui.editor("Refine the plan:", "");
 			if (refinement?.trim()) pi.sendUserMessage(refinement.trim());
@@ -269,7 +297,9 @@ After completing a step, include a [DONE:n] tag in your response.`,
 		const entries = ctx.sessionManager.getEntries();
 		const planModeEntry = entries
 			.filter((e: { type: string; customType?: string }) => e.type === "custom" && e.customType === "plan-mode")
-			.pop() as { data?: { enabled?: boolean; executing?: boolean; plan?: PlanArtifact; planTodos?: StructuredTodoItem[] } } | undefined;
+			.pop() as
+			| { data?: { enabled?: boolean; executing?: boolean; plan?: PlanArtifact; planTodos?: StructuredTodoItem[] } }
+			| undefined;
 		if (planModeEntry?.data) {
 			planModeEnabled = planModeEntry.data.enabled ?? planModeEnabled;
 			executionMode = planModeEntry.data.executing ?? executionMode;

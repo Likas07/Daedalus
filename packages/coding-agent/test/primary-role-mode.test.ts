@@ -5,14 +5,17 @@ import { fauxAssistantMessage, registerFauxProvider } from "@daedalus-pi/ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.js";
 import { createAgentSession } from "../src/core/sdk.js";
-import { buildSubagentAppendPrompts } from "../src/core/subagents/runtime-config.js";
 import { SessionManager } from "../src/core/session-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
+import { buildSubagentAppendPrompts } from "../src/core/subagents/runtime-config.js";
 import { getBundledStarterAgents } from "../src/extensions/daedalus/workflow/subagents/bundled.js";
 
-function getTextContent(message: any): string {
+function _getTextContent(message: any): string {
 	if (!Array.isArray(message?.content)) return "";
-	return message.content.filter((block: any) => block.type === "text").map((block: any) => block.text).join("\n");
+	return message.content
+		.filter((block: any) => block.type === "text")
+		.map((block: any) => block.text)
+		.join("\n");
 }
 
 describe("primary role runtime mode", () => {
@@ -32,19 +35,29 @@ describe("primary role runtime mode", () => {
 	it("switches to Sage primary mode with read-only analysis doctrine and restricted tools", async () => {
 		const faux = registerFauxProvider();
 		let providerSystemPrompt = "";
-		faux.setResponses([(context) => {
-			providerSystemPrompt = context.systemPrompt ?? "";
-			return fauxAssistantMessage("sage primary ok");
-		}]);
+		faux.setResponses([
+			(context) => {
+				providerSystemPrompt = context.systemPrompt ?? "";
+				return fauxAssistantMessage("sage primary ok");
+			},
+		]);
 		const authStorage = AuthStorage.inMemory();
 		authStorage.setRuntimeApiKey(faux.getModel().provider, "faux-key");
 		const settingsManager = SettingsManager.create(tempDir, agentDir);
 		const sessionManager = SessionManager.inMemory();
-		const { session } = await createAgentSession({ cwd: tempDir, agentDir, model: faux.getModel(), authStorage, settingsManager, sessionManager });
+		const { session } = await createAgentSession({
+			cwd: tempDir,
+			agentDir,
+			model: faux.getModel(),
+			authStorage,
+			settingsManager,
+			sessionManager,
+		});
 		await session.bindExtensions({});
 
 		await session.prompt("/role sage");
-		expect(session.getActiveToolNames()).toEqual(expect.arrayContaining(["sem_search", "fs_search", "todo_read"]));
+		expect(session.getActiveToolNames()).toEqual(expect.arrayContaining(["fs_search", "todo_read"]));
+		expect(session.getActiveToolNames()).not.toContain("sem_search");
 		expect(session.getActiveToolNames()).not.toContain("write");
 		expect(session.getActiveToolNames()).not.toContain("hashline_edit");
 
@@ -61,15 +74,24 @@ describe("primary role runtime mode", () => {
 	it("switches to Muse primary mode with planning doctrine and execute_plan-capable toolset", async () => {
 		const faux = registerFauxProvider();
 		let providerSystemPrompt = "";
-		faux.setResponses([(context) => {
-			providerSystemPrompt = context.systemPrompt ?? "";
-			return fauxAssistantMessage("muse primary ok");
-		}]);
+		faux.setResponses([
+			(context) => {
+				providerSystemPrompt = context.systemPrompt ?? "";
+				return fauxAssistantMessage("muse primary ok");
+			},
+		]);
 		const authStorage = AuthStorage.inMemory();
 		authStorage.setRuntimeApiKey(faux.getModel().provider, "faux-key");
 		const settingsManager = SettingsManager.create(tempDir, agentDir);
 		const sessionManager = SessionManager.inMemory();
-		const { session } = await createAgentSession({ cwd: tempDir, agentDir, model: faux.getModel(), authStorage, settingsManager, sessionManager });
+		const { session } = await createAgentSession({
+			cwd: tempDir,
+			agentDir,
+			model: faux.getModel(),
+			authStorage,
+			settingsManager,
+			sessionManager,
+		});
 		await session.bindExtensions({});
 
 		await session.prompt("/role muse");
@@ -88,19 +110,32 @@ describe("primary role runtime mode", () => {
 	it("restores the selected primary role mode on session resume", async () => {
 		const faux = registerFauxProvider();
 		let providerSystemPrompt = "";
-		faux.setResponses([(context) => {
-			providerSystemPrompt = context.systemPrompt ?? "";
-			return fauxAssistantMessage("resumed sage ok");
-		}]);
+		faux.setResponses([
+			(context) => {
+				providerSystemPrompt = context.systemPrompt ?? "";
+				return fauxAssistantMessage("resumed sage ok");
+			},
+		]);
 		const authStorage = AuthStorage.inMemory();
 		authStorage.setRuntimeApiKey(faux.getModel().provider, "faux-key");
 		const settingsManager = SettingsManager.create(tempDir, agentDir);
 		const sessionManager = SessionManager.inMemory();
-		sessionManager.appendCustomEntry("primary-role-mode", { role: "sage", baselineTools: ["read", "bash", "hashline_edit", "write"] });
-		const { session } = await createAgentSession({ cwd: tempDir, agentDir, model: faux.getModel(), authStorage, settingsManager, sessionManager });
+		sessionManager.appendCustomEntry("primary-role-mode", {
+			role: "sage",
+			baselineTools: ["read", "bash", "hashline_edit", "write"],
+		});
+		const { session } = await createAgentSession({
+			cwd: tempDir,
+			agentDir,
+			model: faux.getModel(),
+			authStorage,
+			settingsManager,
+			sessionManager,
+		});
 		await session.bindExtensions({});
 
-		expect(session.getActiveToolNames()).toEqual(expect.arrayContaining(["sem_search", "todo_read"]));
+		expect(session.getActiveToolNames()).toEqual(expect.arrayContaining(["todo_read"]));
+		expect(session.getActiveToolNames()).not.toContain("sem_search");
 		expect(session.getActiveToolNames()).not.toContain("write");
 
 		await session.prompt("Resume the architecture analysis");

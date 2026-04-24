@@ -209,7 +209,10 @@ export class SubagentOverrideSelectorComponent extends Container {
 		}
 	}
 
-	private setRoleExecutionMode(roleName: string, executionModePreference: SubagentExecutionModePreference | undefined): void {
+	private setRoleExecutionMode(
+		roleName: string,
+		executionModePreference: SubagentExecutionModePreference | undefined,
+	): void {
 		if (executionModePreference) {
 			this.overrides[roleName] = { ...(this.overrides[roleName] ?? {}), executionModePreference };
 		} else if (this.overrides[roleName]) {
@@ -218,7 +221,10 @@ export class SubagentOverrideSelectorComponent extends Container {
 		}
 	}
 
-	private setRoleIsolationPreference(roleName: string, isolationPreference: SubagentIsolationPreference | undefined): void {
+	private setRoleIsolationPreference(
+		roleName: string,
+		isolationPreference: SubagentIsolationPreference | undefined,
+	): void {
 		if (isolationPreference) {
 			this.overrides[roleName] = { ...(this.overrides[roleName] ?? {}), isolationPreference };
 		} else if (this.overrides[roleName]) {

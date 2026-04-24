@@ -4,18 +4,19 @@ import { matchesKey, Text, truncateToWidth } from "@daedalus-pi/tui";
 import { Type } from "@sinclair/typebox";
 import { requireUI } from "../shared/ui.js";
 import {
-	TODO_STATUSES,
-	type TodoChange,
-	type TodoItem,
-	type TodoSnapshot,
 	activeTodos,
 	createTodoSnapshot,
 	extractTodoSnapshotFromCustomEntry,
 	extractTodoSnapshotFromDetails,
 	formatActiveTodoReminder,
+	formatCurrentTaskList,
 	mergeTodoLists,
 	replaceTodoList,
 	summarizeTodos,
+	TODO_STATUSES,
+	type TodoChange,
+	type TodoItem,
+	type TodoSnapshot,
 	toggleLegacyTodo,
 	toLegacyView,
 	validateTodoList,
@@ -30,7 +31,9 @@ const TodoItemSchema = Type.Object({
 const TodoReadParams = Type.Object({});
 const TodoWriteParams = Type.Object({
 	todos: Type.Array(TodoItemSchema, { description: "Ordered todo items to write" }),
-	merge: Type.Optional(Type.Boolean({ description: "When true, merge by id. When false or omitted, replace the whole list" })),
+	merge: Type.Optional(
+		Type.Boolean({ description: "When true, merge by id. When false or omitted, replace the whole list" }),
+	),
 });
 const LegacyTodoParams = Type.Object({
 	action: StringEnum(["list", "add", "toggle", "clear"] as const),
@@ -70,7 +73,6 @@ function themedTodoText(todo: TodoItem, theme: Theme): string {
 			return theme.fg("warning", todo.content);
 		case "in_progress":
 			return theme.fg("accent", todo.content);
-		case "pending":
 		default:
 			return theme.fg("text", todo.content);
 	}
@@ -87,6 +89,8 @@ function summarizeChanges(changes: TodoChange[]): string {
 					return `removed ${change.id}`;
 				case "updated":
 					return `updated ${change.id}`;
+				default:
+					return change.id;
 			}
 		})
 		.join(", ");
@@ -116,7 +120,11 @@ function snapshotToReadDetails(snapshot: TodoSnapshot): TodoReadDetails {
 	return { action: "read", ...snapshot };
 }
 
-function snapshotToWriteDetails(snapshot: TodoSnapshot, mode: "merge" | "replace", changes: TodoChange[]): TodoWriteDetails {
+function snapshotToWriteDetails(
+	snapshot: TodoSnapshot,
+	mode: "merge" | "replace",
+	changes: TodoChange[],
+): TodoWriteDetails {
 	return { action: "write", mode, changes, ...snapshot };
 }
 
@@ -216,6 +224,25 @@ export default function todoExtension(pi: ExtensionAPI) {
 	};
 
 	pi.on("session_start", async (_event, ctx) => reconstructState(ctx));
+	pi.on("session_start", async (event, ctx) => {
+		reconstructState(ctx);
+		if (event.reason !== "resume") {
+			return;
+		}
+		if (activeTodos(snapshot.todos).length === 0) {
+			return;
+		}
+		pi.sendMessage(
+			{
+				customType: "resume-current-task-list",
+				content: formatCurrentTaskList(snapshot.todos),
+				display: false,
+				details: { todos: snapshot.todos },
+				droppable: true,
+			},
+			{ triggerTurn: false },
+		);
+	});
 	pi.on("session_tree", async (_event, ctx) => reconstructState(ctx));
 
 	pi.registerTool({
@@ -252,6 +279,9 @@ export default function todoExtension(pi: ExtensionAPI) {
 		promptGuidelines: [
 			"Use todo_write with stable ids and statuses: pending, in_progress, completed, cancelled.",
 			"Use merge=true for incremental updates; omit it to replace the whole list.",
+			"Use todo_write frequently to plan and track multi-step tasks.",
+			"Mark todos complete ONLY after actually executing the implementation AND verifying it works.",
+			"Do not batch multiple completed tasks; mark as you go.",
 		],
 		parameters: TodoWriteParams,
 		async execute(_toolCallId, params) {
@@ -302,7 +332,8 @@ export default function todoExtension(pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "todo",
 		label: "Todo (legacy)",
-		description: "Legacy compatibility wrapper for todo_read/todo_write. Prefer the structured todo_read/todo_write tools.",
+		description:
+			"Legacy compatibility wrapper for todo_read/todo_write. Prefer the structured todo_read/todo_write tools.",
 		parameters: LegacyTodoParams,
 		async execute(_toolCallId, params) {
 			switch (params.action) {
@@ -310,7 +341,14 @@ export default function todoExtension(pi: ExtensionAPI) {
 					const legacyTodos = toLegacyView(snapshot.todos);
 					return {
 						content: [
-							{ type: "text", text: legacyTodos.length ? legacyTodos.map((todo) => `[${todo.done ? "x" : " "}] #${todo.id}: ${todo.text}`).join("\n") : "No todos" },
+							{
+								type: "text",
+								text: legacyTodos.length
+									? legacyTodos
+											.map((todo) => `[${todo.done ? "x" : " "}] #${todo.id}: ${todo.text}`)
+											.join("\n")
+									: "No todos",
+							},
 						],
 						details: { ...snapshotToWriteDetails(snapshot, "merge", []), action: "legacy" },
 					};
@@ -371,7 +409,9 @@ export default function todoExtension(pi: ExtensionAPI) {
 			if (!requireUI(ctx, "/todos")) {
 				return;
 			}
-			await ctx.ui.custom<void>((_tui, theme, _kb, done) => new TodoListComponent(snapshot.todos, theme, () => done()));
+			await ctx.ui.custom<void>(
+				(_tui, theme, _kb, done) => new TodoListComponent(snapshot.todos, theme, () => done()),
+			);
 		},
 	});
 
@@ -383,7 +423,8 @@ export default function todoExtension(pi: ExtensionAPI) {
 	});
 
 	pi.registerMessageRenderer("doom-loop-reminder", (message, _options, theme) => {
-		const content = typeof message.content === "string" ? message.content : "Detected repeated low-progress behavior.";
+		const content =
+			typeof message.content === "string" ? message.content : "Detected repeated low-progress behavior.";
 		return new Text(theme.fg("error", content), 0, 0);
 	});
 }

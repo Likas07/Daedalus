@@ -4,12 +4,21 @@ import { join } from "node:path";
 import { getModel } from "@daedalus-pi/ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createAgentSession } from "../src/core/sdk.js";
-import { initializePlanExecution, loadPlanArtifact, markPlanStepsCompleted, hasUnfinishedPlanWork, parsePlanArtifactText } from "../src/extensions/daedalus/workflow/plan-execution/shared.js";
 import { SessionManager } from "../src/core/session-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
+import {
+	hasUnfinishedPlanWork,
+	initializePlanExecution,
+	loadPlanArtifact,
+	markPlanStepsCompleted,
+	parsePlanArtifactText,
+} from "../src/extensions/daedalus/workflow/plan-execution/shared.js";
 
 function getText(result: any): string {
-	return result.content.filter((block: any) => block.type === "text").map((block: any) => block.text).join("\n");
+	return result.content
+		.filter((block: any) => block.type === "text")
+		.map((block: any) => block.text)
+		.join("\n");
 }
 
 describe("execute_plan primitive", () => {
@@ -23,10 +32,7 @@ describe("execute_plan primitive", () => {
 		mkdirSync(agentDir, { recursive: true });
 		mkdirSync(join(tempDir, "docs", "plans"), { recursive: true });
 		planPath = join(tempDir, "docs", "plans", "auth-plan.md");
-		writeFileSync(
-			planPath,
-			"Plan:\n1. Inspect auth flow\n2. Implement token refresh\n3. Add refresh tests\n",
-		);
+		writeFileSync(planPath, "Plan:\n1. Inspect auth flow\n2. Implement token refresh\n3. Add refresh tests\n");
 	});
 
 	afterEach(() => {
@@ -36,12 +42,24 @@ describe("execute_plan primitive", () => {
 	it("initializes execution state from a markdown plan artifact", async () => {
 		const settingsManager = SettingsManager.create(tempDir, agentDir);
 		const sessionManager = SessionManager.inMemory();
-		const { session } = await createAgentSession({ cwd: tempDir, agentDir, model: getModel("anthropic", "claude-sonnet-4-5")!, settingsManager, sessionManager });
+		const { session } = await createAgentSession({
+			cwd: tempDir,
+			agentDir,
+			model: getModel("anthropic", "claude-sonnet-4-5")!,
+			settingsManager,
+			sessionManager,
+		});
 		await session.bindExtensions({});
 		const executePlan = session.getToolDefinition("execute_plan");
 		expect(executePlan).toBeDefined();
 
-		const result = await executePlan!.execute("execute-plan-1", { path: "docs/plans/auth-plan.md" }, undefined, undefined, { cwd: tempDir } as any);
+		const result = await executePlan!.execute(
+			"execute-plan-1",
+			{ path: "docs/plans/auth-plan.md" },
+			undefined,
+			undefined,
+			{ cwd: tempDir } as any,
+		);
 		expect(getText(result)).toContain("Initialized plan execution");
 		expect(result.details.todos).toHaveLength(3);
 		expect(result.details.todos[0]).toMatchObject({ content: "Inspect auth flow", status: "in_progress" });

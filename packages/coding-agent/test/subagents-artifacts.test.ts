@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getSubagentArtifactPaths, readPersistedSubagentResult, SubagentRegistry, shouldSpillSubagentContext } from "../src/core/subagents/index.js";
+import {
+	getSubagentArtifactPaths,
+	readPersistedSubagentResult,
+	SubagentRegistry,
+	shouldSpillSubagentContext,
+} from "../src/core/subagents/index.js";
 
 describe("getSubagentArtifactPaths", () => {
 	it("stores child files under the parent session artifact directory", () => {

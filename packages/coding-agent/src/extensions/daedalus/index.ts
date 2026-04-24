@@ -9,6 +9,7 @@ export { default as protectedPaths } from "./safety/protected-paths.js";
 export { default as fileTrigger } from "./terminal/file-trigger.js";
 // Terminal extensions
 export { default as interactiveShell } from "./terminal/interactive-shell.js";
+export { default as contextProfile } from "./tools/context-profile/index.js";
 export { default as dynamicTools } from "./tools/dynamic-tools.js";
 export { default as fsSearch } from "./tools/fs-search.js";
 export { default as question } from "./tools/question.js";
