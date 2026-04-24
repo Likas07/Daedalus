@@ -1,8 +1,12 @@
+import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
 import { Text } from "@daedalus-pi/tui";
 import { Type } from "@sinclair/typebox";
-import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
-import { extractTodoSnapshotFromCustomEntry, extractTodoSnapshotFromDetails, type TodoSnapshot } from "../tools/todo-state.js";
 import { getSemanticWorkspaceStatus } from "../tools/semantic-workspace.js";
+import {
+	extractTodoSnapshotFromCustomEntry,
+	extractTodoSnapshotFromDetails,
+	type TodoSnapshot,
+} from "../tools/todo-state.js";
 
 const EmptyParams = Type.Object({});
 
@@ -38,7 +42,7 @@ function buildStatusText(input: {
 		`model: ${input.modelLabel ?? "unknown"}`,
 		`pending_messages: ${input.hasPendingMessages ? "yes" : "no"}`,
 		`semantic_workspace: ${workspace.state}`,
-		`semantic_indexed_files: ${workspace.indexedFiles}`,
+		`semantic_chunk_count: ${workspace.chunkCount}`,
 	];
 	if (todoSummary) {
 		lines.push(`todos_total: ${todoSummary.total}`);
@@ -52,7 +56,8 @@ export default function statusDashboard(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "status_overview",
 		label: "Status Overview",
-		description: "Show a compact daily-driver status overview: cwd, model, pending messages, semantic workspace readiness, and todo summary.",
+		description:
+			"Show a compact daily-driver status overview: cwd, model, pending messages, semantic workspace readiness, and todo summary.",
 		promptSnippet: "Inspect the current session/workspace status in one compact view",
 		parameters: EmptyParams,
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
@@ -63,7 +68,10 @@ export default function statusDashboard(pi: ExtensionAPI): void {
 				hasPendingMessages: ctx.hasPendingMessages(),
 				todoSnapshot,
 			});
-			return { content: [{ type: "text", text }], details: { todoSnapshot, workspace: getSemanticWorkspaceStatus(ctx.cwd) } };
+			return {
+				content: [{ type: "text", text }],
+				details: { todoSnapshot, workspace: getSemanticWorkspaceStatus(ctx.cwd) },
+			};
 		},
 		renderCall(_args, theme) {
 			return new Text(theme.fg("toolTitle", theme.bold("status_overview")), 0, 0);
@@ -84,7 +92,10 @@ export default function statusDashboard(pi: ExtensionAPI): void {
 				hasPendingMessages: ctx.hasPendingMessages(),
 				todoSnapshot,
 			});
-			pi.sendMessage({ customType: "status-dashboard", content: text, display: true, details: { todoSnapshot } }, { triggerTurn: false });
+			pi.sendMessage(
+				{ customType: "status-dashboard", content: text, display: true, details: { todoSnapshot } },
+				{ triggerTurn: false },
+			);
 		},
 	});
 
