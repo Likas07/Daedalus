@@ -1,0 +1,41 @@
+{
+  "version": 2,
+  "root": "/home/likas/Research/Daedalus",
+  "initializedAt": 1776974770580,
+  "chunkCount": 2914,
+  "databaseDir": "/home/likas/Research/Daedalus/.daedalus/semantic-store",
+  "embeddingProvider": "ollama",
+  "embeddingModel": "embeddinggemma",
+  "embeddingHost": "http://127.0.0.1:11434",
+  "embeddingDimension": 768,
+  "chunkingVersion": "v2",
+  "syncStrategyVersion": "incremental-v2",
+  "chunkTableName": "semantic_chunks",
+  "manifestTableName": "semantic_indexed_files",
+  "indexedAt": 1777005045350,
+  "fingerprint": "4ccee10a9755c779c11e6d3677227ab745dccd4e4ccd293d01fe9e94067e7d7f",
+  "vectorIndexName": "vector_idx",
+  "ftsIndexName": "search_text_idx",
+  "lastSyncSummary": {
+    "scannedFiles": 1073,
+    "changedFiles": 8,
+    "deletedFiles": 0,
+    "unchangedFiles": 1061,
+    "failedFiles": 0,
+    "insertedChunks": 89,
+    "removedChunks": 0
+  },
+  "lastDiscoverySummary": {
+    "candidateFiles": 1073,
+    "skippedFiles": 10,
+    "skippedByReason": {
+      "hardExclude": 6,
+      "generated": 3,
+      "minified": 1
+    },
+    "indexProfile": "normal"
+  },
+  "lastIndexRefreshAt": "2026-04-24T04:30:45.350Z",
+  "lastIndexRefreshChunkCount": 2914,
+  "indexRefreshStrategyVersion": 1
+}
