@@ -96,6 +96,12 @@ export interface AfterToolCallContext {
 export interface AgentLoopConfig extends SimpleStreamOptions {
 	model: Model<any>;
 
+	/** Universal timeout for normal built-in/custom/MCP tool execution. Default: 300000ms. */
+	toolTimeoutMs?: number;
+
+	/** Separate timeout for subagent/task-style tools. Undefined means infinite. */
+	subagentToolTimeoutMs?: number;
+
 	/**
 	 * Converts AgentMessage[] to LLM-compatible Message[] before each LLM call.
 	 *
@@ -215,7 +221,7 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 
 /**
  * Thinking/reasoning level for models that support it.
- * Note: "xhigh" is only supported by OpenAI gpt-5.1-codex-max, gpt-5.2, gpt-5.2-codex, gpt-5.3, and gpt-5.3-codex models.
+ * Note: "xhigh" is only supported by OpenAI gpt-5.1-codex-max, gpt-5.2, gpt-5.2-codex, gpt-5.3, gpt-5.3-codex, gpt-5.4, and gpt-5.5 models.
  */
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 

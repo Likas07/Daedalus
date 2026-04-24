@@ -9,6 +9,7 @@ import {
 	type Transport,
 } from "@daedalus-pi/ai";
 import { runAgentLoop, runAgentLoopContinue } from "./agent-loop.js";
+import { DEFAULT_TOOL_TIMEOUT_MS } from "./tool-timeout.js";
 import type {
 	AfterToolCallContext,
 	AfterToolCallResult,
@@ -108,6 +109,10 @@ export interface AgentOptions {
 	transport?: Transport;
 	maxRetryDelayMs?: number;
 	toolExecution?: ToolExecutionMode;
+	/** Universal timeout for normal tool execution. Default: 300000ms. */
+	toolTimeoutMs?: number;
+	/** Separate timeout for subagent/task tools. Undefined means infinite. */
+	subagentToolTimeoutMs?: number;
 }
 
 class PendingMessageQueue {
@@ -185,6 +190,10 @@ export class Agent {
 	public maxRetryDelayMs?: number;
 	/** Tool execution strategy for assistant messages that contain multiple tool calls. */
 	public toolExecution: ToolExecutionMode;
+	/** Universal timeout for normal tool execution. */
+	public toolTimeoutMs: number | undefined;
+	/** Separate timeout for subagent/task tools. Undefined means infinite. */
+	public subagentToolTimeoutMs: number | undefined;
 
 	constructor(options: AgentOptions = {}) {
 		this._state = createMutableAgentState(options.initialState);
@@ -202,6 +211,8 @@ export class Agent {
 		this.transport = options.transport ?? "sse";
 		this.maxRetryDelayMs = options.maxRetryDelayMs;
 		this.toolExecution = options.toolExecution ?? "parallel";
+		this.toolTimeoutMs = options.toolTimeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS;
+		this.subagentToolTimeoutMs = options.subagentToolTimeoutMs;
 	}
 
 	/**
@@ -417,6 +428,8 @@ export class Agent {
 			thinkingBudgets: this.thinkingBudgets,
 			maxRetryDelayMs: this.maxRetryDelayMs,
 			toolExecution: this.toolExecution,
+			toolTimeoutMs: this.toolTimeoutMs,
+			subagentToolTimeoutMs: this.subagentToolTimeoutMs,
 			beforeToolCall: this.beforeToolCall,
 			afterToolCall: this.afterToolCall,
 			convertToLlm: this.convertToLlm,

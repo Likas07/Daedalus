@@ -11,6 +11,7 @@ import {
 	type ToolResultMessage,
 	validateToolArguments,
 } from "@daedalus-pi/ai";
+import { DEFAULT_TOOL_TIMEOUT_MS, ToolTimeoutError, withToolTimeout } from "./tool-timeout.js";
 import type {
 	AgentContext,
 	AgentEvent,
@@ -369,7 +370,7 @@ async function executeToolCallsSequential(
 		if (preparation.kind === "immediate") {
 			results.push(await emitToolCallOutcome(toolCall, preparation.result, preparation.isError, emit));
 		} else {
-			const executed = await executePreparedToolCall(preparation, signal, emit);
+			const executed = await executePreparedToolCall(preparation, config, signal, emit);
 			results.push(
 				await finalizeExecutedToolCall(
 					currentContext,
@@ -416,7 +417,7 @@ async function executeToolCallsParallel(
 
 	const runningCalls = runnableCalls.map((prepared) => ({
 		prepared,
-		execution: executePreparedToolCall(prepared, signal, emit),
+		execution: executePreparedToolCall(prepared, config, signal, emit),
 	}));
 
 	for (const running of runningCalls) {
@@ -521,19 +522,28 @@ async function prepareToolCall(
 	}
 }
 
+function getEffectiveToolTimeoutMs(toolName: string, config: AgentLoopConfig): number | undefined {
+	if (toolName === "subagent" || toolName === "task") {
+		return config.subagentToolTimeoutMs;
+	}
+	if (toolName === "bash") {
+		return undefined;
+	}
+	return config.toolTimeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS;
+}
+
 async function executePreparedToolCall(
 	prepared: PreparedToolCall,
+	config: AgentLoopConfig,
 	signal: AbortSignal | undefined,
 	emit: AgentEventSink,
 ): Promise<ExecutedToolCallOutcome> {
 	const updateEvents: Promise<void>[] = [];
+	const timeoutMs = getEffectiveToolTimeoutMs(prepared.toolCall.name, config);
 
 	try {
-		const result = await prepared.tool.execute(
-			prepared.toolCall.id,
-			prepared.args as never,
-			signal,
-			(partialResult) => {
+		const result = await withToolTimeout(prepared.toolCall.name, timeoutMs, signal, (innerSignal) =>
+			prepared.tool.execute(prepared.toolCall.id, prepared.args as never, innerSignal, (partialResult) => {
 				updateEvents.push(
 					Promise.resolve(
 						emit({
@@ -545,14 +555,16 @@ async function executePreparedToolCall(
 						}),
 					),
 				);
-			},
+			}),
 		);
 		await Promise.all(updateEvents);
 		return { result, isError: false };
 	} catch (error) {
 		await Promise.all(updateEvents);
+		const message =
+			error instanceof ToolTimeoutError ? error.message : error instanceof Error ? error.message : String(error);
 		return {
-			result: createErrorToolResult(error instanceof Error ? error.message : String(error)),
+			result: createErrorToolResult(message),
 			isError: true,
 		};
 	}
