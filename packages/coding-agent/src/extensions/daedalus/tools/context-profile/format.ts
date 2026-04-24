@@ -49,6 +49,18 @@ export function formatContextProfile(profile: ContextProfileResult, options: Con
 		...(profile.byTool.length ? profile.byTool.map((item) => formatTool(item, profile.total.chars)) : ["- (none)"]),
 	);
 	lines.push("");
+	lines.push("Repeated reads:");
+	lines.push(
+		...(profile.reads.byFile.length
+			? profile.reads.byFile
+					.slice(0, 10)
+					.map(
+						(item) =>
+							`- ${item.path}: calls=${item.calls}, repeated=${item.repeatedCalls}, overlaps=${item.overlaps.length}, ${size(item.chars, item.bytes, item.estimatedTokens)}`,
+					)
+			: ["- (none)"]),
+	);
+	lines.push("");
 	lines.push("Top tool results:");
 	lines.push(
 		...(profile.topToolResults.length

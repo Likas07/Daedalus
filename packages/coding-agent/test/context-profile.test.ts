@@ -28,7 +28,66 @@ function toolResult(toolName: string, text: string): AgentMessage {
 	} as AgentMessage;
 }
 
+
+function assistantReadCall(id: string, path: string, offset?: number, limit?: number): AgentMessage {
+	return {
+		role: "assistant",
+		content: [
+			{
+				type: "toolCall",
+				id,
+				name: "read",
+				arguments: { path, ...(offset ? { offset } : {}), ...(limit ? { limit } : {}) },
+			},
+		],
+		api: "anthropic-messages",
+		provider: "anthropic",
+		model: "test",
+		usage: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+		stopReason: "tool_use",
+		timestamp: 1,
+	} as AgentMessage;
+}
+
+function readResult(id: string, path: string, text: string): AgentMessage {
+	return {
+		role: "toolResult",
+		toolCallId: id,
+		toolName: "read",
+		content: [{ type: "text", text }],
+		details: { absolutePath: path },
+		isError: false,
+		timestamp: 2,
+	} as AgentMessage;
+}
+
 describe("context profile analyzer", () => {
+	it("reports repeated and overlapping read ranges", () => {
+		const profile = analyzeContextProfile({
+			systemPrompt: "",
+			messages: [
+				assistantReadCall("r1", "src/a.ts", 1, 100),
+				readResult("r1", "/repo/src/a.ts", "a".repeat(1000)),
+				assistantReadCall("r2", "src/a.ts", 50, 100),
+				readResult("r2", "/repo/src/a.ts", "b".repeat(900)),
+			],
+			activeTools: ["read"],
+			allTools: [{ name: "read" }],
+			top: 5,
+		});
+
+		expect(profile.reads.byFile[0]).toMatchObject({ path: "/repo/src/a.ts", calls: 2, repeatedCalls: 1 });
+		expect(profile.reads.byFile[0].overlaps).toHaveLength(1);
+		expect(profile.warnings).toContainEqual(expect.objectContaining({ kind: "repeated_read", toolName: "read" }));
+	});
+
 	it("aggregates top messages, top tool results, and by-tool totals", () => {
 		const profile = analyzeContextProfile({
 			systemPrompt: "system prompt",
