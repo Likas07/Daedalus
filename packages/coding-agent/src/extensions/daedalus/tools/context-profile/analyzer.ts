@@ -257,10 +257,18 @@ export function analyzeContextProfile(input: ContextProfileInput): ContextProfil
 				}
 			}
 			const total = ranges.reduce<SizeStats>(
-				(sum, item) => add(sum, { chars: item.chars, bytes: item.chars, estimatedTokens: Math.ceil(item.chars / 4) }),
+				(sum, item) =>
+					add(sum, { chars: item.chars, bytes: item.chars, estimatedTokens: Math.ceil(item.chars / 4) }),
 				emptySize(),
 			);
-			return { path, calls: ranges.length, repeatedCalls: Math.max(0, ranges.length - 1), ranges, overlaps, ...total };
+			return {
+				path,
+				calls: ranges.length,
+				repeatedCalls: Math.max(0, ranges.length - 1),
+				ranges,
+				overlaps,
+				...total,
+			};
 		})
 		.sort((a, b) => b.calls - a.calls || b.chars - a.chars || a.path.localeCompare(b.path));
 	for (const item of readFiles.filter((file) => file.repeatedCalls > 0).slice(0, 5)) {

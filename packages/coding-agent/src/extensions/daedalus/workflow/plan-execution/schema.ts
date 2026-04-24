@@ -7,7 +7,9 @@ import Ajv from "ajv";
 export const ExecutablePlanStepSchema = Type.Object({
 	title: Type.String(),
 	body: Type.String(),
-	codeBlocks: Type.Optional(Type.Array(Type.Object({ language: Type.Optional(Type.String()), content: Type.String() }))),
+	codeBlocks: Type.Optional(
+		Type.Array(Type.Object({ language: Type.Optional(Type.String()), content: Type.String() })),
+	),
 	command: Type.Optional(Type.String()),
 	expected: Type.Optional(Type.String()),
 });
@@ -92,11 +94,13 @@ function validateParallelSafety(plan: ExecutablePlanV1): string[] {
 				const right = tasks[j];
 				const declaredConflict =
 					(left.conflictsWith ?? []).includes(right.id) || (right.conflictsWith ?? []).includes(left.id);
-				const dependency = (left.dependencies ?? []).includes(right.id) || (right.dependencies ?? []).includes(left.id);
+				const dependency =
+					(left.dependencies ?? []).includes(right.id) || (right.dependencies ?? []).includes(left.id);
 				if (declaredConflict || dependency) continue;
 				const rightFiles = new Set(taskFiles(right));
 				for (const file of taskFiles(left)) {
-					if (rightFiles.has(file)) errors.push(`parallel group ${group} has overlapping file ${file} in ${left.id} and ${right.id}`);
+					if (rightFiles.has(file))
+						errors.push(`parallel group ${group} has overlapping file ${file} in ${left.id} and ${right.id}`);
 				}
 			}
 		}
@@ -106,7 +110,8 @@ function validateParallelSafety(plan: ExecutablePlanV1): string[] {
 
 export function validateExecutablePlan(value: unknown): PlanValidationResult {
 	const ok = validate(value);
-	if (!ok) return { ok, errors: (validate.errors ?? []).map((error) => `${error.instancePath || "/"} ${error.message}`) };
+	if (!ok)
+		return { ok, errors: (validate.errors ?? []).map((error) => `${error.instancePath || "/"} ${error.message}`) };
 	const parallelErrors = validateParallelSafety(value as ExecutablePlanV1);
 	return { ok: parallelErrors.length === 0, errors: parallelErrors };
 }
@@ -159,16 +164,25 @@ export function renderExecutablePlanMarkdown(plan: ExecutablePlanV1): string {
 			if (step.expected) lines.push(`Expected: ${step.expected}`);
 		}
 		lines.push("", "**Verification:**");
-		for (const item of task.verification) lines.push(codeFence("bash", item.command), `Expected: ${item.expected}`, "");
+		for (const item of task.verification)
+			lines.push(codeFence("bash", item.command), `Expected: ${item.expected}`, "");
 		if (task.commit) {
 			lines.push(
 				"**Commit:**",
-				codeFence("bash", [`git add ${task.commit.paths.join(" ")}`, `git commit -m ${JSON.stringify(task.commit.message)}`].join("\n")),
+				codeFence(
+					"bash",
+					[`git add ${task.commit.paths.join(" ")}`, `git commit -m ${JSON.stringify(task.commit.message)}`].join(
+						"\n",
+					),
+				),
 				"",
 			);
 		}
 	}
-	return `${lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}\n`;
+	return `${lines
+		.join("\n")
+		.replace(/\n{3,}/g, "\n\n")
+		.trimEnd()}\n`;
 }
 
 export function writeExecutablePlanFiles(

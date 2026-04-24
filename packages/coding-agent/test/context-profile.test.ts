@@ -28,7 +28,6 @@ function toolResult(toolName: string, text: string): AgentMessage {
 	} as AgentMessage;
 }
 
-
 function assistantReadCall(id: string, path: string, offset?: number, limit?: number): AgentMessage {
 	return {
 		role: "assistant",

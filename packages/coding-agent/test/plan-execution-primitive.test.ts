@@ -115,7 +115,10 @@ describe("execute_plan primitive", () => {
 		expect(result.markdownPath).toBe(outputPath);
 		expect(result.sidecarPath).toBe(planSidecarPath(outputPath));
 		expect(readFileSync(outputPath, "utf8")).toContain("# Tiny Plan Implementation Plan");
-		expect(JSON.parse(readFileSync(result.sidecarPath, "utf8"))).toMatchObject({ schemaVersion: 1, title: "Tiny Plan" });
+		expect(JSON.parse(readFileSync(result.sidecarPath, "utf8"))).toMatchObject({
+			schemaVersion: 1,
+			title: "Tiny Plan",
+		});
 	});
 
 	it("reports unsafe parallel groups that touch the same file", () => {
@@ -126,13 +129,35 @@ describe("execute_plan primitive", () => {
 			architecture: "Detect file overlap inside a parallel group.",
 			techStack: ["TypeScript"],
 			tasks: [
-				{ id: "task-a", title: "A", dependencies: [], parallelGroup: "g1", canRunInParallel: true, conflictsWith: [], files: { create: [], modify: ["src/a.ts"], test: [] }, steps: [{ title: "A", body: "A" }], verification: [{ command: "true", expected: "PASS" }] },
-				{ id: "task-b", title: "B", dependencies: [], parallelGroup: "g1", canRunInParallel: true, conflictsWith: [], files: { create: [], modify: ["src/a.ts"], test: [] }, steps: [{ title: "B", body: "B" }], verification: [{ command: "true", expected: "PASS" }] },
+				{
+					id: "task-a",
+					title: "A",
+					dependencies: [],
+					parallelGroup: "g1",
+					canRunInParallel: true,
+					conflictsWith: [],
+					files: { create: [], modify: ["src/a.ts"], test: [] },
+					steps: [{ title: "A", body: "A" }],
+					verification: [{ command: "true", expected: "PASS" }],
+				},
+				{
+					id: "task-b",
+					title: "B",
+					dependencies: [],
+					parallelGroup: "g1",
+					canRunInParallel: true,
+					conflictsWith: [],
+					files: { create: [], modify: ["src/a.ts"], test: [] },
+					steps: [{ title: "B", body: "B" }],
+					verification: [{ command: "true", expected: "PASS" }],
+				},
 			],
 		};
 
 		expect(validateExecutablePlan(plan).ok).toBe(false);
-		expect(validateExecutablePlan(plan).errors.join("\n")).toContain("parallel group g1 has overlapping file src/a.ts");
+		expect(validateExecutablePlan(plan).errors.join("\n")).toContain(
+			"parallel group g1 has overlapping file src/a.ts",
+		);
 	});
 
 	it("creates and validates executable plans through plan_create and plan_validate", async () => {
@@ -182,9 +207,15 @@ describe("execute_plan primitive", () => {
 		expect(existsSync(join(tempDir, "docs", "plans", "generated.md"))).toBe(true);
 		expect(existsSync(join(tempDir, "docs", "plans", "generated.plan.json"))).toBe(true);
 
-		const validateResult = await planValidate!.execute("plan-validate-1", { path: "docs/plans/generated.md" }, undefined, undefined, {
-			cwd: tempDir,
-		} as any);
+		const validateResult = await planValidate!.execute(
+			"plan-validate-1",
+			{ path: "docs/plans/generated.md" },
+			undefined,
+			undefined,
+			{
+				cwd: tempDir,
+			} as any,
+		);
 		expect(getText(validateResult)).toContain("Valid executable plan v1");
 
 		session.dispose();
@@ -230,9 +261,15 @@ describe("execute_plan primitive", () => {
 		);
 
 		const executePlan = session.getToolDefinition("execute_plan")!;
-		const result = await executePlan.execute("execute-sidecar", { path: "docs/plans/sidecar.md" }, undefined, undefined, {
-			cwd: tempDir,
-		} as any);
+		const result = await executePlan.execute(
+			"execute-sidecar",
+			{ path: "docs/plans/sidecar.md" },
+			undefined,
+			undefined,
+			{
+				cwd: tempDir,
+			} as any,
+		);
 
 		expect(result.details.plan.format).toBe("executable-plan-v1");
 		expect(result.details.todos[0]).toMatchObject({ id: "task-sidecar", content: "Task 1: Sidecar task" });
@@ -303,11 +340,15 @@ describe("execute_plan primitive", () => {
 		await session.bindExtensions({});
 
 		const executePlan = session.getToolDefinition("execute_plan")!;
-		await executePlan.execute("execute-plan-task-detail", { path: "docs/plans/auth-plan.md" }, undefined, undefined, { cwd: tempDir } as any);
+		await executePlan.execute("execute-plan-task-detail", { path: "docs/plans/auth-plan.md" }, undefined, undefined, {
+			cwd: tempDir,
+		} as any);
 
 		const taskRead = session.getToolDefinition("plan_task_read");
 		expect(taskRead).toBeDefined();
-		const result = await taskRead!.execute("plan-task-read-1", { selector: "active" }, undefined, undefined, { cwd: tempDir } as any);
+		const result = await taskRead!.execute("plan-task-read-1", { selector: "active" }, undefined, undefined, {
+			cwd: tempDir,
+		} as any);
 		const output = getText(result);
 
 		expect(output).toContain("Task 1: Add read guidance");

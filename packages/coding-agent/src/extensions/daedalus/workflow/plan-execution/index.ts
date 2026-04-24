@@ -5,22 +5,22 @@ import { Text } from "@daedalus-pi/tui";
 import { Type } from "@sinclair/typebox";
 import { extractTodoSnapshotFromCustomEntry, type TodoSnapshot } from "../../tools/todo-state.js";
 import {
-	findPlanStepBySelector,
-	formatPlanStepDetail,
-	hasUnfinishedPlanWork,
-	initializePlanExecution,
-	loadPlanArtifact,
-	readyParallelGroups,
-	resumePlanExecution,
-	type PlanExecutionState,
-} from "./shared.js";
-import {
 	type ExecutablePlanV1,
 	markdownHash,
 	planSidecarPath,
 	validateExecutablePlan,
 	writeExecutablePlanFiles,
 } from "./schema.js";
+import {
+	findPlanStepBySelector,
+	formatPlanStepDetail,
+	hasUnfinishedPlanWork,
+	initializePlanExecution,
+	loadPlanArtifact,
+	type PlanExecutionState,
+	readyParallelGroups,
+	resumePlanExecution,
+} from "./shared.js";
 
 const ExecutePlanParams = Type.Object({
 	path: Type.String({ description: "Path to a markdown plan artifact containing a numbered Plan: section" }),
@@ -47,12 +47,18 @@ const PlanCreateParams = Type.Object({
 			parallel_group: Type.Optional(Type.String()),
 			can_run_parallel: Type.Optional(Type.Boolean()),
 			conflicts_with: Type.Optional(Type.Array(Type.String())),
-			files: Type.Object({ create: Type.Array(Type.String()), modify: Type.Array(Type.String()), test: Type.Array(Type.String()) }),
+			files: Type.Object({
+				create: Type.Array(Type.String()),
+				modify: Type.Array(Type.String()),
+				test: Type.Array(Type.String()),
+			}),
 			steps: Type.Array(
 				Type.Object({
 					title: Type.String(),
 					body: Type.String(),
-					codeBlocks: Type.Optional(Type.Array(Type.Object({ language: Type.Optional(Type.String()), content: Type.String() }))),
+					codeBlocks: Type.Optional(
+						Type.Array(Type.Object({ language: Type.Optional(Type.String()), content: Type.String() })),
+					),
 					command: Type.Optional(Type.String()),
 					expected: Type.Optional(Type.String()),
 				}),
@@ -87,7 +93,9 @@ function summarizeExecution(result: ReturnType<typeof initializePlanExecution>):
 	return [
 		`Initialized plan execution from ${result.plan.path ?? "inline plan"} with ${result.todos.length} task(s); ${unfinished} active`,
 		active ? `Active: ${active.content}` : undefined,
-		firstGroup ? `Ready parallel group ${firstGroup.group}: ${firstGroup.steps.map((step) => step.id).join(", ")}` : undefined,
+		firstGroup
+			? `Ready parallel group ${firstGroup.group}: ${firstGroup.steps.map((step) => step.id).join(", ")}`
+			: undefined,
 		"Use plan_task_read selector=active for the current task details instead of reading the full plan file.",
 	]
 		.filter(Boolean)
@@ -185,15 +193,25 @@ export default function planExecutionExtension(pi: ExtensionAPI): void {
 			const validation = validateExecutablePlan(sidecar);
 			const hashMatches = sidecar.markdownHash === markdownHash(markdown);
 			if (!validation.ok || !hashMatches) {
-				const errors = [...validation.errors, ...(hashMatches ? [] : ["markdown hash does not match sidecar"] )];
+				const errors = [...validation.errors, ...(hashMatches ? [] : ["markdown hash does not match sidecar"])];
 				return {
-					content: [{ type: "text", text: `Invalid executable plan v1\n${errors.map((error) => `- ${error}`).join("\n")}` }],
+					content: [
+						{
+							type: "text",
+							text: `Invalid executable plan v1\n${errors.map((error) => `- ${error}`).join("\n")}`,
+						},
+					],
 					isError: true,
 					details: { errors },
 				};
 			}
 			return {
-				content: [{ type: "text", text: `Valid executable plan v1\nTasks: ${sidecar.tasks.length}\nSidecar: ${sidecarPath}` }],
+				content: [
+					{
+						type: "text",
+						text: `Valid executable plan v1\nTasks: ${sidecar.tasks.length}\nSidecar: ${sidecarPath}`,
+					},
+				],
 				details: sidecar,
 			};
 		},
@@ -257,7 +275,7 @@ export default function planExecutionExtension(pi: ExtensionAPI): void {
 					details: latestExecution,
 				};
 			}
-			return { content: [{ type: "text", text: formatPlanStepDetail(step) }], details: { step, plan: latestExecution.plan } };
+			return { content: [{ type: "text", text: formatPlanStepDetail(step) }], details: latestExecution };
 		},
 	});
 

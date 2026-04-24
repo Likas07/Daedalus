@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { TodoItem } from "../../tools/todo-state.js";
-import { markdownHash, planSidecarPath, validateExecutablePlan } from "./schema.js";
 import {
 	createTodoSnapshot,
 	replaceTodoList,
@@ -151,7 +150,9 @@ export function loadPlanArtifact(filePath: string, cwd: string): PlanArtifact {
 		const validation = validateExecutablePlan(sidecar);
 		if (!validation.ok) throw new Error(`Invalid executable plan sidecar:\n${validation.errors.join("\n")}`);
 		if (sidecar.markdownHash && sidecar.markdownHash !== markdownHash(text)) {
-			throw new Error("Executable plan markdown changed since sidecar generation. Run plan_validate or plan_create overwrite=true.");
+			throw new Error(
+				"Executable plan markdown changed since sidecar generation. Run plan_validate or plan_create overwrite=true.",
+			);
 		}
 		return {
 			format: "executable-plan-v1",
@@ -229,13 +230,18 @@ export function markPlanStepsCompleted(state: PlanExecutionState, completedSteps
 	return { ...snapshot, plan: state.plan };
 }
 
-export function findPlanStepBySelector(state: PlanExecutionState, selector: "active" | "next" | string): PlanArtifactStep | undefined {
+export function findPlanStepBySelector(
+	state: PlanExecutionState,
+	selector: "active" | "next" | string,
+): PlanArtifactStep | undefined {
 	if (selector === "active") {
 		const active = state.todos.find((todo) => todo.status === "in_progress");
 		return active ? state.plan.steps.find((step) => step.id === active.id) : undefined;
 	}
 	if (selector === "next") {
-		const next = state.todos.find((todo) => todo.status === "pending") ?? state.todos.find((todo) => todo.status === "in_progress");
+		const next =
+			state.todos.find((todo) => todo.status === "pending") ??
+			state.todos.find((todo) => todo.status === "in_progress");
 		return next ? state.plan.steps.find((step) => step.id === next.id) : undefined;
 	}
 	return state.plan.steps.find((step) => step.id === selector || String(step.step) === selector);
