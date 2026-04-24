@@ -184,3 +184,49 @@ export function markPlanStepsCompleted(state: PlanExecutionState, completedSteps
 	const snapshot = createTodoSnapshot(nextTodos);
 	return { ...snapshot, plan: state.plan };
 }
+
+export function findPlanStepBySelector(state: PlanExecutionState, selector: "active" | "next" | string): PlanArtifactStep | undefined {
+	if (selector === "active") {
+		const active = state.todos.find((todo) => todo.status === "in_progress");
+		return active ? state.plan.steps.find((step) => step.id === active.id) : undefined;
+	}
+	if (selector === "next") {
+		const next = state.todos.find((todo) => todo.status === "pending") ?? state.todos.find((todo) => todo.status === "in_progress");
+		return next ? state.plan.steps.find((step) => step.id === next.id) : undefined;
+	}
+	return state.plan.steps.find((step) => step.id === selector || String(step.step) === selector);
+}
+
+export function formatPlanStepDetail(step: PlanArtifactStep): string {
+	const lines: string[] = [`# ${step.content}`, ""];
+	if (step.files?.length) {
+		lines.push("Files:");
+		lines.push(...step.files.map((file) => `- ${file}`));
+		lines.push("");
+	}
+	if (step.parallelGroup) lines.push(`Parallel group: ${step.parallelGroup}`, "");
+	if (step.dependsOn?.length) lines.push(`Depends on: ${step.dependsOn.join(", ")}`, "");
+	if (step.conflictsWith?.length) lines.push(`Conflicts with: ${step.conflictsWith.join(", ")}`, "");
+	if (step.verification) {
+		lines.push(`Verification: ${step.verification}`, "");
+	}
+	lines.push(step.detail?.trim() || step.content);
+	return lines.join("\n").trim();
+}
+
+export function readyParallelGroups(state: PlanExecutionState): Array<{ group: string; steps: PlanArtifactStep[] }> {
+	const completed = new Set(state.todos.filter((todo) => todo.status === "completed").map((todo) => todo.id));
+	const activeOrPending = new Set(
+		state.todos.filter((todo) => todo.status === "pending" || todo.status === "in_progress").map((todo) => todo.id),
+	);
+	const groups = new Map<string, PlanArtifactStep[]>();
+	for (const step of state.plan.steps) {
+		if (!activeOrPending.has(step.id)) continue;
+		if ((step.dependsOn ?? []).some((id) => !completed.has(id))) continue;
+		const group = step.parallelGroup ?? step.lane ?? "default";
+		const list = groups.get(group) ?? [];
+		list.push(step);
+		groups.set(group, list);
+	}
+	return [...groups.entries()].map(([group, steps]) => ({ group, steps }));
+}

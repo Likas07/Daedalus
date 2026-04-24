@@ -68,6 +68,54 @@ describe("execute_plan primitive", () => {
 		session.dispose();
 	});
 
+	it("reads only the active plan task detail", async () => {
+		writeFileSync(
+			planPath,
+			[
+				"# Example Implementation Plan",
+				"",
+				"### Task 1: Add read guidance",
+				"",
+				"**Files:**",
+				"- Modify: `packages/coding-agent/src/core/tools/read.ts`",
+				"",
+				"- [ ] **Step 1: Write failing test**",
+				"",
+				"Run: `bun test packages/coding-agent/test/tools.test.ts`",
+				"",
+				"### Task 2: Profile reads",
+				"",
+				"**Files:**",
+				"- Modify: `packages/coding-agent/src/extensions/daedalus/tools/context-profile/analyzer.ts`",
+			].join("\n"),
+		);
+		const settingsManager = SettingsManager.create(tempDir, agentDir);
+		const sessionManager = SessionManager.inMemory();
+		const { session } = await createAgentSession({
+			cwd: tempDir,
+			agentDir,
+			model: getModel("anthropic", "claude-sonnet-4-5")!,
+			settingsManager,
+			sessionManager,
+		});
+		await session.bindExtensions({});
+
+		const executePlan = session.getToolDefinition("execute_plan")!;
+		await executePlan.execute("execute-plan-task-detail", { path: "docs/plans/auth-plan.md" }, undefined, undefined, { cwd: tempDir } as any);
+
+		const taskRead = session.getToolDefinition("plan_task_read");
+		expect(taskRead).toBeDefined();
+		const result = await taskRead!.execute("plan-task-read-1", { selector: "active" }, undefined, undefined, { cwd: tempDir } as any);
+		const output = getText(result);
+
+		expect(output).toContain("Task 1: Add read guidance");
+		expect(output).toContain("packages/coding-agent/src/core/tools/read.ts");
+		expect(output).not.toContain("Task 2: Profile reads");
+		expect(Buffer.byteLength(output, "utf8")).toBeLessThan(10_000);
+
+		session.dispose();
+	});
+
 	it("resumes partially completed plans from existing execution state", () => {
 		const plan = loadPlanArtifact(planPath, tempDir);
 		const initial = initializePlanExecution(plan);
