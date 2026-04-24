@@ -11,6 +11,7 @@ const DEFAULT_MANIFEST_TABLE_NAME = "semantic_indexed_files";
 interface OpenSemanticLanceStoreOptions {
 	databaseDir: string;
 	embeddingFunctionAlias: string;
+	vectorDimension?: number;
 	tableName?: string;
 	manifestTableName?: string;
 }
@@ -25,9 +26,14 @@ export interface SemanticLanceStoreInfo {
 	ftsIndexName?: string;
 }
 
+export interface EmbeddedSemanticChunk extends SemanticChunk {
+	vector: number[];
+}
+
 export interface SemanticLanceStore {
 	replaceChunks(chunks: SemanticChunk[], onProgress?: (progress: SemanticStoreProgress) => void): Promise<void>;
 	insertChunks(chunks: SemanticChunk[]): Promise<void>;
+	insertEmbeddedChunks(chunks: EmbeddedSemanticChunk[]): Promise<void>;
 	deleteChunksForFiles(filePaths: string[]): Promise<number>;
 	deleteAllChunks(): Promise<void>;
 	listIndexedFiles(): Promise<SemanticIndexedFile[]>;
@@ -71,6 +77,20 @@ function mapChunkRows(chunks: SemanticChunk[]): Array<Record<string, unknown>> {
 		language: chunk.language ?? "",
 		content: chunk.content,
 		search_text: `${chunk.filePath}\n${chunk.content}`,
+		start_line: chunk.startLine,
+		end_line: chunk.endLine,
+		content_hash: chunk.contentHash,
+	}));
+}
+
+function mapEmbeddedChunkRows(chunks: EmbeddedSemanticChunk[]): Array<Record<string, unknown>> {
+	return chunks.map((chunk) => ({
+		chunk_id: chunk.chunkId,
+		file_path: chunk.filePath,
+		language: chunk.language ?? "",
+		content: chunk.content,
+		search_text: `${chunk.filePath}\n${chunk.content}`,
+		vector: chunk.vector,
 		start_line: chunk.startLine,
 		end_line: chunk.endLine,
 		content_hash: chunk.contentHash,
@@ -159,6 +179,11 @@ export async function openSemanticLanceStore(options: OpenSemanticLanceStoreOpti
 		async insertChunks(chunks: SemanticChunk[]): Promise<void> {
 			if (chunks.length === 0) return;
 			await chunkTable.add(mapChunkRows(chunks));
+		},
+
+		async insertEmbeddedChunks(chunks: EmbeddedSemanticChunk[]): Promise<void> {
+			if (chunks.length === 0) return;
+			await chunkTable.add(mapEmbeddedChunkRows(chunks));
 		},
 
 		async deleteChunksForFiles(filePaths: string[]): Promise<number> {

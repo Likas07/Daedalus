@@ -1,3 +1,16 @@
+export interface SemanticEmbedBatchMetrics {
+	batchIndex: number;
+	batchSize: number;
+	elapsedMs: number;
+	completedTexts: number;
+	totalTexts: number;
+	concurrency: number;
+}
+
+export interface SemanticEmbedDocumentsOptions {
+	onBatch?: (metrics: SemanticEmbedBatchMetrics) => void;
+}
+
 export interface SemanticChunk {
 	chunkId: string;
 	filePath: string;
@@ -78,7 +91,7 @@ export interface SemanticEmbedderModelInfo {
 }
 
 export interface SemanticEmbedder {
-	embedDocuments(texts: string[]): Promise<number[][]>;
+	embedDocuments(texts: string[], options?: SemanticEmbedDocumentsOptions): Promise<number[][]>;
 	embedQuery(text: string): Promise<number[]>;
 	getModelInfo(): Promise<SemanticEmbedderModelInfo>;
 }

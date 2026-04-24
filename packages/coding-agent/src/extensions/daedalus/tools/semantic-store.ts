@@ -3,6 +3,7 @@ import { type Stats, statSync } from "node:fs";
 import path from "node:path";
 import { chunkDocument } from "./semantic-chunking.js";
 import {
+	DEFAULT_OLLAMA_EMBED_BATCH_SIZE,
 	DEFAULT_OLLAMA_EMBED_MODEL,
 	DEFAULT_OLLAMA_HOST,
 	resolveSemanticChunkMaxLines,
@@ -20,7 +21,7 @@ import {
 	semanticContentSkipReason,
 	semanticSizeLimit,
 } from "./semantic-file-discovery.js";
-import { openSemanticLanceStore } from "./semantic-lancedb.js";
+import { openSemanticLanceStore, type EmbeddedSemanticChunk } from "./semantic-lancedb.js";
 import { buildSemanticSyncPlan } from "./semantic-sync-plan.js";
 import type {
 	SemanticChunk,
@@ -76,7 +77,19 @@ export interface SemanticStoreProgress {
 	hashedFiles?: number;
 	embeddingBatchesCompleted?: number;
 	embeddingBatchesTotal?: number;
-	writeSubphase?: "planning" | "deleting-stale" | "embedding-writing" | "manifest" | "indexing";
+	embeddingRequestsCompleted?: number;
+	embeddingRequestsTotal?: number;
+	embeddingTextsCompleted?: number;
+	embeddingTextsTotal?: number;
+	embeddingMsPerRequestAvg?: number;
+	embeddingTextsPerSecond?: number;
+	dbRowsInserted?: number;
+	dbInsertBatchesCompleted?: number;
+	dbInsertBatchesTotal?: number;
+	dbInsertMsPerBatchAvg?: number;
+	indexRefreshStarted?: boolean;
+	indexRefreshMs?: number;
+	writeSubphase?: "planning" | "deleting-stale" | "embedding" | "db-insert" | "embedding-writing" | "manifest" | "indexing";
 }
 
 export interface SemanticStoreSyncResult {
@@ -258,8 +271,13 @@ export async function createSemanticStoreRuntime(config: SemanticStoreConfig): P
 		host: config.host ?? DEFAULT_OLLAMA_HOST,
 		model: config.model ?? DEFAULT_OLLAMA_EMBED_MODEL,
 	});
+	const info = await embedder.getModelInfo();
 	const alias = await registerOllamaEmbeddingFunction(embedder);
-	const store = await openSemanticLanceStore({ databaseDir: config.databaseDir, embeddingFunctionAlias: alias });
+	const store = await openSemanticLanceStore({
+		databaseDir: config.databaseDir,
+		embeddingFunctionAlias: alias,
+		vectorDimension: info.dimension,
+	});
 
 	return {
 		async sync(onProgress) {
@@ -461,24 +479,73 @@ export async function createSemanticStoreRuntime(config: SemanticStoreConfig): P
 			await store.deleteIndexedFiles([...plan.deletedFiles, ...plan.modifiedFiles]);
 
 			let insertedChunks = 0;
+			let embeddedChunksCompleted = 0;
+			let embeddingRequestsCompleted = 0;
+			let embeddingElapsedTotalMs = 0;
+			let dbInsertElapsedTotalMs = 0;
+			let dbInsertBatchesCompleted = 0;
 			const writingStartedAt = Date.now();
 			const allChangedChunks = changedChunkPlans.flatMap((entry) => entry.chunks);
 			const chunkBatches = chunkArray(allChangedChunks, resolveSemanticInsertChunkBatchSize());
+			const estimateEmbedRequestsTotal = Math.ceil(totalChunksPlanned / DEFAULT_OLLAMA_EMBED_BATCH_SIZE);
 			for (const [batchIndex, batch] of chunkBatches.entries()) {
-				await store.insertChunks(batch);
+				const texts = batch.map((chunk) => `${chunk.filePath}\n${chunk.content}`);
+				const vectors = await embedder.embedDocuments(texts, {
+					onBatch: (metrics) => {
+						embeddingRequestsCompleted += 1;
+						embeddingElapsedTotalMs += metrics.elapsedMs;
+						embeddedChunksCompleted += metrics.batchSize;
+						const embedElapsedMs = Date.now() - writingStartedAt;
+						const embeddingTextsPerSecond = embeddedChunksCompleted / Math.max(embedElapsedMs / 1000, 0.001);
+						const remainingTexts = Math.max(0, totalChunksPlanned - embeddedChunksCompleted);
+						const embeddingEtaMs = embeddingTextsPerSecond > 0 ? Math.round((remainingTexts / embeddingTextsPerSecond) * 1000) : undefined;
+						emitProgress({
+							phase: "writing",
+							writeSubphase: "embedding",
+							message: `Embedding chunks ${embeddedChunksCompleted}/${totalChunksPlanned}`,
+							processedFiles: localFiles.length + failedFiles.length,
+							totalFiles: candidateFiles.length,
+							changedFiles,
+							deletedFiles: plan.deletedFiles.length,
+							unchangedFiles: plan.unchangedFiles.length,
+							failedFiles: plan.failedFiles.length,
+							chunks: insertedChunks,
+							totalChunksPlanned,
+							insertedChunks,
+							removedChunks,
+							embeddingEtaMs,
+							embeddingBatchesCompleted: embeddingRequestsCompleted,
+							embeddingBatchesTotal: estimateEmbedRequestsTotal,
+							embeddingRequestsCompleted,
+							embeddingRequestsTotal: estimateEmbedRequestsTotal,
+							embeddingTextsCompleted: embeddedChunksCompleted,
+							embeddingTextsTotal: totalChunksPlanned,
+							embeddingMsPerRequestAvg: Math.round(embeddingElapsedTotalMs / Math.max(embeddingRequestsCompleted, 1)),
+							embeddingTextsPerSecond,
+							dbRowsInserted: insertedChunks,
+							dbInsertBatchesCompleted,
+							dbInsertBatchesTotal: chunkBatches.length,
+							skippedFiles: skipped,
+							skippedByReason: skippedByReason,
+							statUnchangedFiles,
+							hashedFiles,
+						});
+					},
+				});
+				const embeddedBatch: EmbeddedSemanticChunk[] = batch.map((chunk, index) => ({ ...chunk, vector: vectors[index] }));
+				const insertStartedAt = Date.now();
+				await store.insertEmbeddedChunks(embeddedBatch);
+				dbInsertElapsedTotalMs += Date.now() - insertStartedAt;
+				dbInsertBatchesCompleted += 1;
 				insertedChunks += batch.length;
 				const writingElapsedMs = Date.now() - writingStartedAt;
-				const chunksPerSecond =
-					insertedChunks > 0 ? insertedChunks / Math.max(writingElapsedMs / 1000, 0.001) : undefined;
+				const chunksPerSecond = insertedChunks > 0 ? insertedChunks / Math.max(writingElapsedMs / 1000, 0.001) : undefined;
 				const remainingChunks = Math.max(0, totalChunksPlanned - insertedChunks);
-				const embeddingEtaMs =
-					chunksPerSecond && Number.isFinite(chunksPerSecond) && chunksPerSecond > 0
-						? Math.round((remainingChunks / chunksPerSecond) * 1000)
-						: undefined;
+				const embeddingEtaMs = chunksPerSecond && chunksPerSecond > 0 ? Math.round((remainingChunks / chunksPerSecond) * 1000) : undefined;
 				emitProgress({
 					phase: "writing",
-					writeSubphase: "embedding-writing",
-					message: `Indexed chunk batch ${batchIndex + 1}/${chunkBatches.length}`,
+					writeSubphase: "db-insert",
+					message: `Inserted embedded chunk batch ${batchIndex + 1}/${chunkBatches.length}`,
 					processedFiles: localFiles.length + failedFiles.length,
 					totalFiles: candidateFiles.length,
 					changedFiles,
@@ -490,8 +557,18 @@ export async function createSemanticStoreRuntime(config: SemanticStoreConfig): P
 					insertedChunks,
 					removedChunks,
 					embeddingEtaMs,
-					embeddingBatchesCompleted: batchIndex + 1,
-					embeddingBatchesTotal: chunkBatches.length,
+					embeddingBatchesCompleted: embeddingRequestsCompleted,
+					embeddingBatchesTotal: estimateEmbedRequestsTotal,
+					embeddingRequestsCompleted,
+					embeddingRequestsTotal: estimateEmbedRequestsTotal,
+					embeddingTextsCompleted: embeddedChunksCompleted,
+					embeddingTextsTotal: totalChunksPlanned,
+					embeddingMsPerRequestAvg: Math.round(embeddingElapsedTotalMs / Math.max(embeddingRequestsCompleted, 1)),
+					embeddingTextsPerSecond: embeddedChunksCompleted / Math.max(writingElapsedMs / 1000, 0.001),
+					dbRowsInserted: insertedChunks,
+					dbInsertBatchesCompleted,
+					dbInsertBatchesTotal: chunkBatches.length,
+					dbInsertMsPerBatchAvg: Math.round(dbInsertElapsedTotalMs / Math.max(dbInsertBatchesCompleted, 1)),
 					skippedFiles: skipped,
 					skippedByReason: skippedByReason,
 					statUnchangedFiles,
@@ -580,7 +657,6 @@ export async function createSemanticStoreRuntime(config: SemanticStoreConfig): P
 				});
 			}
 
-			const info = await embedder.getModelInfo();
 			semanticDebug("semantic-store.sync", "completed sync", {
 				scannedFiles: candidateFiles.length,
 				skippedFiles: skipped,
@@ -604,6 +680,13 @@ export async function createSemanticStoreRuntime(config: SemanticStoreConfig): P
 				chunks: storeInfo.rowCount,
 				totalChunksPlanned,
 				embeddingEtaMs: 0,
+				embeddingRequestsCompleted,
+				embeddingRequestsTotal: estimateEmbedRequestsTotal,
+				embeddingTextsCompleted: embeddedChunksCompleted,
+				embeddingTextsTotal: totalChunksPlanned,
+				dbRowsInserted: insertedChunks,
+				dbInsertBatchesCompleted,
+				dbInsertBatchesTotal: chunkBatches.length,
 				changedFiles,
 				deletedFiles: plan.deletedFiles.length,
 				unchangedFiles: plan.unchangedFiles.length,

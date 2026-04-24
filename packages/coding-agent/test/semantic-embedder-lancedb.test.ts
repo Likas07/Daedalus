@@ -61,6 +61,68 @@ describe("semantic embedder LanceDB integration", () => {
 		}
 	});
 
+
+	it("reports per-batch embedding metrics", async () => {
+		const originalFetch = globalThis.fetch;
+		globalThis.fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+			const body = JSON.parse(String(init?.body)) as { input: string[] };
+			return new Response(JSON.stringify({ embeddings: body.input.map(() => [1, 2, 3]) }), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			});
+		}) as typeof fetch;
+
+		try {
+			const embedder = await createOllamaSemanticEmbedder({
+				model: "embeddinggemma",
+				host: "http://127.0.0.1:11434",
+				batchSize: 2,
+				concurrency: 1,
+			});
+			const metrics: Array<{ batchIndex: number; batchSize: number; completedTexts: number; totalTexts: number }> = [];
+			await embedder.embedDocuments(["a", "b", "c"], {
+				onBatch: (batch) => metrics.push(batch),
+			});
+			expect(metrics).toMatchObject([
+				{ batchIndex: 0, batchSize: 2, completedTexts: 2, totalTexts: 3 },
+				{ batchIndex: 1, batchSize: 1, completedTexts: 3, totalTexts: 3 },
+			]);
+			expect(metrics.every((metric) => metric.elapsedMs >= 0)).toBe(true);
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+	});
+
+
+	it("inserts chunks with explicit raw vectors", async () => {
+		const embedder = await createOllamaSemanticEmbedder({
+			model: "embeddinggemma",
+			host: "http://127.0.0.1:11434",
+		});
+		const functionName = await registerOllamaEmbeddingFunction(embedder);
+		const store = await openSemanticLanceStore({
+			databaseDir: join(tempDir, "semantic-raw-vector-store"),
+			embeddingFunctionAlias: functionName,
+		});
+
+		const [vector] = await embedder.embedDocuments(["export const rawVector = true;"]);
+		await store.insertEmbeddedChunks([
+			{
+				chunkId: "raw-1",
+				filePath: "src/raw-vector.ts",
+				language: "typescript",
+				content: "export const rawVector = true;",
+				startLine: 1,
+				endLine: 1,
+				contentHash: "raw-hash",
+				vector,
+			},
+		]);
+
+		const info = await store.info();
+		expect(info.rowCount).toBe(1);
+	}, 120_000);
+
 	it("registers an Ollama-backed LanceDB embedding function that auto-embeds inserts and text queries", async () => {
 		const embedder = await createOllamaSemanticEmbedder({
 			model: "embeddinggemma",

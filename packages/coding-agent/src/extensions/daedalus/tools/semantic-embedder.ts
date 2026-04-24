@@ -8,7 +8,7 @@ import {
 	DEFAULT_OLLAMA_HOST,
 	type OllamaSemanticEmbedderConfig,
 } from "./semantic-config.js";
-import type { SemanticEmbedder, SemanticEmbedderModelInfo } from "./semantic-types.js";
+import type { SemanticEmbedder, SemanticEmbedderModelInfo, SemanticEmbedDocumentsOptions } from "./semantic-types.js";
 
 interface OllamaEmbedResponse {
 	embeddings?: number[][];
@@ -111,7 +111,7 @@ class OllamaSemanticEmbedderImpl implements SemanticEmbedder {
 		return embeddings;
 	}
 
-	async embedDocuments(texts: string[]): Promise<number[][]> {
+	async embedDocuments(texts: string[], options: SemanticEmbedDocumentsOptions = {}): Promise<number[][]> {
 		if (texts.length === 0) return [];
 		const startedAt = Date.now();
 		const batches = chunkArray(texts, this.batchSize);
@@ -124,9 +124,21 @@ class OllamaSemanticEmbedderImpl implements SemanticEmbedder {
 			concurrency: this.concurrency,
 			keepAlive: this.keepAlive,
 		});
-		const results = await mapWithConcurrency(batches, this.concurrency, (batch, batchIndex) =>
-			this.embedBatch(batch, batchIndex),
-		);
+		let completedTexts = 0;
+		const results = await mapWithConcurrency(batches, this.concurrency, async (batch, batchIndex) => {
+			const batchStartedAt = Date.now();
+			const embeddings = await this.embedBatch(batch, batchIndex);
+			completedTexts += batch.length;
+			options.onBatch?.({
+				batchIndex,
+				batchSize: batch.length,
+				elapsedMs: Date.now() - batchStartedAt,
+				completedTexts,
+				totalTexts: texts.length,
+				concurrency: this.concurrency,
+			});
+			return embeddings;
+		});
 		const embeddings = results.flat();
 		semanticDebug("semantic-embedder.embedDocuments", "completed batched embedding run", {
 			model: this.model,
