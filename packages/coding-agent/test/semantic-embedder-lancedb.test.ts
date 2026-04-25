@@ -61,7 +61,6 @@ describe("semantic embedder LanceDB integration", () => {
 		}
 	});
 
-
 	it("reports per-batch embedding metrics", async () => {
 		const originalFetch = globalThis.fetch;
 		globalThis.fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -79,7 +78,8 @@ describe("semantic embedder LanceDB integration", () => {
 				batchSize: 2,
 				concurrency: 1,
 			});
-			const metrics: Array<{ batchIndex: number; batchSize: number; completedTexts: number; totalTexts: number }> = [];
+			const metrics: Array<{ batchIndex: number; batchSize: number; completedTexts: number; totalTexts: number }> =
+				[];
 			await embedder.embedDocuments(["a", "b", "c"], {
 				onBatch: (batch) => metrics.push(batch),
 			});
@@ -92,7 +92,6 @@ describe("semantic embedder LanceDB integration", () => {
 			globalThis.fetch = originalFetch;
 		}
 	});
-
 
 	it("inserts chunks with explicit raw vectors", async () => {
 		const embedder = await createOllamaSemanticEmbedder({

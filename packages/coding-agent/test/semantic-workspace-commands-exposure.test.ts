@@ -65,7 +65,6 @@ describe("semantic workspace commands and exposure", () => {
 		session.dispose();
 	}, 120_000);
 
-
 	it("keeps sem_search exposed after indexed workspace becomes soft-stale", async () => {
 		const settingsManager = SettingsManager.create(tempDir, agentDir);
 		const sessionManager = SessionManager.inMemory();

@@ -6,7 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAgentSession } from "../src/core/sdk.js";
 import { SessionManager } from "../src/core/session-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
-import { getSemanticWorkspaceStatus, initSemanticWorkspace } from "../src/extensions/daedalus/tools/semantic-workspace.js";
+import {
+	getSemanticWorkspaceStatus,
+	initSemanticWorkspace,
+} from "../src/extensions/daedalus/tools/semantic-workspace.js";
 
 function getText(result: any): string {
 	return result.content
@@ -72,7 +75,6 @@ describe("semantic workspace lifecycle", () => {
 
 		session.dispose();
 	});
-
 
 	it("bootstraps semantic workspace without probing the embedding endpoint", async () => {
 		const originalFetch = globalThis.fetch;

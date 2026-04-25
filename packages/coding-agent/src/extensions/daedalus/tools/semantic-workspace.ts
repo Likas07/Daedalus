@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { CONFIG_DIR_NAME } from "../../../config.js";
-import { SettingsManager, type SemanticSettings } from "../../../core/settings-manager.js";
+import { type SemanticSettings, SettingsManager } from "../../../core/settings-manager.js";
 import {
 	DEFAULT_OLLAMA_EMBED_MODEL,
 	DEFAULT_OLLAMA_HOST,
@@ -103,7 +103,11 @@ function resolveSemanticSettings(cwd: string, overrides: SemanticBootstrapOption
 	return {
 		embeddingHost: overrides.embeddingHost ?? settings.embeddingHost ?? DEFAULT_OLLAMA_HOST,
 		embeddingModel: overrides.embeddingModel ?? settings.embeddingModel ?? DEFAULT_OLLAMA_EMBED_MODEL,
-		indexProfile: overrides.indexProfile ?? settings.indexProfile ?? resolveSemanticIndexProfile() ?? DEFAULT_SEMANTIC_INDEX_PROFILE,
+		indexProfile:
+			overrides.indexProfile ??
+			settings.indexProfile ??
+			resolveSemanticIndexProfile() ??
+			DEFAULT_SEMANTIC_INDEX_PROFILE,
 	};
 }
 
@@ -173,7 +177,8 @@ export async function initSemanticWorkspace(
 	await persistSemanticSettings(cwd, semantic);
 	const current = loadSemanticWorkspace(cwd);
 	const backendChanged =
-		current && (current.embeddingHost !== semantic.embeddingHost || current.embeddingModel !== semantic.embeddingModel);
+		current &&
+		(current.embeddingHost !== semantic.embeddingHost || current.embeddingModel !== semantic.embeddingModel);
 	const state: SemanticWorkspacePersistedState =
 		current && !backendChanged
 			? {
@@ -477,13 +482,10 @@ export function requireSearchableSemanticWorkspace(cwd: string): {
 		);
 	}
 	if (status.state === "stale_hard") {
-		throw new Error(
-			"Semantic workspace index is invalid and requires /workspace-sync before sem_search can run.",
-		);
+		throw new Error("Semantic workspace index is invalid and requires /workspace-sync before sem_search can run.");
 	}
 	return { status: { ...status, source: "index" }, state };
 }
-
 
 export function requireReadySemanticWorkspace(cwd: string): {
 	status: SemanticWorkspaceStatus;
@@ -500,9 +502,7 @@ export function requireReadySemanticWorkspace(cwd: string): {
 		);
 	}
 	if (status.state === "stale_hard") {
-		throw new Error(
-			"Semantic workspace index is invalid and requires /workspace-sync before sem_search can run.",
-		);
+		throw new Error("Semantic workspace index is invalid and requires /workspace-sync before sem_search can run.");
 	}
 	return { status: { ...status, source: "index" }, state };
 }

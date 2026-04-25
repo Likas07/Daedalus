@@ -1,11 +1,11 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@daedalus-pi/coding-agent";
 import { Text } from "@daedalus-pi/tui";
+import { createSemanticBackgroundSyncController } from "./semantic-background-sync.js";
 import {
 	applySemanticToolExposure,
 	getRememberedSemanticDesiredTools,
 	rememberSemanticDesiredTools,
 } from "./semantic-tool-availability.js";
-import { createSemanticBackgroundSyncController } from "./semantic-background-sync.js";
 import {
 	getSemanticWorkspaceStatus,
 	initSemanticWorkspace,
@@ -20,7 +20,6 @@ const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", 
 
 type WorkspaceCommandKind = "init" | "sync";
 type WorkspacePhase = SemanticWorkspaceProgress["phase"];
-
 
 function parseWorkspaceInitArgs(args: string): SemanticBootstrapOptions {
 	const options: SemanticBootstrapOptions = {};

@@ -8,7 +8,7 @@ import {
 	DEFAULT_OLLAMA_HOST,
 	type OllamaSemanticEmbedderConfig,
 } from "./semantic-config.js";
-import type { SemanticEmbedder, SemanticEmbedderModelInfo, SemanticEmbedDocumentsOptions } from "./semantic-types.js";
+import type { SemanticEmbedDocumentsOptions, SemanticEmbedder, SemanticEmbedderModelInfo } from "./semantic-types.js";
 
 interface OllamaEmbedResponse {
 	embeddings?: number[][];

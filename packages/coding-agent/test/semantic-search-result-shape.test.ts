@@ -95,7 +95,9 @@ describe("semantic search result shape", () => {
 		expect(absolutePathResult.details.queries).toHaveLength(relativePathResult.details.queries.length);
 		expect(
 			absolutePathResult.details.queries.map((bucket: any) => bucket.results.map((row: any) => row.filePath)),
-		).toEqual(relativePathResult.details.queries.map((bucket: any) => bucket.results.map((row: any) => row.filePath)));
+		).toEqual(
+			relativePathResult.details.queries.map((bucket: any) => bucket.results.map((row: any) => row.filePath)),
+		);
 
 		session.dispose();
 	}, 120_000);

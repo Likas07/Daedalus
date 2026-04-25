@@ -21,7 +21,7 @@ import {
 	semanticContentSkipReason,
 	semanticSizeLimit,
 } from "./semantic-file-discovery.js";
-import { openSemanticLanceStore, type EmbeddedSemanticChunk } from "./semantic-lancedb.js";
+import { type EmbeddedSemanticChunk, openSemanticLanceStore } from "./semantic-lancedb.js";
 import { buildSemanticSyncPlan } from "./semantic-sync-plan.js";
 import type {
 	SemanticChunk,
@@ -89,7 +89,14 @@ export interface SemanticStoreProgress {
 	dbInsertMsPerBatchAvg?: number;
 	indexRefreshStarted?: boolean;
 	indexRefreshMs?: number;
-	writeSubphase?: "planning" | "deleting-stale" | "embedding" | "db-insert" | "embedding-writing" | "manifest" | "indexing";
+	writeSubphase?:
+		| "planning"
+		| "deleting-stale"
+		| "embedding"
+		| "db-insert"
+		| "embedding-writing"
+		| "manifest"
+		| "indexing";
 }
 
 export interface SemanticStoreSyncResult {
@@ -498,7 +505,10 @@ export async function createSemanticStoreRuntime(config: SemanticStoreConfig): P
 						const embedElapsedMs = Date.now() - writingStartedAt;
 						const embeddingTextsPerSecond = embeddedChunksCompleted / Math.max(embedElapsedMs / 1000, 0.001);
 						const remainingTexts = Math.max(0, totalChunksPlanned - embeddedChunksCompleted);
-						const embeddingEtaMs = embeddingTextsPerSecond > 0 ? Math.round((remainingTexts / embeddingTextsPerSecond) * 1000) : undefined;
+						const embeddingEtaMs =
+							embeddingTextsPerSecond > 0
+								? Math.round((remainingTexts / embeddingTextsPerSecond) * 1000)
+								: undefined;
 						emitProgress({
 							phase: "writing",
 							writeSubphase: "embedding",
@@ -520,7 +530,9 @@ export async function createSemanticStoreRuntime(config: SemanticStoreConfig): P
 							embeddingRequestsTotal: estimateEmbedRequestsTotal,
 							embeddingTextsCompleted: embeddedChunksCompleted,
 							embeddingTextsTotal: totalChunksPlanned,
-							embeddingMsPerRequestAvg: Math.round(embeddingElapsedTotalMs / Math.max(embeddingRequestsCompleted, 1)),
+							embeddingMsPerRequestAvg: Math.round(
+								embeddingElapsedTotalMs / Math.max(embeddingRequestsCompleted, 1),
+							),
 							embeddingTextsPerSecond,
 							dbRowsInserted: insertedChunks,
 							dbInsertBatchesCompleted,
@@ -532,16 +544,23 @@ export async function createSemanticStoreRuntime(config: SemanticStoreConfig): P
 						});
 					},
 				});
-				const embeddedBatch: EmbeddedSemanticChunk[] = batch.map((chunk, index) => ({ ...chunk, vector: vectors[index] }));
+				const embeddedBatch: EmbeddedSemanticChunk[] = batch.map((chunk, index) => ({
+					...chunk,
+					vector: vectors[index],
+				}));
 				const insertStartedAt = Date.now();
 				await store.insertEmbeddedChunks(embeddedBatch);
 				dbInsertElapsedTotalMs += Date.now() - insertStartedAt;
 				dbInsertBatchesCompleted += 1;
 				insertedChunks += batch.length;
 				const writingElapsedMs = Date.now() - writingStartedAt;
-				const chunksPerSecond = insertedChunks > 0 ? insertedChunks / Math.max(writingElapsedMs / 1000, 0.001) : undefined;
+				const chunksPerSecond =
+					insertedChunks > 0 ? insertedChunks / Math.max(writingElapsedMs / 1000, 0.001) : undefined;
 				const remainingChunks = Math.max(0, totalChunksPlanned - insertedChunks);
-				const embeddingEtaMs = chunksPerSecond && chunksPerSecond > 0 ? Math.round((remainingChunks / chunksPerSecond) * 1000) : undefined;
+				const embeddingEtaMs =
+					chunksPerSecond && chunksPerSecond > 0
+						? Math.round((remainingChunks / chunksPerSecond) * 1000)
+						: undefined;
 				emitProgress({
 					phase: "writing",
 					writeSubphase: "db-insert",

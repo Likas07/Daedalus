@@ -1,4 +1,8 @@
-import { getSemanticWorkspaceStatus, syncSemanticWorkspace, type SemanticWorkspaceStatus } from "./semantic-workspace.js";
+import {
+	getSemanticWorkspaceStatus,
+	type SemanticWorkspaceStatus,
+	syncSemanticWorkspace,
+} from "./semantic-workspace.js";
 
 export const BACKGROUND_SYNC_COOLDOWN_MS = 20 * 60 * 1000;
 

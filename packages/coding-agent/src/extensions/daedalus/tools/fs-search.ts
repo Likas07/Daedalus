@@ -2,18 +2,18 @@ import { spawnSync } from "node:child_process";
 import { statSync } from "node:fs";
 import path from "node:path";
 import { StringEnum } from "@daedalus-pi/ai";
-import { formatVisiblePath, type ExtensionAPI } from "@daedalus-pi/coding-agent";
+import { type ExtensionAPI, formatVisiblePath } from "@daedalus-pi/coding-agent";
 import { Text } from "@daedalus-pi/tui";
 import { Type } from "@sinclair/typebox";
 import { globSync } from "glob";
 import { resolveToCwd } from "../../../core/tools/path-utils.js";
-import { ensureTool } from "../../../utils/tools-manager.js";
 import {
 	GREP_MAX_LINE_LENGTH,
 	type TruncationResult,
 	truncateHead,
 	truncateLine,
 } from "../../../core/tools/truncate.js";
+import { ensureTool } from "../../../utils/tools-manager.js";
 import { formatTruncationNotice, saveToTempFile } from "../shared/truncation.js";
 
 const FsSearchParams = Type.Object({
@@ -98,9 +98,7 @@ async function runFileSearch(params: { pattern: string; path?: string; limit?: n
 		content: [
 			{
 				type: "text" as const,
-				text: page.length
-					? `${bounded!.text}${notice ? `\n\n${notice}` : ""}`
-					: "No files found",
+				text: page.length ? `${bounded!.text}${notice ? `\n\n${notice}` : ""}` : "No files found",
 			},
 		],
 		details: {
@@ -193,9 +191,7 @@ async function runContentSearch(params: {
 		content: [
 			{
 				type: "text" as const,
-				text: page.length
-					? `${bounded!.text}${notice ? `\n\n${notice}` : ""}`
-					: "No matches found",
+				text: page.length ? `${bounded!.text}${notice ? `\n\n${notice}` : ""}` : "No matches found",
 			},
 		],
 		details: {

@@ -93,7 +93,6 @@ describe("status dashboard", () => {
 		session.dispose();
 	});
 
-
 	it("status_overview reports soft-stale semantic state without treating it as unusable", async () => {
 		const settingsManager = SettingsManager.create(tempDir, agentDir);
 		const sessionManager = SessionManager.inMemory();
