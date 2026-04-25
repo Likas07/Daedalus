@@ -1,0 +1,19 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"allowArbitraryExtensions": true,
+		"lib": [
+			"ES2024",
+			"DOM",
+			"DOM.Iterable"
+		],
+		"types": [
+			"bun",
+			"svelte"
+		]
+	},
+	"include": [
+		"src/**/*"
+	]
+}

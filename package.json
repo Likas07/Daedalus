@@ -2,14 +2,19 @@
 	"name": "daedalus-monorepo",
 	"private": true,
 	"type": "module",
-	"workspaces": ["packages/*"],
+	"workspaces": [
+		"packages/*"
+	],
 	"scripts": {
 		"dev": "bun --cwd=packages/coding-agent src/cli.ts",
+		"dev:gui": "bun --cwd=packages/gui run dev",
+		"dev:desktop": "bun --cwd=packages/desktop run dev",
 		"build:binary": "bun --cwd=packages/coding-agent run build:binary",
 		"test": "bun run --workspaces --if-present --parallel test",
-		"check": "biome check . && bun --cwd=packages/agent run check && bun --cwd=packages/ai run check && bun --cwd=packages/tui run check && bun --cwd=packages/coding-agent run check",
+		"check": "biome check . && bun --cwd=packages/agent run check && bun --cwd=packages/ai run check && bun --cwd=packages/tui run check && bun --cwd=packages/coding-agent run check && bun run check:gui",
 		"lint": "biome lint .",
-		"fmt": "biome format --write ."
+		"fmt": "biome format --write .",
+		"check:gui": "bun --cwd=packages/app-server-protocol run check && bun --cwd=packages/app-server-client run check && bun --cwd=packages/app-server run check && bun --cwd=packages/gui run check && bun --cwd=packages/desktop run check"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4",

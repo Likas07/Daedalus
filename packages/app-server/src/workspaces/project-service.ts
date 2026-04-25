@@ -1,0 +1,37 @@
+import { type AppServerDatabase, appendEvent, type EventPayload } from "..";
+import { projectRuntimeEvents } from "../persistence/projector";
+import { listProjects, type ProjectReadModel } from "../persistence/read-model";
+
+export interface ProjectServiceOptions {
+	readonly database: AppServerDatabase;
+}
+
+export interface OpenProjectInput {
+	readonly path: string;
+	readonly name?: string;
+}
+
+export class ProjectService {
+	constructor(private readonly options: ProjectServiceOptions) {}
+
+	open(input: OpenProjectInput): { readonly projectId: string } {
+		const projectId = `project-${crypto.randomUUID()}`;
+		const name = input.name ?? input.path.split(/[\\/]/).at(-1) ?? input.path;
+		appendEvent(this.options.database, {
+			streamId: `project:${projectId}`,
+			type: "project/registered",
+			payload: { projectId, path: input.path, name } satisfies EventPayload,
+		});
+		projectRuntimeEvents(this.options.database);
+		return { projectId };
+	}
+
+	list(): ProjectReadModel[] {
+		projectRuntimeEvents(this.options.database);
+		return listProjects(this.options.database);
+	}
+
+	get(projectId: string): ProjectReadModel | undefined {
+		return this.list().find((project) => project.id === projectId);
+	}
+}

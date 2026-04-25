@@ -2,7 +2,10 @@
 	"compilerOptions": {
 		"target": "ES2024",
 		"module": "ESNext",
-		"lib": ["ES2024", "DOM.AsyncIterable"],
+		"lib": [
+			"ES2024",
+			"DOM.AsyncIterable"
+		],
 		"strict": true,
 		"esModuleInterop": true,
 		"skipLibCheck": true,
@@ -19,21 +22,79 @@
 		"experimentalDecorators": true,
 		"emitDecoratorMetadata": true,
 		"useDefineForClassFields": false,
-		"types": ["bun"],
+		"types": [
+			"bun"
+		],
 		"paths": {
-			"@daedalus-pi/ai": ["./packages/ai/src/index.ts"],
-			"@daedalus-pi/ai/*": ["./packages/ai/src/*"],
-			"@daedalus-pi/agent-core": ["./packages/agent/src/index.ts"],
-			"@daedalus-pi/agent-core/*": ["./packages/agent/src/*"],
-			"@daedalus-pi/coding-agent": ["./packages/coding-agent/src/index.ts"],
-			"@daedalus-pi/coding-agent/hooks": ["./packages/coding-agent/src/core/hooks/index.ts"],
-			"@daedalus-pi/coding-agent/*": ["./packages/coding-agent/src/*"],
-			"@daedalus-pi/tui": ["./packages/tui/src/index.ts"],
-			"@daedalus-pi/tui/*": ["./packages/tui/src/*"],
-			"@daedalus-pi/web-ui": ["./packages/web-ui/src/index.ts"],
-			"@daedalus-pi/web-ui/*": ["./packages/web-ui/src/*"],
-			"@sinclair/typebox": ["./node_modules/@sinclair/typebox/build/esm/index.d.mts"],
-			"@sinclair/typebox/*": ["./node_modules/@sinclair/typebox/build/esm/*"]
+			"@daedalus-pi/ai": [
+				"./packages/ai/src/index.ts"
+			],
+			"@daedalus-pi/ai/*": [
+				"./packages/ai/src/*"
+			],
+			"@daedalus-pi/agent-core": [
+				"./packages/agent/src/index.ts"
+			],
+			"@daedalus-pi/agent-core/*": [
+				"./packages/agent/src/*"
+			],
+			"@daedalus-pi/app-server-protocol": [
+				"./packages/app-server-protocol/src/index.ts"
+			],
+			"@daedalus-pi/app-server-protocol/*": [
+				"./packages/app-server-protocol/src/*"
+			],
+			"@daedalus-pi/app-server-client": [
+				"./packages/app-server-client/src/index.ts"
+			],
+			"@daedalus-pi/app-server-client/*": [
+				"./packages/app-server-client/src/*"
+			],
+			"@daedalus-pi/app-server": [
+				"./packages/app-server/src/index.ts"
+			],
+			"@daedalus-pi/app-server/*": [
+				"./packages/app-server/src/*"
+			],
+			"@daedalus-pi/gui": [
+				"./packages/gui/src/index.ts"
+			],
+			"@daedalus-pi/gui/*": [
+				"./packages/gui/src/*"
+			],
+			"@daedalus-pi/desktop": [
+				"./packages/desktop/src/index.ts"
+			],
+			"@daedalus-pi/desktop/*": [
+				"./packages/desktop/src/*"
+			],
+			"@daedalus-pi/coding-agent": [
+				"./packages/coding-agent/src/index.ts"
+			],
+			"@daedalus-pi/coding-agent/hooks": [
+				"./packages/coding-agent/src/core/hooks/index.ts"
+			],
+			"@daedalus-pi/coding-agent/*": [
+				"./packages/coding-agent/src/*"
+			],
+			"@daedalus-pi/tui": [
+				"./packages/tui/src/index.ts"
+			],
+			"@daedalus-pi/tui/*": [
+				"./packages/tui/src/*"
+			],
+			"@daedalus-pi/web-ui": [
+				"./packages/web-ui/src/index.ts"
+			],
+			"@daedalus-pi/web-ui/*": [
+				"./packages/web-ui/src/*"
+			],
+			"@sinclair/typebox": [
+				"./node_modules/@sinclair/typebox/build/esm/index.d.mts"
+			],
+			"@sinclair/typebox/*": [
+				"./node_modules/@sinclair/typebox/build/esm/*"
+			]
 		}
 	}
 }
