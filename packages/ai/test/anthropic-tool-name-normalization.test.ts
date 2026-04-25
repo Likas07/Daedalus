@@ -5,7 +5,7 @@ import { stream } from "../src/stream.js";
 import type { Context, Tool } from "../src/types.js";
 import { resolveApiKey } from "./oauth.js";
 
-const oauthToken = await resolveApiKey("anthropic");
+const oauthToken = await resolveApiKey("anthropic").catch(() => undefined);
 
 /**
  * Tests for Anthropic OAuth tool name normalization.

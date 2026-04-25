@@ -77,7 +77,10 @@ export function supportsXhigh<TApi extends Api>(model: Model<TApi>): boolean {
  * - OpenAI Codex `gpt-5.4` / `gpt-5.5`
  */
 export function supportsFastMode<TApi extends Api>(model: Model<TApi>): boolean {
-	return (model.id === "gpt-5.4" || model.id === "gpt-5.5") && (model.provider === "openai" || model.provider === "openai-codex");
+	return (
+		(model.id === "gpt-5.4" || model.id === "gpt-5.5") &&
+		(model.provider === "openai" || model.provider === "openai-codex")
+	);
 }
 
 /**
