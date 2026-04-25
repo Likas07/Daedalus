@@ -85,6 +85,23 @@ describe("bundled starter agent policies", () => {
 		expect(policies.get("muse")).toContain("skill");
 		expect(policies.get("worker")).toContain("skill");
 		expect(policies.get("sage")).not.toContain("skill");
+		expect(policies.get("sage")).not.toContain("write");
+		expect(policies.get("sage")).not.toContain("hashline_edit");
+	});
+
+	it("keeps sage read-only with no writable globs", () => {
+		const sage = getBundledStarterAgents().find((agent) => agent.name === "sage");
+
+		expect(sage?.toolPolicy?.allowedTools).toEqual([
+			"read",
+			"grep",
+			"find",
+			"ls",
+			"fs_search",
+			"sem_search",
+			"todo_read",
+		]);
+		expect(sage?.toolPolicy?.writableGlobs).toEqual([]);
 	});
 });
 

@@ -1,4 +1,6 @@
+import path from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@daedalus-pi/coding-agent";
+import { minimatch } from "minimatch";
 import { applySemanticToolExposure, rememberSemanticDesiredTools } from "../../tools/semantic-tool-availability.js";
 import musePrimaryPrompt from "./prompts/muse-primary.md" with { type: "text" };
 import sagePrimaryPrompt from "./prompts/sage-primary.md" with { type: "text" };
@@ -35,14 +37,32 @@ const MUSE_TOOLS = [
 	"read_agent_result_output",
 	"todo_read",
 	"todo_write",
-	"execute_plan",
+	"plan_create",
+	"plan_validate",
 	"status_overview",
 	"subagent",
 	"question",
 	"questionnaire",
 	"write",
+	"hashline_edit",
+	"skill",
 ] as const;
 
+const IMPLEMENTATION_HANDOFF_TOOLS = ["execute_plan", "plan_task_read", "subagent", "todo_read", "todo_write"] as const;
+const MUSE_PLAN_HANDOFF_OPTIONS = ["Implement with Daedalus", "Revise plan", "Stay in Muse"] as const;
+
+type MusePlanReadyMetadata = {
+	path: string;
+	sidecarPath?: string;
+	validated: true;
+	createdAt: string;
+};
+
+function extractSidecarPath(details: unknown): string | undefined {
+	if (!details || typeof details !== "object") return undefined;
+	const { sidecarPath, sidecar } = details as { sidecarPath?: unknown; sidecar?: unknown };
+	return typeof sidecarPath === "string" ? sidecarPath : typeof sidecar === "string" ? sidecar : undefined;
+}
 function isPrimaryRoleMode(value: string): value is PrimaryRoleMode {
 	return value === "daedalus" || value === "sage" || value === "muse";
 }
@@ -58,9 +78,42 @@ function buildPrimaryRoleOverlay(role: Exclude<PrimaryRoleMode, "daedalus">): st
 	].join("\n\n");
 }
 
+const MUSE_WRITABLE_GLOBS = ["**/*.md"] as const;
+const MUSE_WRITE_TOOLS = new Set(["write", "edit", "hashline_edit"]);
+
+function normalizeToolPath(cwd: string, rawPath: string): string {
+	const normalized = rawPath.startsWith("@") ? rawPath.slice(1) : rawPath;
+	return path.resolve(cwd, normalized);
+}
+
+function isMuseWritablePath(cwd: string, rawPath: string): boolean {
+	const absolutePath = normalizeToolPath(cwd, rawPath);
+	const relativePath = path.relative(cwd, absolutePath) || path.basename(absolutePath);
+	return MUSE_WRITABLE_GLOBS.some(
+		(glob) => minimatch(absolutePath, glob, { dot: true }) || minimatch(relativePath, glob, { dot: true }),
+	);
+}
+
+function extractMutationPaths(toolName: string, input: Record<string, unknown>): string[] {
+	if (toolName === "hashline_edit") {
+		const edits = Array.isArray(input.edits) ? input.edits : [];
+		return edits.flatMap((edit) => {
+			if (!edit || typeof edit !== "object") return [];
+			const paths = [];
+			const { path: editPath, to } = edit as { path?: unknown; to?: unknown };
+			if (typeof editPath === "string") paths.push(editPath);
+			if (typeof to === "string") paths.push(to);
+			return paths;
+		});
+	}
+	const rawPath = input.path ?? input.file_path;
+	return typeof rawPath === "string" ? [rawPath] : [];
+}
+
 export default function primaryRoleMode(pi: ExtensionAPI): void {
 	let currentRole: PrimaryRoleMode = "daedalus";
 	let baselineTools: string[] | undefined;
+	let latestMusePlanReady: MusePlanReadyMetadata | undefined;
 
 	function toolsForRole(role: PrimaryRoleMode): string[] | undefined {
 		if (role === "daedalus") return baselineTools;
@@ -85,6 +138,52 @@ export default function primaryRoleMode(pi: ExtensionAPI): void {
 		}
 	}
 
+	function ensureImplementationTools(ctx?: ExtensionContext | ExtensionCommandContext): void {
+		const activeTools = new Set(pi.getActiveTools());
+		for (const toolName of IMPLEMENTATION_HANDOFF_TOOLS) activeTools.add(toolName);
+		const toolList = [...activeTools];
+		rememberSemanticDesiredTools(toolList);
+		pi.setActiveTools(ctx ? applySemanticToolExposure(toolList, ctx.cwd) : toolList);
+	}
+
+	async function handleMusePlanReady(
+		event: { input: Record<string, unknown>; details: unknown },
+		ctx: ExtensionContext,
+	): Promise<void> {
+		if (currentRole !== "muse") return;
+		const planPath = event.input.path;
+		if (typeof planPath !== "string" || !planPath.trim()) return;
+		latestMusePlanReady = {
+			path: planPath,
+			sidecarPath: extractSidecarPath(event.details),
+			validated: true,
+			createdAt: new Date().toISOString(),
+		};
+		pi.appendEntry("muse-plan-ready", latestMusePlanReady);
+
+		if (!ctx.hasUI || typeof ctx.ui.select !== "function") return;
+		const choice = await ctx.ui.select(`Validated Muse plan: ${planPath}`, [...MUSE_PLAN_HANDOFF_OPTIONS]);
+		if (choice !== "Implement with Daedalus") return;
+
+		currentRole = "daedalus";
+		applyRoleMode(ctx);
+		ensureImplementationTools(ctx);
+		persistRoleMode();
+		pi.sendMessage(
+			{
+				customType: "muse-plan-handoff",
+				content: `Validated plan ${planPath} is ready. Primary role switched to Daedalus for implementation.`,
+				display: true,
+				details: latestMusePlanReady,
+			},
+			{ triggerTurn: false },
+		);
+		pi.sendUserMessage(
+			`Implement the validated plan at ${planPath}. Use execute_plan with resume=true, and delegate implementation tasks to Worker subagents where appropriate.`,
+			{ deliverAs: "followUp" },
+		);
+	}
+
 	function restoreFromSession(ctx: ExtensionContext): void {
 		baselineTools = pi.getActiveTools();
 		const latest = ctx.sessionManager
@@ -106,35 +205,32 @@ export default function primaryRoleMode(pi: ExtensionAPI): void {
 		default: "daedalus",
 	});
 
-	pi.registerCommand("role", {
-		description: "Show or switch primary role mode: /role [daedalus|sage|muse]",
-		handler: async (args, ctx) => {
-			const requested = args.trim().toLowerCase();
-			if (!requested) {
-				ctx.ui.notify(`Current primary role: ${PRIMARY_ROLE_LABELS[currentRole]}`, "info");
-				return;
-			}
-			if (!isPrimaryRoleMode(requested)) {
-				ctx.ui.notify("Usage: /role [daedalus|sage|muse]", "error");
-				return;
-			}
-			if (!baselineTools) {
-				baselineTools = pi.getActiveTools();
-			}
-			currentRole = requested;
-			applyRoleMode(ctx);
-			persistRoleMode();
-			pi.sendMessage(
-				{
-					customType: "primary-role-mode",
-					content: `Primary role switched to ${PRIMARY_ROLE_LABELS[currentRole]}.`,
-					display: true,
-					details: { role: currentRole },
-				},
-				{ triggerTurn: false },
-			);
-		},
-	});
+	async function switchPrimaryRole(requested: PrimaryRoleMode, ctx: ExtensionCommandContext): Promise<void> {
+		if (!baselineTools) {
+			baselineTools = pi.getActiveTools();
+		}
+		currentRole = requested;
+		applyRoleMode(ctx);
+		persistRoleMode();
+		pi.sendMessage(
+			{
+				customType: "primary-role-mode",
+				content: `Primary role switched to ${PRIMARY_ROLE_LABELS[currentRole]}.`,
+				display: true,
+				details: { role: currentRole },
+			},
+			{ triggerTurn: false },
+		);
+	}
+
+	for (const role of ["sage", "muse", "daedalus"] as const) {
+		pi.registerCommand(role, {
+			description: `Switch primary role mode to ${PRIMARY_ROLE_LABELS[role]}`,
+			handler: async (_args, ctx) => {
+				await switchPrimaryRole(role, ctx);
+			},
+		});
+	}
 
 	pi.on("session_start", async (_event, ctx) => {
 		restoreFromSession(ctx);
@@ -144,6 +240,23 @@ export default function primaryRoleMode(pi: ExtensionAPI): void {
 		restoreFromSession(ctx);
 	});
 
+	pi.on("tool_call", async (event, ctx) => {
+		if (currentRole !== "muse" || !MUSE_WRITE_TOOLS.has(event.toolName)) {
+			return undefined;
+		}
+		const paths = extractMutationPaths(event.toolName, event.input);
+		const deniedPath = paths.find((toolPath) => !isMuseWritablePath(ctx.cwd, toolPath));
+		if (!deniedPath) {
+			return undefined;
+		}
+		return { block: true, reason: `Primary Muse may only write Markdown files; blocked ${deniedPath}` };
+	});
+
+	pi.on("tool_result", async (event, ctx) => {
+		if (event.toolName !== "plan_validate" || event.isError) return undefined;
+		await handleMusePlanReady(event, ctx);
+		return undefined;
+	});
 	pi.on("before_agent_start", async (event) => {
 		if (currentRole === "daedalus") {
 			return undefined;

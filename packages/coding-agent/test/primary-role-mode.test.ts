@@ -8,6 +8,7 @@ import { createAgentSession } from "../src/core/sdk.js";
 import { SessionManager } from "../src/core/session-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
 import { buildSubagentAppendPrompts } from "../src/core/subagents/runtime-config.js";
+import primaryRoleMode from "../src/extensions/daedalus/workflow/primary-role/index.js";
 import { getBundledStarterAgents } from "../src/extensions/daedalus/workflow/subagents/bundled.js";
 
 function _getTextContent(message: any): string {
@@ -55,7 +56,7 @@ describe("primary role runtime mode", () => {
 		});
 		await session.bindExtensions({});
 
-		await session.prompt("/role sage");
+		await session.prompt("/sage");
 		expect(session.getActiveToolNames()).toEqual(expect.arrayContaining(["fs_search", "todo_read"]));
 		expect(session.getActiveToolNames()).not.toContain("sem_search");
 		expect(session.getActiveToolNames()).not.toContain("write");
@@ -71,7 +72,7 @@ describe("primary role runtime mode", () => {
 		faux.unregister();
 	});
 
-	it("switches to Muse primary mode with planning doctrine and execute_plan-capable toolset", async () => {
+	it("switches to Muse primary mode with planning doctrine and structured plan toolset", async () => {
 		const faux = registerFauxProvider();
 		let providerSystemPrompt = "";
 		faux.setResponses([
@@ -94,8 +95,18 @@ describe("primary role runtime mode", () => {
 		});
 		await session.bindExtensions({});
 
-		await session.prompt("/role muse");
-		expect(session.getActiveToolNames()).toEqual(expect.arrayContaining(["todo_write", "execute_plan", "subagent"]));
+		await session.prompt("/muse");
+		expect(session.getActiveToolNames()).toEqual(
+			expect.arrayContaining([
+				"todo_write",
+				"plan_create",
+				"plan_validate",
+				"skill",
+				"subagent",
+				"write",
+				"hashline_edit",
+			]),
+		);
 
 		await session.prompt("Plan the auth refactor");
 		expect(providerSystemPrompt).toContain("[PRIMARY ROLE MODE: MUSE]");
@@ -143,6 +154,277 @@ describe("primary role runtime mode", () => {
 
 		session.dispose();
 		faux.unregister();
+	});
+
+	it("blocks primary Muse write tools outside Markdown paths", async () => {
+		let toolCallHandler: ((event: any, ctx: any) => Promise<unknown>) | undefined;
+		const commandHandlers: Record<string, (args: string, ctx: any) => Promise<void>> = {};
+		primaryRoleMode({
+			on(event: string, handler: any) {
+				if (event === "tool_call") toolCallHandler = handler;
+			},
+			registerCommand(name: string, options: any) {
+				commandHandlers[name] = options.handler;
+			},
+			registerFlag() {},
+			getActiveTools: () => ["read", "write", "hashline_edit"],
+			setActiveTools() {},
+			appendEntry() {},
+			sendMessage() {},
+		} as any);
+		if (!toolCallHandler || !commandHandlers.muse || !commandHandlers.sage)
+			throw new Error("primary-role did not register handlers");
+		expect(commandHandlers.role).toBeUndefined();
+		expect(commandHandlers.daedalus).toBeDefined();
+
+		const ctx = {
+			cwd: tempDir,
+			hasUI: true,
+			ui: { notify() {}, setStatus() {}, theme: { fg: (_name: string, text: string) => text } },
+		};
+		await commandHandlers.muse("", ctx);
+
+		await expect(
+			toolCallHandler(
+				{ type: "tool_call", toolCallId: "1", toolName: "write", input: { path: "notes.md", content: "ok" } },
+				ctx,
+			),
+		).resolves.toBeUndefined();
+		await expect(
+			toolCallHandler(
+				{ type: "tool_call", toolCallId: "2", toolName: "write", input: { path: "src/file.ts", content: "no" } },
+				ctx,
+			),
+		).resolves.toEqual({ block: true, reason: "Primary Muse may only write Markdown files; blocked src/file.ts" });
+		await expect(
+			toolCallHandler(
+				{
+					type: "tool_call",
+					toolCallId: "3",
+					toolName: "hashline_edit",
+					input: { edits: [{ path: "docs/plan.md", op: "move", to: "src/plan.ts" }] },
+				},
+				ctx,
+			),
+		).resolves.toEqual({ block: true, reason: "Primary Muse may only write Markdown files; blocked src/plan.ts" });
+
+		await commandHandlers.sage("", ctx);
+		await expect(
+			toolCallHandler(
+				{ type: "tool_call", toolCallId: "4", toolName: "write", input: { path: "src/file.ts", content: "ok" } },
+				ctx,
+			),
+		).resolves.toBeUndefined();
+	});
+
+	it("records Muse plan-ready metadata and ignores failed validation", async () => {
+		let toolResultHandler: ((event: any, ctx: any) => Promise<unknown>) | undefined;
+		const commandHandlers: Record<string, (args: string, ctx: any) => Promise<void>> = {};
+		const entries: Array<{ customType: string; data: any }> = [];
+		primaryRoleMode({
+			on(event: string, handler: any) {
+				if (event === "tool_result") toolResultHandler = handler;
+			},
+			registerCommand(name: string, options: any) {
+				commandHandlers[name] = options.handler;
+			},
+			registerFlag() {},
+			getActiveTools: () => ["read", "plan_validate"],
+			setActiveTools() {},
+			appendEntry(customType: string, data: any) {
+				entries.push({ customType, data });
+			},
+			sendMessage() {},
+			sendUserMessage() {},
+		} as any);
+		if (!toolResultHandler || !commandHandlers.muse) throw new Error("primary-role did not register handlers");
+
+		const ctx = {
+			cwd: tempDir,
+			hasUI: false,
+			ui: { notify() {}, setStatus() {}, theme: { fg: (_name: string, text: string) => text } },
+		};
+		await commandHandlers.muse("", ctx);
+		entries.length = 0;
+
+		await toolResultHandler(
+			{
+				type: "tool_result",
+				toolCallId: "1",
+				toolName: "plan_validate",
+				input: { path: "docs/plan.md" },
+				content: [],
+				isError: true,
+			},
+			ctx,
+		);
+		expect(entries).toHaveLength(0);
+
+		await toolResultHandler(
+			{
+				type: "tool_result",
+				toolCallId: "2",
+				toolName: "plan_validate",
+				input: { path: "docs/plan.md" },
+				content: [],
+				isError: false,
+				details: { sidecarPath: "docs/plan.tasks.json" },
+			},
+			ctx,
+		);
+		expect(entries).toHaveLength(1);
+		expect(entries[0]).toMatchObject({
+			customType: "muse-plan-ready",
+			data: { path: "docs/plan.md", sidecarPath: "docs/plan.tasks.json", validated: true },
+		});
+		expect(entries[0]?.data.createdAt).toEqual(expect.any(String));
+	});
+
+	it("prompts after Muse plan validation and leaves Muse active for revise or stay choices", async () => {
+		for (const choice of ["Revise plan", "Stay in Muse"]) {
+			let toolResultHandler: ((event: any, ctx: any) => Promise<unknown>) | undefined;
+			const commandHandlers: Record<string, (args: string, ctx: any) => Promise<void>> = {};
+			const sentMessages: any[] = [];
+			const queuedUserMessages: any[] = [];
+			let activeTools = ["read", "write", "hashline_edit"];
+			primaryRoleMode({
+				on(event: string, handler: any) {
+					if (event === "tool_result") toolResultHandler = handler;
+				},
+				registerCommand(name: string, options: any) {
+					commandHandlers[name] = options.handler;
+				},
+				registerFlag() {},
+				getActiveTools: () => activeTools,
+				setActiveTools(tools: string[]) {
+					activeTools = tools;
+				},
+				appendEntry() {},
+				sendMessage(message: any) {
+					sentMessages.push(message);
+				},
+				sendUserMessage(content: string, options: any) {
+					queuedUserMessages.push({ content, options });
+				},
+			} as any);
+			if (!toolResultHandler || !commandHandlers.muse) throw new Error("primary-role did not register handlers");
+
+			const ctx = {
+				cwd: tempDir,
+				hasUI: true,
+				ui: {
+					notify() {},
+					setStatus() {},
+					select: async () => choice,
+					theme: { fg: (_name: string, text: string) => text },
+				},
+			};
+			await commandHandlers.muse("", ctx);
+			await toolResultHandler(
+				{
+					type: "tool_result",
+					toolCallId: "1",
+					toolName: "plan_validate",
+					input: { path: "docs/plan.md" },
+					content: [],
+					isError: false,
+				},
+				ctx,
+			);
+
+			expect(activeTools).toEqual(expect.arrayContaining(["plan_validate", "write", "hashline_edit"]));
+			expect(sentMessages.map((message) => message.customType)).not.toContain("muse-plan-handoff");
+			expect(queuedUserMessages).toHaveLength(0);
+		}
+	});
+
+	it("hands validated Muse plans to Daedalus when implement is selected", async () => {
+		let toolResultHandler: ((event: any, ctx: any) => Promise<unknown>) | undefined;
+		const commandHandlers: Record<string, (args: string, ctx: any) => Promise<void>> = {};
+		const entries: Array<{ customType: string; data: any }> = [];
+		const sentMessages: any[] = [];
+		const queuedUserMessages: any[] = [];
+		let activeTools = ["read", "write", "hashline_edit"];
+		primaryRoleMode({
+			on(event: string, handler: any) {
+				if (event === "tool_result") toolResultHandler = handler;
+			},
+			registerCommand(name: string, options: any) {
+				commandHandlers[name] = options.handler;
+			},
+			registerFlag() {},
+			getActiveTools: () => activeTools,
+			setActiveTools(tools: string[]) {
+				activeTools = tools;
+			},
+			appendEntry(customType: string, data: any) {
+				entries.push({ customType, data });
+			},
+			sendMessage(message: any) {
+				sentMessages.push(message);
+			},
+			sendUserMessage(content: string, options: any) {
+				queuedUserMessages.push({ content, options });
+			},
+		} as any);
+		if (!toolResultHandler || !commandHandlers.muse) throw new Error("primary-role did not register handlers");
+
+		const ctx = {
+			cwd: tempDir,
+			hasUI: true,
+			ui: {
+				notify() {},
+				setStatus() {},
+				select: async (_prompt: string, options: string[]) => {
+					expect(options).toEqual(["Implement with Daedalus", "Revise plan", "Stay in Muse"]);
+					return "Implement with Daedalus";
+				},
+				theme: { fg: (_name: string, text: string) => text },
+			},
+		};
+		await commandHandlers.muse("", ctx);
+		await toolResultHandler(
+			{
+				type: "tool_result",
+				toolCallId: "1",
+				toolName: "plan_validate",
+				input: { path: "docs/plan.md" },
+				content: [],
+				isError: false,
+			},
+			ctx,
+		);
+
+		expect(entries).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ customType: "muse-plan-ready" }),
+				expect.objectContaining({
+					customType: "primary-role-mode",
+					data: expect.objectContaining({ role: "daedalus" }),
+				}),
+			]),
+		);
+		expect(activeTools).toEqual(
+			expect.arrayContaining(["execute_plan", "plan_task_read", "subagent", "todo_read", "todo_write"]),
+		);
+		expect(sentMessages).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					customType: "muse-plan-handoff",
+					display: true,
+					content: expect.stringContaining("docs/plan.md"),
+				}),
+			]),
+		);
+		expect(queuedUserMessages).toEqual([
+			expect.objectContaining({
+				content: expect.stringContaining("docs/plan.md"),
+				options: { deliverAs: "followUp" },
+			}),
+		]);
+		expect(queuedUserMessages[0].content).toContain("execute_plan");
+		expect(queuedUserMessages[0].content).toContain("resume=true");
+		expect(queuedUserMessages[0].content).toContain("Worker");
 	});
 
 	it("keeps delegated Sage prompts on the subagent result contract while primary Sage does not use it", () => {

@@ -5,8 +5,8 @@ import { parseFrontmatter } from "../../../../utils/frontmatter.js";
 const mdGlob = "**/*.md";
 const toolPolicies: Record<string, SubagentDefinition["toolPolicy"]> = {
 	sage: {
-		allowedTools: ["read", "grep", "find", "ls", "fs_search", "sem_search", "todo_read", "write", "hashline_edit"],
-		writableGlobs: [mdGlob],
+		allowedTools: ["read", "grep", "find", "ls", "fs_search", "sem_search", "todo_read"],
+		writableGlobs: [],
 		spawns: [],
 		maxDepth: 1,
 	},
@@ -20,7 +20,8 @@ const toolPolicies: Record<string, SubagentDefinition["toolPolicy"]> = {
 			"sem_search",
 			"todo_read",
 			"todo_write",
-			"execute_plan",
+			"plan_create",
+			"plan_validate",
 			"write",
 			"hashline_edit",
 			"skill",

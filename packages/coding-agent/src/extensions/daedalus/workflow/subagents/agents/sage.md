@@ -2,7 +2,7 @@
 name: sage
 displayName: Sage
 description: Read-only research and reconnaissance specialist with compact evidence-backed findings
-tools: read,grep,find,ls,fs_search,sem_search,sem_workspace_status,sem_workspace_init,sem_workspace_sync,todo_read,write,hashline_edit
+tools: read,grep,find,ls,fs_search,sem_search,todo_read
 purpose: exploration
 ---
 

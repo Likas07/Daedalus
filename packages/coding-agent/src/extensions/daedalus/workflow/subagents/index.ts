@@ -112,6 +112,7 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 		promptSnippet: "Delegate a focused sub-task to an available specialist.",
 		promptGuidelines: [
 			"Do not launch subagents for initial codebase exploration or simple lookups. Use sem_search first.",
+			"This exploration limit does not override role routing: use Muse for plans and always use Worker for implementation after minimal grounding.",
 			"When launching multiple independent tasks, call subagent once per independent task in parallel (single assistant message, multiple tool calls).",
 			"Keep Daedalus summary-first result semantics: inspect the returned summary/reference first and read deferred full output only when needed.",
 		],
@@ -243,7 +244,7 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 		pi.setActiveTools(Array.from(next));
 	});
 
-	pi.on("before_agent_start", async (_event, ctx) => {
+	pi.on("before_agent_start", async (event, ctx) => {
 		const { agents } = await discoverSubagents({
 			cwd: ctx.cwd,
 			agentDir: getAgentDir(),
@@ -251,11 +252,7 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 		});
 
 		return {
-			message: {
-				customType: "daedalus-orchestrator",
-				content: [{ type: "text", text: getOrchestratorGuidance(agents) }],
-				display: false,
-			},
+			systemPrompt: `${event.systemPrompt}\n\n${getOrchestratorGuidance(agents)}`,
 		};
 	});
 }

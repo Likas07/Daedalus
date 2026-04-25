@@ -191,32 +191,36 @@ describe("starter-pack subagent extension", () => {
 		await runner.emit({ type: "session_start", reason: "startup" });
 
 		const result = await runner.emitBeforeAgentStart("help", undefined, "System prompt");
-		const text = result?.messages?.[0]?.content?.[0];
-		const textContent = text && typeof text === "object" && "type" in text && text.type === "text" ? text : undefined;
+		const systemPrompt = result?.systemPrompt ?? "";
 
-		expect(textContent?.type).toBe("text");
-		expect(textContent?.text ?? "").toContain("[DAEDALUS]");
-		expect(textContent?.text ?? "").toContain("Daedalus is a master artisan");
-		expect(textContent?.text ?? "").toContain("Delegate focused work when it improves quality, speed, or safety.");
-		expect(textContent?.text ?? "").toContain(
-			"Default to delegation for non-trivial, multi-step, or ambiguous work.",
-		);
-		expect(textContent?.text ?? "").toContain(
+		expect(result?.messages).toBeUndefined();
+		expect(systemPrompt).toContain("System prompt");
+		expect(systemPrompt).toContain("[DAEDALUS]");
+		expect(systemPrompt).toContain("Daedalus is a master artisan");
+		expect(systemPrompt).toContain("Delegate focused work when it improves quality, speed, or safety.");
+		expect(systemPrompt).toContain("Default to delegation for non-trivial, multi-step, or ambiguous work.");
+		expect(systemPrompt).toContain(
 			"Parallelize everything that is independent; serialize only when later work depends on earlier results.",
 		);
-		expect(textContent?.text ?? "").toContain(
-			"Use Muse when the task needs decomposition or dependency-aware sequencing.",
+		expect(systemPrompt).toContain(
+			"Use Muse whenever the task needs a plan, decomposition, sequencing, architecture/design trade-off, or durable task breakdown.",
 		);
-		expect(textContent?.text ?? "").toContain(
+		expect(systemPrompt).toContain(
+			"Always use Worker for implementation: code edits, bug fixes, refactors, tests, generated files, or other repository mutations.",
+		);
+		expect(systemPrompt).toContain(
+			"Daedalus may do minimal first-hand grounding and final verification/synthesis, but should not implement alone when Worker is available.",
+		);
+		expect(systemPrompt).toContain(
 			"Keep final synthesis in Daedalus; subagents return scoped lightweight references.",
 		);
-		expect(textContent?.text ?? "").toContain("Use summary first when consuming subagent results.");
-		expect(textContent?.text ?? "").toContain("read_agent_result_output(result_id)");
-		expect(textContent?.text ?? "").toContain("Avoid duplicate or overly granular delegations.");
-		expect(textContent?.text ?? "").toContain("Use compact task packets and inspectable task results.");
-		expect(textContent?.text ?? "").toContain('Use agent="sage" for Sage (sage)');
-		expect(textContent?.text ?? "").toContain('Use agent="muse" for Muse (muse)');
-		expect(textContent?.text ?? "").toContain('Use agent="worker" for Hephaestus (worker)');
+		expect(systemPrompt).toContain("Use summary first when consuming subagent results.");
+		expect(systemPrompt).toContain("read_agent_result_output(result_id)");
+		expect(systemPrompt).toContain("Avoid duplicate delegations.");
+		expect(systemPrompt).toContain("Use compact task packets and inspectable task results.");
+		expect(systemPrompt).toContain('Use agent="sage" for Sage (sage)');
+		expect(systemPrompt).toContain('Use agent="muse" for Muse (muse)');
+		expect(systemPrompt).toContain('Use agent="worker" for Hephaestus (worker)');
 	});
 
 	it("exposes the subagent tool in the prompt via a prompt snippet", async () => {
