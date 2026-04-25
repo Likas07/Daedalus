@@ -19,6 +19,11 @@ export interface CreateAgentSessionRuntimeResult extends CreateAgentSessionResul
 	diagnostics: AgentSessionRuntimeDiagnostic[];
 }
 
+export interface AgentSessionRuntimeOptions {
+	/** Apply runtime cwd changes to process.cwd(). Defaults to true for CLI/TUI compatibility. */
+	applyProcessCwd?: boolean;
+}
+
 /**
  * Creates a full runtime for a target cwd and session manager.
  *
@@ -58,6 +63,7 @@ export class AgentSessionRuntime {
 		private readonly createRuntime: CreateAgentSessionRuntimeFactory,
 		private _diagnostics: AgentSessionRuntimeDiagnostic[] = [],
 		private _modelFallbackMessage?: string,
+		private readonly options: AgentSessionRuntimeOptions = {},
 	) {}
 
 	get services(): AgentSessionServices {
@@ -116,7 +122,7 @@ export class AgentSessionRuntime {
 	}
 
 	private apply(result: CreateAgentSessionRuntimeResult): void {
-		if (process.cwd() !== result.services.cwd) {
+		if ((this.options.applyProcessCwd ?? true) && process.cwd() !== result.services.cwd) {
 			process.chdir(result.services.cwd);
 		}
 		this._session = result.session;
@@ -303,11 +309,11 @@ export async function createAgentSessionRuntime(
 		agentDir: string;
 		sessionManager: SessionManager;
 		sessionStartEvent?: SessionStartEvent;
-	},
+	} & AgentSessionRuntimeOptions,
 ): Promise<AgentSessionRuntime> {
 	assertSessionCwdExists(options.sessionManager, options.cwd);
 	const result = await createRuntime(options);
-	if (process.cwd() !== result.services.cwd) {
+	if ((options.applyProcessCwd ?? true) && process.cwd() !== result.services.cwd) {
 		process.chdir(result.services.cwd);
 	}
 	return new AgentSessionRuntime(
@@ -316,6 +322,7 @@ export async function createAgentSessionRuntime(
 		createRuntime,
 		result.diagnostics,
 		result.modelFallbackMessage,
+		{ applyProcessCwd: options.applyProcessCwd },
 	);
 }
 

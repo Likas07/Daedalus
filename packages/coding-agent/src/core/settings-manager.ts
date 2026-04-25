@@ -587,7 +587,9 @@ export class SettingsManager {
 
 	setSemanticSettings(settings: SemanticSettings, scope: SettingsScope = "project"): void {
 		const target =
-			scope === "project" ? { ...(this.projectSettings.semantic ?? {}) } : { ...(this.globalSettings.semantic ?? {}) };
+			scope === "project"
+				? { ...(this.projectSettings.semantic ?? {}) }
+				: { ...(this.globalSettings.semantic ?? {}) };
 		const next: SemanticSettings = { ...target };
 		if (settings.embeddingHost !== undefined) next.embeddingHost = settings.embeddingHost;
 		if (settings.embeddingModel !== undefined) next.embeddingModel = settings.embeddingModel;

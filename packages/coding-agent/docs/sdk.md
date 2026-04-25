@@ -1168,3 +1168,17 @@ type Tool
 ```
 
 For extension types, see [extensions.md](extensions.md) for the full API.
+
+## App-server and GUI SDK notes
+
+The desktop GUI embeds the coding-agent runtime through `@daedalus-pi/app-server`. Applications that need a local GUI/backend split should prefer the app-server packages instead of importing terminal UI internals:
+
+- `@daedalus-pi/app-server-protocol` contains the JSON protocol schemas and TypeScript types.
+- `@daedalus-pi/app-server-client` provides renderer/client transport helpers.
+- `@daedalus-pi/app-server` starts the local Bun server, persists events, hosts sessions, and bridges extension UI.
+- `@daedalus-pi/desktop` bootstraps or reuses the app-server from Electron and writes the local manifest.
+- `@daedalus-pi/gui` renders the browser/Electron renderer surface.
+
+For SDK consumers, the important boundary is still `createAgentSession()` for in-process embedding. Use the app-server when you need process isolation, WebSocket transport, event replay, terminal/session services, or GUI extension dialogs. The app-server protocol currently advertises `events`, `sessions`, and `extensions` capabilities during `initialize`.
+
+Extension UI support in the GUI is intentionally narrower than the TUI: `confirm`, `input`, and `select` map cleanly to dialogs, while custom TUI components should provide a simpler fallback. See `extensions.md` for the support matrix.

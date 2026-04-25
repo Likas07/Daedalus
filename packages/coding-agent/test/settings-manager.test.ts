@@ -128,7 +128,6 @@ describe("SettingsManager", () => {
 		});
 	});
 
-
 	describe("semantic settings", () => {
 		it("defaults semantic settings to unset values", () => {
 			const manager = SettingsManager.inMemory();
@@ -151,7 +150,9 @@ describe("SettingsManager", () => {
 				embeddingModel: "embeddinggemma",
 				indexProfile: "broad",
 			});
-			expect(SettingsManager.create(sandbox.projectDir, sandbox.agentDir).getSemanticSettings()).toEqual(saved.semantic);
+			expect(SettingsManager.create(sandbox.projectDir, sandbox.agentDir).getSemanticSettings()).toEqual(
+				saved.semantic,
+			);
 		});
 	});
 

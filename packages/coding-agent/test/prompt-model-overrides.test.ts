@@ -28,26 +28,21 @@ describe("main prompt model overrides", () => {
 		expect(prompt).not.toContain("# Daedalus GPT Override");
 	});
 
-	it("keeps delegation and parallel-lane doctrine explicit in the GPT override", () => {
-		const prompt = buildSystemPrompt({
-			selectedTools: [],
-			contextFiles: [],
-			skills: [],
-			modelId: "gpt-5.4",
-		});
-
-		expect(prompt).toContain("Keep default-to-delegation and independent-lane parallelism explicit and top-loaded.");
-	});
-
-	it("preserves delegation and parallel-lane doctrine in the Claude override", () => {
-		const prompt = buildSystemPrompt({
+	it("keeps model override files as lightweight headers", () => {
+		const gptPrompt = buildSystemPrompt({ selectedTools: [], contextFiles: [], skills: [], modelId: "gpt-5.4" });
+		const claudePrompt = buildSystemPrompt({
 			selectedTools: [],
 			contextFiles: [],
 			skills: [],
 			modelId: "claude-sonnet-4-6",
 		});
 
-		expect(prompt).toContain(
+		expect(gptPrompt).toContain("# Daedalus GPT Override");
+		expect(gptPrompt).not.toContain(
+			"Keep default-to-delegation and independent-lane parallelism explicit and top-loaded.",
+		);
+		expect(claudePrompt).toContain("# Daedalus Claude Override");
+		expect(claudePrompt).not.toContain(
 			"Preserve default delegation and independent-lane parallelism while allowing slightly richer synthesis.",
 		);
 	});

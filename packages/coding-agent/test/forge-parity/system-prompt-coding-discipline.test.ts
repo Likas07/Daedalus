@@ -11,7 +11,8 @@ describe("coding discipline system prompt overlay", () => {
 		expect(prompt).toContain("Semantic search first for unfamiliar code");
 		expect(prompt).toContain("Parallelize independent tool calls");
 		expect(prompt).toContain("Prefer specialized tools over shell");
-		expect(prompt).toContain("Do not use subagents for initial exploration");
+		expect(prompt).not.toContain("Do not use subagents for initial exploration");
+		expect(prompt).toContain("Do not use bash or Python to edit files");
 		expect(prompt).toContain("Validate before finalizing");
 		expect(prompt).toContain("Do not delete failing tests");
 		expect(prompt).toContain("Address root causes, not symptoms.");

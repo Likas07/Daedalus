@@ -136,7 +136,7 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 	if (hasFsSearch) {
 		addGuideline("Prefer fs_search over grep/find/ls for exact discovery and paginated search results");
 	} else if (hasBash && !hasGrep && !hasFind && !hasLs) {
-		addGuideline("Use bash for file operations like ls, rg, find");
+		addGuideline("Use bash for file inspection commands only, not for file edits");
 	} else if (hasBash && (hasGrep || hasFind || hasLs)) {
 		addGuideline("Prefer grep/find/ls tools over bash for file exploration (faster, respects .gitignore)");
 	}
@@ -149,6 +149,9 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 	}
 
 	// Always include these
+	addGuideline(
+		"Do not use bash or Python to edit files; use hashline_edit, write, ast_edit, or another dedicated edit tool instead",
+	);
 	addGuideline("Be concise in your responses");
 	addGuideline("Show file paths clearly when working with files");
 

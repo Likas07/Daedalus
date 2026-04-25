@@ -13,8 +13,9 @@ describe("role-aware performance tuning", () => {
 		expect(sage?.toolPolicy?.allowedTools).not.toContain("todo_write");
 		expect(sage?.toolPolicy?.allowedTools).not.toContain("bash");
 		expect(muse?.toolPolicy?.allowedTools).toEqual(
-			expect.arrayContaining(["sem_search", "fs_search", "todo_read", "todo_write", "execute_plan"]),
+			expect.arrayContaining(["sem_search", "fs_search", "todo_read", "todo_write", "plan_create", "plan_validate"]),
 		);
+		expect(muse?.toolPolicy?.allowedTools).not.toContain("execute_plan");
 		expect(muse?.toolPolicy?.allowedTools).not.toContain("sem_workspace_status");
 		expect(muse?.toolPolicy?.allowedTools).not.toContain("sem_workspace_init");
 		expect(muse?.toolPolicy?.allowedTools).not.toContain("sem_workspace_sync");
@@ -37,6 +38,8 @@ describe("role-aware performance tuning", () => {
 		const worker = agents.find((agent) => agent.name === "worker");
 		expect(sage?.systemPrompt).toContain("Stop once enough evidence exists");
 		expect(muse?.systemPrompt).toContain("Create durable plan artifacts under `plans/`");
+		expect(muse?.systemPrompt).toContain("At the start of every Muse task, load and use the `writing-plans` skill");
+		expect(muse?.systemPrompt).toContain("Do not use Markdown checkbox lists as Muse's plan output format");
 		expect(worker?.systemPrompt).toContain("Use todo_write narrowly");
 		expect(worker?.systemPrompt).toContain("leave final synthesis and user-facing judgment to Daedalus");
 	});

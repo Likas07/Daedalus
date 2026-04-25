@@ -123,20 +123,22 @@ describe("buildSystemPrompt", () => {
 			expect(prompt.match(/- Use dynamic_tool for summaries\./g)).toHaveLength(1);
 		});
 
-        test("includes clean bulk hashline_edit guidance", () => {
-            const tool = createHashlineEditToolDefinition(process.cwd());
-            const prompt = buildSystemPrompt({
-                selectedTools: ["hashline_edit"],
-                toolSnippets: { hashline_edit: tool.promptSnippet ?? "" },
-                promptGuidelines: tool.promptGuidelines,
-                contextFiles: [],
-                skills: [],
-            });
+		test("includes clean bulk hashline_edit guidance", () => {
+			const tool = createHashlineEditToolDefinition(process.cwd());
+			const prompt = buildSystemPrompt({
+				selectedTools: ["hashline_edit"],
+				toolSnippets: { hashline_edit: tool.promptSnippet ?? "" },
+				promptGuidelines: tool.promptGuidelines,
+				contextFiles: [],
+				skills: [],
+			});
 
-            expect(prompt).toContain("op/pos/end/lines");
-            expect(prompt).toContain("clean bulk shape");
-            expect(prompt).toContain("ORIGINAL file snapshot");
-        });
+			expect(prompt).toContain('read(format="hashline") first');
+			expect(prompt).toContain("op/pos/end/lines/to");
+			expect(prompt).toContain("clean bulk shape");
+			expect(prompt).toContain("ORIGINAL file snapshot");
+			expect(prompt).toContain("Use hashline_edit for file edits instead of bash, Python, perl, sed, awk");
+		});
 	});
 
 	describe("Daedalus prompt layering", () => {
@@ -179,7 +181,7 @@ describe("buildSystemPrompt", () => {
 			const prompt = buildSystemPrompt({ selectedTools: [], contextFiles: [], skills: [] });
 
 			expect(prompt).toContain("Default to delegation for non-trivial, multi-step, or ambiguous work.");
-			expect(prompt).toContain("Direct execution is for clearly local, trivial, or dependency-bound work.");
+			expect(prompt).not.toContain("Direct execution is for clearly local, trivial, or dependency-bound work.");
 			expect(prompt).toContain("Daedalus owns final synthesis and the user-facing answer.");
 		});
 

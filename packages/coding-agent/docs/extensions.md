@@ -2306,3 +2306,20 @@ All examples in [examples/extensions/](../examples/extensions/).
 | `inline-bash.ts` | Inline bash in tool calls | `on("tool_call")` |
 | `bash-spawn-hook.ts` | Adjust bash command, cwd, and env before execution | `createBashTool`, `spawnHook` |
 | `with-deps/` | Extension with npm dependencies | Package structure with `package.json` |
+
+## GUI extension support
+
+Daedalus desktop routes supported extension UI calls through the app-server so the same extension can run from the TUI or GUI. Extension authors do not need a separate GUI API for common prompts; continue to call `ctx.ui`.
+
+| API/capability | TUI | GUI | Guidance |
+| --- | --- | --- | --- |
+| `ctx.ui.confirm()` | Supported | Supported | Best cross-surface approval primitive. |
+| `ctx.ui.input()` | Supported | Supported | Use for short text/password/number prompts. |
+| `ctx.ui.select()` | Supported | Supported | Keep option labels concise for dialog rendering. |
+| `ctx.ui.notify()` | Supported | Planned/basic host bridge | Do not require notification delivery for correctness. |
+| `ctx.ui.custom()` | Supported | Not supported | Provide a confirm/input/select fallback for desktop GUI users. |
+| Custom tools | Supported | Supported by the app-server runtime | Results appear through normal session events. |
+| Custom slash commands | Supported | Runtime supported; GUI command palette is future work | Avoid requiring slash-command-only flows in GUI-first extensions. |
+| Extension persistence | Supported | Supported | Persisted events/state can be replayed by the app-server. |
+
+In GUI mode the app-server emits `extension/ui/request` messages and the renderer answers with `extension/ui/respond`. See `packages/gui/docs/extension-support.md` and `packages/app-server/docs/protocol.md` for the transport details.

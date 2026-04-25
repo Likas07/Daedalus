@@ -589,8 +589,6 @@ export function findCutPoint(
 		};
 	}
 
-
-
 	if (cutPoints.length === 0) {
 		return { firstKeptEntryIndex: startIndex, turnStartIndex: -1, isSplitTurn: false };
 	}

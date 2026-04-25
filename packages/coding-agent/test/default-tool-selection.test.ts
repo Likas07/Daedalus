@@ -81,6 +81,12 @@ describe("default built-in tool selection", () => {
 		expect(session.systemPrompt).toContain(
 			"- All edits in one call reference the ORIGINAL file snapshot; do not adjust line numbers for earlier edits in the same call",
 		);
+		expect(session.systemPrompt).toContain(
+			"- Do not use bash or Python to edit files; use hashline_edit, write, ast_edit, or another dedicated edit tool instead",
+		);
+		expect(session.systemPrompt).toContain(
+			"- Use hashline_edit for file edits instead of bash, Python, perl, sed, awk, or ad hoc mutation scripts",
+		);
 		expect(session.systemPrompt).toContain("- Use ast_grep when syntax shape matters more than plain text");
 		expect(session.systemPrompt).toContain(
 			"- Use ast_edit for codemods and structural rewrites where plain text replace is unsafe",
