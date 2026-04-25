@@ -275,7 +275,8 @@ export function createRemoteHashlineEditOps(
 		access: readOps.access,
 		writeFile: writeOps.writeFile,
 		mkdir: writeOps.mkdir,
-		unlink: (p) => sshExec(remote, buildShellCommand(["rm", "-f", toRemotePath(localCwd, remoteCwd, p)])).then(() => {}),
+		unlink: (p) =>
+			sshExec(remote, buildShellCommand(["rm", "-f", toRemotePath(localCwd, remoteCwd, p)])).then(() => {}),
 		rename: async (from, to) => {
 			const remoteFrom = toRemotePath(localCwd, remoteCwd, from);
 			const remoteTo = toRemotePath(localCwd, remoteCwd, to);

@@ -12,15 +12,12 @@ import type { ToolDefinition } from "../extensions/types.js";
 import type { EditToolDetails } from "./edit.js";
 import { createPathEditCallRenderer, createPathEditResultRenderer } from "./edit-render.js";
 import { withFileMutationQueue } from "./file-mutation-queue.js";
-import {
-	executeHashlineFileBatch,
-	type HashlineFileBatchResult,
-} from "./hashline/bulk-executor.js";
+import { executeHashlineFileBatch, type HashlineFileBatchResult } from "./hashline/bulk-executor.js";
 import {
 	buildCompactHashlineDiffPreview,
-	hashlineEditSchema,
 	type HashlineEditToolInput,
 	HashlineMismatchError,
+	hashlineEditSchema,
 	normalizeHashlineBulkInput,
 } from "./hashline/index.js";
 import { resolveToCwd } from "./path-utils.js";
@@ -79,7 +76,10 @@ function aggregateResults(results: HashlineFileBatchResult[]): {
 	return {
 		content: [{ type: "text", text: results.map(formatResultText).join("\n") }],
 		details: {
-			diff: results.map((result) => result.diff).filter(Boolean).join("\n"),
+			diff: results
+				.map((result) => result.diff)
+				.filter(Boolean)
+				.join("\n"),
 			firstChangedLine: results.find((result) => result.firstChangedLine !== undefined)?.firstChangedLine,
 		},
 	};
@@ -94,16 +94,19 @@ export function createHashlineEditToolDefinition(
 		name: "hashline_edit",
 		label: "hashline_edit",
 		description:
-			'Bulk edit files using LINE#ID anchors from read(format="hashline"). Input is { edits: [{ path, op, pos?, end?, lines? }] } with op replace/append/prepend/delete/move.',
-		promptSnippet: "Preferred stale-safe bulk file edits using per-entry path plus op/pos/end/lines LINE#ID anchors",
+			'Preferred stale-safe file editing tool. First read each anchored target with read({ path, format: "hashline" }), then call hashline_edit with { edits: [{ path, op, pos?, end?, lines?, to? }] }. Use op:"replace" with pos/end LINE#ID anchors to replace or delete exact existing lines; lines is only the replacement text, and lines:null deletes the consumed line/range. Use op:"append" or op:"prepend" with pos to insert after/before an anchor, or without pos for EOF/BOF file creation. Batch independent edits across files in one call; every anchor refers to the original file snapshot from the prior hashline read, so never adjust anchors for earlier edits in the same call. Use op:"move" with to for renames and op:"delete" only for whole-file deletion.',
+		promptSnippet:
+			'Preferred stale-safe bulk file edits: read(format="hashline") first, then use per-entry path/op/pos/end/lines/to LINE#ID anchors',
 		promptGuidelines: [
+			"Use hashline_edit for file edits instead of bash, Python, perl, sed, awk, or ad hoc mutation scripts",
 			'Read each anchored target file with read({ path, format: "hashline" }) before hashline_edit',
 			'Use the clean bulk shape only: { edits: [{ path, op: "replace"|"append"|"prepend"|"delete"|"move", pos?, end?, lines?, to? }] }',
 			"All edits in one call reference the ORIGINAL file snapshot; do not adjust line numbers for earlier edits in the same call",
 			"Batch independent edits across files in one hashline_edit call instead of writing ad hoc bash or Python mutation scripts",
 			"replace consumes pos..end inclusive; lines contains only replacement content, not unchanged surrounding lines",
+			"Use lines:null with replace to delete the consumed line/range; op:delete deletes the whole file only",
 			"append/prepend with pos insert after/before the anchor; without pos they append/prepend at EOF/BOF and may create missing files",
-			"Use lines:null only with replace to delete the consumed line/range",
+			"Use move with to for renames; hashline_edit checks both source path and destination to against protected paths",
 			"Re-read a file before editing it again after a successful hashline_edit call",
 		],
 		parameters: hashlineEditSchema,

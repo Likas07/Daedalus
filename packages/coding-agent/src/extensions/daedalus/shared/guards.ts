@@ -6,6 +6,9 @@ export function isDangerousCommand(command: string): boolean {
 
 export const DEFAULT_PROTECTED_PATHS: string[] = [".env", ".git/", "node_modules/"];
 
-export function isProtectedPath(path: string, protectedPaths: string[] = DEFAULT_PROTECTED_PATHS): boolean {
-	return protectedPaths.some((protectedPath) => path.includes(protectedPath));
+export function isProtectedPath(path: unknown, protectedPaths: string[] = DEFAULT_PROTECTED_PATHS): boolean {
+	if (typeof path !== "string") return false;
+	return protectedPaths.some(
+		(protectedPath) => typeof protectedPath === "string" && protectedPath.length > 0 && path.includes(protectedPath),
+	);
 }

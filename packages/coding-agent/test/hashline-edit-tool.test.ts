@@ -97,7 +97,12 @@ describe("hashline_edit tool", () => {
 
 		const result = await tool.execute(
 			"tool-file-ops",
-			{ edits: [{ path: "dead.txt", op: "delete" }, { path: "old.txt", op: "move", to: "nested/new.txt" }] },
+			{
+				edits: [
+					{ path: "dead.txt", op: "delete" },
+					{ path: "old.txt", op: "move", to: "nested/new.txt" },
+				],
+			},
 			undefined,
 			undefined,
 			{} as any,

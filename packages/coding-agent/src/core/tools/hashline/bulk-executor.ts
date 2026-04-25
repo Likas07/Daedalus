@@ -1,7 +1,7 @@
 import { dirname } from "node:path";
+import { detectLineEnding, generateDiffString, normalizeToLF, restoreLineEndings, stripBom } from "../edit-diff.js";
 import type { NormalizedHashlineFileBatch } from "./bulk-input.js";
 import { applyHashlineEditsToNormalizedContent } from "./edit-operations.js";
-import { detectLineEnding, generateDiffString, normalizeToLF, restoreLineEndings, stripBom } from "../edit-diff.js";
 
 export interface HashlineBatchFileOps {
 	readFile: (absolutePath: string) => Promise<Buffer>;
@@ -30,7 +30,10 @@ export interface HashlineFileBatchResult {
 	noopEdits?: Array<{ editIndex: number; loc: string; current: string }>;
 }
 
-function buildNoChangeDiagnostic(path: string, noopEdits?: Array<{ editIndex: number; loc: string; current: string }>): string {
+function buildNoChangeDiagnostic(
+	path: string,
+	noopEdits?: Array<{ editIndex: number; loc: string; current: string }>,
+): string {
 	let diagnostic = `No changes made to ${path}. The edits produced identical content.`;
 	if (noopEdits && noopEdits.length > 0) {
 		diagnostic += ` No-op edits: ${noopEdits.map((edit) => `edits[${edit.editIndex}] at ${edit.loc}`).join(", ")}.`;
@@ -39,7 +42,9 @@ function buildNoChangeDiagnostic(path: string, noopEdits?: Array<{ editIndex: nu
 }
 
 function isMissingFileError(error: unknown): boolean {
-	return Boolean(error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "ENOENT");
+	return Boolean(
+		error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "ENOENT",
+	);
 }
 
 export async function executeHashlineFileBatch(input: ExecuteHashlineFileBatchInput): Promise<HashlineFileBatchResult> {

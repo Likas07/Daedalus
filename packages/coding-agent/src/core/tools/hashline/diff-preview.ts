@@ -29,7 +29,12 @@ export function buildCompactHashlineDiffPreview(
 	const output: string[] = [];
 
 	for (const line of lines) {
-		const kind = line.startsWith("+") && !line.startsWith("+++") ? "+" : line.startsWith("-") && !line.startsWith("---") ? "-" : " ";
+		const kind =
+			line.startsWith("+") && !line.startsWith("+++")
+				? "+"
+				: line.startsWith("-") && !line.startsWith("---")
+					? "-"
+					: " ";
 		if (kind === "+") addedLines++;
 		if (kind === "-") removedLines++;
 

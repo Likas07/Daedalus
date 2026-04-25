@@ -73,7 +73,8 @@ export const hashlineEditEntrySchema = Type.Union([
 export const hashlineEditSchema = Type.Object(
 	{
 		edits: Type.Array(hashlineEditEntrySchema, {
-			description: "Bulk hashline edits. Every entry carries path and op. All anchors reference original file snapshots.",
+			description:
+				"Bulk hashline edits. Every entry carries path and op. All anchors reference original file snapshots.",
 			minItems: 1,
 		}),
 	},
@@ -139,7 +140,7 @@ function normalizeEntry(entry: RawHashlineEditEntry): {
 export function normalizeHashlineBulkInput(input: HashlineEditToolInput): Map<string, NormalizedHashlineFileBatch> {
 	if (!input || typeof input !== "object" || !("edits" in input) || !Array.isArray(input.edits) || "path" in input) {
 		throw new Error(
-			'hashline_edit now expects { edits: [{ path, op, pos?, end?, lines? }] }; top-level path/loc/content are no longer supported.',
+			"hashline_edit now expects { edits: [{ path, op, pos?, end?, lines? }] }; top-level path/loc/content are no longer supported.",
 		);
 	}
 
@@ -151,7 +152,7 @@ export function normalizeHashlineBulkInput(input: HashlineEditToolInput): Map<st
 		}
 		if ("loc" in entry || "content" in entry) {
 			throw new Error(
-				'hashline_edit now expects { edits: [{ path, op, pos?, end?, lines? }] }; loc/content are no longer supported.',
+				"hashline_edit now expects { edits: [{ path, op, pos?, end?, lines? }] }; loc/content are no longer supported.",
 			);
 		}
 		const normalized = normalizeEntry(entry);
