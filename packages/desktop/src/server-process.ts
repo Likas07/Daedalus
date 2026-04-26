@@ -88,13 +88,36 @@ export function spawnAppServer(
 	const projectRoot = options.projectRoot ?? process.env.DAEDALUS_PROJECT_ROOT ?? resolve(moduleDir, "..", "..", "..");
 	const args = ["--db", options.dbPath, "--host", "127.0.0.1", "--port", "0", "--token-file", options.tokenFile];
 	if (options.packaged) {
-		const binary =
-			options.appServerBinary ?? join(process.resourcesPath ?? projectRoot, "app-server", "daedalus-app-server");
-		return spawn(binary, args, { env: options.env ?? process.env });
+		const runtime = resolvePackagedAppServerRuntime({
+			appServerBinary: options.appServerBinary,
+			resourcesPath: process.resourcesPath,
+			projectRoot,
+		});
+		return spawn(runtime.command, [...runtime.args, ...args], { env: options.env ?? process.env });
 	}
 	return spawn("bun", ["--cwd", join(projectRoot, "packages", "app-server"), "src/server/main.ts", ...args], {
 		env: options.env ?? process.env,
 	});
+}
+
+export interface PackagedAppServerRuntime {
+	readonly command: string;
+	readonly args: readonly string[];
+	readonly kind: "binary" | "bun-script";
+}
+
+export function resolvePackagedAppServerRuntime(options: {
+	readonly appServerBinary?: string;
+	readonly resourcesPath?: string;
+	readonly projectRoot?: string;
+}): PackagedAppServerRuntime {
+	if (options.appServerBinary) return { command: options.appServerBinary, args: [], kind: "binary" };
+	const resourcesRoot = options.resourcesPath ?? options.projectRoot ?? process.cwd();
+	const binary = join(resourcesRoot, "app-server", process.platform === "win32" ? "daedalus-app-server.exe" : "daedalus-app-server");
+	if (existsSync(binary)) return { command: binary, args: [], kind: "binary" };
+	const fallback = join(resourcesRoot, "app-server", "main.ts");
+	if (existsSync(fallback)) return { command: "bun", args: [fallback], kind: "bun-script" };
+	return { command: binary, args: [], kind: "binary" };
 }
 
 export function ensureTokenFile(tokenFile: string): string {

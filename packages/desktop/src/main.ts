@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { deepLinkUrl, installDaedalusMenu, openFileDialog } from "./menu";
 import { isSafeExternalUrl, toRendererServerBootstrap } from "./native-bridge";
+import { NativeCommandRouter } from "./native-command-router";
 import { showDesktopNotification } from "./notifications";
 import { addRecentProject, clearRecentProjects, listRecentProjects } from "./recent-projects";
 import { ensureAppServer } from "./server-process";
@@ -14,6 +15,8 @@ const projectRoot = process.env.DAEDALUS_PROJECT_ROOT
 	: resolve(moduleDir, "..", "..", "..");
 
 let mainWindow: BrowserWindow | undefined;
+const nativeCommands = new NativeCommandRouter({ getMainWindow: () => mainWindow });
+const refreshMenu = (): void => installDaedalusMenu({ getMainWindow: () => mainWindow, router: nativeCommands, onRecentProjectsChanged: refreshMenu });
 
 function createMainWindow(): BrowserWindow {
 	const window = new BrowserWindow({
@@ -24,13 +27,13 @@ function createMainWindow(): BrowserWindow {
 			preload: join(moduleDir, "preload.js"),
 			contextIsolation: true,
 			nodeIntegration: false,
-			sandbox: false,
+			sandbox: true,
 		},
 	});
 	mainWindow = window;
 	const devUrl = process.env.DAEDALUS_GUI_DEV_URL ?? process.env.VITE_DEV_SERVER_URL;
 	if (devUrl) window.loadURL(devUrl);
-	else window.loadFile(resolve(projectRoot, "packages", "gui", "dist", "index.html"));
+	else window.loadFile(resolve(app.isPackaged ? process.resourcesPath : join(projectRoot, "packages"), "gui", "dist", "index.html"));
 	window.on("closed", () => {
 		if (mainWindow === window) mainWindow = undefined;
 	});
@@ -85,6 +88,11 @@ function registerIpc(): void {
 		}
 		return openFileDialog(mainWindow);
 	});
+	ipcMain.handle("daedalus:shell:open-external-editor", async (_event, input: { path?: string }) => {
+		const target = input.path;
+		if (!target) throw new Error("Missing path for external editor");
+		await shell.openPath(target);
+	});
 	ipcMain.handle("daedalus:shell:open-external-url", async (_event, input: { url?: string }) => {
 		if (!input.url || !isSafeExternalUrl(input.url)) throw new Error("Unsupported external URL");
 		await shell.openExternal(input.url);
@@ -95,12 +103,16 @@ function registerIpc(): void {
 			showDesktopNotification({ kind: input.kind, body: input.body }),
 	);
 	ipcMain.handle("daedalus:recent-projects:list", () => listRecentProjects());
-	ipcMain.handle("daedalus:recent-projects:add", (_event, input: { path: string }) => addRecentProject(input.path));
-	ipcMain.handle("daedalus:recent-projects:clear", () => clearRecentProjects());
+	ipcMain.handle("daedalus:recent-projects:add", (_event, input: { path: string }) => {
+		const projects = addRecentProject(input.path);
+		refreshMenu();
+		return projects;
+	});
+	ipcMain.handle("daedalus:recent-projects:clear", () => { clearRecentProjects(); refreshMenu(); });
 	ipcMain.handle(
 		"daedalus:deep-links:open",
 		(_event, input: { projectId?: string; sessionId?: string; worktreeId?: string }) => {
-			mainWindow?.loadURL(deepLinkUrl(input));
+			nativeCommands.send("open-deep-link", { url: deepLinkUrl(input) });
 		},
 	);
 	ipcMain.handle("daedalus:server:bootstrap-endpoint", async () => {
@@ -113,7 +125,7 @@ function registerIpc(): void {
 registerIpc();
 app.whenReady().then(() => {
 	createMainWindow();
-	installDaedalusMenu({ getMainWindow: () => mainWindow });
+	refreshMenu();
 	app.on("activate", () => {
 		if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
 	});

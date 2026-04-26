@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { type DaedalusNativeBridge, nativeBridgeApiName } from "./native-bridge";
+import { nativeCommandChannel, type NativeCommandEnvelope } from "./native-command-router";
 
 const bridge: DaedalusNativeBridge = {
 	app: {
@@ -11,6 +12,7 @@ const bridge: DaedalusNativeBridge = {
 		openFolder: (path) => ipcRenderer.invoke("daedalus:shell:open-folder", { path }),
 		openFile: (path) => ipcRenderer.invoke("daedalus:shell:open-file", { path }),
 		openExternalUrl: (url) => ipcRenderer.invoke("daedalus:shell:open-external-url", { url }),
+		openExternalEditor: (path) => ipcRenderer.invoke("daedalus:shell:open-external-editor", { path }),
 	},
 	notifications: {
 		show: (kind, body) => ipcRenderer.invoke("daedalus:notifications:show", { kind, body }),
@@ -22,6 +24,13 @@ const bridge: DaedalusNativeBridge = {
 	},
 	deepLinks: {
 		open: (input) => ipcRenderer.invoke("daedalus:deep-links:open", input),
+	},
+	commands: {
+		onCommand: (listener) => {
+			const handler = (_event: unknown, command: NativeCommandEnvelope) => listener(command);
+			ipcRenderer.on(nativeCommandChannel, handler);
+			return () => ipcRenderer.removeListener(nativeCommandChannel, handler);
+		},
 	},
 	server: {
 		bootstrapEndpoint: () => ipcRenderer.invoke("daedalus:server:bootstrap-endpoint"),

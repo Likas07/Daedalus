@@ -1,9 +1,11 @@
 import { app, type BrowserWindow, dialog, Menu, type MenuItemConstructorOptions } from "electron";
-import { addRecentProject, clearRecentProjects, listRecentProjects } from "./recent-projects";
+import type { NativeCommandRouter } from "./native-command-router";
+import { clearRecentProjects, listRecentProjects } from "./recent-projects";
 
 export interface InstallDaedalusMenuOptions {
 	readonly getMainWindow: () => BrowserWindow | undefined;
-	readonly onOpenProject?: (path: string) => void;
+	readonly router?: NativeCommandRouter;
+	readonly onRecentProjectsChanged?: () => void;
 }
 
 export async function openProjectDialog(window?: BrowserWindow): Promise<string | undefined> {
@@ -24,9 +26,7 @@ export function installDaedalusMenu(options: InstallDaedalusMenuOptions): void {
 	const openProject = async () => {
 		const path = await openProjectDialog(options.getMainWindow());
 		if (!path) return;
-		addRecentProject(path);
-		options.onOpenProject?.(path);
-		options.getMainWindow()?.webContents.send("daedalus:project:open", { path });
+		options.router?.send("open-project", { path });
 	};
 	const template: MenuItemConstructorOptions[] = [
 		{
@@ -42,18 +42,25 @@ export function installDaedalusMenu(options: InstallDaedalusMenuOptions): void {
 					submenu: [
 						...listRecentProjects().map((project) => ({
 							label: project.path,
-							click: () =>
-								options.getMainWindow()?.webContents.send("daedalus:project:open", { path: project.path }),
+							click: () => options.router?.send("open-recent-project", { path: project.path }),
 						})),
 						{ type: "separator" },
-						{ label: "Clear Recent Projects", click: () => clearRecentProjects() },
+						{ label: "Clear Recent Projects", click: () => { clearRecentProjects(); options.onRecentProjectsChanged?.(); } },
 					],
 				},
 			],
 		},
 		{
 			label: "View",
-			submenu: [{ role: "reload" }, { role: "toggleDevTools" }, { type: "separator" }, { role: "resetZoom" }],
+			submenu: [
+				{ role: "reload" },
+				{ role: "toggleDevTools" },
+				{ type: "separator" },
+				{ label: "Toggle Terminal", accelerator: "Ctrl+`", click: () => options.router?.send("toggle-terminal", {}) },
+				{ label: "Export Diagnostics…", click: () => options.router?.send("export-diagnostics", {}) },
+				{ type: "separator" },
+				{ role: "resetZoom" },
+			],
 		},
 	];
 	Menu.setApplicationMenu(Menu.buildFromTemplate(template));

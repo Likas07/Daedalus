@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { AppServerEndpoint } from "./server-process";
+import type { NativeCommandEnvelope } from "./native-command-router";
 
 export interface LocalEnvironmentBootstrap {
 	readonly platform: NodeJS.Platform;
@@ -31,7 +32,9 @@ export interface DaedalusNativeBridge {
 		openFolder(path?: string): Promise<string | undefined>;
 		openExternalUrl(url: string): Promise<void>;
 		openFile(path?: string): Promise<string | undefined>;
+		openExternalEditor(path?: string): Promise<void>;
 	};
+
 	readonly notifications: {
 		show(kind: "approval" | "run-completed" | "run-failed" | "provider-error", body?: string): Promise<boolean>;
 	};
@@ -42,6 +45,9 @@ export interface DaedalusNativeBridge {
 	};
 	readonly deepLinks: {
 		open(input: { projectId?: string; sessionId?: string; worktreeId?: string }): Promise<void>;
+	};
+	readonly commands: {
+		onCommand(listener: (command: NativeCommandEnvelope) => void): () => void;
 	};
 	readonly server: {
 		bootstrapEndpoint(): Promise<AppServerRendererBootstrap>;
