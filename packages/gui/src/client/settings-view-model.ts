@@ -6,6 +6,8 @@ export interface SettingsViewModel {
 	readonly selectedModel?: string;
 	readonly theme: string;
 	readonly thinkingLevel: string;
+	readonly density: "compact" | "comfortable" | "spacious";
+	readonly schema: SettingsSnapshotResult["schema"];
 	readonly thinkingLevels: readonly string[];
 	readonly enabledModels: readonly string[];
 	readonly models: readonly RendererModel[];
@@ -25,6 +27,8 @@ export function createSettingsViewModel(snapshot: SettingsSnapshotResult | undef
 		selectedModel: stringValue(snapshot?.selectedModel ?? effective.defaultModel),
 		theme: stringValue(effective.theme) ?? "daedalus-dark",
 		thinkingLevel: stringValue(effective.defaultThinkingLevel) ?? "medium",
+		density: densityValue(effective.density),
+		schema: snapshot?.schema ?? [],
 		thinkingLevels: snapshot?.thinkingLevels ?? ["off", "minimal", "low", "medium", "high", "xhigh"],
 		enabledModels: arrayOfStrings(snapshot?.enabledModels ?? effective.enabledModels),
 		models: (snapshot?.models ?? []) as RendererModel[],
@@ -57,6 +61,10 @@ function stringValue(value: unknown): string | undefined {
 
 function booleanValue(value: unknown, fallback: boolean): boolean {
 	return typeof value === "boolean" ? value : fallback;
+}
+
+function densityValue(value: unknown): "compact" | "comfortable" | "spacious" {
+	return value === "compact" || value === "spacious" ? value : "comfortable";
 }
 
 function arrayOfStrings(value: unknown): string[] {

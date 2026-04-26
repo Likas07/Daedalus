@@ -13,6 +13,8 @@ describe("SettingsService", () => {
 		expect(snapshot.selectedModel).toBe("gpt-5");
 		expect(snapshot.models[0]?.id).toBe("gpt-5");
 		expect(snapshot.keybindings.length).toBeGreaterThan(0);
+		expect(snapshot.schema.map((entry) => entry.key)).toContain("density");
+		expect(snapshot.schema.map((entry) => entry.key)).toContain("keybindings");
 	});
 
 	test("sets, resets, and validates settings", async () => {
@@ -23,6 +25,9 @@ describe("SettingsService", () => {
 		await service.reset("global", "defaultThinkingLevel");
 		expect(manager.getDefaultThinkingLevel()).toBeUndefined();
 		expect(service.set("global", "defaultThinkingLevel", "extreme")).rejects.toThrow("invalid");
+		await service.set("global", "density", "compact");
+		expect((await service.read()).effective.density).toBe("compact");
+		expect(service.set("global", "density", "tiny")).rejects.toThrow("density is invalid");
 	});
 
 	test("supports project-scoped values", async () => {
@@ -32,5 +37,21 @@ describe("SettingsService", () => {
 		const snapshot = await service.read();
 		expect(snapshot.project.defaultModel).toBe("project-model");
 		expect(snapshot.selectedModel).toBe("project-model");
+	});
+
+	test("persists keybinding overrides by scope", async () => {
+
+		const manager = SettingsManager.inMemory();
+
+		const service = new SettingsService({ settingsManager: manager });
+
+		await service.set("project", "keybindings", { "app.commandPalette": ["ctrl+p"] });
+
+		const snapshot = await service.read();
+
+		expect(snapshot.project.keybindings).toEqual({ "app.commandPalette": ["ctrl+p"] });
+
+		expect(snapshot.keybindings.find((binding) => binding.id === "app.commandPalette")?.keys).toEqual(["ctrl+p"]);
+
 	});
 });

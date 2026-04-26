@@ -15,6 +15,8 @@
 	let active = $state<Section>("providers");
 	let resources = $state<ResourceItem[]>([]);
 	let resourceDiagnostics = $state<string[]>([]);
+	let settingsScope = $state<"global" | "project">("global");
+	let settingsError = $state<string | undefined>();
 
 	const sections: Array<{ id: Section; label: string; sub: string }> = [
 		{ id: "providers", label: "Providers", sub: "API keys, default model" },
@@ -29,16 +31,6 @@
 	const settings = $derived(createSettingsViewModel(guiState.settings, guiState.authStatuses));
 	const resourcesVm = $derived(createResourcesViewModel({ resources, diagnostics: resourceDiagnostics }));
 
-	const appearanceRows = [
-		{ k: "Theme", v: "Obsidian", sub: "gold accents · dark only" },
-		{ k: "Density", v: "Comfortable", sub: "compact · comfortable · spacious" },
-		{ k: "Display font", v: "Inter", sub: "Cinzel reserved for the wordmark" },
-		{ k: "Mono font", v: "JetBrains Mono", sub: "used in code, paths, numbers" },
-		{ k: "Animations", v: "Reduced", sub: "no decorative motion; transitions only" },
-	];
-
-	const keybindingsDisabledReason = disabledReasonFor("keybindings");
-	const themesDisabledReason = disabledReasonFor("themes");
 	const exportDisabledReason = disabledReasonFor("export");
 
 	function backToSession(): void {
@@ -71,15 +63,26 @@
 
 	async function setSetting(key: string, value: unknown): Promise<void> {
 		if (!runtime) return;
-		guiState.settings = await runtime.client.setSetting({ scope: "global", key, value });
-		runtime.notify();
+		try {
+			settingsError = undefined;
+			guiState.settings = await runtime.client.setSetting({ scope: settingsScope, key, value });
+			runtime.notify();
+		} catch (error) {
+			settingsError = error instanceof Error ? error.message : String(error);
+		}
 	}
 
 	async function resetSetting(key: string): Promise<void> {
 		if (!runtime) return;
-		guiState.settings = await runtime.client.resetSetting({ scope: "global", key });
-		runtime.notify();
+		try {
+			settingsError = undefined;
+			guiState.settings = await runtime.client.resetSetting({ scope: settingsScope, key });
+			runtime.notify();
+		} catch (error) {
+			settingsError = error instanceof Error ? error.message : String(error);
+		}
 	}
+
 
 	async function reloadResources(): Promise<void> {
 		if (!runtime) return;
@@ -146,6 +149,10 @@
 	<!-- Pane -->
 	<div class="min-w-0 flex-1 overflow-y-auto px-12 py-10" role="tabpanel" id={`settings-panel-${active}`} aria-labelledby={`settings-tab-${active}`} tabindex="0">
 		<div class="mx-auto max-w-[68ch]">
+			<div class="mb-6 flex items-center justify-between border-b border-ink-500 pb-3">
+				<label class="caps text-bone-300">scope <select bind:value={settingsScope} class="ml-2 bg-ink-900 font-mono text-bone-100"><option value="global">global</option><option value="project">project</option></select></label>
+				{#if settingsError}<p class="font-mono text-[11px] text-[color:var(--crimson)]" role="alert">{settingsError}</p>{/if}
+			</div>
 
 			{#if active === "providers"}
 				<header class="mb-8">
@@ -197,18 +204,20 @@
 					</p>
 				</header>
 
-				<dl class="divide-y divide-ink-500 border-y border-ink-500">
-					<div class="grid grid-cols-[180px_1fr] items-baseline gap-6 py-4">
-						<dt class="text-[13px] text-bone-100">Access mode</dt>
-						<dd class="font-mono text-[12px] text-bone-300">{guiState.accessMode}</dd>
+				<div class="divide-y divide-ink-500 border-y border-ink-500">
+					<div class="grid grid-cols-[180px_1fr] items-center gap-6 py-4">
+						<label class="text-[13px] text-bone-100" for="access-mode">Access mode</label>
+						<select id="access-mode" class="bg-ink-900 font-mono text-[12px] text-bone-100" value={guiState.accessMode} onchange={(event) => runtime?.setAccessMode(event.currentTarget.value as typeof guiState.accessMode)}>
+							<option value="supervised">supervised</option>
+							<option value="auto-accept">auto-accept</option>
+							<option value="unrestricted">unrestricted</option>
+						</select>
 					</div>
 					<div class="grid grid-cols-[180px_1fr] items-baseline gap-6 py-4">
-						<dt class="text-[13px] text-bone-100">Hard blocks bypass</dt>
-						<dd class="font-mono text-[12px] text-bone-300">
-							{guiState.accessPolicy?.bypassHardBlocks === false ? "false" : "unavailable"}
-						</dd>
+						<div class="text-[13px] text-bone-100">Hard blocks bypass</div>
+						<div class="font-mono text-[12px] text-bone-300">{guiState.accessPolicy?.bypassHardBlocks === false ? "false" : "unavailable"}</div>
 					</div>
-				</dl>
+				</div>
 
 				<div class="mt-6">
 					<h2 class="caps mb-3 text-bone-300">automation</h2>
@@ -229,9 +238,19 @@
 						<div class="text-right"><button type="button" class="caps text-bone-300 hover:text-gold" onclick={() => setSetting("theme", settings.theme === "daedalus-dark" ? "obsidian" : "daedalus-dark")}>toggle</button></div>
 					</div>
 					<div class="grid grid-cols-[180px_1fr_120px] items-center gap-6 py-4">
+						<dt class="text-[13px] text-bone-100">Density</dt>
+						<dd><select class="bg-ink-900 font-mono text-[12px] text-bone-100" value={settings.density} onchange={(event) => setSetting("density", event.currentTarget.value)}><option value="compact">compact</option><option value="comfortable">comfortable</option><option value="spacious">spacious</option></select></dd>
+						<div class="text-right"><button type="button" class="caps text-bone-300 hover:text-gold" onclick={() => resetSetting("density")}>reset</button></div>
+					</div>
+					<div class="grid grid-cols-[180px_1fr_120px] items-center gap-6 py-4">
 						<dt class="text-[13px] text-bone-100">Terminal images</dt>
 						<dd class="text-[13px] text-bone-300">{settings.terminal.showImages ? "enabled" : "disabled"}</dd>
 						<div class="text-right"><button type="button" class="caps text-bone-300 hover:text-gold" onclick={() => setSetting("terminal.showImages", !settings.terminal.showImages)}>toggle</button></div>
+					</div>
+					<div class="grid grid-cols-[180px_1fr_120px] items-center gap-6 py-4">
+						<dt class="text-[13px] text-bone-100">Block images</dt>
+						<dd class="text-[13px] text-bone-300">{settings.images.blockImages ? "enabled" : "disabled"}</dd>
+						<div class="text-right"><button type="button" class="caps text-bone-300 hover:text-gold" onclick={() => setSetting("images.blockImages", !settings.images.blockImages)}>toggle</button></div>
 					</div>
 				</dl>
 			{/if}
@@ -239,17 +258,14 @@
 			{#if active === "keybindings"}
 				<header class="mb-8">
 					<h1 class="text-[20px] font-medium text-bone-50">Keybindings</h1>
-					<p class="mt-1 text-[13px] text-bone-300">Keybindings are read from the backend registry. Editing individual bindings is disabled until write support lands.</p>
+					<p class="mt-1 text-[13px] text-bone-300">Keybindings are read/write through the backend settings schema. Use reset to return this scope to inherited defaults.</p>
 				</header>
-				{#if keybindingsDisabledReason}
-					<p class="mt-3 font-mono text-[11px] text-bone-400">{keybindingsDisabledReason}</p>
-				{/if}
 
 				<ul class="divide-y divide-ink-500 border-y border-ink-500">
 					{#each settings.keybindings as kb}
 						<li class="flex items-baseline justify-between gap-6 py-3">
 							<span class="text-[13px] text-bone-100">{kb.label}</span>
-							<kbd class="rounded-sm border border-ink-500 px-2 py-0.5 font-mono text-[11px] text-bone-200">{kb.combo}</kbd>
+							<span class="flex items-center gap-3"><kbd class="rounded-sm border border-ink-500 px-2 py-0.5 font-mono text-[11px] text-bone-200">{kb.combo}</kbd><button type="button" class="caps text-bone-300 hover:text-gold" onclick={() => resetSetting("keybindings")}>reset</button></span>
 						</li>
 					{/each}
 				</ul>

@@ -256,6 +256,7 @@ describe("app-server protocol schemas", () => {
 				models: [{ id: "gpt-5" }],
 				thinkingLevels: ["off", "low"],
 				keybindings: [],
+				schema: [],
 			}),
 		).toBe(true);
 		expect(Value.Check(ClientRequestResultSchemas["terminal/create"], { terminal: terminalSnapshot() })).toBe(true);

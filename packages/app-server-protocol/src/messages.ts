@@ -232,6 +232,15 @@ export const SettingsKeybindingSchema = StrictObject({
 });
 export type SettingsKeybinding = Static<typeof SettingsKeybindingSchema>;
 
+export const SettingsSchemaEntrySchema = StrictObject({
+	key: Type.String({ minLength: 1 }),
+	label: Type.String({ minLength: 1 }),
+	type: Type.Union([Type.Literal("string"), Type.Literal("boolean"), Type.Literal("string[]"), Type.Literal("keybindings")]),
+	scopes: Type.Array(SettingsScopeSchema),
+	values: Type.Optional(Type.Array(Type.String())),
+	resourceReload: Type.Optional(Type.Boolean()),
+});
+
 export const SettingsSnapshotResultSchema = StrictObject({
 	global: Type.Record(Type.String(), Type.Unknown()),
 	project: Type.Record(Type.String(), Type.Unknown()),
@@ -243,6 +252,7 @@ export const SettingsSnapshotResultSchema = StrictObject({
 	enabledModels: Type.Optional(Type.Array(Type.String())),
 	thinkingLevels: Type.Array(Type.String({ minLength: 1 })),
 	keybindings: Type.Array(SettingsKeybindingSchema),
+	schema: Type.Array(SettingsSchemaEntrySchema),
 });
 export type SettingsSnapshotResult = Static<typeof SettingsSnapshotResultSchema>;
 

@@ -139,7 +139,7 @@ const GUI_CAPABILITY_DEFINITIONS = [
 	{
 		id: "settings",
 		label: "Settings",
-		status: "partial",
+		status: "wired",
 		requirement: "required",
 		coverage: {
 			behavioral: [
@@ -149,8 +149,7 @@ const GUI_CAPABILITY_DEFINITIONS = [
 				"packages/gui/src/app.test.ts",
 			],
 		},
-		disabledReason:
-			"Provider defaults, model, theme, density, keybindings, terminal/image behavior, access policy, integrations, and resource controls are not all read/write/persisted yet.",
+
 	},
 	{
 		id: "persistence",

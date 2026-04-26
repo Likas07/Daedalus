@@ -1,5 +1,5 @@
 import { SettingsManager } from "@daedalus-pi/coding-agent";
-type Settings = Record<string, unknown>;
+
 type SettingsScope = "global" | "project";
 
 export type SettingsKey =
@@ -7,6 +7,8 @@ export type SettingsKey =
 	| "defaultModel"
 	| "defaultThinkingLevel"
 	| "theme"
+	| "density"
+	| "keybindings"
 	| "enabledModels"
 	| "terminal.showImages"
 	| "terminal.clearOnShrink"
@@ -39,9 +41,34 @@ export interface SettingsSnapshot {
 	readonly enabledModels?: readonly string[];
 	readonly thinkingLevels: readonly string[];
 	readonly keybindings: readonly { id: string; description: string; defaultKeys: readonly string[]; keys: readonly string[]; overridden: boolean }[];
+	readonly schema: readonly SettingsSchemaEntry[];
 }
 
 const thinkingLevels = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
+const densities = ["compact", "comfortable", "spacious"] as const;
+
+export interface SettingsSchemaEntry {
+	readonly key: SettingsKey;
+	readonly label: string;
+	readonly type: "string" | "boolean" | "string[]" | "keybindings";
+	readonly scopes: readonly SettingsScope[];
+	readonly values?: readonly string[];
+	readonly resourceReload?: boolean;
+}
+
+const SETTINGS_SCHEMA: readonly SettingsSchemaEntry[] = [
+	{ key: "defaultProvider", label: "Default provider", type: "string", scopes: ["global", "project"] },
+	{ key: "defaultModel", label: "Default model", type: "string", scopes: ["global", "project"] },
+	{ key: "defaultThinkingLevel", label: "Thinking level", type: "string", scopes: ["global", "project"], values: thinkingLevels },
+	{ key: "theme", label: "Theme", type: "string", scopes: ["global", "project"], resourceReload: true },
+	{ key: "density", label: "Density", type: "string", scopes: ["global", "project"], values: densities },
+	{ key: "keybindings", label: "Keybindings", type: "keybindings", scopes: ["global", "project"] },
+	{ key: "enabledModels", label: "Enabled model patterns", type: "string[]", scopes: ["global", "project"] },
+	{ key: "terminal.showImages", label: "Terminal images", type: "boolean", scopes: ["global", "project"] },
+	{ key: "terminal.clearOnShrink", label: "Clear terminal on shrink", type: "boolean", scopes: ["global", "project"] },
+	{ key: "images.blockImages", label: "Block images", type: "boolean", scopes: ["global", "project"] },
+	{ key: "images.autoResize", label: "Auto-resize images", type: "boolean", scopes: ["global", "project"] },
+];
 
 export class SettingsService {
 	private readonly settingsManager: SettingsManager;
@@ -66,8 +93,10 @@ export class SettingsService {
 				defaultProvider: selectedProvider,
 				defaultModel: selectedModel,
 				defaultThinkingLevel: this.settingsManager.getDefaultThinkingLevel(),
-				theme: this.settingsManager.getTheme(),
+				theme: stringSetting(global, project, "theme") ?? this.settingsManager.getTheme(),
+				density: stringSetting(global, project, "density") ?? "comfortable",
 				enabledModels: this.settingsManager.getEnabledModels(),
+				keybindings: objectSetting(global, project, "keybindings") ?? {},
 				terminal: { showImages: this.settingsManager.getShowImages(), clearOnShrink: this.settingsManager.getClearOnShrink() },
 				images: { blockImages: this.settingsManager.getBlockImages(), autoResize: this.settingsManager.getImageAutoResize() },
 			},
@@ -78,6 +107,7 @@ export class SettingsService {
 			enabledModels: this.settingsManager.getEnabledModels(),
 			thinkingLevels,
 			keybindings: this.keybindings(),
+			schema: SETTINGS_SCHEMA,
 		};
 	}
 
@@ -104,8 +134,9 @@ export class SettingsService {
 	private keybindings(): SettingsSnapshot["keybindings"] {
 		return Object.entries(this.keybindingDefinitions).map(([id, def]) => {
 			const defaultKeys = toKeys(def.defaultKeys);
-			const keys = toKeys(def.keys ?? def.defaultKeys);
-			return { id, description: def.description ?? id, defaultKeys, keys, overridden: def.keys !== undefined };
+			const configured = keybindingOverrides(this.settingsManager.getGlobalSettings() as Record<string, unknown>, this.settingsManager.getProjectSettings() as Record<string, unknown>)[id];
+			const keys = configured ? toKeys(configured) : toKeys(def.keys ?? def.defaultKeys);
+			return { id, description: def.description ?? id, defaultKeys, keys, overridden: configured !== undefined || def.keys !== undefined };
 		});
 	}
 
@@ -117,6 +148,11 @@ export class SettingsService {
 		}
 		if (key === "terminal.showImages" || key === "terminal.clearOnShrink" || key === "images.blockImages" || key === "images.autoResize") {
 			if (typeof value !== "boolean") throw new Error(`${key} must be a boolean`);
+			return value;
+		}
+		if (key === "density" && !densities.includes(value as (typeof densities)[number])) throw new Error("density is invalid");
+		if (key === "keybindings") {
+			if (!isStringArrayRecord(value)) throw new Error("keybindings must be an object of string arrays");
 			return value;
 		}
 		if (key === "defaultThinkingLevel" && !thinkingLevels.includes(value as (typeof thinkingLevels)[number])) throw new Error("defaultThinkingLevel is invalid");
@@ -156,6 +192,27 @@ function setPath(target: Record<string, unknown>, key: string, value: unknown): 
 	}
 	if (value === undefined) delete cursor[parts.at(-1)!];
 	else cursor[parts.at(-1)!] = value;
+}
+
+function stringSetting(global: Record<string, unknown>, project: Record<string, unknown>, key: string): string | undefined {
+	const value = project[key] ?? global[key];
+	return typeof value === "string" ? value : undefined;
+}
+
+function objectSetting(global: Record<string, unknown>, project: Record<string, unknown>, key: string): Record<string, unknown> | undefined {
+	const value = project[key] ?? global[key];
+	return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+function keybindingOverrides(...settings: Record<string, unknown>[]): Record<string, string[]> {
+	return Object.assign({}, ...settings.map((setting) => {
+		const value = setting.keybindings;
+		return isStringArrayRecord(value) ? value : {};
+	}));
+}
+
+function isStringArrayRecord(value: unknown): value is Record<string, string[]> {
+	return value !== null && typeof value === "object" && !Array.isArray(value) && Object.values(value).every((item) => Array.isArray(item) && item.every((entry) => typeof entry === "string"));
 }
 
 
