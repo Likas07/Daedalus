@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Daedalus — Manuscript</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+	:root {
+		--paper: #f4ecd8;
+		--paper-deep: #ece2c8;
+		--paper-soft: #f8f2e1;
+		--ink: #2a2418;
+		--ink-soft: #4a3f2c;
+		--ink-faint: #8a7a55;
+		--indigo: #2c3e6b;
+		--indigo-soft: #4a5e8a;
+		--carmine: #9c2c2c;
+		--ochre: #b8862c;
+		--rule: rgba(74, 63, 44, 0.22);
+		--rule-strong: rgba(74, 63, 44, 0.45);
+	}
+	* { box-sizing: border-box; }
+	html, body { margin: 0; height: 100%; }
+	body {
+		background: var(--paper);
+		color: var(--ink);
+		font-family: "Atkinson Hyperlegible", Georgia, serif;
+		font-size: 14px;
+		line-height: 1.55;
+		overflow: hidden;
+		background-image:
+			radial-gradient(circle at 20% 30%, rgba(184,134,44,0.05) 0%, transparent 60%),
+			radial-gradient(circle at 80% 70%, rgba(44,62,107,0.04) 0%, transparent 50%);
+	}
+	body::before {
+		content: "";
+		position: fixed; inset: 0;
+		background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 27px, rgba(74,63,44,0.06) 27px, rgba(74,63,44,0.06) 28px);
+		pointer-events: none;
+		z-index: 1;
+	}
+	body::after {
+		content: "";
+		position: fixed; inset: 0;
+		background-image:
+			radial-gradient(circle at 12% 8%, rgba(74,63,44,0.06) 0%, transparent 12%),
+			radial-gradient(circle at 88% 22%, rgba(74,63,44,0.04) 0%, transparent 8%),
+			radial-gradient(circle at 35% 92%, rgba(74,63,44,0.05) 0%, transparent 10%);
+		pointer-events: none;
+		z-index: 2;
+	}
+
+	.shell { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; position: relative; z-index: 3; }
+
+	.topbar {
+		display: grid;
+		grid-template-columns: 1fr auto 1fr;
+		align-items: center;
+		padding: 18px 32px 14px;
+		border-bottom: 1px double var(--rule-strong);
+	}
+	.brand-block { display: flex; align-items: baseline; gap: 14px; }
+	.brand-mark {
+		font-family: "Cormorant Garamond", serif;
+		font-style: italic;
+		font-size: 36px;
+		color: var(--carmine);
+		line-height: 1;
+		letter-spacing: -0.01em;
+	}
+	.brand-sub {
+		font-family: "Atkinson Hyperlegible", sans-serif;
+		text-transform: uppercase;
+		letter-spacing: 0.32em;
+		font-size: 9px;
+		color: var(--ink-faint);
+	}
+	.scale {
+		font-family: "Cormorant Garamond", serif;
+		font-style: italic;
+		font-size: 14px;
+		color: var(--ink-faint);
+	}
+	.scale .now { color: var(--carmine); border-bottom: 1px solid var(--carmine); padding: 0 4px 1px; }
+	.crest {
+		justify-self: end;
+		display: flex; align-items: center; gap: 18px;
+		font-family: "JetBrains Mono", monospace;
+		font-size: 11px;
+		color: var(--ink-soft);
+	}
+	.crest .pip { display: inline-flex; align-items: baseline; gap: 4px; }
+	.crest .pip .label { color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.14em; font-size: 9px; }
+	.crest .pip .num { color: var(--ink); font-weight: 700; }
+	.crest .pip.warn .num { color: var(--carmine); }
+
+	.body { display: grid; grid-template-columns: 260px 1fr 360px; min-height: 0; height: 100%; }
+	.col { padding: 24px 28px; overflow: auto; min-height: 0; }
+	.col.left { border-right: 1px solid var(--rule); }
+	.col.right { border-left: 1px solid var(--rule); }
+
+	.eyebrow {
+		font-family: "Atkinson Hyperlegible", sans-serif;
+		text-transform: uppercase;
+		letter-spacing: 0.28em;
+		font-size: 9px;
+		color: var(--ochre);
+		margin-bottom: 8px;
+	}
+	.display {
+		font-family: "Cormorant Garamond", serif;
+		font-style: italic;
+		font-weight: 600;
+		color: var(--ink);
+		line-height: 1.05;
+		letter-spacing: -0.01em;
+		margin: 0;
+	}
+	.h1 { font-size: 34px; }
+	.h2 { font-size: 22px; }
+	.h3 { font-size: 18px; }
+
+	.proj-meta { font-family: "JetBrains Mono", monospace; font-size: 10px; color: var(--ink-faint); margin-top: 6px; }
+
+	.toc { margin-top: 22px; }
+	.toc .item {
+		display: grid;
+		grid-template-columns: 18px 1fr auto;
+		gap: 10px;
+		padding: 9px 0;
+		align-items: baseline;
+		border-bottom: 1px dotted var(--rule);
+		cursor: pointer;
+	}
+	.toc .item .num {
+		font-family: "Cormorant Garamond", serif;
+		font-style: italic;
+		font-size: 14px;
+		color: var(--ochre);
+	}
+	.toc .item .title {
+		font-family: "Atkinson Hyperlegible", sans-serif;
+		font-size: 13px;
+		color: var(--ink);
+	}
+	.toc .item.active { background: linear-gradient(to right, transparent, rgba(156,44,44,0.08), transparent); }
+	.toc .item.active .title { color: var(--carmine); font-weight: 700; }
+	.toc .item .badge {
+		font-family: "JetBrains Mono", monospace; font-size: 9px;
+		text-transform: uppercase; letter-spacing: 0.14em;
+		padding: 1px 6px; border-radius: 999px;
+		background: rgba(74,63,44,0.06); color: var(--ink-faint);
+	}
+	.toc .item .badge.run { background: rgba(184,134,44,0.18); color: var(--ochre); }
+	.toc .item .badge.aw { background: rgba(156,44,44,0.16); color: var(--carmine); }
+
+	.btn {
+		font-family: "Atkinson Hyperlegible", sans-serif;
+		font-size: 11px;
+		text-transform: uppercase;
+		letter-spacing: 0.14em;
+		padding: 5px 12px;
+		border: 1px solid var(--ink-soft);
+		background: var(--paper-soft);
+		color: var(--ink);
+		border-radius: 2px;
+		cursor: pointer;
+	}
+	.btn:hover { background: var(--ink); color: var(--paper); }
+	.btn-ink { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+	.btn-carmine { background: var(--carmine); color: var(--paper-soft); border-color: var(--carmine); }
+	.btn-ghost { background: transparent; }
+
+	.crumb {
+		font-family: "JetBrains Mono", monospace;
+		font-size: 10px;
+		color: var(--ink-faint);
+		text-transform: uppercase;
+		letter-spacing: 0.18em;
+	}
+	.crumb .here { color: var(--carmine); }
+
+	.workspace-meta {
+		display: flex; flex-wrap: wrap; gap: 16px; align-items: baseline;
+		font-family: "JetBrains Mono", monospace;
+		font-size: 11px;
+		color: var(--ink-faint);
+		padding: 10px 0 16px;
+		border-bottom: 1px solid var(--rule);
+		margin-bottom: 18px;
+	}
+	.tag-pill {
+		font-family: "JetBrains Mono", monospace;
+		font-size: 10px;
+		padding: 2px 8px;
+		border-radius: 999px;
+		background: rgba(74,63,44,0.08);
+		color: var(--ink-soft);
+	}
+	.tag-pill.run { background: rgba(184,134,44,0.18); color: var(--ochre); }
+	.tag-pill.diff { background: rgba(44,62,107,0.12); color: var(--indigo); }
+
+	.entry {
+		display: grid;
+		grid-template-columns: 96px 1fr;
+		gap: 22px;
+		padding: 16px 0 22px;
+		border-bottom: 1px dotted var(--rule);
+	}
+	.entry:last-child { border-bottom: 0; }
+	.entry .gutter {
+		text-align: right;
+		font-family: "JetBrains Mono", monospace;
+		font-size: 10px;
+		color: var(--ink-faint);
+	}
+	.entry .gutter .ts { display: block; }
+	.entry .gutter .marker {
+		display: inline-block;
+		margin-top: 4px;
+		font-family: "Cormorant Garamond", serif;
+		font-style: italic;
+		font-size: 14px;
+		color: var(--carmine);
+	}
+	.entry .body p { margin: 0 0 8px; }
+	.entry .body .who {
+		font-family: "Cormorant Garamond", serif;
+		font-style: italic;
+		font-size: 16px;
+		color: var(--indigo);
+		margin-right: 8px;
+	}
+	.entry .body .who.assistant { color: var(--carmine); }
+	.entry .body em.subject {
+		font-family: "Cormorant Garamond", serif;
+		font-style: italic;
+		color: var(--ink);
+	}
+
+	.diff-paper {
+		font-family: "JetBrains Mono", monospace;
+		font-size: 11px;
+		background: var(--paper-soft);
+		border-left: 3px solid var(--ochre);
+		padding: 8px 12px;
+		margin-top: 8px;
+		white-space: pre;
+		overflow: auto;
+	}
+	.diff-paper .add { color: var(--indigo); background: rgba(44,62,107,0.08); }
+	.diff-paper .del { color: var(--carmine); background: rgba(156,44,44,0.08); text-decoration: line-through; }
+	.diff-paper .ctx { color: var(--ink-faint); }
+
+	.composer {
+		padding: 16px 32px 22px;
+		border-top: 1px double var(--rule-strong);
+		background: var(--paper-soft);
+		background-image: radial-gradient(circle at 50% 100%, rgba(74,63,44,0.04) 0%, transparent 60%);
+	}
+	.composer-shell {
+		border: 1px solid var(--rule-strong);
+		border-radius: 3px;
+		padding: 14px 16px;
+		background: var(--paper);
+		display: grid; gap: 10px;
+	}
+	.prompt-row { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: start; }
+	.prompt-mark {
+		font-family: "Cormorant Garamond", serif;
+		font-style: italic;
+		font-size: 30px;
+		line-height: 1;
+		color: var(--carmine);
+		padding-top: 4px;
+	}
+	textarea.prompt {
+		min-height: 64px;
+		width: 100%;
+		border: 0;
+		background: transparent;
+		font-family: "Atkinson Hyperlegible", sans-serif;
+		font-size: 14px;
+		color: var(--ink);
+		resize: none;
+		outline: none;
+		line-height: 1.5;
+	}
+	.composer-meta {
+		display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+		font-family: "JetBrains Mono", monospace; font-size: 10px;
+	}
+	.context-chip {
+		display: inline-flex; gap: 5px; align-items: baseline;
+		padding: 2px 8px; border-radius: 999px;
+		background: rgba(74,63,44,0.08);
+	}
+	.context-chip .k { color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.12em; font-size: 9px; }
+	.context-chip .v { color: var(--ink); }
+
+	/* Inspector */
+	.tab-bar {
+		display: flex; gap: 2px;
+		border-bottom: 1px solid var(--rule);
+		margin-bottom: 16px;
+		padding-bottom: 4px;
+	}
+	.tab {
+		font-family: "Cormorant Garamond", serif;
+		font-style: italic;
+		font-size: 14px;
+		padding: 4px 8px;
+		color: var(--ink-faint);
+		cursor: pointer;
+		border-bottom: 2px solid transparent;
+	}
+	.tab.on { color: var(--carmine); border-bottom-color: var(--carmine); }
+
+	.card {
+		padding: 14px 16px;
+		border: 1px solid var(--rule);
+		border-radius: 3px;
+		background: var(--paper-soft);
+		margin-bottom: 12px;
+		box-shadow: 0 1px 0 rgba(74,63,44,0.06);
+	}
+	.card-title {
+		display: flex; justify-content: space-between; gap: 8px;
+		font-family: "Cormorant Garamond", serif;
+		font-style: italic;
+		font-size: 17px;
+		color: var(--ink);
+		margin-bottom: 4px;
+	}
+	.card-meta { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--ink-soft); }
+
+	.approval {
+		border: 1px solid var(--carmine);
+		background:
+			repeating-linear-gradient(135deg, rgba(156,44,44,0.04) 0, rgba(156,44,44,0.04) 6px, transparent 6px, transparent 12px),
+			var(--paper-soft);
+	}
+	.risk-stamp {
+		display: inline-block;
+		font-family: "Cormorant Garamond", serif;
+		font-style: italic;
+		font-size: 12px;
+		color: var(--carmine);
+		border: 1.5px solid var(--carmine);
+		padding: 2px 10px;
+		border-radius: 4px;
+		text-transform: uppercase;
+		letter-spacing: 0.2em;
+		transform: rotate(-2deg);
+	}
+	.dl { display: grid; grid-template-columns: 90px 1fr; row-gap: 5px; column-gap: 12px; margin: 10px 0; font-family: "JetBrains Mono", monospace; font-size: 11px; }
+	.dl dt { color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.14em; font-size: 9px; }
+	.dl dd { margin: 0; color: var(--ink); }
+	.actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+	.terminal {
+		padding: 8px 32px;
+		border-top: 1px solid var(--rule);
+		background: var(--paper-deep);
+		font-family: "JetBrains Mono", monospace;
+		font-size: 11px;
+		color: var(--ink-soft);
+		display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: center;
+	}
+	.terminal .ok { color: var(--indigo); font-weight: 700; }
+	.terminal .label { color: var(--ochre); text-transform: uppercase; letter-spacing: 0.16em; font-size: 9px; }
+	.dropcap {
+		float: left;
+		font-family: "Cormorant Garamond", serif;
+		font-style: italic;
+		font-size: 56px;
+		line-height: 0.85;
+		color: var(--carmine);
+		padding: 4px 8px 0 0;
+	}
+</style>
+</head>
+<body>
+<div class="shell">
+
+	<header class="topbar">
+		<div class="brand-block">
+			<span class="brand-mark">Dædalus</span>
+			<span class="brand-sub">a manuscript of work · vol vii</span>
+		</div>
+		<div class="scale">
+			<span>i.</span>&nbsp;<span>ii.</span>&nbsp;<span>iii.</span>&nbsp;<span class="now">index</span>&nbsp;<span>iv.</span>&nbsp;<span>forge</span>&nbsp;<span>v.</span>
+		</div>
+		<div class="crest">
+			<span class="pip"><span class="label">prov</span><span class="num">2</span></span>
+			<span class="pip"><span class="label">sess</span><span class="num">7</span></span>
+			<span class="pip warn"><span class="label">aprv</span><span class="num">1</span></span>
+			<span class="pip"><span class="label">net</span><span class="num">○</span></span>
+		</div>
+	</header>
+
+	<main class="body">
+		<aside class="col left">
+			<div class="eyebrow">project · folio</div>
+			<h1 class="display h1">Daedalus<br/><em style="color:var(--ochre); font-size: 0.7em;">— a fork —</em></h1>
+			<p class="proj-meta">/Research/Daedalus<br/>main · ahead 3 · clean wt</p>
+
+			<div class="toc">
+				<div class="eyebrow" style="margin-bottom: 4px;">sessions <button class="btn btn-ghost" style="float:right; font-size:9px; padding: 2px 7px;">＋ new</button></div>
+				<div class="item"><span class="num">i.</span><span class="title">Refactor app-server transport</span><span class="badge">idle</span></div>
+				<div class="item active"><span class="num">ii.</span><span class="title">Rewrite GUI shell with Atelier tokens</span><span class="badge run">running</span></div>
+				<div class="item"><span class="num">iii.</span><span class="title">Fix happy-dom fallback test</span><span class="badge">done</span></div>
+				<div class="item"><span class="num">iv.</span><span class="title">Port subagent lane planner</span><span class="badge aw">awaiting</span></div>
+				<div class="item"><span class="num">v.</span><span class="title">Audit trail pagination</span><span class="badge">idle</span></div>
+				<div class="item"><span class="num">vi.</span><span class="title">Automation rule grammar</span><span class="badge">idle</span></div>
+				<div class="item"><span class="num">vii.</span><span class="title">Extension capability scope</span><span class="badge">done</span></div>
+			</div>
+
+			<div class="eyebrow" style="margin-top: 22px;">marginalia</div>
+			<p style="font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 15px; color: var(--ink-soft); margin: 4px 0 0; line-height: 1.4;">
+				“The transport ought never speak before the handshake greets it.”
+				<br/><span style="font-family: 'Atkinson Hyperlegible', sans-serif; font-style: normal; font-size: 9px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.18em;">— note in the margin, fol. 8a</span>
+			</p>
+		</aside>
+
+		<section class="col">
+			<div class="crumb">Daedalus &nbsp;›&nbsp; Base &nbsp;›&nbsp; <span class="here">sess_8a7b3c</span></div>
+			<h2 class="display h1" style="margin-top: 6px;">Rewrite GUI shell <em style="color:var(--ochre);">with Atelier tokens</em></h2>
+			<div class="workspace-meta">
+				<span class="tag-pill run">● running</span>
+				<span class="tag-pill">182 events</span>
+				<span class="tag-pill diff">+412 / −89</span>
+				<span class="tag-pill">br · gui/atelier</span>
+				<span class="tag-pill">$ 0.0421</span>
+			</div>
+
+			<div class="eyebrow" style="margin-bottom: 4px;">chapter ii · transcript</div>
+
+			<div class="entry">
+				<div class="gutter"><span class="ts">11:42:09</span><span class="marker">¶</span></div>
+				<div class="body">
+					<p><span class="dropcap">L</span><span class="who">Likas writes —</span> the <em class="subject">ReconnectLoop</em> is dropping the second pong frame whenever the worker negotiates a new transport. Trace the path through and propose the smallest patch that holds.</p>
+				</div>
+			</div>
+
+			<div class="entry">
+				<div class="gutter"><span class="ts">11:42:14</span><span class="marker">§</span></div>
+				<div class="body">
+					<p><span class="who">Tool · ripgrep —</span> searched <em class="subject">'pong|negotiate'</em> across <em class="subject">packages/app-server/src</em>. Two matches: <em class="subject">reconnect-loop.ts:42</em> (queues pong unconditionally) and <em class="subject">handshake.ts:117</em> (resets state on renegotiation).</p>
+				</div>
+			</div>
+
+			<div class="entry">
+				<div class="gutter"><span class="ts">11:42:31</span><span class="marker">Δ</span></div>
+				<div class="body">
+					<p><span class="who assistant">Proposed amendment —</span> hold pongs until the handshake reopens, then flush. <span class="tag-pill diff">+7 / −3 in reconnect-loop.ts</span></p>
+					<div class="diff-paper">
+<span class="ctx">@@ -38,7 +38,11 @@ schedulePong()</span>
+<span class="del">- this.queue.push({ kind: "pong", at: now() });</span>
+<span class="add">+ if (this.handshake.state !== "open") {</span>
+<span class="add">+   this.pendingPong = true;</span>
+<span class="add">+   return;</span>
+<span class="add">+ }</span>
+<span class="add">+ this.queue.push({ kind: "pong", at: now() });</span>
+					</div>
+				</div>
+			</div>
+
+			<div class="entry">
+				<div class="gutter"><span class="ts">11:42:48</span><span class="marker" style="color: var(--ochre);">✎</span></div>
+				<div class="body">
+					<p><span class="who" style="color: var(--ochre);">Approval requested —</span> apply 7 file edits across <em class="subject">packages/app-server/src/transport/</em>. Marked <strong style="color: var(--carmine);">high risk</strong> — the patch writes outside the session worktree.</p>
+				</div>
+			</div>
+
+			<div class="entry">
+				<div class="gutter"><span class="ts">11:43:05</span><span class="marker">¶</span></div>
+				<div class="body">
+					<p><span class="who assistant">Claude responds —</span> the loop now defers pong scheduling until the handshake re-opens. Queued pongs flush in <em class="subject">flushPending()</em>. Tests added in <em class="subject">reconnect-loop.test.ts</em>. I am waiting on your approval.</p>
+				</div>
+			</div>
+		</section>
+
+		<aside class="col right">
+			<div class="tab-bar">
+				<span class="tab on">Context</span>
+				<span class="tab">Diff</span>
+				<span class="tab">Tools</span>
+				<span class="tab">Ledger</span>
+				<span class="tab">Ext.</span>
+				<span class="tab">Debug</span>
+			</div>
+
+			<div class="eyebrow">approvals · 1 awaiting</div>
+
+			<div class="card approval">
+				<div class="card-title">
+					<span><em>Apply 7 file edits</em></span>
+					<span class="risk-stamp">High risk</span>
+				</div>
+				<dl class="dl">
+					<dt>tool</dt><dd>fs.batchEdit</dd>
+					<dt>scope</dt><dd>packages/app-server/src/transport/*</dd>
+					<dt>diff</dt><dd>+7 / −3 across 7 files</dd>
+					<dt>safety</dt><dd>writes outside session worktree</dd>
+				</dl>
+				<div class="actions">
+					<button class="btn btn-ink">Approve once</button>
+					<button class="btn btn-carmine">Deny</button>
+					<button class="btn">Ask to revise</button>
+				</div>
+			</div>
+
+			<div class="card">
+				<div class="card-title"><span>Diff review</span><span class="tag-pill diff">7 files</span></div>
+				<p class="card-meta">+412 added · −89 removed</p>
+				<p class="card-meta" style="color: var(--carmine);">▸ reconnect-loop.ts <span style="color: var(--ink-faint);">+7/−3</span></p>
+				<p class="card-meta">handshake.ts <span style="color: var(--ink-faint);">+0/−0</span></p>
+				<p class="card-meta">pong-scheduler.ts <span style="color: var(--ink-faint);">+24/−0</span></p>
+				<p class="card-meta" style="color: var(--ink-faint);">+ 4 more files</p>
+			</div>
+
+			<div class="card">
+				<div class="card-title"><span>Providers</span><span class="tag-pill">2</span></div>
+				<p class="card-meta">anthropic · <em style="color:var(--indigo); font-style: italic;">opus-4.7</em></p>
+				<p class="card-meta">openai · <em style="color:var(--indigo); font-style: italic;">gpt-5</em></p>
+				<p class="card-meta" style="color: var(--ink-faint);">model count pending</p>
+			</div>
+
+			<div class="card">
+				<div class="card-title"><span>Integrations</span></div>
+				<p class="card-meta">github · daedalus-pi/main — 3 prs</p>
+				<p class="card-meta">linear · ENG — 12 issues</p>
+				<p class="card-meta" style="color: var(--ink-faint);">no server providers configured for slack</p>
+			</div>
+		</aside>
+	</main>
+
+	<footer>
+		<div class="composer">
+			<div class="composer-shell">
+				<div class="prompt-row">
+					<span class="prompt-mark">¶</span>
+					<textarea class="prompt" placeholder="Compose…">Apply the patch and run bun test packages/app-server transport once approved.</textarea>
+					<button class="btn btn-ink" style="font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 14px; padding: 6px 18px; text-transform: none; letter-spacing: 0;">Send →</button>
+				</div>
+				<div class="composer-meta">
+					<span class="context-chip"><span class="k">mode</span><span class="v">apply</span></span>
+					<span class="context-chip"><span class="k">model</span><span class="v">opus-4.7</span></span>
+					<span class="context-chip"><span class="k">budget</span><span class="v">$ 0.50</span></span>
+					<span class="context-chip"><span class="k">branch</span><span class="v">gui/atelier</span></span>
+					<span class="context-chip"><span class="k">+file</span><span class="v">reconnect-loop.ts</span></span>
+					<span style="margin-left:auto; color: var(--ink-faint);">⌘K palette · ⌃R retry · esc cancel</span>
+				</div>
+			</div>
+		</div>
+
+		<div class="terminal">
+			<span class="label">colophon · terminal</span>
+			<span><span style="color:var(--ink-faint);">$</span> bun test packages/gui &nbsp; <span class="ok">26 pass</span> · 0 fail · 73 expects · 412ms</span>
+			<span style="color: var(--ink-faint);">printed in alembic · vt220</span>
+		</div>
+	</footer>
+</div>
+</body>
+</html>
