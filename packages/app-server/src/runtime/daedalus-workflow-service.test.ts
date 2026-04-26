@@ -28,6 +28,19 @@ describe("daedalus workflow service", () => {
 		expect(workflow.todos).toEqual([]);
 	});
 
+	test("redacts internal prompt text from workflow projections", () => {
+		const workflow = projectDaedalusWorkflow("s1", [
+			custom("plan-execution-init", {
+				plan: { id: "p1", title: "Plan <internal>hidden system prompt</internal>", status: "executing" },
+				todos: [{ id: "t1", title: "Build", status: "completed", summary: "done <internal>secret</internal>" }],
+			}),
+			custom("question", { id: "q1", prompt: "Proceed? <internal>never show</internal>" }),
+		]);
+		expect(JSON.stringify(workflow)).not.toContain("hidden system prompt");
+		expect(JSON.stringify(workflow)).not.toContain("never show");
+		expect(workflow.questions[0]?.prompt).toContain("[internal omitted]");
+	});
+
 	test("reads from persisted session store", async () => {
 		const session: SessionStoreSession = { header: { type: "session", version: 3, id: "s1", timestamp: "now", cwd: "/repo" }, entries: [custom("questionnaire", { prompt: "Pick one", answer: "A" })] };
 		const store = { read: async () => session } as unknown as SessionStore;

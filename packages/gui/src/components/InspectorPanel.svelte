@@ -1,11 +1,5 @@
 <script lang="ts">
-	import type {
-		AppEvent,
-		AuditEntry,
-		AutomationRule,
-		ExtensionUiField,
-		ExtensionUiRequest,
-	} from "@daedalus-pi/app-server-protocol";
+	import type { ExtensionUiField, ExtensionUiRequest } from "@daedalus-pi/app-server-protocol";
 	import { orchestrationFromEvents } from "../client/orchestration-state";
 	import { workflowFromTypedEvents } from "../client/daedalus-workflow-view-model";
 	import type { GuiState } from "../client/runtime";
@@ -33,64 +27,12 @@
 		{ id: "debug", label: "Debug", testid: "inspector-debug-tab" },
 	];
 
-	const orchestration = $derived(orchestrationFromEvents(uiState.events));
-	const daedalusWorkflow = $derived(workflowFromTypedEvents(uiState.events));
-	const auditEntries = $derived(
-		uiState.events.slice(-80).reverse().map((event: AppEvent): AuditEntry => ({
-			id: event.id,
-			ts: event.ts,
-			kind: event.type.includes("tool")
-				? "tool"
-				: event.type.includes("approval")
-					? "approval"
-					: event.type.includes("extension")
-						? "extension"
-						: "transcript",
-			title: event.type,
-			summary:
-				typeof event.payload === "object" && event.payload && "summary" in event.payload
-					? String(event.payload.summary)
-					: event.type,
-			sessionId: event.sessionId,
-			metadata: { eventType: event.type },
-		})),
-	);
-
-	const automationRules: AutomationRule[] = [
-		{
-			id: "background-agent-management",
-			kind: "background-agent",
-			title: "Background agent management",
-			description: "Surface stalled or blocked subagents for review.",
-			enabled: true,
-			requiresConfirmation: false,
-		},
-		{
-			id: "post-run-review-prompts",
-			kind: "post-run-review",
-			title: "Post-run review prompts",
-			description: "Suggest review checkpoints after agent completion.",
-			enabled: true,
-			requiresConfirmation: false,
-		},
-		{
-			id: "test-status-reminders",
-			kind: "test-status",
-			title: "Test status reminders",
-			description: "Remind when tests have not been run after edits.",
-			enabled: true,
-			requiresConfirmation: false,
-		},
-		{
-			id: "cleanup-suggestions",
-			kind: "cleanup",
-			title: "Cleanup suggestions",
-			description: "Suggest destructive cleanup only after explicit confirmation.",
-			enabled: true,
-			requiresConfirmation: true,
-			destructive: true,
-		},
-	];
+	const eventOrchestration = $derived(orchestrationFromEvents(uiState.events));
+	const eventWorkflow = $derived(workflowFromTypedEvents(uiState.events));
+	const orchestration = $derived(uiState.orchestration ?? uiState.workflow?.orchestration ?? eventOrchestration);
+	const daedalusWorkflow = $derived(uiState.workflow ?? eventWorkflow);
+	const auditEntries = $derived(uiState.audit?.entries ?? []);
+	const automationRules = $derived(uiState.automation?.rules ?? []);
 
 	const extensions = $derived(
 		uiState.extensionRequests.map((request: ExtensionUiRequest): RendererSafeExtensionMetadata => ({

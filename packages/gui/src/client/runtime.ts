@@ -8,8 +8,12 @@ import {
 import {
 	type AppEvent,
 	appServerProtocolVersion,
+	type AuditTrailProjection,
+	type AutomationProjection,
+	type DaedalusWorkflowState,
 	type ExtensionUiRequest,
 	type ExtensionUiResponse,
+	type OrchestrationProjection,
 	type TerminalSnapshot,
 	type WorkflowWorktreeMetadata,
 } from "@daedalus-pi/app-server-protocol";
@@ -189,6 +193,10 @@ export interface GuiState {
 	composerFileMentions: ComposerFileMention[];
 	composerSlashCommands: ComposerSlashCommand[];
 	activeDiff?: RendererDiffSummary;
+	orchestration?: OrchestrationProjection;
+	workflow?: DaedalusWorkflowState;
+	audit?: AuditTrailProjection;
+	automation?: AutomationProjection;
 	_reconnectState?: ReconnectState;
 	recentProjects?: readonly RecentProject[];
 }
@@ -316,6 +324,10 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 		composerSlashCommands: [],
 		sessionTokensUsed: 0,
 		recentProjects: [],
+		orchestration: undefined,
+		workflow: undefined,
+		audit: undefined,
+		automation: undefined,
 	};
 	const reconnectState = createReconnectState(options.reconnect);
 	let currentTransport = initialTransport;
@@ -868,6 +880,8 @@ function recordEvent(state: GuiState, value: unknown): void {
 	if (event.type === "integration/state") recordIntegrationState(state, event.payload);
 	if (event.type === "approval/requested") recordApproval(state, event.payload, event.sessionId);
 	if (event.type === "agent/message_end" || event.type === "agent/turn_end") recordUsageFromEvent(state, event);
+	if (event.type === "orchestration/projected") recordOrchestrationProjection(state, event.payload);
+	if (event.type === "daedalus/workflow/projected") recordWorkflowProjection(state, event.payload);
 }
 
 function recordUsageFromEvent(state: GuiState, event: AppEvent): void {
@@ -884,6 +898,18 @@ function recordUsageFromEvent(state: GuiState, event: AppEvent): void {
 	if (total > state.sessionTokensUsed) state.sessionTokensUsed = total;
 }
 
+function recordOrchestrationProjection(state: GuiState, payload: unknown): void {
+	const projection = payload && typeof payload === "object" ? (payload as { projection?: unknown }).projection : undefined;
+	if (projection && typeof projection === "object") state.orchestration = projection as OrchestrationProjection;
+}
+
+function recordWorkflowProjection(state: GuiState, payload: unknown): void {
+	const workflow = payload && typeof payload === "object" ? (payload as { workflow?: unknown }).workflow : undefined;
+	if (workflow && typeof workflow === "object") {
+		state.workflow = workflow as DaedalusWorkflowState;
+		state.orchestration = state.workflow.orchestration;
+	}
+}
 function upsertSession(state: GuiState, session: SessionSummary): void {
 	const index = state.sessions.findIndex((item) => item.id === session.id);
 	if (index >= 0) state.sessions[index] = session;
@@ -1054,6 +1080,20 @@ async function hydrateGuiState(client: AppServerClient, state: GuiState): Promis
 		const result = await client.getAccessPolicy();
 		state.accessPolicy = result.policy;
 		state.accessMode = result.policy.mode;
+	});
+	await safeHydrateStep(state, "workflow-inspector", async () => {
+		state.orchestration = (await client.request("orchestration/read", {})) as OrchestrationProjection;
+		if (state.selectedSessionId) {
+			state.workflow = (await client.request("daedalus/workflow/read", {
+				sessionId: state.selectedSessionId,
+			})) as DaedalusWorkflowState;
+			state.orchestration = state.workflow.orchestration;
+		}
+		state.audit = (await client.request("audit/query", {
+			sessionId: state.selectedSessionId,
+			limit: 200,
+		})) as AuditTrailProjection;
+		state.automation = (await client.request("automation/read", {})) as AutomationProjection;
 	});
 	await safeHydrateStep(state, "event-cursor", async () => {
 		const result = await client.replayEvents({ cursor: { after: state.lastEventCursor }, types: [] });

@@ -78,24 +78,24 @@ function readTodos(customType: string | undefined, data: Record<string, unknown>
 	if (!source || !(customType?.includes("todo") || customType === "plan-execution-init" || customType === "status-dashboard")) return [];
 	return source.filter(isRecord).map((item, index) => ({
 		id: text(item, "id") ?? `todo-${index + 1}`,
-		title: text(item, "title") ?? text(item, "content") ?? text(item, "text") ?? `Todo ${index + 1}`,
+		title: sanitize(text(item, "title") ?? text(item, "content") ?? text(item, "text") ?? `Todo ${index + 1}`) ?? `Todo ${index + 1}`,
 		status: todoStatus(text(item, "status")),
-		summary: text(item, "summary"),
+		summary: sanitize(text(item, "summary")),
 		dependencies: strings(item.dependencies),
 	}));
 }
 function readPlan(customType: string | undefined, data: Record<string, unknown>, updatedAt?: string): DaedalusPlanState | undefined {
 	const plan = isRecord(data.plan) ? data.plan : customType?.includes("plan") && customType !== "plan-mode" ? data : undefined;
 	if (!plan) return undefined;
-	return { id: text(plan, "id") ?? text(plan, "planId") ?? "plan", title: text(plan, "title") ?? text(plan, "goal") ?? "Plan", status: planStatus(text(plan, "status") ?? customType), path: text(plan, "path"), taskIds: strings(plan.taskIds), updatedAt };
+	return { id: text(plan, "id") ?? text(plan, "planId") ?? "plan", title: sanitize(text(plan, "title") ?? text(plan, "goal") ?? "Plan") ?? "Plan", status: planStatus(text(plan, "status") ?? customType), path: text(plan, "path"), taskIds: strings(plan.taskIds), updatedAt };
 }
 function readQuestion(customType: string | undefined, data: Record<string, unknown>, updatedAt?: string): DaedalusQuestionPrompt | undefined {
 	if (customType !== "question" && customType !== "questionnaire") return undefined;
-	return { id: text(data, "id") ?? customType, kind: customType, prompt: text(data, "prompt") ?? text(data, "question") ?? "Question", status: data.answer ? "answered" : "open", choices: strings(data.choices), answer: text(data, "answer"), updatedAt };
+	return { id: text(data, "id") ?? customType, kind: customType, prompt: sanitize(text(data, "prompt") ?? text(data, "question") ?? "Question") ?? "Question", status: data.answer ? "answered" : "open", choices: strings(data.choices).map((choice) => sanitize(choice) ?? ""), answer: sanitize(text(data, "answer")), updatedAt };
 }
 function readSemantic(customType: string | undefined, data: Record<string, unknown>, updatedAt?: string): DaedalusSemanticWorkspaceState | undefined {
 	if (!customType?.includes("sem")) return undefined;
-	return { status: semanticStatus(text(data, "status")), indexedPath: text(data, "indexedPath") ?? text(data, "path"), indexName: text(data, "indexName"), summary: text(data, "summary"), updatedAt };
+	return { status: semanticStatus(text(data, "status")), indexedPath: text(data, "indexedPath") ?? text(data, "path"), indexName: text(data, "indexName"), summary: sanitize(text(data, "summary")), updatedAt };
 }
 function laneStatus(status: DaedalusTodoItem["status"]): OrchestrationLane["status"] {
 	if (status === "in_progress") return "running";
@@ -124,6 +124,9 @@ function planStatus(value?: string): DaedalusPlanState["status"] {
 function semanticStatus(value?: string): DaedalusSemanticWorkspaceState["status"] {
 	if (value === "indexing" || value === "ready" || value === "error") return value;
 	return "idle";
+}
+function sanitize(value?: string): string | undefined {
+	return value?.replace(/<internal>[\s\S]*?<\/internal>/g, "[internal omitted]");
 }
 function text(record: Record<string, unknown>, key: string): string | undefined {
 	const value = record[key];
