@@ -228,12 +228,13 @@ export class TerminalService {
 	private persist(state: TerminalSessionState): void {
 		this.database
 			?.query(
-				`INSERT INTO terminal_sessions (id, project_id, worktree_id, status, cwd, shell, cols, rows, history, pid, exit_code, exit_signal, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET status = excluded.status, cwd = excluded.cwd, shell = excluded.shell, cols = excluded.cols, rows = excluded.rows, history = excluded.history, pid = excluded.pid, exit_code = excluded.exit_code, exit_signal = excluded.exit_signal, updated_at = excluded.updated_at`,
+				`INSERT INTO terminal_sessions (id, project_id, worktree_id, session_id, status, cwd, shell, cols, rows, history, pid, exit_code, exit_signal, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET project_id = excluded.project_id, worktree_id = excluded.worktree_id, session_id = excluded.session_id, status = excluded.status, cwd = excluded.cwd, shell = excluded.shell, cols = excluded.cols, rows = excluded.rows, history = excluded.history, pid = excluded.pid, exit_code = excluded.exit_code, exit_signal = excluded.exit_signal, updated_at = excluded.updated_at`,
 			)
 			.run(
 				state.record.terminalId,
 				state.record.projectId ?? null,
 				state.record.worktreeId ?? null,
+				state.record.sessionId ?? null,
 				state.record.status,
 				state.record.cwd,
 				state.record.shell,
@@ -265,6 +266,7 @@ export class TerminalService {
 					id: string;
 					project_id: string | null;
 					worktree_id: string | null;
+					session_id: string | null;
 					status: string;
 					cwd: string;
 					shell: string;
@@ -287,6 +289,7 @@ export class TerminalService {
 					terminalId: row.id,
 					projectId: row.project_id ?? undefined,
 					worktreeId: row.worktree_id ?? undefined,
+					sessionId: row.session_id ?? undefined,
 					cwd: row.cwd,
 					shell: row.shell,
 					status: row.status === "killed" ? "killed" : "exited",

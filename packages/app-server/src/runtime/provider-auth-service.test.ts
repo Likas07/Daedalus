@@ -34,6 +34,17 @@ describe("ProviderAuthService", () => {
 		expect(openai.canLogout).toBe(false);
 	});
 
+	test("environment-key providers expose complete actionable model snapshots", () => {
+		process.env.OPENAI_API_KEY = "test-key";
+		const openai = service().status("openai").providers[0];
+		expect(openai.enabled).toBe(true);
+		expect(openai.models.length).toBeGreaterThan(0);
+		expect(openai.modelCount).toBe(openai.models.length);
+		expect(openai.capabilities).toContain("reasoning");
+		expect(openai.diagnostics).toEqual([]);
+		expect(openai.updatedAt).toContain("T");
+	});
+
 	test("reports AuthStorage API key as ready and logout removes it", () => {
 		delete process.env.OPENAI_API_KEY;
 		const authStorage = AuthStorage.inMemory({ openai: { type: "api_key", key: "stored-key" } });

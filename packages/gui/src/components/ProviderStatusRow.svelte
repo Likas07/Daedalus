@@ -57,9 +57,19 @@
 		</div>
 	</dl>
 
-	<div class="mt-4 flex flex-wrap gap-2">
-		<button disabled={!provider.canLogin || !onLogin} title={disabledReason("login")} onclick={() => onLogin?.(provider.provider)} class="btn-mini" type="button">Login</button>
-		<button disabled={!provider.canRelogin || !onLogin} title={disabledReason("relogin")} onclick={() => onLogin?.(provider.provider)} class="btn-mini" type="button">Relogin</button>
-		<button disabled={!provider.canLogout || !onLogout} title={disabledReason("logout")} onclick={() => onLogout?.(provider.provider)} class="btn-mini" type="button">Logout</button>
-	</div>
+	{#if provider.canLogin || provider.canRelogin || provider.canLogout}
+		<div class="mt-4 flex flex-wrap gap-2">
+			{#if provider.canLogin}
+				<button disabled={!onLogin} title={disabledReason("login")} onclick={() => onLogin?.(provider.provider)} class="btn-mini" type="button">Login</button>
+			{/if}
+			{#if provider.canRelogin}
+				<button disabled={!onLogin} title={disabledReason("relogin")} onclick={() => onLogin?.(provider.provider)} class="btn-mini" type="button">Relogin</button>
+			{/if}
+			{#if provider.canLogout}
+				<button disabled={!onLogout} title={disabledReason("logout")} onclick={() => onLogout?.(provider.provider)} class="btn-mini" type="button">Logout</button>
+			{/if}
+		</div>
+	{:else if provider.instruction}
+		<p class="mt-4 font-mono text-[10.5px] text-[color:var(--bone-faint)]">{provider.instruction}</p>
+	{/if}
 </div>

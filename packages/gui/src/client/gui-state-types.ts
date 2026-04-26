@@ -20,12 +20,30 @@ export interface RendererModel {
 	readonly reasoning?: boolean;
 	readonly reasoningLevels?: readonly ReasoningLevel[];
 	readonly supportsFastMode?: boolean;
+	readonly capabilities?: readonly string[];
+	readonly diagnostics?: readonly string[];
 }
 
 export interface RendererAuthStatus {
 	readonly provider: string;
+	readonly label?: string;
+	readonly enabled?: boolean;
 	readonly authenticated: boolean;
-	status: "ready" | "missing-auth" | "unavailable" | "unknown";
+	status: "ready" | "missing-auth" | "env-key" | "oauth" | "unavailable" | "error" | "unknown";
+	readonly authMethod?: "oauth" | "api-key" | "env" | "config";
+	readonly actionable?: boolean;
+	readonly canLogin?: boolean;
+	readonly canLogout?: boolean;
+	readonly canRelogin?: boolean;
+	readonly instruction?: string;
+	readonly message?: string;
+	readonly source?: string;
+	readonly version?: string;
+	readonly modelCount?: number;
+	readonly models?: readonly RendererModel[];
+	readonly capabilities?: readonly string[];
+	readonly diagnostics?: readonly string[];
+	readonly updatedAt?: string;
 }
 
 export interface RendererAccessPolicy {
@@ -42,6 +60,10 @@ export interface RendererTerminal {
 	readonly rows: number;
 	status: "starting" | "running" | "exited" | "killed" | "error";
 	history: string;
+	cursor?: number;
+	projectId?: string;
+	worktreeId?: string;
+	sessionId?: string;
 	updatedAt?: string;
 }
 

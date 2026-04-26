@@ -10,7 +10,11 @@
 	const activeTerminal = $derived(appState.terminals.find((terminal: import("../client/gui-state-types").RendererTerminal) => terminal.terminalId === appState.activeTerminalId) ?? appState.terminals[0]);
 
 	async function createTerminal(): Promise<void> {
-		await runtime.createTerminal({ cwd: appState.projectRoot ?? "/", projectId: appState.lastProjectId, cols: 100, rows: 24 });
+		const selectedSession = appState.sessions.find((session: import("../client/runtime").SessionSummary) => session.id === appState.selectedSessionId);
+		const selectedWorktree = appState.worktrees.find((worktree: import("@daedalus-pi/app-server-protocol").WorkflowWorktreeMetadata) => worktree.id === selectedSession?.worktreeId);
+		const cwd = selectedWorktree?.path ?? selectedSession?.cwd ?? appState.projectRoot;
+		if (!cwd) throw new Error("Choose a project before creating a terminal.");
+		await runtime.createTerminal({ cwd, projectId: appState.lastProjectId, worktreeId: selectedSession?.worktreeId, cols: 100, rows: 24 });
 	}
 	function selectTerminal(id: string): void {
 		appState.activeTerminalId = id;

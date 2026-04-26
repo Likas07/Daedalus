@@ -82,6 +82,12 @@ export class IntegrationService {
 		return adapter.createPullRequest(input);
 	}
 
+	async openPullRequest(provider: string, url: string, cwd?: string): Promise<boolean> {
+		const adapter = this.adapters.find((item) => item.provider === provider);
+		if (!adapter?.openPullRequest) throw new Error(`Integration provider cannot open pull requests: ${provider}`);
+		return adapter.openPullRequest({ url, cwd });
+	}
+
 	private recordState(state: IntegrationState): void {
 		const now = state.updatedAt;
 		this.options.database

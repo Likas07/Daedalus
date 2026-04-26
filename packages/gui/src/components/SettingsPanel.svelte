@@ -176,7 +176,7 @@
 									{#if settings.selectedModel === model.id}
 										selected
 									{:else if runtime}
-										<button type="button" class="caps text-bone-300 hover:text-gold" onclick={() => setSetting("defaultModel", model.id)}>select</button>
+										<button type="button" class="caps text-bone-300 hover:text-gold" onclick={() => runtime.setModel(model.id)}>select</button>
 									{:else}
 										{model.provider ?? "—"}
 									{/if}

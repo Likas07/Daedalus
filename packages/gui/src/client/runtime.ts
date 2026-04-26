@@ -116,6 +116,12 @@ export interface GuiRuntime {
 	unstageFiles?(paths: readonly string[], diffId?: string): Promise<RendererDiffSummary | undefined>;
 	discardFiles?(paths: readonly string[], diffId?: string): Promise<RendererDiffSummary | undefined>;
 	commitChanges?(message: string, diffId?: string): Promise<RendererDiffSummary | undefined>;
+	createCheckpoint?(input: { sessionId: string; turnId: string; label?: string }): Promise<unknown>;
+	restoreCheckpoint?(input: { sessionId: string; checkpointId: string }): Promise<RendererDiffSummary | undefined>;
+	diffCheckpoint?(checkpointRef: string, diffId?: string): Promise<RendererDiffSummary | undefined>;
+	refreshIntegrations?(projectId?: string): Promise<readonly IntegrationViewState[]>;
+	createPullRequest?(input: { provider?: string; title: string; body?: string; head: string; base?: string; draft?: boolean; projectId?: string }): Promise<unknown>;
+	openPullRequest?(url: string, input?: { provider?: string; projectId?: string }): Promise<boolean>;
 	createWorktree(input: CreateWorktreeInput): Promise<WorkflowWorktreeMetadata>;
 	openInEditor(path?: string): Promise<void>;
 	saveComposerAttachment(input: SaveComposerAttachmentInput): Promise<ComposerDraftAttachment>;
@@ -463,7 +469,7 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 				accessMode: input.accessMode ?? state.accessMode,
 				mode: input.mode ?? state.mode,
 				fastMode: input.fastMode ?? state.fastMode,
-				draftState: input.draftState,
+				draftState: toJsonObject(input.draftState),
 			});
 			state.sessionTokensUsed = 0;
 			const session = result as { sessionId?: unknown; id?: unknown };
@@ -540,6 +546,7 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 				accessMode: input.accessMode ?? state.accessMode,
 				mode: input.mode ?? state.mode,
 				fastMode: input.fastMode ?? state.fastMode,
+				draftState: toJsonObject(input.draftState),
 			});
 		},
 		cancelTurn: (sessionId, turnId) => client.cancelTurn({ sessionId, turnId }),
@@ -559,8 +566,12 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 		},
 		async setModel(model) {
 			state.selectedModel = model;
+			const result = await client.request("model/select", { model });
+			state.settings = await client.readSettings();
+			state.models = (state.settings.models as RendererModel[]) ?? state.models;
+			state.selectedModel = state.settings.selectedModel ?? model;
 			notify();
-			return client.request("model/select", { model });
+			return result;
 		},
 		async setEffort(effort) {
 			state.effort = effort;
@@ -637,6 +648,40 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 			notify();
 			return state.activeDiff;
 		},
+		async createCheckpoint(input) {
+			const result = await client.request("checkpoint/create", input);
+			await refreshDiffForState(client, state, notify);
+			return result;
+		},
+		async restoreCheckpoint(input) {
+			const result = (await client.request("checkpoint/restore", input)) as { diff?: RendererDiffSummary };
+			state.activeDiff = result.diff;
+			notify();
+			return state.activeDiff;
+		},
+		async diffCheckpoint(checkpointRef, diffId = state.lastProjectId ?? state.projectRoot) {
+			if (!diffId) return undefined;
+			const result = (await client.request("git/checkpoint-restore", { diffId, checkpointRef })) as { diff?: RendererDiffSummary };
+			state.activeDiff = result.diff;
+			notify();
+			return state.activeDiff;
+		},
+		async refreshIntegrations(projectId = state.lastProjectId) {
+			const result = (await client.request("integration/list", projectId ? { projectId } : {})) as { integrations?: IntegrationViewState[] };
+			state.integrations = result.integrations ?? [];
+			notify();
+			return state.integrations;
+		},
+		async createPullRequest(input) {
+			const result = await client.request("integration/pr-create", { provider: input.provider ?? "github", projectId: input.projectId ?? state.lastProjectId, title: input.title, body: input.body, head: input.head, base: input.base, draft: input.draft });
+			await refreshIntegrationsForState(client, state, notify, input.projectId ?? state.lastProjectId);
+			return result;
+		},
+		async openPullRequest(url, input = {}) {
+			const result = (await client.request("integration/pr-open", { provider: input.provider ?? "github", projectId: input.projectId ?? state.lastProjectId, url })) as { ok?: boolean };
+			await refreshIntegrationsForState(client, state, notify, input.projectId ?? state.lastProjectId);
+			return result.ok === true;
+		},
 		async createWorktree(input) {
 			const result = (await client.request("worktree/create", input)) as { worktree: WorkflowWorktreeMetadata };
 			state.worktrees = [
@@ -681,7 +726,8 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 			return terminal;
 		},
 		async replayTerminal(terminalId, afterSeq) {
-			const result = await client.replayTerminal({ terminalId, afterSeq });
+			const terminal = state.terminals.find((item) => item.terminalId === terminalId);
+			const result = await client.replayTerminal({ terminalId, afterSeq: afterSeq ?? terminal?.cursor ?? 0 });
 			for (const chunk of result.chunks) recordTerminalOutput(state, { terminalId, ...chunk });
 			notify();
 			return result;
@@ -739,6 +785,36 @@ async function openProjectPath(
 	if (bridge?.recentProjects) state.recentProjects = await bridge.recentProjects.add(path);
 	notify();
 	return { projectId: project.projectId };
+}
+
+function toJsonObject(value: unknown): Record<string, unknown> | undefined {
+	if (!value || typeof value !== "object") return undefined;
+	return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+}
+
+async function refreshDiffForState(
+	client: AppServerClient,
+	state: GuiState,
+	notify: () => void,
+	diffId = state.lastProjectId ?? state.projectRoot,
+	): Promise<RendererDiffSummary | undefined> {
+	if (!diffId) return undefined;
+	const result = (await client.request("diff/get", { diffId })) as { diff?: RendererDiffSummary };
+	state.activeDiff = result.diff;
+	notify();
+	return state.activeDiff;
+}
+
+async function refreshIntegrationsForState(
+	client: AppServerClient,
+	state: GuiState,
+	notify: () => void,
+	projectId = state.lastProjectId,
+	): Promise<IntegrationViewState[]> {
+	const result = (await client.request("integration/list", projectId ? { projectId } : {})) as { integrations?: IntegrationViewState[] };
+	state.integrations = result.integrations ?? [];
+	notify();
+	return state.integrations;
 }
 
 export async function resolveBootstrap(): Promise<GuiBootstrap> {
@@ -961,7 +1037,7 @@ async function hydrateGuiState(client: AppServerClient, state: GuiState): Promis
 			statuses?: RendererAuthStatus[];
 		};
 		state.authStatuses = [...(result.providers ?? result.statuses ?? [])];
-		for (const status of state.authStatuses) recordProviderStatus(state, status);
+		state.providerStatuses = [...state.authStatuses];
 	});
 	await safeHydrateStep(state, "config", async () => {
 		const result = (await client.request("config/get", {})) as {
@@ -970,7 +1046,7 @@ async function hydrateGuiState(client: AppServerClient, state: GuiState): Promis
 		};
 		const config = result.config ?? result.values ?? {};
 		if (typeof config["composer.effort"] === "string") state.effort = config["composer.effort"];
-		if (typeof config["model.selected"] === "string") state.selectedModel = config["model.selected"];
+		if (!state.selectedModel && typeof config["model.selected"] === "string") state.selectedModel = config["model.selected"];
 		if (typeof config["composer.mode"] === "string") state.mode = config["composer.mode"];
 		if (typeof config["composer.fastMode"] === "boolean") state.fastMode = config["composer.fastMode"];
 	});
@@ -1050,6 +1126,10 @@ function terminalFromSnapshot(snapshot: TerminalSnapshot): RendererTerminal {
 		rows: snapshot.dimensions?.rows ?? 24,
 		status: snapshot.status,
 		history: capTerminalHistory(snapshot.history ?? ""),
+		cursor: snapshot.cursor?.replayCursor ?? 0,
+		projectId: snapshot.projectId,
+		worktreeId: snapshot.worktreeId,
+		sessionId: snapshot.sessionId,
 		updatedAt: snapshot.updatedAt,
 	};
 }
@@ -1064,8 +1144,8 @@ function recordTerminalOutput(state: GuiState, params: { terminalId: string; seq
 }
 
 function recordTerminalEvent(state: GuiState, params: { terminalId: string; event: unknown }): void {
-	const event = params.event as { kind?: string; data?: string; status?: RendererTerminal["status"] };
-	if (typeof event.data === "string")
+	const event = params.event as { type?: string; kind?: string; data?: string; status?: RendererTerminal["status"] };
+	if (event.type !== "output" && event.kind !== "output" && typeof event.data === "string")
 		recordTerminalOutput(state, { terminalId: params.terminalId, seq: state.terminalCursor + 1, data: event.data });
 	const terminal = state.terminals.find((item) => item.terminalId === params.terminalId);
 	if (terminal && event.status) terminal.status = event.status;

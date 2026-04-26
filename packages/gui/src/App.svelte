@@ -166,4 +166,4 @@
 
 <ExtensionDialogs requests={guiState.extensionRequests} {respond} close={closeExtensionRequest} />
 <CommandPalette commands={commandRegistry} guiState={guiState} {runtime} {ui} />
-<DiffOverlay guiState={guiState} {ui} />
+<DiffOverlay guiState={guiState} {ui} {runtime} />

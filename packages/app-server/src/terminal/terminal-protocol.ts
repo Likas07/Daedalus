@@ -1,6 +1,6 @@
 import type { ProjectId, SessionId, TerminalId, WorktreeId } from "@daedalus-pi/app-server-protocol";
 
-export type TerminalStatus = "running" | "exited" | "killed" | "error";
+export type TerminalStatus = "starting" | "running" | "exited" | "killed" | "error";
 
 export interface TerminalDimensions {
 	readonly cols: number;

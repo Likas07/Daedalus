@@ -35,6 +35,8 @@ import {
 	IntegrationProviderStateSchema,
 	IntegrationPullRequestCreateParamsSchema,
 	IntegrationPullRequestCreateResultSchema,
+	IntegrationPullRequestOpenParamsSchema,
+	IntegrationPullRequestOpenResultSchema,
 } from "./integration-messages";
 import { OrchestrationProjectionSchema } from "./orchestration";
 import {
@@ -216,6 +218,8 @@ export const ModelSummarySchema = StrictObject({
 	reasoningLevels: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
 	supportsFastMode: Type.Optional(Type.Boolean()),
 	diagnostic: Type.Optional(Type.String()),
+	capabilities: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+	diagnostics: Type.Optional(Type.Array(Type.String())),
 });
 export type ModelSummary = Static<typeof ModelSummarySchema>;
 
@@ -268,9 +272,18 @@ export const ProviderAuthMethodSchema = Type.Union([
 	Type.Literal("env"),
 	Type.Literal("config"),
 ]);
+export const ProviderAuthModelSchema = StrictObject({
+	id: Type.String({ minLength: 1 }),
+	label: Type.Optional(Type.String()),
+	available: Type.Boolean(),
+	capabilities: Type.Array(Type.String({ minLength: 1 })),
+	diagnostics: Type.Array(Type.String()),
+});
+export type ProviderAuthModel = Static<typeof ProviderAuthModelSchema>;
 export const ProviderAuthStatusSchema = StrictObject({
 	provider: Type.String({ minLength: 1 }),
 	label: Type.Optional(Type.String()),
+	enabled: Type.Boolean(),
 	authenticated: Type.Boolean(),
 	status: ProviderAuthStatusValueSchema,
 	authMethod: Type.Optional(ProviderAuthMethodSchema),
@@ -283,6 +296,10 @@ export const ProviderAuthStatusSchema = StrictObject({
 	source: Type.Optional(Type.String()),
 	version: Type.Optional(Type.String()),
 	modelCount: Type.Integer({ minimum: 0 }),
+	models: Type.Array(ProviderAuthModelSchema),
+	capabilities: Type.Array(Type.String({ minLength: 1 })),
+	diagnostics: Type.Array(Type.String()),
+	updatedAt: Type.String({ minLength: 1 }),
 });
 export type ProviderAuthStatus = Static<typeof ProviderAuthStatusSchema>;
 
@@ -385,6 +402,16 @@ export const CheckpointSummarySchema = StrictObject({
 	createdAt: Type.String({ minLength: 1 }),
 });
 export type CheckpointSummary = Static<typeof CheckpointSummarySchema>;
+export const CheckpointCreateParamsSchema = StrictObject({
+	sessionId: SessionIdSchema,
+	turnId: TurnIdSchema,
+	label: Type.Optional(Type.String()),
+});
+export type CheckpointCreateParams = Static<typeof CheckpointCreateParamsSchema>;
+export const CheckpointCreateResultSchema = StrictObject({
+	checkpoint: StrictObject({ checkpointId: CheckpointIdSchema, ref: Type.String({ minLength: 1 }), commit: Type.String({ minLength: 1 }) }),
+});
+export type CheckpointCreateResult = Static<typeof CheckpointCreateResultSchema>;
 export const CheckpointListParamsSchema = StrictObject({ sessionId: SessionIdSchema });
 export type CheckpointListParams = Static<typeof CheckpointListParamsSchema>;
 export const CheckpointListResultSchema = StrictObject({ checkpoints: Type.Array(CheckpointSummarySchema) });
@@ -457,6 +484,7 @@ export const ClientRequestSchema = Type.Union([
 	),
 	request("extension/ui/respond", ExtensionUiResponseSchema),
 	request("checkpoint/list", CheckpointListParamsSchema),
+	request("checkpoint/create", CheckpointCreateParamsSchema),
 	request("checkpoint/restore", CheckpointRestoreParamsSchema),
 	request("diff/get", DiffGetParamsSchema),
 	request("git/stage", GitPathsParamsSchema),
@@ -491,6 +519,7 @@ export const ClientRequestSchema = Type.Union([
 	request("integration/link", IntegrationManualLinkParamsSchema),
 	request("integration/import", IntegrationImportParamsSchema),
 	request("integration/pr-create", IntegrationPullRequestCreateParamsSchema),
+	request("integration/pr-open", IntegrationPullRequestOpenParamsSchema),
 	request("diagnostics/export", DiagnosticExportParamsSchema),
 	request("orchestration/read", EmptyParamsSchema),
 	request("daedalus/workflow/read", StrictObject({ sessionId: SessionIdSchema })),
@@ -536,6 +565,7 @@ export const ClientRequestResultSchemas = {
 	"approval/respond": EmptyResultSchema,
 	"extension/ui/respond": EmptyResultSchema,
 	"checkpoint/list": CheckpointListResultSchema,
+	"checkpoint/create": CheckpointCreateResultSchema,
 	"checkpoint/restore": CheckpointRestoreResultSchema,
 	"diff/get": DiffGetResultSchema,
 	"git/stage": GitMutationResultSchema,
@@ -570,6 +600,7 @@ export const ClientRequestResultSchemas = {
 	"integration/link": IntegrationConnectResultSchema,
 	"integration/import": IntegrationConnectResultSchema,
 	"integration/pr-create": IntegrationPullRequestCreateResultSchema,
+	"integration/pr-open": IntegrationPullRequestOpenResultSchema,
 	"diagnostics/export": DiagnosticExportResultSchema,
 	"orchestration/read": OrchestrationProjectionSchema,
 	"daedalus/workflow/read": DaedalusWorkflowStateSchema,

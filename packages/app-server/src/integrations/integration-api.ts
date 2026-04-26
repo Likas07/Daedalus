@@ -87,6 +87,7 @@ export interface IntegrationAdapter {
 		readonly cwd?: string;
 	}): Promise<PullRequestStatus | undefined>;
 	createPullRequest?(input: PullRequestCreateRequest & { readonly cwd?: string }): Promise<PullRequestCreateResult>;
+	openPullRequest?(input: { readonly url: string; readonly cwd?: string }): Promise<boolean>;
 	getCiChecks?(input?: { readonly ref?: string; readonly cwd?: string }): Promise<readonly CiCheck[]>;
 }
 

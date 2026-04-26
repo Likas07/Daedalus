@@ -124,6 +124,13 @@ export const IntegrationImportParamsSchema = StrictObject({
 });
 export type IntegrationImportParams = Static<typeof IntegrationImportParamsSchema>;
 
+export const IntegrationPullRequestOpenParamsSchema = StrictObject({
+	provider: IntegrationProviderSchema,
+	projectId: Type.Optional(ProjectIdSchema),
+	url: Type.String({ minLength: 1 }),
+});
+export type IntegrationPullRequestOpenParams = Static<typeof IntegrationPullRequestOpenParamsSchema>;
+
 export const IntegrationPullRequestCreateParamsSchema = StrictObject({
 	provider: IntegrationProviderSchema,
 	projectId: Type.Optional(ProjectIdSchema),
@@ -153,3 +160,5 @@ export type IntegrationDisconnectResult = Static<typeof IntegrationDisconnectRes
 
 export const IntegrationPullRequestCreateResultSchema = StrictObject({ pullRequest: PullRequestCreateResultSchema });
 export type IntegrationPullRequestCreateResult = Static<typeof IntegrationPullRequestCreateResultSchema>;
+export const IntegrationPullRequestOpenResultSchema = StrictObject({ ok: Type.Boolean() });
+export type IntegrationPullRequestOpenResult = Static<typeof IntegrationPullRequestOpenResultSchema>;

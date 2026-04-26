@@ -16,14 +16,14 @@ describe("createSettingsViewModel", () => {
 					images: { blockImages: true, autoResize: false },
 				},
 				diagnostics: ["ok"],
-				models: [{ id: "gpt-5", provider: "openai" }],
+				models: [{ id: "gpt-5", provider: "openai", capabilities: ["reasoning"], diagnostics: [] }],
 				selectedProvider: "openai",
 				selectedModel: "gpt-5",
 				enabledModels: ["openai/*"],
 				thinkingLevels: ["low", "high"],
 				keybindings: [{ id: "app.commandPalette", description: "Open palette", defaultKeys: ["super+k"], keys: ["ctrl+k"], overridden: true }],
 			},
-			[{ provider: "openai", authenticated: true, status: "ready" }],
+			[{ provider: "openai", enabled: true, authenticated: true, status: "env-key", authMethod: "env", actionable: false, canLogin: false, canLogout: false, canRelogin: false, modelCount: 1, models: [{ id: "gpt-5", available: true, capabilities: ["reasoning"], diagnostics: [] }], capabilities: ["reasoning"], diagnostics: [], updatedAt: "2026-04-26T00:00:00.000Z" }],
 		);
 		expect(vm.selectedModel).toBe("gpt-5");
 		expect(vm.theme).toBe("obsidian");
@@ -31,5 +31,8 @@ describe("createSettingsViewModel", () => {
 		expect(vm.providers[0]?.authenticated).toBe(true);
 		expect(vm.terminal.showImages).toBe(false);
 		expect(vm.images.blockImages).toBe(true);
+		expect(vm.models[0]?.capabilities).toContain("reasoning");
+		expect(vm.providers[0]?.status).toBe("env-key");
+		expect(vm.providers[0]?.models?.[0]?.id).toBe("gpt-5");
 	});
 });

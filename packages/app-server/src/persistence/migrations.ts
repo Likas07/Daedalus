@@ -261,6 +261,13 @@ CREATE INDEX IF NOT EXISTS gui_session_approvals_entry_id_idx ON gui_session_app
 CREATE INDEX IF NOT EXISTS gui_session_approvals_status_idx ON gui_session_approvals(status);
 `,
 	},
+	{
+		version: 11,
+		name: "terminal_session_scope",
+		sql: `
+ALTER TABLE terminal_sessions ADD COLUMN session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL;
+`,
+	},
 ];
 
 export function runMigrations(database: AppServerDatabase): void {

@@ -153,19 +153,24 @@ describe("web GUI E2E smoke", () => {
 		expect(composerStarted.sessionId).toBeTruthy();
 
 		expect(await request(server, "auth/status", {})).toHaveProperty("providers");
-		const terminal = (await request(server, "terminal/create", { cwd: tempDir, cols: 80, rows: 24 })) as {
-			terminal: { terminalId: string };
+		const terminal = (await request(server, "terminal/create", { cwd: tempDir, projectId: opened.projectId, sessionId: session.sessionId, cols: 80, rows: 24 })) as {
+			terminal: { terminalId: string; projectId?: string; sessionId?: string; cwd?: string };
 		};
-		expect(terminal.terminal.terminalId).toBeTruthy();
+		expect(typeof terminal.terminal.terminalId).toBe("string");
+		expect(terminal.terminal.projectId).toBe(opened.projectId);
+		expect(terminal.terminal.sessionId).toBe(session.sessionId);
+		expect(terminal.terminal.cwd).toBe(tempDir);
 		expect(
 			await request(server, "terminal/input", {
 				terminalId: terminal.terminal.terminalId,
 				data: "echo daedalus-gui-smoke\n",
 			}),
 		).toEqual({});
-		expect(await request(server, "terminal/replay", { terminalId: terminal.terminal.terminalId })).toHaveProperty(
-			"chunks",
-		);
+		const terminalReplay = (await request(server, "terminal/replay", { terminalId: terminal.terminal.terminalId, afterSeq: 0 })) as { chunks: Array<{ seq: number; data: string }> };
+		const replayAgain = (await request(server, "terminal/replay", { terminalId: terminal.terminal.terminalId, afterSeq: terminalReplay.chunks.at(-1)?.seq ?? 0 })) as { chunks: Array<{ seq: number; data: string }> };
+		expect(terminalReplay.chunks.map((chunk) => chunk.data)).toEqual(["echo daedalus-gui-smoke\n"]);
+		expect(replayAgain.chunks).toEqual([]);
+		await expect(request(server, "terminal/create", { cwd: join(tempDir, "missing"), projectId: opened.projectId, cols: 80, rows: 24 })).rejects.toThrow();
 
 		const diff = (await request(server, "diff/get", { diffId: opened.projectId })) as { diff: { files: unknown[] } };
 		expect(diff.diff.files).toBeDefined();

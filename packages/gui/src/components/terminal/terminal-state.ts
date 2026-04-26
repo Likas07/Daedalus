@@ -13,7 +13,7 @@ export interface TerminalOutputState {
 export function terminalLabel(terminal?: Pick<RendererTerminal, "terminalId" | "cwd">): string {
 	if (!terminal) return "terminal";
 	const cwd = terminal.cwd.trim();
-	return cwd.split("/").filter(Boolean).at(-1) ?? cwd ?? terminal.terminalId;
+	return cwd.split("/").filter(Boolean).at(-1) || terminal.terminalId;
 }
 
 export function terminalCloseLabel(terminal?: Pick<RendererTerminal, "terminalId" | "cwd">): string {
@@ -59,9 +59,10 @@ export function applyTerminalOutput(
 	const terminal = state.terminals.find((item) => item.terminalId === params.terminalId);
 	if (!terminal) return false;
 	state.activeTerminalId = params.terminalId;
-	if (params.seq <= state.terminalCursor) return false;
+	if (params.seq <= (terminal.cursor ?? state.terminalCursor ?? 0)) return false;
 	state.terminalOutput = capTerminalHistory(state.terminalOutput + params.data);
 	state.terminalCursor = params.seq;
 	terminal.history = capTerminalHistory(terminal.history + params.data);
+	terminal.cursor = params.seq;
 	return true;
 }

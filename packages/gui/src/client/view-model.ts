@@ -41,6 +41,8 @@ export interface ApprovalItem {
 
 export interface ProviderStatus {
 	readonly provider: string;
+	readonly label?: string;
+	readonly enabled?: boolean;
 	readonly authenticated: boolean;
 	readonly status: "ready" | "missing-auth" | "env-key" | "oauth" | "unavailable" | "error" | "unknown";
 	readonly authMethod?: "oauth" | "api-key" | "env" | "config";
@@ -53,6 +55,10 @@ export interface ProviderStatus {
 	readonly source?: string;
 	readonly version?: string;
 	readonly modelCount?: number;
+	readonly models?: readonly { id: string; label?: string; available?: boolean; capabilities?: readonly string[]; diagnostics?: readonly string[] }[];
+	readonly capabilities?: readonly string[];
+	readonly diagnostics?: readonly string[];
+	readonly updatedAt?: string;
 }
 
 export interface DiffSummary {

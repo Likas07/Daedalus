@@ -1,5 +1,6 @@
+import { stat } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import type {
 	AppEvent,
 	AuditQuery,
@@ -36,6 +37,7 @@ import { ProjectService } from "../workspaces/project-service";
 import { WorktreeService } from "../workspaces/worktree-service";
 import { DiffService } from "../workspaces/diff-service";
 import { GitMutationService } from "../workspaces/git-mutation-service";
+import { CheckpointService } from "../workspaces/checkpoint-service";
 
 import { ExportService } from "./export-service";
 
@@ -84,6 +86,7 @@ export class AppRouter {
 	private readonly attachmentService = new AttachmentService();
 	private readonly diffService = new DiffService();
 	private readonly gitMutationService: GitMutationService;
+	private readonly checkpointService: CheckpointService;
 
 	private readonly sessionStore: SqliteSessionStore;
 	private readonly runtimeControlService: RuntimeControlService;
@@ -116,6 +119,7 @@ export class AppRouter {
 			approvalService: this.approvalService,
 			diffService: this.diffService,
 		});
+		this.checkpointService = new CheckpointService({ database: options.database });
 		this.integrationService = new IntegrationService({
 			database: options.database,
 			runner: options.integrationRunner,
@@ -286,8 +290,10 @@ export class AppRouter {
 				return { resource: this.resourceManagementService.enable(request.params) };
 			case "resources/disable":
 				return { resource: this.resourceManagementService.disable(request.params) };
-			case "terminal/create":
-				return { terminal: await this.terminalService.create(request.params) };
+			case "terminal/create": {
+				const params = await this.validateTerminalCreate(request.params);
+				return { terminal: await this.terminalService.create(params) };
+			}
 			case "terminal/list":
 				return { terminals: this.terminalService.list(request.params) };
 			case "terminal/attach":
@@ -310,6 +316,16 @@ export class AppRouter {
 				return this.terminalService.replay(request.params.terminalId, request.params.afterSeq);
 			case "checkpoint/list":
 				return { checkpoints: this.listCheckpoints(request.params.sessionId) };
+			case "checkpoint/create": {
+				const session = await this.sessionStore.read({ sessionId: request.params.sessionId });
+				const checkpoint = await this.checkpointService.create({
+					cwd: session.header.cwd,
+					sessionId: request.params.sessionId,
+					turnId: request.params.turnId,
+					label: request.params.label,
+				});
+				return { checkpoint };
+			}
 			case "checkpoint/restore": {
 				const checkpoints = this.listCheckpoints(request.params.sessionId);
 				const checkpoint = checkpoints.find((item) => item.checkpointId === request.params.checkpointId);
@@ -374,12 +390,15 @@ export class AppRouter {
 				});
 				return { config: this.configService.get(request.params.key) };
 			}
-			case "model/list":
+			case "model/list": {
+				const settings = await this.settingsService.read();
 				return {
-					models: await this.listModels(),
-					selectedModel: this.configService.get("model.selected")["model.selected"],
+					models: settings.models,
+					selectedModel: settings.selectedModel,
 				};
-			case "model/select":
+			}
+			case "model/select": {
+				await this.settingsService.set("global", "defaultModel", request.params.model);
 				this.configService.set("model.selected", request.params.model);
 				this.options.publish({
 					kind: "notification",
@@ -387,6 +406,7 @@ export class AppRouter {
 					params: { model: request.params.model },
 				});
 				return { model: request.params.model };
+			}
 			case "auth/status":
 				return this.providerAuthService.status(request.params.provider);
 			case "auth/login":
@@ -448,7 +468,13 @@ export class AppRouter {
 							pullRequest: { status: "failed", message: decision.reason ?? "Pull request creation denied." },
 						};
 				}
-				return { pullRequest: await this.integrationService.createPullRequest({ ...request.params, cwd }) };
+				const pullRequest = await this.integrationService.createPullRequest({ ...request.params, cwd });
+				if (cwd) await this.integrationService.list({ cwd });
+				return { pullRequest };
+			}
+			case "integration/pr-open": {
+				const cwd = request.params.projectId ? this.projects.get(String(request.params.projectId)) : undefined;
+				return { ok: await this.integrationService.openPullRequest(request.params.provider, request.params.url, cwd) };
 			}
 			case "diagnostics/export":
 				return new ExportService({
@@ -475,6 +501,26 @@ export class AppRouter {
 			default:
 				return {};
 		}
+	}
+
+	private async validateTerminalCreate(params: import("../terminal/terminal-protocol").TerminalCreateParams): Promise<import("../terminal/terminal-protocol").TerminalCreateParams> {
+		const cwd = resolve(params.cwd);
+		const stats = await stat(cwd).catch(() => undefined);
+		if (!stats?.isDirectory()) throw new Error(`Invalid terminal cwd: ${params.cwd}`);
+		const roots: string[] = [];
+		if (params.projectId) {
+			const project = this.projectService.get(params.projectId);
+			if (!project) throw new Error(`Unknown project: ${params.projectId}`);
+			roots.push(project.path);
+		}
+		if (params.worktreeId) {
+			const worktree = this.worktreeService.open(params.worktreeId);
+			if (!worktree) throw new Error(`Unknown worktree: ${params.worktreeId}`);
+			if (params.projectId && worktree.projectId !== params.projectId) throw new Error(`Worktree ${params.worktreeId} does not belong to project ${params.projectId}`);
+			roots.push(worktree.path);
+		}
+		if (roots.length > 0 && !roots.some((root) => this.isWithin(cwd, root))) throw new Error(`Terminal cwd is outside requested project/worktree scope: ${cwd}`);
+		return { ...params, cwd };
 	}
 
 	private listCheckpoints(sessionId: string): Array<{
@@ -523,6 +569,12 @@ export class AppRouter {
 		});
 	}
 
+	private isWithin(path: string, root: string): boolean {
+		const normalizedRoot = resolve(root);
+		const relativePath = relative(normalizedRoot, path);
+		return relativePath === "" || (!relativePath.startsWith("..") && !relativePath.startsWith("/") && !relativePath.match(/^[A-Za-z]:/));
+	}
+
 	private resolveProjectOrWorktreeCwd(diffId: string): string {
 		const projectPath = this.projects.get(diffId);
 		if (projectPath) return projectPath;
@@ -542,7 +594,8 @@ export class AppRouter {
 			const { AuthStorage, ModelRegistry } = await import("@daedalus-pi/coding-agent");
 			const authStorage = AuthStorage.create();
 			const registry = ModelRegistry.create(authStorage);
-			const explicitProviders = new Set(Object.keys(authStorage.getAll()));
+			const providerStatuses = this.providerAuthService.status().providers;
+			const enabledProviders = new Set(providerStatuses.filter((provider) => provider.enabled || provider.authenticated).map((provider) => provider.provider));
 			type ModelLike = {
 				id?: string;
 				name?: string;
@@ -550,10 +603,11 @@ export class AppRouter {
 				reasoning?: boolean;
 				contextWindow?: number;
 				maxTokens?: number;
+				input?: readonly string[];
 			};
 			const models: ModelLike[] = registry
 				.getAll()
-				.filter((model: ModelLike) => model.provider !== undefined && explicitProviders.has(model.provider));
+				.filter((model: ModelLike) => model.provider !== undefined && enabledProviders.has(model.provider));
 			return models.map((model) => {
 				const id = model.id ?? model.name ?? "";
 				const provider = model.provider ?? "unknown";
@@ -569,6 +623,11 @@ export class AppRouter {
 					reasoning,
 					reasoningLevels,
 					supportsFastMode: supportsFastModeFor(id, provider),
+					capabilities: [
+						...(reasoning ? ["reasoning"] : []),
+						...((model.input ?? []).map((input) => `input:${input}`)),
+					],
+					diagnostics: [],
 				};
 			});
 		} catch (error) {

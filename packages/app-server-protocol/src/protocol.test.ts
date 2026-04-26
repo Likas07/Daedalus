@@ -221,6 +221,7 @@ describe("app-server protocol schemas", () => {
 				providers: [
 					{
 						provider: "openai",
+						enabled: false,
 						authenticated: false,
 						status: "missing-auth",
 						authMethod: "api-key",
@@ -229,6 +230,13 @@ describe("app-server protocol schemas", () => {
 						canLogout: false,
 						canRelogin: false,
 						modelCount: 2,
+						models: [
+							{ id: "gpt-5", available: true, capabilities: ["reasoning"], diagnostics: [] },
+							{ id: "gpt-5-mini", available: true, capabilities: [], diagnostics: [] },
+						],
+						capabilities: ["reasoning"],
+						diagnostics: [],
+						updatedAt: "2026-04-26T00:00:00.000Z",
 					},
 				],
 			}),

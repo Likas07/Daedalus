@@ -81,6 +81,10 @@ export class GitHubAdapter implements IntegrationAdapter {
 		return this.cli.createPullRequest(input);
 	}
 
+	openPullRequest(input: { readonly url: string; readonly cwd?: string }): Promise<boolean> {
+		return this.cli.openPullRequest(input.url, input.cwd ?? this.options.cwd);
+	}
+
 	getCiChecks(input: { readonly ref?: string; readonly cwd?: string } = {}) {
 		return this.cli.checks(input.ref, input.cwd ?? this.options.cwd);
 	}

@@ -4,12 +4,16 @@
 	import type { WorkflowChangedFile } from "@daedalus-pi/app-server-protocol";
 	import type { RendererDiffSummary } from "../client/gui-state-types";
 
-	const { diff, patch = diff?.patch ?? "", path = null, readonly = true, disabledReason = "Requires Git mutation policy" } = $props<{
+	const { diff, patch = diff?.patch ?? "", path = null, readonly = true, disabledReason = "Requires Git mutation policy", onStage, onUnstage, onDiscard, onCommit } = $props<{
 		diff?: RendererDiffSummary;
 		patch?: string;
 		path?: string | null;
 		readonly?: boolean;
 		disabledReason?: string;
+		onStage?: (paths: readonly string[]) => void | Promise<void>;
+		onUnstage?: (paths: readonly string[]) => void | Promise<void>;
+		onDiscard?: (paths: readonly string[]) => void | Promise<void>;
+		onCommit?: (message: string) => void | Promise<void>;
 	}>();
 	let viewMode = $state<"unified" | "side-by-side">("unified");
 
@@ -17,6 +21,14 @@
 	const insertions = $derived(diff?.files.reduce((sum: number, file: WorkflowChangedFile) => sum + file.insertions, 0) ?? 0);
 	const deletions = $derived(diff?.files.reduce((sum: number, file: WorkflowChangedFile) => sum + file.deletions, 0) ?? 0);
 	const focusedFile = $derived(path ? diff?.files.find((file: WorkflowChangedFile) => file.path === path) : undefined);
+	const selectedPaths = $derived(path ? [path] : (diff?.files.map((file: WorkflowChangedFile) => file.path) ?? []));
+	const hasStaged = $derived(path ? focusedFile?.staged === true : (diff?.files.some((file: WorkflowChangedFile) => file.staged) ?? false));
+	const hasUnstaged = $derived(path ? focusedFile?.staged === false : (diff?.files.some((file: WorkflowChangedFile) => !file.staged) ?? false));
+
+	function commitWithPrompt(): void {
+		const message = window.prompt("Commit message");
+		if (message?.trim()) void onCommit?.(message);
+	}
 
 	let renderedHTML = $state<string>("");
 	let renderError = $state<string | null>(null);
@@ -119,20 +131,30 @@
 		<span class="flex items-center gap-4">
 			<button
 				type="button"
-				disabled={readonly}
-				title={disabledReason}
+				disabled={readonly || !hasUnstaged}
+				title={readonly ? disabledReason : "Stage selected paths"}
+				onclick={() => void onStage?.(selectedPaths)}
 				class="text-bone-400 transition hover:text-bone-100 disabled:opacity-50"
 			>stage</button>
 			<button
 				type="button"
-				disabled={readonly}
-				title={disabledReason}
+				disabled={readonly || !hasStaged}
+				title={readonly ? disabledReason : "Unstage selected paths"}
+				onclick={() => void onUnstage?.(selectedPaths)}
+				class="text-bone-400 transition hover:text-bone-100 disabled:opacity-50"
+			>unstage</button>
+			<button
+				type="button"
+				disabled={readonly || !hasUnstaged}
+				title={readonly ? disabledReason : "Discard selected paths (approval required)"}
+				onclick={() => void onDiscard?.(selectedPaths)}
 				class="text-bone-400 transition hover:text-bone-100 disabled:opacity-50"
 			>discard</button>
 			<button
 				type="button"
 				disabled={readonly}
 				title={disabledReason}
+				onclick={commitWithPrompt}
 				class="text-gold transition hover:text-bone-50 disabled:opacity-50"
 			>commit</button>
 		</span>

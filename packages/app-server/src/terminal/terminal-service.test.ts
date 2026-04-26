@@ -1,4 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import type { AppServerDatabase } from "../persistence/database";
+import { openAppServerDatabase } from "../persistence/database";
+import { runMigrations } from "../persistence/migrations";
 import type { PtyAdapter } from "./pty-adapter";
 import { TerminalService } from "./terminal-service";
 
@@ -35,6 +38,18 @@ function fakePty() {
 		emitData: (data: string) => onData(data),
 		emitExit: (exitCode: number | null, signal: string | null = null) => onExit({ exitCode, signal }),
 	};
+}
+
+let database: AppServerDatabase | undefined;
+afterEach(() => {
+	database?.close();
+	database = undefined;
+});
+
+function migratedInMemoryDatabase(): AppServerDatabase {
+	database = openAppServerDatabase(":memory:");
+	runMigrations(database);
+	return database;
 }
 
 describe("TerminalService", () => {
@@ -94,5 +109,36 @@ describe("TerminalService", () => {
 				.chunks.map((chunk) => chunk.data)
 				.join(""),
 		).toBe("three\n");
+	});
+
+	test("persists canonical scoped snapshots and replays history after restart", async () => {
+		const pty = fakePty();
+		const db = migratedInMemoryDatabase();
+		db.query("INSERT INTO projects (id, name, path, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run("project-1", "tmp", "/tmp", "2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z");
+		db.query("INSERT INTO worktrees (id, project_id, path, branch, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run("worktree-1", "project-1", "/tmp", "main", "active", "2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z");
+		db.query("INSERT INTO sessions (id, project_id, worktree_id, status, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run("session-1", "project-1", "worktree-1", "active", "Session", "2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z");
+		const service = new TerminalService({ pty: pty.adapter, database: db });
+		const terminal = await service.create({
+			cwd: "/tmp",
+			projectId: "project-1",
+			worktreeId: "worktree-1",
+			sessionId: "session-1",
+			shell: "/bin/sh",
+		});
+		pty.emitData("persisted\n");
+		service.kill(terminal.terminalId);
+		const restored = new TerminalService({ pty: pty.adapter, database: db });
+		const [snapshot] = restored.list({ projectId: "project-1", worktreeId: "worktree-1" });
+		expect(snapshot).toMatchObject({
+			terminalId: terminal.terminalId,
+			projectId: "project-1",
+			worktreeId: "worktree-1",
+			sessionId: "session-1",
+			cwd: "/tmp",
+			status: "killed",
+			history: "persisted\n",
+		});
+		expect(snapshot).not.toHaveProperty("id");
+		expect(restored.replay(terminal.terminalId, 0).chunks).toEqual([{ seq: 1, data: "persisted\n" }]);
 	});
 });
