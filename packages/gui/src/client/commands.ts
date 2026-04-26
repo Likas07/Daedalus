@@ -3,6 +3,7 @@ import { disabledReasonFor } from "./capability-registry";
 export type CommandId =
 	| "focus-composer"
 	| "new-session"
+	| "open-project"
 	| "open-settings"
 	| "open-model-selector"
 	| "export-diagnostics"
@@ -31,6 +32,7 @@ export interface CommandDescriptor {
 export const GUI_COMMANDS: readonly CommandDescriptor[] = [
 	{ id: "focus-composer", label: "Focus composer", group: "Navigation", keywords: ["prompt", "task"] },
 	{ id: "new-session", label: "New session", group: "Sessions", keywords: ["start", "task", "composer"] },
+	{ id: "open-project", label: "Open project folder", group: "Projects", keywords: ["folder", "workspace", "browse"] },
 	{ id: "open-settings", label: "Open settings", group: "Settings", keywords: ["preferences", "configuration"] },
 	{ id: "provider-settings", label: "Provider settings", group: "Settings", keywords: ["models", "auth"] },
 	{ id: "open-model-selector", label: "Open model selector", group: "Settings", keywords: ["model", "provider"] },

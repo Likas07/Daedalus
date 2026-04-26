@@ -40,6 +40,7 @@ function uiState(): UiState {
 	return {
 		view: "empty",
 		paletteOpen: false,
+		paletteMode: "commands",
 		terminalOpen: false,
 		leftOpen: true,
 		rightOpen: true,

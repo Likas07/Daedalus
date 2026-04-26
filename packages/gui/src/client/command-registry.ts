@@ -109,6 +109,7 @@ function runHandler(commandId: CommandId, context: CommandRegistryContext): (() 
 	switch (commandId) {
 		case "focus-composer": return () => context.focusComposer?.();
 		case "new-session": return () => { context.ui.view = "empty"; context.runtime.selectSession(undefined); setTimeout(() => context.focusComposer?.(), 0); };
+		case "open-project": return () => { context.ui.paletteMode = "project"; context.ui.paletteOpen = true; };
 		case "open-settings":
 		case "provider-settings": return () => { context.ui.view = "settings"; context.runtime.selectSession(undefined); };
 		case "open-model-selector": return () => { context.ui.popoverKind = "model"; };

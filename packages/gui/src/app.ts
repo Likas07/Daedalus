@@ -60,7 +60,14 @@ function renderTestFallback(root: HTMLElement, runtime: GuiRuntime): void {
 	shell.dataset.testid = "gui-fallback-renderer";
 	const width = window.innerWidth;
 	const nav = document.createElement("aside");
-	nav.textContent = `Project overview ${runtime.state.sessions.length} ${runtime.state.approvalItems.length} approvals + New Archived Settings`;
+	nav.textContent = `Project overview Projects ${runtime.state.sessions.length} ${runtime.state.approvalItems.length} approvals + New Archived Settings`;
+	const openProject = document.createElement("button");
+	openProject.type = "button";
+	openProject.dataset.testid = "sidebar-open-project";
+	openProject.textContent = "+";
+	openProject.setAttribute("aria-label", "Add or open project folder");
+	openProject.addEventListener("click", () => appendFallbackProjectPalette(root, runtime));
+	nav.append(openProject);
 	const canvas = document.createElement("section");
 	canvas.textContent = runtime.state.selectedSessionId
 		? "Session workspace"
@@ -141,10 +148,44 @@ function appendFallbackTerminal(root: HTMLElement, runtime: GuiRuntime): void {
 	root.append(tail);
 }
 
+function appendFallbackProjectPalette(root: HTMLElement, runtime: GuiRuntime): void {
+	root.querySelector('[data-testid="command-palette"]')?.remove();
+	const palette = document.createElement("div");
+	palette.dataset.testid = "command-palette";
+	palette.dataset.mode = "project";
+	const input = document.createElement("input");
+	input.dataset.testid = "command-palette-input";
+	input.placeholder = "Type a folder path…";
+	const browse = document.createElement("button");
+	browse.type = "button";
+	browse.dataset.testid = "project-native-folder";
+	browse.textContent = "Browse…";
+	const bridge = window.desktopBridge ?? window.daedalusNative;
+	browse.disabled = !bridge?.shell?.openFolder;
+	browse.addEventListener("click", () => {
+		void bridge?.shell?.openFolder(runtime.state.projectRoot).then((path) => {
+			if (path) void runtime.openProject(path).then(() => palette.remove());
+		});
+	});
+	const submit = () => {
+		const path = input.value.trim();
+		if (path) void runtime.openProject(path).then(() => palette.remove());
+	};
+	input.addEventListener("keydown", (event) => {
+		if (event.key === "Enter") submit();
+	});
+	document.addEventListener("keydown", function onProjectKeydown(event) {
+		if (!palette.isConnected) return document.removeEventListener("keydown", onProjectKeydown);
+		if (event.key === "Enter") submit();
+	});
+	palette.append(input, browse);
+	root.append(palette);
+	input.focus();
+}
 function appendFallbackCommandPalette(root: HTMLElement, runtime: GuiRuntime): void {
 	document.addEventListener("keydown", (event) => {
 		const existingPalette = root.querySelector('[data-testid="command-palette"]');
-		if (event.key === "Enter" && existingPalette) {
+		if (event.key === "Enter" && existingPalette && (existingPalette as HTMLElement).dataset.mode !== "project") {
 			appendFallbackSettings(root, runtime);
 			existingPalette.remove();
 			return;

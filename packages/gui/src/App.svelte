@@ -85,9 +85,10 @@
 		ui.view = view;
 	}
 
-	function setPaletteOpen(open: boolean): void {
+	function setPaletteOpen(open: boolean, mode: typeof ui.paletteMode = "commands"): void {
+		ui.paletteMode = mode;
 		ui.paletteOpen = open;
-		window.dispatchEvent(new CustomEvent("daedalus:palette-open", { detail: { open } }));
+		window.dispatchEvent(new CustomEvent("daedalus:palette-open", { detail: { open, mode } }));
 	}
 
 	function setLeftOpen(open: boolean): void {
@@ -138,7 +139,7 @@
 		{/if}
 		<div class="grid min-h-0 flex-1 {ui.leftOpen && ui.rightOpen ? 'grid-cols-[minmax(220px,17rem)_minmax(0,1fr)_minmax(300px,22rem)]' : ui.leftOpen ? 'grid-cols-[minmax(220px,17rem)_minmax(0,1fr)]' : ui.rightOpen ? 'grid-cols-[minmax(0,1fr)_minmax(300px,22rem)]' : 'grid-cols-1'}">
 			{#if ui.leftOpen}
-				<div class="min-w-0 overflow-hidden border-r border-ink-500 bg-ink-900"><LeftNav guiState={guiState} {runtime} {ui} onViewChange={setView} /></div>
+				<div class="min-w-0 overflow-hidden border-r border-ink-500 bg-ink-900"><LeftNav guiState={guiState} {runtime} {ui} onViewChange={setView} onPaletteOpenChange={setPaletteOpen} /></div>
 			{/if}
 			<section class="min-w-0 overflow-hidden bg-ink-950">
 				{#if ui.view === "settings"}
@@ -164,5 +165,5 @@
 </div>
 
 <ExtensionDialogs requests={guiState.extensionRequests} {respond} close={closeExtensionRequest} />
-<CommandPalette commands={commandRegistry} {ui} />
+<CommandPalette commands={commandRegistry} guiState={guiState} {runtime} {ui} />
 <DiffOverlay guiState={guiState} {ui} />

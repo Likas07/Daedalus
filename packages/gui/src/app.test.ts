@@ -348,6 +348,69 @@ describe("GUI app", () => {
 		await app.close();
 	});
 
+	test("sidebar project control opens add-project palette and typed path opens project", async () => {
+		const root = document.createElement("div");
+		document.body.replaceChildren(root);
+		const transport = new MemoryTransport();
+		const app = await createApp({
+			root,
+			transport,
+			bootstrap: { wsEndpoint: "ws://localhost/ws", projectRoot: "/repo" },
+		});
+		await app.start();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		root.querySelector<HTMLButtonElement>('[data-testid="sidebar-open-project"]')?.click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		const input = root.querySelector<HTMLInputElement>('[data-testid="command-palette-input"]');
+		if (!input) throw new Error("Missing project palette input");
+		expect(input.getAttribute("placeholder")).toContain("folder path");
+		input.value = "/tmp/new-project";
+		input.dispatchEvent(new Event("input", { bubbles: true }));
+		document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+		await new Promise((resolve) => setTimeout(resolve, 25));
+		expect(transport.sent).toContainEqual(expect.objectContaining({
+			kind: "request",
+			method: "project/open",
+			params: { path: "/tmp/new-project" },
+		}));
+		expect(app.runtime.state.projectRoot).toBe("/tmp/new-project");
+		await app.close();
+	});
+
+	test("sidebar project palette uses native folder picker when available", async () => {
+		const root = document.createElement("div");
+		document.body.replaceChildren(root);
+		const transport = new MemoryTransport();
+		let pickerStart: string | undefined;
+		(window as Window & { desktopBridge?: unknown }).desktopBridge = {
+			shell: {
+				openFolder: async (path?: string) => {
+					pickerStart = path;
+					return "/picked/project";
+				},
+			},
+		};
+		const app = await createApp({
+			root,
+			transport,
+			bootstrap: { wsEndpoint: "ws://localhost/ws", projectRoot: "/repo" },
+		});
+		await app.start();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		root.querySelector<HTMLButtonElement>('[data-testid="sidebar-open-project"]')?.click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		root.querySelector<HTMLButtonElement>('[data-testid="project-native-folder"]')?.click();
+		await new Promise((resolve) => setTimeout(resolve, 25));
+		expect(pickerStart).toBe("/repo");
+		expect(transport.sent).toContainEqual(expect.objectContaining({
+			kind: "request",
+			method: "project/open",
+			params: { path: "/picked/project" },
+		}));
+		expect(app.runtime.state.projectRoot).toBe("/picked/project");
+		await app.close();
+	});
+
 	test("opens terminal drawer and creates a PTY terminal", async () => {
 		const root = document.createElement("div");
 		document.body.replaceChildren(root);

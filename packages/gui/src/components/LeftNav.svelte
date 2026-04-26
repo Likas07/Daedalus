@@ -4,11 +4,12 @@
 	import type { UiState } from "../client/ui-state.svelte";
 	import type { ApprovalItem } from "../client/view-model";
 
-	const { guiState, runtime, ui, onViewChange } = $props<{
+	const { guiState, runtime, ui, onViewChange, onPaletteOpenChange } = $props<{
 		guiState: GuiState;
 		runtime: GuiRuntime;
 		ui: UiState;
 		onViewChange?: (view: UiState["view"]) => void;
+		onPaletteOpenChange?: (open: boolean, mode?: UiState["paletteMode"]) => void;
 	}>();
 	let open = $state({ projects: true, sessions: true });
 	const projectRows = $derived.by((): RendererProject[] =>
@@ -41,6 +42,11 @@
 	function setView(view: UiState["view"]): void {
 		onViewChange?.(view);
 	}
+
+	function openProjectPalette(): void {
+		onPaletteOpenChange?.(true, "project");
+		if (!onPaletteOpenChange) window.dispatchEvent(new CustomEvent("daedalus:palette-open", { detail: { open: true, mode: "project" } }));
+	}
 </script>
 
 {#snippet sectionHeader(key: "projects" | "sessions", label: string, count: number)}
@@ -65,7 +71,16 @@
 	<div class="min-h-0 flex-1 overflow-y-auto px-5 text-[12.5px]">
 
 		<section class="border-b border-ink-500">
-			{@render sectionHeader("projects", "projects", projectRows.length)}
+			<div class="flex items-center gap-2">
+				<div class="min-w-0 flex-1">{@render sectionHeader("projects", "projects", projectRows.length)}</div>
+				<button
+					type="button"
+					data-testid="sidebar-open-project"
+					onclick={openProjectPalette}
+					aria-label="Add or open project folder"
+					class="rounded-sm border border-ink-500 px-2 py-1 font-mono text-[12px] text-bone-300 transition hover:border-gold hover:text-bone-50"
+				>+</button>
+			</div>
 			{#if open.projects}
 				<ul class="space-y-0.5 pb-4">
 					{#each projectRows as project}

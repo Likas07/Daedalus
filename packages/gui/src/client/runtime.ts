@@ -471,6 +471,11 @@ async function openProjectPath(
 	if (typeof project.projectId !== "string") throw new Error("App server did not return a projectId");
 	state.projectRoot = path;
 	state.lastProjectId = project.projectId;
+	const name = path.split("/").filter(Boolean).at(-1) ?? path;
+	const existingIndex = state.projects.findIndex((item) => item.id === project.projectId || item.path === path);
+	const openedProject = { id: project.projectId, path, name };
+	if (existingIndex >= 0) state.projects[existingIndex] = { ...state.projects[existingIndex], ...openedProject };
+	else state.projects = [openedProject, ...state.projects];
 	const bridge = typeof window === "undefined" ? undefined : window.desktopBridge ?? window.daedalusNative;
 	if (bridge?.recentProjects) state.recentProjects = await bridge.recentProjects.add(path);
 	notify();

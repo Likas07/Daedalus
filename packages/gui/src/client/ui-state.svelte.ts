@@ -1,5 +1,6 @@
 export type ShellView = "session" | "settings" | "empty" | "diff";
 export type PopoverKind = null | "model" | "effort" | "mode" | "access";
+export type PaletteMode = "commands" | "project";
 
 export interface PopoverAnchor {
 	readonly left: number;
@@ -13,6 +14,7 @@ export interface PopoverAnchor {
 export interface UiState {
 	view: ShellView;
 	paletteOpen: boolean;
+	paletteMode: PaletteMode;
 	terminalOpen: boolean;
 	leftOpen: boolean;
 	rightOpen: boolean;
@@ -29,6 +31,7 @@ export function createUiState(): UiState {
 	let state = $state({
 		view: "empty" as ShellView,
 		paletteOpen: false,
+		paletteMode: "commands" as PaletteMode,
 		terminalOpen: false,
 		leftOpen: true,
 		rightOpen: true,
