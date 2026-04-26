@@ -56,4 +56,8 @@ export class CheckpointService {
 		projectRuntimeEvents(this.options.database);
 		return { checkpointId, ref, commit };
 	}
+
+	async restore(input: { readonly cwd: string; readonly checkpointRef: string }): Promise<void> {
+		await git(input.cwd, ["restore", "--source", input.checkpointRef, "--worktree", "--staged", "--", "."]);
+	}
 }

@@ -33,6 +33,19 @@ async function initRepo(): Promise<string> {
 	return repo;
 }
 
+describe("project service", () => {
+	test("returns stable project ids for the same normalized path", async () => {
+		const repo = await initRepo();
+		const service = new ProjectService({ database: db });
+
+		const first = service.open({ path: repo });
+		const second = service.open({ path: join(repo, ".") });
+
+		expect(second.projectId).toBe(first.projectId);
+		expect(service.list()).toHaveLength(1);
+	});
+});
+
 describe("worktree service", () => {
 	test("creates, lists, opens, and removes git worktrees", async () => {
 		const repo = await initRepo();

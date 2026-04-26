@@ -1,4 +1,5 @@
 import type { AppEvent, ServerNotification, ServerRequest, SessionId, TurnId } from "@daedalus-pi/app-server-protocol";
+import type { ImageContent } from "@daedalus-pi/ai";
 export type RuntimeSessionManager = unknown;
 
 import { mapRuntimeEvent } from "./event-mapper";
@@ -11,17 +12,21 @@ export interface ControlledSessionRuntime {
 	readonly session: {
 		readonly sessionFile?: string;
 		subscribe(listener: (event: unknown) => void): () => void;
-		prompt(prompt: string): Promise<void>;
+		prompt(prompt: string, options?: { images?: ImageContent[] }): Promise<void>;
 		abort(): Promise<void>;
 	};
+	readonly control?: unknown;
+	applyRuntimeOptions?(context?: PromptContextInput): Promise<void>;
 	dispose(): Promise<void>;
 }
 
 export interface RuntimeFactoryInput {
 	readonly cwd: string;
 	readonly agentDir: string;
+	readonly sessionId?: SessionId;
 	readonly sessionManager: RuntimeSessionManager;
 	readonly applyProcessCwd?: boolean;
+	readonly context?: PromptContextInput;
 }
 
 export type RuntimeFactory = (input: RuntimeFactoryInput) => Promise<ControlledSessionRuntime>;
@@ -29,18 +34,37 @@ export type RuntimeFactory = (input: RuntimeFactoryInput) => Promise<ControlledS
 export interface SessionControllerOptions {
 	readonly runtimeFactory: RuntimeFactory;
 	readonly eventSink: RuntimeEventSink;
-	readonly makeSessionManager: (input: { cwd: string; sessionPath?: string }) => RuntimeSessionManager;
+	readonly makeSessionManager: (input: { cwd: string; sessionPath?: string; sessionId?: string; parentSession?: string }) =>
+		| RuntimeSessionManager
+		| Promise<RuntimeSessionManager>;
 	readonly agentDir: string;
 	readonly nextSessionId?: () => SessionId;
 	readonly nextTurnId?: () => TurnId;
 	readonly nextEventId?: () => string;
 	readonly now?: () => Date;
+	readonly promptContextResolver?: PromptContextResolver;
+}
+
+export interface PromptContextInput {
+	readonly attachmentIds?: readonly string[];
+	readonly filePaths?: readonly string[];
+	readonly model?: string;
+	readonly effort?: string;
+	readonly accessMode?: string;
+	readonly mode?: string;
+	readonly fastMode?: boolean;
+	readonly tools?: readonly string[];
+}
+
+export interface PromptContextResolver {
+	resolve(input: PromptContextInput & { cwd: string }): Promise<{ preamble?: string; images?: ImageContent[] }>;
 }
 
 export interface StartSessionInput {
 	readonly cwd: string;
 	readonly prompt?: string;
 	readonly sessionId?: SessionId;
+	readonly context?: PromptContextInput;
 }
 
 export interface ResumeSessionInput {
@@ -53,6 +77,7 @@ export interface StartTurnInput {
 	readonly sessionId: SessionId;
 	readonly prompt: string;
 	readonly turnId?: TurnId;
+	readonly context?: PromptContextInput;
 }
 
 export interface InterruptTurnInput {
@@ -85,8 +110,10 @@ export class SessionController {
 		const runtime = await this.options.runtimeFactory({
 			cwd: input.cwd,
 			agentDir: this.options.agentDir,
-			sessionManager: this.options.makeSessionManager({ cwd: input.cwd }),
+			sessionManager: await this.options.makeSessionManager({ cwd: input.cwd, sessionId }),
+			sessionId,
 			applyProcessCwd: false,
+			context: input.context,
 		});
 		this.register(sessionId, runtime);
 		await this.emit({
@@ -98,7 +125,7 @@ export class SessionController {
 		});
 		await this.emit({ kind: "notification", method: "session/changed", params: { sessionId, status: "active" } });
 		if (input.prompt) {
-			await this.startTurn({ sessionId, prompt: input.prompt });
+			await this.startTurn({ sessionId, prompt: input.prompt, context: input.context });
 		}
 		return { sessionId };
 	}
@@ -108,7 +135,8 @@ export class SessionController {
 		const runtime = await this.options.runtimeFactory({
 			cwd: input.cwd,
 			agentDir: this.options.agentDir,
-			sessionManager: this.options.makeSessionManager({ cwd: input.cwd, sessionPath: input.sessionPath }),
+			sessionManager: await this.options.makeSessionManager({ cwd: input.cwd, sessionPath: input.sessionPath, sessionId }),
+			sessionId,
 			applyProcessCwd: false,
 		});
 		this.register(sessionId, runtime);
@@ -139,7 +167,11 @@ export class SessionController {
 			method: "turn/changed",
 			params: { sessionId: input.sessionId, turnId, status: "running" },
 		});
-		await record.runtime.session.prompt(input.prompt);
+		await record.runtime.applyRuntimeOptions?.(input.context);
+		const context = await this.resolvePromptContext(record.runtime.cwd, input.context);
+		await record.runtime.session.prompt(context.preamble ? `${context.preamble}\n\n${input.prompt}` : input.prompt, {
+			images: context.images,
+		});
 		return { turnId };
 	}
 
@@ -161,6 +193,15 @@ export class SessionController {
 				params: { sessionId: input.sessionId, turnId, status: "interrupted" },
 			});
 		}
+	}
+
+	getSessionRuntime(sessionId: SessionId): ControlledSessionRuntime {
+		return this.requireSession(sessionId).runtime;
+	}
+
+	async emitRuntimeControlChanged(sessionId: SessionId, control: string, payload: unknown): Promise<void> {
+		await this.emit({ id: this.nextEventId(), type: "runtime/control-changed", ts: this.nowIso(), sessionId, payload: { sessionId, control, ...((payload && typeof payload === "object") ? payload : { value: payload }) } });
+		await this.emit({ kind: "notification", method: "runtime/changed", params: { sessionId, control, payload } });
 	}
 
 	readState(): SessionControllerState {
@@ -210,6 +251,10 @@ export class SessionController {
 		return record;
 	}
 
+	private async resolvePromptContext(cwd: string, context?: PromptContextInput): Promise<{ preamble?: string; images?: ImageContent[] }> {
+		if (!context || !this.options.promptContextResolver) return {};
+		return this.options.promptContextResolver.resolve({ ...context, cwd });
+	}
 	private async emit(message: RuntimeControllerMessage): Promise<void> {
 		await this.options.eventSink(message);
 	}

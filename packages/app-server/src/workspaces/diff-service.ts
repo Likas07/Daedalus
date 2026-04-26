@@ -1,4 +1,4 @@
-import type { WorkflowChangedFile, WorkflowFileStatus } from "@daedalus-pi/app-server-protocol";
+import type { WorkflowChangedFile, WorkflowFileStatus, WorkflowRiskGroup } from "@daedalus-pi/app-server-protocol";
 import { type GitStatusSummary, git, gitStatus, riskGroupForPath } from "./git";
 
 export interface DiffFileSummary extends WorkflowChangedFile {}
@@ -6,7 +6,7 @@ export interface DiffFileSummary extends WorkflowChangedFile {}
 export interface DiffResult extends GitStatusSummary {
 	readonly files: DiffFileSummary[];
 	readonly patch: string;
-	readonly riskyGroups: readonly string[];
+	readonly riskyGroups: readonly WorkflowRiskGroup[];
 }
 
 export class DiffService {
@@ -18,16 +18,29 @@ export class DiffService {
 			gitStatus(cwd),
 		]);
 		const stats = parseNumstat(numstat.stdout);
-		const files: DiffFileSummary[] = parseNameStatus(nameStatus.stdout).map((file) => {
+		const byPath = new Map<string, DiffFileSummary>();
+		for (const file of parseNameStatus(nameStatus.stdout)) {
 			const stat = stats.get(file.path) ?? { insertions: 0, deletions: 0 };
-			return {
+			byPath.set(file.path, {
 				...file,
 				insertions: stat.insertions,
 				deletions: stat.deletions,
 				staged: Boolean(status.files.find((changed) => changed.path === file.path)?.staged),
 				riskGroup: riskGroupForPath(file.path),
-			};
-		});
+			});
+		}
+		for (const file of status.files) {
+			if (byPath.has(file.path)) continue;
+			byPath.set(file.path, {
+				path: file.path,
+				status: file.status,
+				staged: file.staged,
+				insertions: 0,
+				deletions: 0,
+				riskGroup: riskGroupForPath(file.path),
+			});
+		}
+		const files = [...byPath.values()];
 		return {
 			...status,
 			files,

@@ -22,9 +22,11 @@ describe("integration adapter framework", () => {
 		const calls: string[][] = [];
 		const runner: CommandRunner = async (args) => {
 			calls.push([...args]);
+			if (args.join(" ") === "gh --version") return { stdout: "gh version", exitCode: 0 };
 			if (args.join(" ") === "gh auth status") return { stdout: "Logged in", exitCode: 0 };
-			if (args.join(" ") === "git config --get remote.origin.url")
-				return { stdout: "git@github.com:acme/project.git\n", exitCode: 0 };
+			if (args.join(" ") === "gh repo view --json owner,name,url") return { stdout: JSON.stringify({ owner: { login: "acme" }, name: "project", url: "git@github.com:acme/project.git" }), exitCode: 0 };
+			if (args[0] === "gh" && args[1] === "issue" && args[2] === "list") return { stdout: "[]", exitCode: 0 };
+			if (args[0] === "gh" && args[1] === "pr" && args[2] === "list") return { stdout: "[]", exitCode: 0 };
 			if (args[0] === "gh" && args[1] === "pr" && args[2] === "checks")
 				return { stdout: JSON.stringify([{ name: "test", state: "SUCCESS", link: "https://ci" }]), exitCode: 0 };
 			return { stdout: "", stderr: "unexpected", exitCode: 1 };
@@ -32,6 +34,7 @@ describe("integration adapter framework", () => {
 		const state = await new GitHubAdapter({ runner, cwd: "/repo" }).getState();
 		expect(state.status).toBe("authenticated");
 		expect(state.repository).toEqual({
+			provider: "github",
 			owner: "acme",
 			name: "project",
 			remoteUrl: "git@github.com:acme/project.git",
@@ -44,9 +47,11 @@ describe("integration adapter framework", () => {
 		const database = openAppServerDatabase(":memory:");
 		runMigrations(database);
 		const runner: CommandRunner = async (args) => {
+			if (args.join(" ") === "gh --version") return { stdout: "gh version", exitCode: 0 };
 			if (args[0] === "gh" && args[1] === "auth") return { stdout: "not logged in", exitCode: 1 };
 			return { stdout: "", exitCode: 1 };
 		};
+
 		const service = new IntegrationService({ database, runner });
 		const states = await service.list({ cwd: "/repo" });
 		expect(states[0]?.provider).toBe("github");

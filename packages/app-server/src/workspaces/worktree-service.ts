@@ -29,7 +29,7 @@ export class WorktreeService {
 		this.projects = new ProjectService(options);
 	}
 
-	async create(input: CreateWorktreeInput): Promise<WorktreeReadModel> {
+	async create(input: CreateWorktreeInput): Promise<WorktreeLifecycleMetadata> {
 		const project = this.projects.get(input.projectId);
 		if (!project) throw new Error(`Unknown project: ${input.projectId}`);
 		const path =
@@ -53,7 +53,7 @@ export class WorktreeService {
 		projectRuntimeEvents(this.options.database);
 		const worktree = listWorktrees(this.options.database, input.projectId).find((row) => row.id === worktreeId);
 		if (!worktree) throw new Error(`Failed to project worktree: ${worktreeId}`);
-		return worktree;
+		return this.withMetadata(worktree);
 	}
 
 	async gitList(

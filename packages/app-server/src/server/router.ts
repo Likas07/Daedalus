@@ -1,32 +1,70 @@
+import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
 import type {
 	AppEvent,
 	AuditQuery,
 	ClientRequest,
+	ClientNotification,
 	ServerNotification,
 	ServerRequest,
 } from "@daedalus-pi/app-server-protocol";
 import { type AppServerDatabase, appendEvent, type EventPayload, readEventsAfter } from "..";
+import { AttachmentService } from "../composer/attachment-service";
+import { CommandService } from "../composer/command-service";
+import { FileSearchService } from "../composer/file-search-service";
 import type { CommandRunner } from "../integrations/integration-api";
 import { IntegrationService } from "../integrations/integration-service";
 import { projectRuntimeEvents } from "../persistence/projector";
-import { listProjectSessions } from "../persistence/read-model";
+import { ExtensionUiRouter } from "../extensions/extension-ui-router";
+
 import { projectAuditTrail } from "../runtime/audit-projection";
+import { SqliteSessionStore } from "../sessions/sqlite-session-store";
 import { AutomationService } from "../runtime/automation-service";
 import { projectOrchestration } from "../runtime/orchestration-projection";
+import { DaedalusWorkflowService } from "../runtime/daedalus-workflow-service";
+import { AccessPolicyService } from "../runtime/access-policy-service";
+import { ApprovalService } from "../runtime/approval-service";
+import { GuiConfigService } from "../runtime/gui-config-service";
+import { RuntimeControlService } from "../runtime/runtime-control-service";
+import { ProviderAuthService } from "../runtime/provider-auth-service";
+import { SettingsService, type SettingsKey } from "../runtime/settings-service";
+import { ResourceManagementService } from "../runtime/resource-management-service";
 import type { SessionController } from "../runtime/session-controller";
+import type { PtyAdapter } from "../terminal/pty-adapter";
 import { TerminalService } from "../terminal/terminal-service";
 import { ProjectService } from "../workspaces/project-service";
 import { WorktreeService } from "../workspaces/worktree-service";
-import { createDiagnosticExport } from "./diagnostics";
+import { DiffService } from "../workspaces/diff-service";
+import { GitMutationService } from "../workspaces/git-mutation-service";
+import { ExportService } from "./export-service";
 
 export type OutboundMessage = AppEvent | ServerNotification | ServerRequest;
 export type Publish = (message: OutboundMessage) => void;
+
+function supportsXhighFor(id: string): boolean {
+	if (id.includes("gpt-5.2") || id.includes("gpt-5.3") || id.includes("gpt-5.4") || id.includes("gpt-5.5")) return true;
+	if (id.includes("opus-4-6") || id.includes("opus-4.6")) return true;
+	return false;
+}
+
+function buildReasoningLevels(id: string): string[] {
+	const base = ["minimal", "low", "medium", "high"];
+	return supportsXhighFor(id) ? [...base, "xhigh"] : base;
+}
+
+function supportsFastModeFor(id: string, provider: string): boolean {
+	return (id === "gpt-5.4" || id === "gpt-5.5") && (provider === "openai" || provider === "openai-codex");
+}
 
 export interface AppRouterOptions {
 	readonly database: AppServerDatabase;
 	readonly controller: SessionController;
 	readonly publish: Publish;
 	readonly integrationRunner?: CommandRunner;
+	readonly terminalPty?: PtyAdapter;
+	readonly accessPolicyService?: AccessPolicyService;
+	readonly approvalService?: ApprovalService;
+	readonly extensionUiRouter?: ExtensionUiRouter;
 }
 
 export class AppRouter {
@@ -36,23 +74,54 @@ export class AppRouter {
 	private readonly terminalService: TerminalService;
 	private readonly integrationService: IntegrationService;
 	private readonly automationService = new AutomationService();
+	private readonly configService: GuiConfigService;
+	private readonly accessPolicyService: AccessPolicyService;
+	private readonly approvalService: ApprovalService;
+	private readonly fileSearchService = new FileSearchService();
+	private readonly commandService = new CommandService();
+	private readonly attachmentService = new AttachmentService();
+	private readonly diffService = new DiffService();
+	private readonly gitMutationService: GitMutationService;
+	private readonly sessionStore: SqliteSessionStore;
+	private readonly runtimeControlService: RuntimeControlService;
+	private readonly providerAuthService = new ProviderAuthService();
+	private readonly settingsService: SettingsService;
+	private readonly resourceManagementService = new ResourceManagementService();
+	private readonly daedalusWorkflowService: DaedalusWorkflowService;
 	constructor(private readonly options: AppRouterOptions) {
 		this.projectService = new ProjectService({ database: options.database });
 		this.worktreeService = new WorktreeService({ database: options.database });
-		this.terminalService = new TerminalService({ publish: options.publish });
+		this.sessionStore = new SqliteSessionStore({ database: options.database });
+		this.daedalusWorkflowService = new DaedalusWorkflowService({ sessionStore: this.sessionStore });
+		this.runtimeControlService = new RuntimeControlService(options.controller);
+		this.settingsService = new SettingsService({ listModels: () => this.listModels() as Promise<unknown[]> as Promise<import("../runtime/settings-service").SettingsModel[]> });
+		this.terminalService = new TerminalService({ publish: options.publish, database: options.database, pty: options.terminalPty });
+		this.configService = new GuiConfigService(options.database);
+		this.accessPolicyService = options.accessPolicyService ?? new AccessPolicyService(options.database);
+		this.approvalService = options.approvalService ?? new ApprovalService(options.database, this.accessPolicyService, (event) => this.options.publish(event));
+		this.gitMutationService = new GitMutationService({ approvalService: this.approvalService, diffService: this.diffService });
 		this.integrationService = new IntegrationService({
 			database: options.database,
 			runner: options.integrationRunner,
 		});
 	}
 
+	handleNotification(notification: ClientNotification): void {
+		switch (notification.method) {
+			case "extension/ui/closed":
+				this.options.extensionUiRouter?.close(notification.params.requestId);
+				return;
+			default:
+				return;
+		}
+	}
 	async handle(request: ClientRequest): Promise<unknown> {
 		switch (request.method) {
 			case "initialize":
 				return {
 					protocolVersion: request.params.protocolVersion,
 					server: { name: "daedalus-app-server", version: "0.1.0" },
-					capabilities: { events: true, sessions: true, extensions: true },
+					capabilities: { events: true, sessions: true, extensions: true, gitMutations: true },
 				};
 			case "project/open": {
 				const result = this.projectService.open({ path: request.params.path });
@@ -62,19 +131,59 @@ export class AppRouter {
 			case "project/list":
 				return { projects: this.projectService.list() };
 			case "worktree/list":
-				return { worktrees: this.worktreeService.list(request.params.projectId) };
+				return { worktrees: await this.worktreeService.listMetadata(request.params.projectId) };
 			case "worktree/create":
 				return { worktree: await this.worktreeService.create(request.params) };
 			case "session/list":
-				projectRuntimeEvents(this.options.database);
-				return {
-					sessions: request.params.projectId
-						? listProjectSessions(this.options.database, request.params.projectId)
-						: this.options.controller.readState().sessions,
-				};
+				return { sessions: await this.sessionStore.list(request.params) };
+			case "session/import-jsonl": {
+				const session = await this.sessionStore.importJsonl(request.params);
+				return { sessionId: session.header.id };
+			}
+			case "session/export-jsonl":
+				return { content: await this.sessionStore.exportJsonl(request.params), filename: `${request.params.sessionId}.jsonl` };
+			case "session/export-html":
+				return { content: this.sessionToHtml(await this.sessionStore.export(request.params)), filename: `${request.params.sessionId}.html` };
+			case "session/rename":
+				await this.sessionStore.rename({ sessionId: request.params.sessionId, name: request.params.name });
+				return { ok: true };
+			case "session/archive":
+				await this.sessionStore.archive(request.params);
+				return { ok: true };
+			case "session/delete":
+				await this.sessionStore.delete(request.params);
+				return { ok: true };
+			case "session/stats":
+				return this.sessionStats(request.params.sessionId);
+			case "session/tree":
+				return { roots: await this.sessionTree(request.params) };
+			case "session/resume": {
+				const session = await this.sessionStore.read({ sessionId: request.params.sessionId });
+				const result = await this.options.controller.resumeSession({
+					cwd: session.header.cwd,
+					sessionPath: request.params.sessionId,
+					sessionId: request.params.sessionId,
+				});
+				if (request.params.prompt) await this.options.controller.startTurn({ sessionId: result.sessionId, prompt: request.params.prompt });
+				return { sessionId: result.sessionId, status: "active" };
+			}
+			case "session/fork": {
+				const source = await this.sessionStore.read({ sessionId: request.params.sessionId });
+				const forkId = randomUUID();
+				const cwd = request.params.cwd ?? source.header.cwd;
+				await this.sessionStore.import({
+					session: {
+						header: { ...source.header, id: forkId, cwd, parentSession: source.header.id, timestamp: new Date().toISOString() },
+						entries: source.entries,
+					},
+				});
+				const result = await this.options.controller.resumeSession({ cwd, sessionPath: forkId, sessionId: forkId });
+				if (request.params.prompt) await this.options.controller.startTurn({ sessionId: result.sessionId, prompt: request.params.prompt });
+				return { sessionId: result.sessionId, status: "active" };
+			}
 			case "session/start": {
 				const cwd = this.projects.get(request.params.projectId) ?? request.params.projectId;
-				return this.options.controller.startSession({ cwd, prompt: request.params.prompt });
+				return this.options.controller.startSession({ cwd, prompt: request.params.prompt, context: request.params });
 			}
 			case "turn/start":
 				return this.options.controller.startTurn(request.params);
@@ -84,8 +193,57 @@ export class AppRouter {
 			case "session/stop":
 				await this.options.controller.disposeSession(request.params.sessionId);
 				return {};
+			case "runtime/get-state":
+				return this.runtimeControlService.getState(request.params.sessionId);
+			case "runtime/set-model":
+				return this.runtimeControlService.setModel(request.params.sessionId, request.params.provider, request.params.modelId);
+			case "runtime/cycle-model":
+				return this.runtimeControlService.cycleModel(request.params.sessionId);
+			case "runtime/set-thinking":
+				return this.runtimeControlService.setThinking(request.params.sessionId, request.params.level);
+			case "runtime/cycle-thinking":
+				return this.runtimeControlService.cycleThinking(request.params.sessionId);
+			case "runtime/set-tools":
+				return this.runtimeControlService.setTools(request.params.sessionId, request.params.tools);
+			case "runtime/set-steering-mode":
+				return this.runtimeControlService.setSteeringMode(request.params.sessionId, request.params.mode);
+			case "runtime/set-follow-up-mode":
+				return this.runtimeControlService.setFollowUpMode(request.params.sessionId, request.params.mode);
+			case "runtime/compact":
+				return this.runtimeControlService.compact(request.params.sessionId, request.params.customInstructions);
+			case "runtime/abort":
+				return this.runtimeControlService.abort(request.params.sessionId);
+			case "runtime/reload-resources":
+				return this.runtimeControlService.reloadResources(request.params.sessionId);
+			case "runtime/get-commands":
+				return this.runtimeControlService.getCommands(request.params.sessionId);
+			case "runtime/get-keybindings":
+				return this.runtimeControlService.getKeybindings();
+			case "settings/read":
+				return this.settingsService.read();
+			case "settings/set":
+				return this.settingsService.set(request.params.scope, request.params.key as SettingsKey, request.params.value);
+			case "settings/reset":
+				return this.settingsService.reset(request.params.scope, request.params.key as SettingsKey);
+			case "settings/reload-resources":
+				await this.settingsService.reloadResources();
+				return this.settingsService.read();
+			case "resources/list":
+				return this.resourceManagementService.list();
+			case "resources/reload":
+				return this.resourceManagementService.reload();
+			case "resources/install":
+				return { resource: this.resourceManagementService.install(request.params) };
+			case "resources/remove":
+				return this.resourceManagementService.remove(request.params);
+			case "resources/update":
+				return { resource: this.resourceManagementService.update(request.params) };
+			case "resources/enable":
+				return { resource: this.resourceManagementService.enable(request.params) };
+			case "resources/disable":
+				return { resource: this.resourceManagementService.disable(request.params) };
 			case "terminal/create":
-				return { terminal: this.terminalService.create(request.params) };
+				return { terminal: await this.terminalService.create(request.params) };
 			case "terminal/list":
 				return { terminals: this.terminalService.list(request.params) };
 			case "terminal/attach":
@@ -106,6 +264,72 @@ export class AppRouter {
 				return { terminal: this.terminalService.kill(request.params.terminalId) };
 			case "terminal/replay":
 				return this.terminalService.replay(request.params.terminalId, request.params.afterSeq);
+			case "diff/get": {
+				const cwd = this.resolveProjectOrWorktreeCwd(request.params.diffId);
+				return { diff: await this.diffService.get(cwd) };
+			}
+			case "git/stage": {
+				const cwd = this.resolveProjectOrWorktreeCwd(request.params.diffId);
+				return this.gitMutationService.stage({ cwd, paths: request.params.paths });
+			}
+			case "git/unstage": {
+				const cwd = this.resolveProjectOrWorktreeCwd(request.params.diffId);
+				return this.gitMutationService.unstage({ cwd, paths: request.params.paths });
+			}
+			case "git/discard": {
+				const cwd = this.resolveProjectOrWorktreeCwd(request.params.diffId);
+				return this.gitMutationService.discard({ cwd, paths: request.params.paths });
+			}
+			case "git/commit": {
+				const cwd = this.resolveProjectOrWorktreeCwd(request.params.diffId);
+				return this.gitMutationService.commit({ cwd, message: request.params.message });
+			}
+			case "git/checkpoint-restore": {
+				const cwd = this.resolveProjectOrWorktreeCwd(request.params.diffId);
+				return this.gitMutationService.restoreCheckpoint({ cwd, checkpointRef: request.params.checkpointRef });
+			}
+			case "composer/file-search": {
+				const cwd = this.projects.get(request.params.projectId) ?? request.params.projectId;
+				return { files: await this.fileSearchService.search({ cwd, query: request.params.query, limit: request.params.limit ?? 20 }) };
+			}
+			case "composer/command-list":
+				return { commands: this.commandService.list() };
+			case "composer/attachment/save":
+				return { attachment: await this.attachmentService.save(request.params) };
+			case "composer/attachment/get":
+				return { attachment: await this.attachmentService.get(request.params.attachmentId) };
+			case "config/get":
+				return { config: this.configService.get(request.params.key) };
+			case "config/set": {
+				this.configService.set(request.params.key, request.params.value);
+				this.options.publish({ kind: "notification", method: "config/changed", params: { key: request.params.key } });
+				return { config: this.configService.get(request.params.key) };
+			}
+			case "model/list":
+				return { models: await this.listModels(), selectedModel: this.configService.get("model.selected")["model.selected"] };
+			case "model/select":
+				this.configService.set("model.selected", request.params.model);
+				this.options.publish({ kind: "notification", method: "model/changed", params: { model: request.params.model } });
+				return { model: request.params.model };
+			case "auth/status":
+				return this.providerAuthService.status(request.params.provider);
+			case "auth/login":
+				return this.providerAuthService.login(request.params.provider);
+			case "auth/logout":
+				return this.providerAuthService.logout(request.params.provider);
+			case "access/get":
+				return { policy: this.accessPolicyService.getPolicy() };
+			case "access/set": {
+				const policy = this.accessPolicyService.setMode(request.params.mode);
+				this.options.publish({ kind: "notification", method: "access/changed", params: { mode: policy.mode } });
+				return { policy };
+			}
+			case "extension/ui/respond":
+				this.options.extensionUiRouter?.respond(request.params);
+				return {};
+			case "approval/respond":
+				this.approvalService.resolve(request.params);
+				return {};
 			case "integration/list": {
 				const cwd =
 					request.params && "projectId" in request.params
@@ -128,10 +352,22 @@ export class AppRouter {
 				return { integration: await this.integrationService.linkArtifact(request.params) };
 			case "integration/import":
 				return { integration: await this.integrationService.importArtifacts(request.params) };
+			case "integration/pr-create": {
+				const cwd = request.params.projectId ? this.projects.get(String(request.params.projectId)) : undefined;
+				const summary = `Create GitHub pull request \"${request.params.title}\" from ${request.params.head}${request.params.base ? ` into ${request.params.base}` : ""}`;
+				const approval = this.approvalService.request({ request: { action: "integration/pr-create", summary, provider: request.params.provider, head: request.params.head, base: request.params.base }, hardBlock: true });
+				if (!approval.autoApproved) {
+					const decision = await this.approvalService.waitForDecision(approval.approvalId, { timeoutMs: 60_000 });
+					if (decision.decision !== "approved") return { pullRequest: { status: "failed", message: decision.reason ?? "Pull request creation denied." } };
+				}
+				return { pullRequest: await this.integrationService.createPullRequest({ ...request.params, cwd }) };
+			}
 			case "diagnostics/export":
-				return { export: createDiagnosticExport(this.options.database, request.params) };
+				return new ExportService({ database: this.options.database, runtimeDiagnostics: () => this.options.controller.readState?.() }).export(request.params);
 			case "orchestration/read":
 				return projectOrchestration(this.recentAppEvents());
+			case "daedalus/workflow/read":
+				return this.daedalusWorkflowService.read(request.params.sessionId);
 			case "audit/query":
 				return projectAuditTrail(this.recentAppEvents(), request.params as AuditQuery);
 			case "automation/read":
@@ -150,12 +386,89 @@ export class AppRouter {
 		}
 	}
 
+	private resolveProjectOrWorktreeCwd(diffId: string): string {
+		const projectPath = this.projects.get(diffId);
+		if (projectPath) return projectPath;
+		for (const worktree of this.worktreeService.list()) {
+			if (worktree.id === diffId || worktree.path === diffId) return worktree.path;
+		}
+		return resolve(diffId);
+	}
 	private recentAppEvents(limit = 1000): AppEvent[] {
 		return readEventsAfter(this.options.database, 0, { limit })
 			.map((event) => event.payload as unknown as AppEvent)
 			.filter((event): event is AppEvent => typeof event === "object" && event !== null && "type" in event);
 	}
 
+	private async listModels(): Promise<unknown[]> {
+		try {
+			const { AuthStorage, ModelRegistry } = await import("@daedalus-pi/coding-agent");
+			const authStorage = AuthStorage.create();
+			const registry = ModelRegistry.create(authStorage);
+			const explicitProviders = new Set(Object.keys(authStorage.getAll()));
+			type ModelLike = {
+				id?: string;
+				name?: string;
+				provider?: string;
+				reasoning?: boolean;
+				contextWindow?: number;
+				maxTokens?: number;
+			};
+			const models: ModelLike[] = registry
+				.getAll()
+				.filter((model: ModelLike) => model.provider !== undefined && explicitProviders.has(model.provider));
+			return models.map((model) => {
+				const id = model.id ?? model.name ?? "";
+				const provider = model.provider ?? "unknown";
+				const reasoning = model.reasoning === true;
+				const reasoningLevels = reasoning ? buildReasoningLevels(id) : [];
+				return {
+					id,
+					label: model.name ?? id,
+					provider,
+					available: true,
+					contextWindow: model.contextWindow ?? 0,
+					maxTokens: model.maxTokens ?? 0,
+					reasoning,
+					reasoningLevels,
+					supportsFastMode: supportsFastModeFor(id, provider),
+				};
+			});
+		} catch (error) {
+			return [{ id: "unavailable", label: "Model discovery unavailable", provider: "unknown", available: false, diagnostic: error instanceof Error ? error.message : String(error) }];
+		}
+	}
+	private sessionToHtml(session: { header: { id: string; cwd: string }; entries: readonly unknown[] }): string {
+		const body = session.entries.map((entry) => `<pre>${this.escapeHtml(JSON.stringify(entry, null, 2))}</pre>`).join("\n");
+		return `<!doctype html><html><head><meta charset="utf-8"><title>${this.escapeHtml(session.header.id)}</title></head><body><h1>${this.escapeHtml(session.header.id)}</h1><p>${this.escapeHtml(session.header.cwd)}</p>${body}</body></html>`;
+	}
+
+	private escapeHtml(value: string): string {
+		return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+	}
+
+	private async sessionStats(sessionId?: string): Promise<{ sessionCount: number; archivedCount: number; messageCount: number }> {
+		const sessions = sessionId ? [await this.sessionStore.read({ sessionId })] : await Promise.all((await this.sessionStore.list({ includeArchived: true })).map((session) => this.sessionStore.read({ sessionId: session.id })));
+		let messageCount = 0;
+		for (const session of sessions) messageCount += session.entries.filter((entry) => entry.type === "message").length;
+		const summaries = await this.sessionStore.list({ includeArchived: true });
+		return { sessionCount: sessions.length, archivedCount: summaries.filter((session) => session.archived).length, messageCount };
+	}
+
+	private async sessionTree(params: { rootSessionId?: string; includeArchived?: boolean }): Promise<unknown[]> {
+		const summaries = await this.sessionStore.list({ includeArchived: params.includeArchived ?? true });
+		const byParent = new Map<string, typeof summaries>();
+		for (const summary of summaries) {
+			const parent = summary.parentSessionPath ?? "";
+			byParent.set(parent, [...(byParent.get(parent) ?? []), summary]);
+		}
+		const build = (parent: string): unknown[] => (byParent.get(parent) ?? []).map((session) => ({ session, children: build(session.id) }));
+		if (params.rootSessionId) {
+			const root = summaries.find((session) => session.id === params.rootSessionId);
+			return root ? [{ session: root, children: build(root.id) }] : [];
+		}
+		return build("");
+	}
 	append(event: AppEvent): void {
 		const stored = appendEvent(this.options.database, {
 			streamId: event.sessionId ?? "app",
@@ -170,3 +483,7 @@ export class AppRouter {
 		});
 	}
 }
+
+
+
+

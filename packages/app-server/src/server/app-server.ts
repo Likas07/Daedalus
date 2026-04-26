@@ -2,11 +2,20 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Server } from "bun";
 import { openAppServerDatabase, runMigrations } from "..";
+import { PromptContextService } from "../composer/prompt-context-service";
+import { AccessPolicyService } from "../runtime/access-policy-service";
+import { ApprovalService } from "../runtime/approval-service";
+import { createCodingAgentRuntimeFactory } from "../runtime/coding-agent-runtime";
 import type { RuntimeFactory } from "../runtime/session-controller";
 import { SessionController } from "../runtime/session-controller";
+import { SqliteSessionManager } from "../runtime/sqlite-session-manager";
+import { SqliteSessionStore } from "../sessions/sqlite-session-store";
+import type { PtyAdapter } from "../terminal/pty-adapter";
 import { authenticateRequest, createCapabilityToken } from "./auth";
 import { AppRouter, type OutboundMessage } from "./router";
 import { createWebSocketHandlers, type WebSocketClient } from "./websocket";
+import { serveStaticGui } from "./static-gui";
+import { ExtensionUiRouter } from "../extensions/extension-ui-router";
 
 export interface CreateAppServerOptions {
 	readonly databasePath: string;
@@ -15,6 +24,10 @@ export interface CreateAppServerOptions {
 	readonly token?: string;
 	readonly runtimeFactory?: RuntimeFactory;
 	readonly agentDir?: string;
+	readonly terminalPty?: PtyAdapter;
+	readonly serveGui?: boolean;
+	readonly guiDistDir?: string;
+	readonly projectRoot?: string;
 }
 
 export interface AppServerInstance {
@@ -37,21 +50,27 @@ export async function startAppServer(options: CreateAppServerOptions): Promise<A
 		for (const client of clients) client.send(message);
 	};
 	let router!: AppRouter;
+	const sessionStore = new SqliteSessionStore({ database });
+	const accessPolicyService = new AccessPolicyService(database);
+	const approvalService = new ApprovalService(database, accessPolicyService, (event) => publish(event));
+	const extensionUiRouter = new ExtensionUiRouter((message) => publish(message));
 	const controller = new SessionController({
-		runtimeFactory: options.runtimeFactory ?? fakeRuntimeFactory,
+		runtimeFactory: options.runtimeFactory ?? createCodingAgentRuntimeFactory({ approvalService, accessPolicy: accessPolicyService, extensionUiRouter }),
 		eventSink: (message) => {
 			if ("id" in message && "type" in message) router.append(message);
 			else publish(message);
 		},
-		makeSessionManager: () => ({}),
+		makeSessionManager: async ({ cwd, sessionId }) =>
+			SqliteSessionManager.create({ store: sessionStore, cwd, sessionId }).initialized(),
 		agentDir: options.agentDir ?? join(process.cwd(), ".daedalus", "agent"),
+		promptContextResolver: new PromptContextService(),
 	});
-	router = new AppRouter({ database, controller, publish });
+	router = new AppRouter({ database, controller, publish, terminalPty: options.terminalPty, accessPolicyService, approvalService, extensionUiRouter });
 	const websocket = createWebSocketHandlers(router, clients);
 	const server = Bun.serve({
 		hostname: host,
 		port: options.port ?? 0,
-		fetch(request, server) {
+		async fetch(request, server) {
 			const url = new URL(request.url);
 			if (url.pathname === "/ws") {
 				if (!authenticateRequest(request, { token, host })) return new Response("Unauthorized", { status: 401 });
@@ -60,8 +79,18 @@ export async function startAppServer(options: CreateAppServerOptions): Promise<A
 				return new Response("Upgrade failed", { status: 400 });
 			}
 			if (url.pathname === "/health") return Response.json({ ok: true });
+			if (options.serveGui) {
+				const guiResponse = await serveStaticGui(request, {
+					distDir: options.guiDistDir,
+					wsUrl: `ws://${host}:${server.port}/ws`,
+					token,
+					projectRoot: options.projectRoot ?? process.cwd(),
+				});
+				if (guiResponse) return guiResponse;
+			}
 			return new Response("Not found", { status: 404 });
 		},
+
 		websocket,
 	});
 	const httpUrl = `http://${host}:${server.port}`;

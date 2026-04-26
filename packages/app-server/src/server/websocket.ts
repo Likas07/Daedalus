@@ -1,4 +1,4 @@
-import type { ClientRequest, ServerResponse } from "@daedalus-pi/app-server-protocol";
+import type { ClientNotification, ClientRequest, ServerResponse } from "@daedalus-pi/app-server-protocol";
 import type { ServerWebSocket } from "bun";
 import type { AppRouter, OutboundMessage } from "./router";
 
@@ -38,7 +38,7 @@ export function createWebSocketHandlers(router: AppRouter, clients: Set<WebSocke
 		async message(ws: AppServerWebSocket, data: string | Buffer) {
 			const client = ws.data.client;
 			try {
-				const message = JSON.parse(typeof data === "string" ? data : data.toString()) as ClientRequest;
+				const message = JSON.parse(typeof data === "string" ? data : data.toString()) as ClientRequest | ClientNotification;
 				if (message.kind === "request") {
 					try {
 						const result = await router.handle(message);
@@ -52,6 +52,7 @@ export function createWebSocketHandlers(router: AppRouter, clients: Set<WebSocke
 						});
 					}
 				}
+				if (message.kind === "notification") router.handleNotification(message as ClientNotification);
 			} catch (error) {
 				client.send({
 					kind: "response",

@@ -25,7 +25,8 @@
 	"dependencies": {
 		"@daedalus-pi/agent-core": "workspace:*",
 		"@daedalus-pi/app-server-protocol": "workspace:*",
-		"@daedalus-pi/coding-agent": "workspace:*"
+		"@daedalus-pi/coding-agent": "workspace:*",
+		"node-pty": "^1.1.0-beta9"
 	},
 	"devDependencies": {
 		"@types/bun": "^1.3"

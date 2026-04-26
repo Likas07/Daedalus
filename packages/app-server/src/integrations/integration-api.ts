@@ -15,6 +15,7 @@ export type CommandRunner = (
 ) => Promise<{ readonly stdout: string; readonly stderr?: string; readonly exitCode: number }>;
 
 export interface IntegrationRepository {
+	readonly provider?: IntegrationProvider;
 	readonly owner: string;
 	readonly name: string;
 	readonly remoteUrl?: string;
@@ -22,16 +23,21 @@ export interface IntegrationRepository {
 
 export interface LinkedIssue {
 	readonly id: string;
+	readonly number?: number;
 	readonly title?: string;
 	readonly url?: string;
 	readonly state?: string;
+	readonly labels?: readonly string[];
 }
 export interface PullRequestStatus {
 	readonly number: number;
 	readonly title?: string;
 	readonly url?: string;
 	readonly state?: string;
-	readonly checks?: CiCheck[];
+	readonly head?: string;
+	readonly base?: string;
+	readonly createUpdateGuarded?: boolean;
+	readonly checks?: readonly CiCheck[];
 }
 export interface PullRequestCreateRequest {
 	readonly title: string;
@@ -54,6 +60,7 @@ export interface CiCheck {
 }
 export interface IntegrationSyncError {
 	readonly message: string;
+	readonly provider?: IntegrationProvider;
 	readonly code?: string;
 	readonly retryable?: boolean;
 	readonly occurredAt: string;

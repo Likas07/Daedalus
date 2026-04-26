@@ -7,6 +7,7 @@ import type {
 	ServerRequest,
 	SessionId,
 } from "@daedalus-pi/app-server-protocol";
+import type { ExtensionUiRouter } from "./extension-ui-router";
 export interface ExtensionUIDialogOptions {
 	readonly signal?: AbortSignal;
 	readonly timeout?: number;
@@ -30,6 +31,7 @@ export interface ExtensionUIBridgeOptions {
 	readonly extensionId: ExtensionId;
 	readonly sessionId?: SessionId;
 	readonly emit: ExtensionBridgeEmit;
+	readonly router?: ExtensionUiRouter;
 	readonly nextRequestId?: () => ExtensionUiRequestId;
 	readonly warn?: ExtensionBridgeWarningSink;
 }
@@ -183,17 +185,27 @@ export class ExtensionUIBridge {
 		return true;
 	}
 
+	cancelPending(reason = "Extension UI bridge disposed"): void {
+		for (const [requestId, resolve] of [...this.pending]) {
+			this.pending.delete(requestId);
+			resolve({ requestId, actionId: "cancel", values: {} });
+		}
+		if (this.options.sessionId) this.options.router?.cancelSession(this.options.sessionId, reason);
+	}
+
 	private async request(
 		input: Omit<ExtensionUiRequest, "requestId" | "extensionId" | "sessionId">,
 	): Promise<ExtensionUiResponse> {
 		const requestId = this.nextRequestId();
+		const request: ExtensionUiRequest = {
+			requestId,
+			extensionId: this.options.extensionId,
+			sessionId: this.options.sessionId,
+			...input,
+		};
+		if (this.options.router) return this.options.router.request(request);
 		const promise = new Promise<ExtensionUiResponse>((resolve) => this.pending.set(requestId, resolve));
-		await this.options.emit({
-			kind: "request",
-			id: requestId,
-			method: "extension/ui/request",
-			params: { requestId, extensionId: this.options.extensionId, sessionId: this.options.sessionId, ...input },
-		});
+		await this.options.emit({ kind: "request", id: requestId, method: "extension/ui/request", params: request });
 		return promise;
 	}
 

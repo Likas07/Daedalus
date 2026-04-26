@@ -60,6 +60,11 @@ export async function unstageFiles(cwd: string, paths: readonly string[]): Promi
 	return gitStatus(cwd);
 }
 
+export async function discardFiles(cwd: string, paths: readonly string[]): Promise<GitStatusSummary> {
+	await git(cwd, ["restore", "--worktree", "--", ...paths]);
+	return gitStatus(cwd);
+}
+
 export async function safeCommit(input: {
 	readonly cwd: string;
 	readonly message: string;
