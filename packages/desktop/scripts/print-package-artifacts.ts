@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-const releaseDir = resolve(import.meta.dir, "..", "release");
+const releaseDir = resolve(import.meta.dir, "../../..", "release", "desktop");
 
 function executableName(): string {
 	if (process.platform === "win32") return "Daedalus.exe";

@@ -6,7 +6,7 @@ const config: Configuration = {
 	executableName: "daedalus",
 	directories: {
 		app: ".",
-		output: "release",
+		output: "../../release/desktop",
 	},
 	files: [
 		"package.json",

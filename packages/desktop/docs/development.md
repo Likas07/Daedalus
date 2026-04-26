@@ -28,7 +28,7 @@ To produce a ready-to-use desktop app artifact from the repository root:
 bun run package:desktop
 ```
 
-`package:desktop` builds the GUI, Electron main/preload files, and app-server runtime, then runs electron-builder for the current OS. It prints the created artifact paths when complete. On Linux, expect an AppImage plus the unpacked executable at `packages/desktop/release/linux-unpacked/daedalus`; `package:dir` remains available for unpacked-only packaging.
+`package:desktop` builds the GUI, Electron main/preload files, and app-server runtime, then runs electron-builder for the current OS. It prints the created artifact paths when complete. On Linux, expect an AppImage plus the unpacked executable at `release/desktop/linux-unpacked/daedalus`; `package:dir` remains available for unpacked-only packaging.
 
 ## App-server bootstrap
 
