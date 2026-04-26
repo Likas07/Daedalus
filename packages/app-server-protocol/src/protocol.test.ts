@@ -2,12 +2,34 @@ import { describe, expect, test } from "bun:test";
 import { Value } from "@sinclair/typebox/value";
 import {
 	appServerProtocolVersion,
+	ClientRequestResultSchemas,
 	ClientRequestSchema,
 	EventReplayResponseSchema,
 	ServerNotificationSchema,
 	ServerRequestSchema,
 	TerminalSnapshotSchema,
 } from "./index";
+
+function terminalSnapshot(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+	return {
+		terminalId: "terminal-1",
+		projectId: "project-1",
+		worktreeId: "worktree-1",
+		sessionId: "session-1",
+		cwd: "/tmp/project",
+		shell: "/bin/sh",
+		dimensions: { cols: 80, rows: 24 },
+		status: "running",
+		history: "ready\n",
+		cursor: { nextSeq: 2, replayCursor: 1 },
+		attached: true,
+		pid: 123,
+		createdAt: "2026-04-25T00:00:00.000Z",
+		updatedAt: "2026-04-25T00:00:01.000Z",
+		elapsedMs: 1000,
+		...overrides,
+	};
+}
 
 describe("app-server protocol schemas", () => {
 	test("validates initialize requests", () => {
@@ -161,24 +183,133 @@ describe("app-server protocol schemas", () => {
 			}),
 		).toBe(true);
 
-		expect(
-			Value.Check(TerminalSnapshotSchema, {
-				terminalId: "terminal-1",
-				projectId: "project-1",
-				cwd: "/tmp/project",
-				cols: 80,
-				rows: 24,
-				status: "running",
-				history: "ready\n",
-				updatedAt: "2026-04-25T00:00:00.000Z",
-			}),
-		).toBe(true);
+		expect(Value.Check(TerminalSnapshotSchema, terminalSnapshot())).toBe(true);
 
 		expect(
 			Value.Check(ServerNotificationSchema, {
 				kind: "notification",
 				method: "terminal/event",
 				params: { terminalId: "terminal-1", event: { type: "data", data: "ready\n" } },
+			}),
+		).toBe(true);
+	});
+
+	test("validates canonical route result schemas", () => {
+		expect(
+			Value.Check(ClientRequestResultSchemas["project/list"], {
+				projects: [{ id: "project-1", name: "repo", path: "/repo", createdAt: "now", updatedAt: "now" }],
+			}),
+		).toBe(true);
+		expect(Value.Check(ClientRequestResultSchemas["session/start"], { sessionId: "session-1" })).toBe(true);
+		expect(
+			Value.Check(ClientRequestResultSchemas["session/list"], {
+				sessions: [
+					{
+						id: "session-1",
+						cwd: "/repo",
+						created: "now",
+						modified: "now",
+						messageCount: 0,
+						firstMessage: "",
+						allMessagesText: "",
+					},
+				],
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestResultSchemas["auth/status"], {
+				providers: [
+					{
+						provider: "openai",
+						authenticated: false,
+						status: "missing-auth",
+						authMethod: "api-key",
+						actionable: false,
+						canLogin: false,
+						canLogout: false,
+						canRelogin: false,
+						modelCount: 2,
+					},
+				],
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestResultSchemas["model/list"], {
+				models: [{ id: "gpt-5", label: "GPT-5", provider: "openai", available: true }],
+				selectedModel: "gpt-5",
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestResultSchemas["settings/read"], {
+				global: {},
+				project: {},
+				effective: {},
+				diagnostics: [],
+				models: [{ id: "gpt-5" }],
+				thinkingLevels: ["off", "low"],
+				keybindings: [],
+			}),
+		).toBe(true);
+		expect(Value.Check(ClientRequestResultSchemas["terminal/create"], { terminal: terminalSnapshot() })).toBe(true);
+		expect(
+			Value.Check(ClientRequestResultSchemas["terminal/replay"], {
+				chunks: [{ seq: 1, data: "ready" }],
+				nextSeq: 2,
+				status: "running",
+				replayCursor: 1,
+			}),
+		).toBe(true);
+		const diff = {
+			branch: "main",
+			upstream: null,
+			ahead: 0,
+			behind: 0,
+			stagedCount: 0,
+			unstagedCount: 1,
+			files: [
+				{
+					path: "src/index.ts",
+					status: "modified",
+					staged: false,
+					insertions: 1,
+					deletions: 0,
+					riskGroup: "source",
+				},
+			],
+			patch: "",
+			riskyGroups: ["source"],
+		};
+		expect(Value.Check(ClientRequestResultSchemas["diff/get"], { diff })).toBe(true);
+		expect(Value.Check(ClientRequestResultSchemas["git/stage"], { ok: true, approvalId: "approval-1", diff })).toBe(
+			true,
+		);
+		expect(
+			Value.Check(ClientRequestResultSchemas["checkpoint/list"], {
+				checkpoints: [{ checkpointId: "checkpoint-1", sessionId: "session-1", metadata: {}, createdAt: "now" }],
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestResultSchemas["integration/pr-create"], {
+				pullRequest: { status: "created", number: 1, url: "https://example.test/pr/1" },
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestResultSchemas["orchestration/read"], {
+				mode: "build",
+				lanes: [],
+				checkpoints: [],
+				updatedAt: "now",
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestResultSchemas["daedalus/workflow/read"], {
+				sessionId: "session-1",
+				plans: [],
+				todos: [],
+				questions: [],
+				semanticWorkspace: { status: "idle" },
+				orchestration: { mode: "build", lanes: [], checkpoints: [] },
+				updatedAt: "now",
 			}),
 		).toBe(true);
 	});
@@ -226,6 +357,7 @@ describe("app-server protocol schemas", () => {
 			);
 		}
 	});
+
 	test("rejects invalid GUI protocol values", () => {
 		expect(
 			Value.Check(ClientRequestSchema, {
@@ -245,16 +377,9 @@ describe("app-server protocol schemas", () => {
 			}),
 		).toBe(false);
 
-		expect(
-			Value.Check(TerminalSnapshotSchema, {
-				terminalId: "terminal-1",
-				cwd: "/tmp/project",
-				cols: 10,
-				rows: 2,
-				status: "running",
-				history: "",
-				updatedAt: "2026-04-25T00:00:00.000Z",
-			}),
-		).toBe(false);
+		expect(Value.Check(TerminalSnapshotSchema, terminalSnapshot({ id: "terminal-1", cols: 80, rows: 24 }))).toBe(
+			false,
+		);
+		expect(Value.Check(TerminalSnapshotSchema, { terminalId: "terminal-1", cwd: "/tmp/project" })).toBe(false);
 	});
 });

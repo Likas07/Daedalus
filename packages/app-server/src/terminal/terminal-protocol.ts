@@ -13,7 +13,7 @@ export interface TerminalOutputChunk {
 }
 
 export interface TerminalSessionRecord {
-	readonly id: TerminalId;
+	readonly terminalId: TerminalId;
 	readonly projectId?: ProjectId;
 	readonly worktreeId?: WorktreeId;
 	readonly sessionId?: SessionId;
@@ -25,12 +25,14 @@ export interface TerminalSessionRecord {
 	readonly pid?: number;
 	readonly exitCode?: number | null;
 	readonly exitSignal?: string | null;
-	readonly history?: string;
+	readonly history: string;
 	readonly createdAt: string;
 	readonly updatedAt: string;
 	readonly attached: boolean;
-	readonly nextSeq: number;
-	readonly replayCursor: number;
+	readonly cursor: {
+		readonly nextSeq: number;
+		readonly replayCursor: number;
+	};
 	readonly elapsedMs: number;
 }
 

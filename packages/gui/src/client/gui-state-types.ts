@@ -36,7 +36,6 @@ export interface RendererAccessPolicy {
 }
 
 export interface RendererTerminal {
-	readonly id: string;
 	readonly terminalId: string;
 	readonly cwd: string;
 	readonly cols: number;

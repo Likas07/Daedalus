@@ -1,13 +1,34 @@
 import { describe, expect, test } from "bun:test";
 import type { RendererTerminal } from "../../client/gui-state-types";
-import { applyTerminalOutput, capTerminalHistory, removeTerminal, selectExistingTerminal, terminalCloseLabel, terminalLabel, upsertTerminal } from "./terminal-state";
+import {
+	applyTerminalOutput,
+	capTerminalHistory,
+	removeTerminal,
+	selectExistingTerminal,
+	terminalCloseLabel,
+	terminalLabel,
+	upsertTerminal,
+} from "./terminal-state";
 
-const terminal = (id: string, history = "", updatedAt = id): RendererTerminal => ({ id, terminalId: id, cwd: `/tmp/${id}`, cols: 80, rows: 24, status: "running", history, updatedAt });
+const terminal = (terminalId: string, history = "", updatedAt = terminalId): RendererTerminal => ({
+	terminalId,
+	cwd: `/tmp/${terminalId}`,
+	cols: 80,
+	rows: 24,
+	status: "running",
+	history,
+	updatedAt,
+});
 
 describe("terminal-state", () => {
-	test("upserts by id and keeps newest first", () => {
-		expect(upsertTerminal([terminal("a", "old", "1"), terminal("a", "stale", "0")], terminal("a", "new", "2"))).toEqual([terminal("a", "new", "2")]);
-		expect(upsertTerminal([terminal("a", "", "1")], terminal("b", "", "2")).map((item) => item.id)).toEqual(["b", "a"]);
+	test("upserts by terminalId and keeps newest first", () => {
+		expect(
+			upsertTerminal([terminal("a", "old", "1"), terminal("a", "stale", "0")], terminal("a", "new", "2")),
+		).toEqual([terminal("a", "new", "2")]);
+		expect(upsertTerminal([terminal("a", "", "1")], terminal("b", "", "2")).map((item) => item.terminalId)).toEqual([
+			"b",
+			"a",
+		]);
 	});
 
 	test("labels never include undefined", () => {
@@ -18,7 +39,7 @@ describe("terminal-state", () => {
 
 	test("removes and repairs selected terminal", () => {
 		const terminals = removeTerminal([terminal("a"), terminal("b")], "a");
-		expect(terminals.map((item) => item.id)).toEqual(["b"]);
+		expect(terminals.map((item) => item.terminalId)).toEqual(["b"]);
 		expect(selectExistingTerminal(terminals, "a")).toBe("b");
 	});
 

@@ -53,7 +53,8 @@ export async function createApp(options: AppOptions = {}): Promise<GuiApp> {
 }
 
 function renderTestFallback(root: HTMLElement, runtime: GuiRuntime): void {
-	if (process.env.NODE_ENV !== "test") throw new Error("Svelte renderer failed to mount; fallback renderer disabled outside tests");
+	if (process.env.NODE_ENV !== "test")
+		throw new Error("Svelte renderer failed to mount; fallback renderer disabled outside tests");
 	root.replaceChildren();
 	const shell = document.createElement("main");
 	shell.className = "workspace-shell";
@@ -126,7 +127,9 @@ function renderTestFallback(root: HTMLElement, runtime: GuiRuntime): void {
 function appendFallbackTerminal(root: HTMLElement, runtime: GuiRuntime): void {
 	const tail = document.createElement("section");
 	tail.dataset.testid = "terminal-tail";
-	const active = runtime.state.terminals.find((terminal) => terminal.id === runtime.state.activeTerminalId) ?? runtime.state.terminals[0];
+	const active =
+		runtime.state.terminals.find((terminal) => terminal.terminalId === runtime.state.activeTerminalId) ??
+		runtime.state.terminals[0];
 	tail.textContent = `terminal tail ${active?.status ?? "idle"} ${active?.history ?? runtime.state.terminalOutput ?? "No terminal output yet."}`;
 	const open = document.createElement("button");
 	open.type = "button";
@@ -139,7 +142,12 @@ function appendFallbackTerminal(root: HTMLElement, runtime: GuiRuntime): void {
 		create.type = "button";
 		create.textContent = "Create terminal";
 		create.addEventListener("click", () => {
-			void runtime.createTerminal({ cwd: runtime.state.projectRoot ?? "/", projectId: runtime.state.lastProjectId, cols: 100, rows: 24 });
+			void runtime.createTerminal({
+				cwd: runtime.state.projectRoot ?? "/",
+				projectId: runtime.state.lastProjectId,
+				cols: 100,
+				rows: 24,
+			});
 		});
 		drawer.append(create);
 		root.append(drawer);
@@ -310,10 +318,19 @@ function appendFallbackLifecycleControls(canvas: HTMLElement, runtime: GuiRuntim
 function findFallbackActiveTurnId(runtime: GuiRuntime): string | undefined {
 	for (const event of [...runtime.state.events].reverse()) {
 		if (runtime.state.selectedSessionId && event.sessionId !== runtime.state.selectedSessionId) continue;
-		const payload = event.payload && typeof event.payload === "object" ? (event.payload as { turnId?: unknown; id?: unknown; status?: unknown }) : undefined;
-		const turnId = typeof payload?.turnId === "string" ? payload.turnId : typeof payload?.id === "string" && event.type.includes("turn") ? payload.id : undefined;
+		const payload =
+			event.payload && typeof event.payload === "object"
+				? (event.payload as { turnId?: unknown; id?: unknown; status?: unknown })
+				: undefined;
+		const turnId =
+			typeof payload?.turnId === "string"
+				? payload.turnId
+				: typeof payload?.id === "string" && event.type.includes("turn")
+					? payload.id
+					: undefined;
 		if (!turnId) continue;
-		if (event.type.includes("completed") || event.type.includes("cancel") || payload?.status === "completed") return undefined;
+		if (event.type.includes("completed") || event.type.includes("cancel") || payload?.status === "completed")
+			return undefined;
 		return turnId;
 	}
 	return undefined;

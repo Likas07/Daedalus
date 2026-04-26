@@ -10,14 +10,14 @@
 	}>();
 
 	function onTabKeydown(event: KeyboardEvent, terminalId: string): void {
-		const index = terminals.findIndex((terminal: RendererTerminal) => terminal.id === terminalId);
+		const index = terminals.findIndex((terminal: RendererTerminal) => terminal.terminalId === terminalId);
 		if (index < 0) return;
 		if (event.key === "ArrowRight") {
 			event.preventDefault();
-			onSelect?.(terminals[(index + 1) % terminals.length].id);
+			onSelect?.(terminals[(index + 1) % terminals.length].terminalId);
 		} else if (event.key === "ArrowLeft") {
 			event.preventDefault();
-			onSelect?.(terminals[(index - 1 + terminals.length) % terminals.length].id);
+			onSelect?.(terminals[(index - 1 + terminals.length) % terminals.length].terminalId);
 		}
 	}
 </script>
@@ -27,19 +27,19 @@
 		<button
 			type="button"
 			class="terminal-tab"
-			data-active={terminal.id === selectedTerminalId}
+			data-active={terminal.terminalId === selectedTerminalId}
 
 			role="tab"
-			aria-selected={terminal.id === selectedTerminalId}
-			aria-controls={`terminal-panel-${terminal.id}`}
-			tabindex={terminal.id === selectedTerminalId ? 0 : -1}
-			onkeydown={(event) => onTabKeydown(event, terminal.id)}
-			onclick={() => onSelect?.(terminal.id)}
+			aria-selected={terminal.terminalId === selectedTerminalId}
+			aria-controls={`terminal-panel-${terminal.terminalId}`}
+			tabindex={terminal.terminalId === selectedTerminalId ? 0 : -1}
+			onkeydown={(event) => onTabKeydown(event, terminal.terminalId)}
+			onclick={() => onSelect?.(terminal.terminalId)}
 		>
 			<span class="text-bone-400">{terminal.status}</span>
 			<span class="ml-1.5">{terminalLabel(terminal)}</span>
 		</button>
-		<button class="btn-mini mb-1" type="button" aria-label={terminalCloseLabel(terminal)} onclick={() => onClose?.(terminal.id)}>×</button>
+		<button class="btn-mini mb-1" type="button" aria-label={terminalCloseLabel(terminal)} onclick={() => onClose?.(terminal.terminalId)}>×</button>
 	{:else}
 		<span class="px-2 pb-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-bone-400">No terminals</span>
 	{/each}

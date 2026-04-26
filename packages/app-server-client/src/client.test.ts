@@ -121,11 +121,15 @@ test("provides typed GUI protocol helpers", async () => {
 						terminal: {
 							terminalId: "terminal-1",
 							cwd: request.params.cwd,
-							cols: request.params.cols ?? 80,
-							rows: request.params.rows ?? 24,
+							shell: "/bin/sh",
+							dimensions: { cols: request.params.cols ?? 80, rows: request.params.rows ?? 24 },
 							status: "running",
 							history: "",
+							cursor: { nextSeq: 1, replayCursor: 0 },
+							attached: true,
+							createdAt: "2026-04-25T00:00:00.000Z",
 							updatedAt: "2026-04-25T00:00:00.000Z",
+							elapsedMs: 0,
 						},
 					},
 				});
@@ -154,9 +158,13 @@ test("provides typed GUI protocol helpers", async () => {
 	await expect(client.setAccessMode("unrestricted")).resolves.toMatchObject({
 		policy: { mode: "unrestricted", bypassHardBlocks: false, auditRequired: true },
 	});
-	await expect(client.createTerminal({ cwd: "/tmp/project", cols: 80, rows: 24 })).resolves.toMatchObject({
-		terminal: { terminalId: "terminal-1", status: "running" },
+	const createdTerminal = await client.createTerminal({ cwd: "/tmp/project", cols: 80, rows: 24 });
+	expect(createdTerminal.terminal).toMatchObject({
+		terminalId: "terminal-1",
+		status: "running",
+		dimensions: { cols: 80, rows: 24 },
 	});
+	expect(createdTerminal.terminal).not.toHaveProperty("id");
 	await expect(client.replayTerminal({ terminalId: "terminal-1" })).resolves.toMatchObject({
 		chunks: [{ seq: 1, data: "ready" }],
 	});

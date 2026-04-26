@@ -5,7 +5,7 @@
 	import TerminalDrawer from "./TerminalDrawer.svelte";
 
 	const { guiState: appState, runtime, ui, onTerminalOpenChange } = $props<{ guiState: GuiState; runtime: GuiRuntime; ui: UiState; onTerminalOpenChange?: (open: boolean) => void }>();
-	const active = $derived(appState.terminals.find((terminal: RendererTerminal) => terminal.id === appState.activeTerminalId) ?? appState.terminals[0]);
+	const active = $derived(appState.terminals.find((terminal: RendererTerminal) => terminal.terminalId === appState.activeTerminalId) ?? appState.terminals[0]);
 	const lastLine = $derived(((active?.history ?? appState.terminalOutput ?? "").split("\n").filter((line: string) => line.trim().length > 0).at(-1)) ?? "ready");
 	const cwdLabel = $derived(appState.projectRoot ?? "~");
 	function setTerminalOpen(open: boolean): void {
@@ -19,7 +19,7 @@
 	<footer class="flex h-7 shrink-0 items-center gap-4 border-t border-ink-500 px-5 font-mono text-[10.5px] text-bone-400" data-testid="terminal-tail">
 		<span class="text-bone-300">$</span>
 		<span class="min-w-0 truncate">
-			<span class="text-bone-300">{active?.id ?? "terminal"}</span>
+			<span class="text-bone-300">{active?.terminalId ?? "terminal"}</span>
 			<span class="text-bone-500"> · </span>
 			<span class="text-bone-300">{lastLine}</span>
 		</span>

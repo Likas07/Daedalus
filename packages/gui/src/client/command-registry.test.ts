@@ -59,34 +59,71 @@ function runtime(guiState: GuiState, calls: string[] = []): GuiRuntime {
 		client: {} as AppServerClient,
 		state: guiState,
 		notify() {},
-		subscribe() { return () => {}; },
+		subscribe() {
+			return () => {};
+		},
 		async initialize() {},
 		async reconnect() {},
-		selectSession(sessionId) { guiState.selectedSessionId = sessionId; calls.push(`select:${sessionId ?? "none"}`); },
-		async openProject() { return { projectId: "project-1" }; },
+		selectSession(sessionId) {
+			guiState.selectedSessionId = sessionId;
+			calls.push(`select:${sessionId ?? "none"}`);
+		},
+		async openProject() {
+			return { projectId: "project-1" };
+		},
 		async startSessionFromPrompt() {},
-		async respondToExtensionUI() { return {}; },
+		async respondToExtensionUI() {
+			return {};
+		},
 		async startTurn() {},
-		async cancelTurn(_sessionId, _turnId) { calls.push("cancel-turn"); },
-		async stopSession(_sessionId) { calls.push("stop-session"); },
+		async cancelTurn(_sessionId, _turnId) {
+			calls.push("cancel-turn");
+		},
+		async stopSession(_sessionId) {
+			calls.push("stop-session");
+		},
 		async respondToApproval() {},
 		async setModel() {},
 		async setEffort() {},
-		async setAccessMode(mode) { guiState.accessMode = mode; calls.push(`access:${mode}`); return {}; },
+		async setAccessMode(mode) {
+			guiState.accessMode = mode;
+			calls.push(`access:${mode}`);
+			return {};
+		},
 		async setMode() {},
 		async setFastMode() {},
-		async searchComposerFiles() { return []; },
-		async listComposerCommands() { return []; },
-		async refreshDiff() { return undefined; },
-		async createWorktree() { throw new Error("not used"); },
+		async searchComposerFiles() {
+			return [];
+		},
+		async listComposerCommands() {
+			return [];
+		},
+		async refreshDiff() {
+			return undefined;
+		},
+		async createWorktree() {
+			throw new Error("not used");
+		},
 		async openInEditor() {},
-		async saveComposerAttachment() { throw new Error("not used"); },
-		async createTerminal() { calls.push("create-terminal"); return { terminalId: "term-1", id: "term-1", cwd: "/repo", cols: 100, rows: 24, status: "running", history: "" }; },
+		async saveComposerAttachment() {
+			throw new Error("not used");
+		},
+		async createTerminal() {
+			calls.push("create-terminal");
+			return { terminalId: "term-1", cwd: "/repo", cols: 100, rows: 24, status: "running", history: "" };
+		},
 		async sendTerminalInput() {},
 		async resizeTerminal() {},
-		async replayTerminal() { return []; },
-		async killTerminal() { return undefined; },
-		exportDiagnostics() { calls.push("export-diagnostics"); return "{}"; },
+		async replayTerminal() {
+			return [];
+		},
+		async killTerminal() {
+			return undefined;
+		},
+		exportDiagnostics() {
+			calls.push("export-diagnostics");
+			return "{}";
+		},
 		async close() {},
 	};
 }
@@ -94,7 +131,12 @@ function runtime(guiState: GuiState, calls: string[] = []): GuiRuntime {
 describe("command registry", () => {
 	test("every command has a handler or disabled reason", () => {
 		const guiState = state();
-		const commands = createCommandRegistry({ guiState, ui: uiState(), runtime: runtime(guiState), exportDiagnostics() {} });
+		const commands = createCommandRegistry({
+			guiState,
+			ui: uiState(),
+			runtime: runtime(guiState),
+			exportDiagnostics() {},
+		});
 		expect(() => assertCommandRegistryRunnable(commands)).not.toThrow();
 		expect(commands.filter((command) => !command.run && !command.disabledReason)).toEqual([]);
 	});
@@ -102,7 +144,9 @@ describe("command registry", () => {
 	test("toggle terminal changes ui state", () => {
 		const guiState = state();
 		const ui = uiState();
-		const command = createCommandRegistry({ guiState, ui, runtime: runtime(guiState) }).find((item) => item.id === "toggle-terminal");
+		const command = createCommandRegistry({ guiState, ui, runtime: runtime(guiState) }).find(
+			(item) => item.id === "toggle-terminal",
+		);
 		expect(ui.terminalOpen).toBe(false);
 		command?.run?.();
 		expect(ui.terminalOpen).toBe(true);
@@ -111,7 +155,9 @@ describe("command registry", () => {
 	test("disabled commands do not run", () => {
 		const calls: string[] = [];
 		const guiState = state();
-		const command = createCommandRegistry({ guiState, ui: uiState(), runtime: runtime(guiState, calls) }).find((item) => item.id === "cancel-turn");
+		const command = createCommandRegistry({ guiState, ui: uiState(), runtime: runtime(guiState, calls) }).find(
+			(item) => item.id === "cancel-turn",
+		);
 		expect(command?.disabledReason).toContain("No active turn");
 		expect(command?.run).toBeUndefined();
 		expect(calls).toEqual([]);
@@ -121,7 +167,9 @@ describe("command registry", () => {
 		const calls: string[] = [];
 		const guiState = state({
 			selectedSessionId: "session-1",
-			events: [{ id: "event-1", ts: "now", type: "turn/running", sessionId: "session-1", payload: { turnId: "turn-1" } }],
+			events: [
+				{ id: "event-1", ts: "now", type: "turn/running", sessionId: "session-1", payload: { turnId: "turn-1" } },
+			],
 		});
 		const ui = uiState();
 		let extensionRan = false;
@@ -130,9 +178,24 @@ describe("command registry", () => {
 			guiState,
 			ui,
 			runtime: runtime(guiState, calls),
-			extensions: [{ id: "ext", enabled: true, capabilities: [], permissions: [], commands: [{ id: "run", extensionId: "ext", kind: "command", title: "Run extension" }], panes: [], backgroundTasks: [], errors: [] }],
-			dispatchExtensionCommand: () => { extensionRan = true; },
-			exportDiagnostics: (value) => { diagnostics = value; },
+			extensions: [
+				{
+					id: "ext",
+					enabled: true,
+					capabilities: [],
+					permissions: [],
+					commands: [{ id: "run", extensionId: "ext", kind: "command", title: "Run extension" }],
+					panes: [],
+					backgroundTasks: [],
+					errors: [],
+				},
+			],
+			dispatchExtensionCommand: () => {
+				extensionRan = true;
+			},
+			exportDiagnostics: (value) => {
+				diagnostics = value;
+			},
 		});
 		commands.find((item) => item.id === "cancel-turn")?.run?.();
 		commands.find((item) => item.id === "stop-session")?.run?.();

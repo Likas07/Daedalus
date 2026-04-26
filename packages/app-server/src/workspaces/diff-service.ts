@@ -6,7 +6,7 @@ export interface DiffFileSummary extends WorkflowChangedFile {}
 export interface DiffResult extends GitStatusSummary {
 	readonly files: DiffFileSummary[];
 	readonly patch: string;
-	readonly riskyGroups: readonly WorkflowRiskGroup[];
+	readonly riskyGroups: WorkflowRiskGroup[];
 }
 
 export class DiffService {

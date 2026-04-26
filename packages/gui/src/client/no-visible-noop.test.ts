@@ -105,7 +105,6 @@ function runtime(guiState: GuiState): GuiRuntime {
 		async createTerminal() {
 			return {
 				terminalId: "term-1",
-				id: "term-1",
 				cwd: "/repo",
 				cols: 100,
 				rows: 24,

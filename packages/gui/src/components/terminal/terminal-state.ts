@@ -10,13 +10,13 @@ export interface TerminalOutputState {
 	terminals: RendererTerminal[];
 }
 
-export function terminalLabel(terminal?: Pick<RendererTerminal, "id" | "cwd">): string {
+export function terminalLabel(terminal?: Pick<RendererTerminal, "terminalId" | "cwd">): string {
 	if (!terminal) return "terminal";
 	const cwd = terminal.cwd.trim();
-	return cwd.split("/").filter(Boolean).at(-1) ?? cwd ?? terminal.id;
+	return cwd.split("/").filter(Boolean).at(-1) ?? cwd ?? terminal.terminalId;
 }
 
-export function terminalCloseLabel(terminal?: Pick<RendererTerminal, "id" | "cwd">): string {
+export function terminalCloseLabel(terminal?: Pick<RendererTerminal, "terminalId" | "cwd">): string {
 	return `Close terminal ${terminalLabel(terminal)}`;
 }
 
@@ -30,24 +30,33 @@ export function capTerminalHistory(history: string, options: { maxBytes?: number
 	return capped;
 }
 
-export function upsertTerminal<T extends { id: string; updatedAt?: string }>(terminals: readonly T[], terminal: T): T[] {
+export function upsertTerminal<T extends { terminalId: string; updatedAt?: string }>(
+	terminals: readonly T[],
+	terminal: T,
+): T[] {
 	const byId = new Map<string, T>();
-	for (const item of terminals) byId.set(item.id, item);
-	byId.set(terminal.id, terminal);
+	for (const item of terminals) byId.set(item.terminalId, item);
+	byId.set(terminal.terminalId, terminal);
 	return [...byId.values()].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
 }
 
-export function removeTerminal<T extends { id: string }>(terminals: readonly T[], terminalId?: string): T[] {
+export function removeTerminal<T extends { terminalId: string }>(terminals: readonly T[], terminalId?: string): T[] {
 	if (!terminalId) return [...terminals];
-	return terminals.filter((terminal) => terminal.id !== terminalId);
+	return terminals.filter((terminal) => terminal.terminalId !== terminalId);
 }
 
-export function selectExistingTerminal(terminals: readonly RendererTerminal[], selectedId?: string): string | undefined {
-	return terminals.some((terminal) => terminal.id === selectedId) ? selectedId : terminals[0]?.id;
+export function selectExistingTerminal(
+	terminals: readonly RendererTerminal[],
+	selectedId?: string,
+): string | undefined {
+	return terminals.some((terminal) => terminal.terminalId === selectedId) ? selectedId : terminals[0]?.terminalId;
 }
 
-export function applyTerminalOutput(state: TerminalOutputState, params: { terminalId: string; seq: number; data: string }): boolean {
-	const terminal = state.terminals.find((item) => item.id === params.terminalId);
+export function applyTerminalOutput(
+	state: TerminalOutputState,
+	params: { terminalId: string; seq: number; data: string },
+): boolean {
+	const terminal = state.terminals.find((item) => item.terminalId === params.terminalId);
 	if (!terminal) return false;
 	state.activeTerminalId = params.terminalId;
 	if (params.seq <= state.terminalCursor) return false;

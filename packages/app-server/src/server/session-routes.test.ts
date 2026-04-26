@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { ClientRequestResultSchemas } from "@daedalus-pi/app-server-protocol";
+import { Value } from "@sinclair/typebox/value";
 import { type SessionEntry, type SessionMessageEntry, serializeSessionJsonl } from "@daedalus-pi/coding-agent";
 import type { AppServerDatabase } from "../persistence/database";
 import { openAppServerDatabase } from "../persistence/database";
@@ -122,6 +124,10 @@ function controllerEvent(events: RuntimeControllerMessage[], type: string): Runt
 	return event as RuntimeControllerMessage;
 }
 
+function expectRouteResult(method: keyof typeof ClientRequestResultSchemas, result: unknown): void {
+	expect(Value.Check(ClientRequestResultSchemas[method], result)).toBe(true);
+}
+
 describe("session store routes", () => {
 	test("imports and exports JSONL through the router", async () => {
 		const appRouter = router();
@@ -143,6 +149,7 @@ describe("session store routes", () => {
 			params: { content },
 		});
 		expect(imported).toEqual({ sessionId: "route-session" });
+		expectRouteResult("session/import-jsonl", imported);
 
 		const listed = await appRouter.handle({
 			kind: "request",
@@ -151,6 +158,7 @@ describe("session store routes", () => {
 			params: { cwd: "/repo" },
 		});
 		expect(listed).toMatchObject({ sessions: [{ id: "route-session", messageCount: 1 }] });
+		expectRouteResult("session/list", listed);
 
 		const exported = await appRouter.handle({
 			kind: "request",
@@ -159,6 +167,7 @@ describe("session store routes", () => {
 			params: { sessionId: "route-session" },
 		});
 		expect(exported).toEqual({ content, filename: "route-session.jsonl" });
+		expectRouteResult("session/export-jsonl", exported);
 	});
 
 	test("starts a prompted session through AppRouter with an empty SQLite store", async () => {
@@ -172,6 +181,7 @@ describe("session store routes", () => {
 		})) as { sessionId: string };
 
 		expect(started).toEqual({ sessionId: "session-controller-id" });
+		expectRouteResult("session/start", started);
 		expect(runtimes[0]?.sessionId).toBe(started.sessionId);
 		expect(runtimes[0]?.prompts).toEqual(["hello from gui"]);
 		expect(runtimes[0]?.session.sessionFile).toBe(`sqlite://${started.sessionId}`);
@@ -205,6 +215,7 @@ describe("session store routes", () => {
 		})) as { sessionId: string };
 
 		expect(started.sessionId).toBe("session-controller-id");
+		expectRouteResult("session/start", started);
 		expect(runtimes[0]?.sessionId).toBe(started.sessionId);
 		expect(runtimes[0]?.prompts).toEqual([]);
 		expect((await sessionStore.read({ sessionId: started.sessionId })).header.id).toBe(started.sessionId);
@@ -217,6 +228,8 @@ describe("session store routes", () => {
 		});
 
 		expect(turn).toEqual({ turnId: "turn-1" });
+		expectRouteResult("turn/start", turn);
+
 		expect(runtimes[0]?.prompts).toEqual(["first turn after empty start"]);
 		const sessionStarted = controllerEvent(events, "session/started") as {
 			sessionId: string;
@@ -259,6 +272,7 @@ describe("session store routes", () => {
 		})) as { sessionId: string; status: string };
 
 		expect(resumed).toEqual({ sessionId: "existing-session", status: "active" });
+		expectRouteResult("session/resume", resumed);
 		expect(runtimes[0]?.sessionId).toBe(resumed.sessionId);
 		expect(runtimes[0]?.initialEntryCount).toBe(1);
 		expect((await sessionStore.read({ sessionId: resumed.sessionId })).entries).toHaveLength(1);

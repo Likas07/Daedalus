@@ -7,7 +7,7 @@
 	import TerminalTabs from "./TerminalTabs.svelte";
 
 	const { state: appState, runtime, onCollapse } = $props<{ state: GuiState; runtime: GuiRuntime; onCollapse?: () => void }>();
-	const activeTerminal = $derived(appState.terminals.find((terminal: import("../client/gui-state-types").RendererTerminal) => terminal.id === appState.activeTerminalId) ?? appState.terminals[0]);
+	const activeTerminal = $derived(appState.terminals.find((terminal: import("../client/gui-state-types").RendererTerminal) => terminal.terminalId === appState.activeTerminalId) ?? appState.terminals[0]);
 
 	async function createTerminal(): Promise<void> {
 		await runtime.createTerminal({ cwd: appState.projectRoot ?? "/", projectId: appState.lastProjectId, cols: 100, rows: 24 });
@@ -35,11 +35,11 @@
 		</div>
 		<span class="font-display text-[12px] italic text-bone-400">furnace</span>
 	</div>
-	<TerminalTabs terminals={appState.terminals} selectedTerminalId={activeTerminal?.id} onSelect={selectTerminal} onNew={() => void createTerminal()} onClose={(id) => void closeTerminal(id)} />
-	<TerminalHeader terminal={activeTerminal} onKill={() => activeTerminal && void closeTerminal(activeTerminal.id)} {onCollapse} />
+	<TerminalTabs terminals={appState.terminals} selectedTerminalId={activeTerminal?.terminalId} onSelect={selectTerminal} onNew={() => void createTerminal()} onClose={(id) => void closeTerminal(id)} />
+	<TerminalHeader terminal={activeTerminal} onKill={() => activeTerminal && void closeTerminal(activeTerminal.terminalId)} {onCollapse} />
 	<div class="min-h-0 flex-1">
 		{#if activeTerminal}
-			<XtermViewport terminalId={activeTerminal.id} history={activeTerminal.history} {runtime} />
+			<XtermViewport terminalId={activeTerminal.terminalId} history={activeTerminal.history} {runtime} />
 		{:else}
 			<div class="flex h-full items-center justify-center bg-black/60 font-mono text-xs text-bone-400">
 				<button class="btn-mini" type="button" onclick={() => void createTerminal()}>Create terminal</button>

@@ -1,52 +1,70 @@
-export interface DiagnosticVersionInfo {
-	readonly appServer?: string;
-	readonly gui?: string;
-	readonly desktop?: string;
-	readonly protocol?: string;
-}
+import { type Static, type TSchema, Type } from "@sinclair/typebox";
+import { SessionIdSchema } from "./ids";
 
-export interface DiagnosticEnvironmentSummary {
-	readonly platform: string;
-	readonly arch: string;
-	readonly bunVersion?: string;
-	readonly nodeVersion?: string;
-	readonly cwd?: string;
-}
+const StrictObject = <Properties extends Record<string, TSchema>>(properties: Properties) =>
+	Type.Object(properties, { additionalProperties: false });
 
-export interface DiagnosticProtocolEvent {
-	readonly seq?: number;
-	readonly type: string;
-	readonly streamId?: string;
-	readonly createdAt?: string;
-}
+export const DiagnosticVersionInfoSchema = StrictObject({
+	appServer: Type.Optional(Type.String()),
+	gui: Type.Optional(Type.String()),
+	desktop: Type.Optional(Type.String()),
+	protocol: Type.Optional(Type.String()),
+});
+export type DiagnosticVersionInfo = Static<typeof DiagnosticVersionInfoSchema>;
 
-export type DiagnosticExportKind = "support-bundle" | "sqlite-session-bundle" | "jsonl-session" | "html-session";
+export const DiagnosticEnvironmentSummarySchema = StrictObject({
+	platform: Type.String({ minLength: 1 }),
+	arch: Type.String({ minLength: 1 }),
+	bunVersion: Type.Optional(Type.String()),
+	nodeVersion: Type.Optional(Type.String()),
+	cwd: Type.Optional(Type.String()),
+});
+export type DiagnosticEnvironmentSummary = Static<typeof DiagnosticEnvironmentSummarySchema>;
 
-export interface DiagnosticExport {
-	readonly exportedAt: string;
-	readonly kind?: DiagnosticExportKind;
-	readonly sessionId?: string;
-	readonly transcript: readonly unknown[];
-	readonly toolLogs: readonly unknown[];
-	readonly appServerLogs: readonly string[];
-	readonly runtimeDiagnostics?: unknown;
-	readonly environment: DiagnosticEnvironmentSummary;
-	readonly versions: DiagnosticVersionInfo;
-	readonly integrationStatus: readonly unknown[];
-	readonly recentProtocolEvents: readonly DiagnosticProtocolEvent[];
-}
+export const DiagnosticProtocolEventSchema = StrictObject({
+	seq: Type.Optional(Type.Integer({ minimum: 0 })),
+	type: Type.String({ minLength: 1 }),
+	streamId: Type.Optional(Type.String()),
+	createdAt: Type.Optional(Type.String()),
+});
+export type DiagnosticProtocolEvent = Static<typeof DiagnosticProtocolEventSchema>;
 
-export interface DiagnosticExportParams {
-	readonly kind?: DiagnosticExportKind;
-	readonly sessionId?: string;
-	readonly includeTranscripts?: boolean;
-	readonly includeToolLogs?: boolean;
-	readonly recentEventLimit?: number;
-}
+export const DiagnosticExportKindSchema = Type.Union([
+	Type.Literal("support-bundle"),
+	Type.Literal("sqlite-session-bundle"),
+	Type.Literal("jsonl-session"),
+	Type.Literal("html-session"),
+]);
+export type DiagnosticExportKind = Static<typeof DiagnosticExportKindSchema>;
 
-export interface DiagnosticExportResult {
-	readonly export: DiagnosticExport;
-	readonly content?: string;
-	readonly filename?: string;
-	readonly path?: string;
-}
+export const DiagnosticExportSchema = StrictObject({
+	exportedAt: Type.String({ minLength: 1 }),
+	kind: Type.Optional(DiagnosticExportKindSchema),
+	sessionId: Type.Optional(SessionIdSchema),
+	transcript: Type.Array(Type.Unknown()),
+	toolLogs: Type.Array(Type.Unknown()),
+	appServerLogs: Type.Array(Type.String()),
+	runtimeDiagnostics: Type.Optional(Type.Unknown()),
+	environment: DiagnosticEnvironmentSummarySchema,
+	versions: DiagnosticVersionInfoSchema,
+	integrationStatus: Type.Array(Type.Unknown()),
+	recentProtocolEvents: Type.Array(DiagnosticProtocolEventSchema),
+});
+export type DiagnosticExport = Static<typeof DiagnosticExportSchema>;
+
+export const DiagnosticExportParamsSchema = StrictObject({
+	kind: Type.Optional(DiagnosticExportKindSchema),
+	sessionId: Type.Optional(SessionIdSchema),
+	includeTranscripts: Type.Optional(Type.Boolean()),
+	includeToolLogs: Type.Optional(Type.Boolean()),
+	recentEventLimit: Type.Optional(Type.Integer({ minimum: 1 })),
+});
+export type DiagnosticExportParams = Static<typeof DiagnosticExportParamsSchema>;
+
+export const DiagnosticExportResultSchema = StrictObject({
+	export: DiagnosticExportSchema,
+	content: Type.Optional(Type.String()),
+	filename: Type.Optional(Type.String()),
+	path: Type.Optional(Type.String()),
+});
+export type DiagnosticExportResult = Static<typeof DiagnosticExportResultSchema>;

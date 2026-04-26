@@ -34,19 +34,22 @@ export function integrationArtifactChips(state: IntegrationProviderState): reado
 		...state.issues.map((issue) => ({
 			id: `${state.provider}:issue:${issue.id}`,
 			kind: "issue" as const,
-			label: issue.title,
+			label: issue.title ?? `#${issue.number ?? issue.id}`,
 			url: issue.url,
 		})),
 		...state.pullRequests.map((pr) => ({
 			id: `${state.provider}:pr:${pr.number}`,
 			kind: "pr" as const,
-			label: `#${pr.number} ${pr.title}`,
+			label: `#${pr.number}${pr.title ? ` ${pr.title}` : ""}`,
 			url: pr.url,
 		})),
 	];
 }
 
-export function integrationPanelViewModel(state: IntegrationProviderState, load: IntegrationLoadState = {}): IntegrationPanelViewModel {
+export function integrationPanelViewModel(
+	state: IntegrationProviderState,
+	load: IntegrationLoadState = {},
+): IntegrationPanelViewModel {
 	const repo = state.repository ? `${state.repository.owner}/${state.repository.name}` : "No repository detected";
 	const failures = state.ciChecks.filter((check) => check.status === "failure").length;
 	const pending = state.ciChecks.filter((check) => check.status === "queued" || check.status === "in_progress").length;
@@ -54,16 +57,26 @@ export function integrationPanelViewModel(state: IntegrationProviderState, load:
 		provider: state.provider,
 		status: state.status,
 		repositoryLabel: repo,
-		backendStatus: state.message ?? state.syncErrors[0]?.message ?? (state.status === "authenticated" ? "GitHub CLI connected" : "GitHub CLI needs attention"),
+		backendStatus:
+			state.message ??
+			state.syncErrors?.[0]?.message ??
+			(state.status === "authenticated" ? "GitHub CLI connected" : "GitHub CLI needs attention"),
 		issueCount: state.issues.length,
 		pullRequestCount: state.pullRequests.length,
-		ciSummary: state.ciChecks.length === 0 ? "No CI checks" : `${state.ciChecks.length} checks · ${failures} failing · ${pending} pending`,
+		ciSummary:
+			state.ciChecks.length === 0
+				? "No CI checks"
+				: `${state.ciChecks.length} checks · ${failures} failing · ${pending} pending`,
 		loading: load.loading === true,
-		error: load.error ?? state.syncErrors[0]?.message,
+		error: load.error ?? state.syncErrors?.[0]?.message,
 	};
 }
 
-export function prCreateApprovalSummary(input: { readonly title: string; readonly head: string; readonly base?: string }): string {
+export function prCreateApprovalSummary(input: {
+	readonly title: string;
+	readonly head: string;
+	readonly base?: string;
+}): string {
 	return `Create GitHub pull request \"${input.title}\" from ${input.head}${input.base ? ` into ${input.base}` : ""}`;
 }
 

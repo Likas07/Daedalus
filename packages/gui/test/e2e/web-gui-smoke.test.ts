@@ -104,15 +104,20 @@ describe("web GUI E2E smoke", () => {
 		await git(tempDir, "add", "file.txt");
 		await git(tempDir, "commit", "-m", "initial");
 		writeFileSync(join(tempDir, "file.txt"), "after\n");
-		server = await startAppServer({ databasePath: join(tempDir, "app.sqlite"), agentDir: join(tempDir, "agent"), runtimeFactory, terminalPty });
+		server = await startAppServer({
+			databasePath: join(tempDir, "app.sqlite"),
+			agentDir: join(tempDir, "agent"),
+			runtimeFactory,
+			terminalPty,
+		});
 
 		const init = await request(server, "initialize", { protocolVersion: "1", client: { name: "web-gui-smoke" } });
 		expect(init).toMatchObject({ capabilities: expect.any(Object) });
 
-		const opened = await request(server, "project/open", { path: tempDir }) as { projectId: string };
+		const opened = (await request(server, "project/open", { path: tempDir })) as { projectId: string };
 		expect(opened.projectId).toBeTruthy();
 
-		const commands = await request(server, "composer/command-list", { projectId: opened.projectId, query: ">" }) as { commands: unknown[] };
+		const commands = (await request(server, "composer/command-list", {})) as { commands: unknown[] };
 		expect(commands.commands.length).toBeGreaterThan(0);
 
 		const session = { sessionId: "web-gui-smoke-session" };
@@ -121,22 +126,41 @@ describe("web GUI E2E smoke", () => {
 			type: "session/started",
 			ts: new Date(0).toISOString(),
 			sessionId: session.sessionId,
-			payload: { sessionId: session.sessionId, projectId: opened.projectId, cwd: tempDir, title: "SQLite-backed GUI smoke session" },
+			payload: {
+				sessionId: session.sessionId,
+				projectId: opened.projectId,
+				cwd: tempDir,
+				title: "SQLite-backed GUI smoke session",
+			},
 		};
 		server.router.append(started);
-		const sessionList = await request(server, "session/list", { projectId: opened.projectId }) as { sessions: unknown[] };
+		const sessionList = (await request(server, "session/list", { cwd: tempDir })) as {
+			sessions: unknown[];
+		};
 		expect(sessionList.sessions).toBeDefined();
 
 		expect(await request(server, "auth/status", {})).toHaveProperty("providers");
-		const terminal = await request(server, "terminal/create", { cwd: tempDir, cols: 80, rows: 24 }) as { terminal: { id: string } };
-		expect(terminal.terminal.id).toBeTruthy();
-		expect(await request(server, "terminal/input", { terminalId: terminal.terminal.id, data: "echo daedalus-gui-smoke\n" })).toEqual({});
-		expect(await request(server, "terminal/replay", { terminalId: terminal.terminal.id })).toHaveProperty("chunks");
+		const terminal = (await request(server, "terminal/create", { cwd: tempDir, cols: 80, rows: 24 })) as {
+			terminal: { terminalId: string };
+		};
+		expect(terminal.terminal.terminalId).toBeTruthy();
+		expect(
+			await request(server, "terminal/input", {
+				terminalId: terminal.terminal.terminalId,
+				data: "echo daedalus-gui-smoke\n",
+			}),
+		).toEqual({});
+		expect(await request(server, "terminal/replay", { terminalId: terminal.terminal.terminalId })).toHaveProperty(
+			"chunks",
+		);
 
-		const diff = await request(server, "diff/get", { diffId: opened.projectId }) as { diff: { files: unknown[] } };
+		const diff = (await request(server, "diff/get", { diffId: opened.projectId })) as { diff: { files: unknown[] } };
 		expect(diff.diff.files).toBeDefined();
 
-		const exported = await request(server, "diagnostics/export", { kind: "support-bundle" }) as { filename: string; content: string };
+		const exported = (await request(server, "diagnostics/export", { kind: "support-bundle" })) as {
+			filename: string;
+			content: string;
+		};
 		expect(exported.filename).toContain("daedalus-support");
 		expect(exported.content).toContain("runtimeDiagnostics");
 
@@ -148,7 +172,9 @@ describe("web GUI E2E smoke", () => {
 			payload: { sessionId: session.sessionId, projectId: opened.projectId, title: "Replay" },
 		};
 		server.router.append(replayEvent);
-		const replay = await request(server, "event/replay", { types: ["session/started"], cursor: { after: 0 } }) as { events: AppEvent[] };
+		const replay = (await request(server, "event/replay", { types: ["session/started"], cursor: { after: 0 } })) as {
+			events: AppEvent[];
+		};
 		expect(replay.events.some((event) => event.id === replayEvent.id)).toBe(true);
 	});
 });

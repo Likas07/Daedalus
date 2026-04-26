@@ -1,52 +1,74 @@
-import type { SessionId } from "./ids";
+import { type Static, type TSchema, Type } from "@sinclair/typebox";
+import { SessionIdSchema } from "./ids";
 
-export type AuditEntryKind =
-	| "transcript"
-	| "tool"
-	| "approval"
-	| "file-edit"
-	| "diff"
-	| "terminal"
-	| "git"
-	| "pr"
-	| "diagnostic"
-	| "extension"
-	| "automation";
-export type AutomationRuleKind = "background-agent" | "post-run-review" | "test-status" | "cleanup";
+const StrictObject = <Properties extends Record<string, TSchema>>(properties: Properties) =>
+	Type.Object(properties, { additionalProperties: false });
 
-export interface AuditEntry {
-	readonly id: string;
-	readonly ts: string;
-	readonly kind: AuditEntryKind;
-	readonly title: string;
-	readonly summary: string;
-	readonly sessionId?: SessionId;
-	readonly actor?: string;
-	readonly target?: string;
-	readonly destructive?: boolean;
-	readonly metadata?: Record<string, unknown>;
-}
-export interface AuditTrailProjection {
-	readonly entries: readonly AuditEntry[];
-	readonly updatedAt?: string;
-}
-export interface AutomationRule {
-	readonly id: string;
-	readonly kind: AutomationRuleKind;
-	readonly title: string;
-	readonly description: string;
-	readonly enabled: boolean;
-	readonly requiresConfirmation: boolean;
-	readonly destructive?: boolean;
-}
-export interface AutomationProjection {
-	readonly rules: readonly AutomationRule[];
-	readonly suggestions: readonly AuditEntry[];
-	readonly updatedAt?: string;
-}
-export interface AuditQuery {
-	readonly sessionId?: SessionId;
-	readonly kinds?: readonly AuditEntryKind[];
-	readonly text?: string;
-	readonly limit?: number;
-}
+export const AuditEntryKindSchema = Type.Union([
+	Type.Literal("transcript"),
+	Type.Literal("tool"),
+	Type.Literal("approval"),
+	Type.Literal("file-edit"),
+	Type.Literal("diff"),
+	Type.Literal("terminal"),
+	Type.Literal("git"),
+	Type.Literal("pr"),
+	Type.Literal("diagnostic"),
+	Type.Literal("extension"),
+	Type.Literal("automation"),
+]);
+export type AuditEntryKind = Static<typeof AuditEntryKindSchema>;
+
+export const AutomationRuleKindSchema = Type.Union([
+	Type.Literal("background-agent"),
+	Type.Literal("post-run-review"),
+	Type.Literal("test-status"),
+	Type.Literal("cleanup"),
+]);
+export type AutomationRuleKind = Static<typeof AutomationRuleKindSchema>;
+
+export const AuditEntrySchema = StrictObject({
+	id: Type.String({ minLength: 1 }),
+	ts: Type.String({ minLength: 1 }),
+	kind: AuditEntryKindSchema,
+	title: Type.String(),
+	summary: Type.String(),
+	sessionId: Type.Optional(SessionIdSchema),
+	actor: Type.Optional(Type.String()),
+	target: Type.Optional(Type.String()),
+	destructive: Type.Optional(Type.Boolean()),
+	metadata: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+});
+export type AuditEntry = Static<typeof AuditEntrySchema>;
+
+export const AuditTrailProjectionSchema = StrictObject({
+	entries: Type.Array(AuditEntrySchema),
+	updatedAt: Type.Optional(Type.String({ minLength: 1 })),
+});
+export type AuditTrailProjection = Static<typeof AuditTrailProjectionSchema>;
+
+export const AutomationRuleSchema = StrictObject({
+	id: Type.String({ minLength: 1 }),
+	kind: AutomationRuleKindSchema,
+	title: Type.String(),
+	description: Type.String(),
+	enabled: Type.Boolean(),
+	requiresConfirmation: Type.Boolean(),
+	destructive: Type.Optional(Type.Boolean()),
+});
+export type AutomationRule = Static<typeof AutomationRuleSchema>;
+
+export const AutomationProjectionSchema = StrictObject({
+	rules: Type.Array(AutomationRuleSchema),
+	suggestions: Type.Array(AuditEntrySchema),
+	updatedAt: Type.Optional(Type.String({ minLength: 1 })),
+});
+export type AutomationProjection = Static<typeof AutomationProjectionSchema>;
+
+export const AuditQuerySchema = StrictObject({
+	sessionId: Type.Optional(SessionIdSchema),
+	kinds: Type.Optional(Type.Array(AuditEntryKindSchema)),
+	text: Type.Optional(Type.String()),
+	limit: Type.Optional(Type.Integer({ minimum: 1 })),
+});
+export type AuditQuery = Static<typeof AuditQuerySchema>;
