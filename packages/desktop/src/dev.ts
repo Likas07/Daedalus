@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 const host = "127.0.0.1";
 const guiPort = 5173;
@@ -7,6 +7,7 @@ const guiDevUrl = `http://${host}:${guiPort}/`;
 const repoRoot = resolve(import.meta.dir, "../../..");
 const desktopRoot = resolve(import.meta.dir, "..");
 const guiRoot = resolve(repoRoot, "packages/gui");
+const devMainEntry = join(desktopRoot, ".daedalus", "desktop-dev", "main.js");
 
 type DevSubprocess = ReturnType<typeof Bun.spawn>;
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -17,6 +18,10 @@ export interface WaitForUrlOptions {
 	timeoutMs?: number;
 	intervalMs?: number;
 	fetcher?: Fetcher;
+}
+
+export function electronDevCommand(entry = devMainEntry): string[] {
+	return ["electron", entry];
 }
 
 export async function isUrlServing(url: string, fetcher: Fetcher = fetch): Promise<boolean> {
@@ -68,7 +73,7 @@ async function main(): Promise<void> {
 		return;
 	}
 
-	const electron = spawn("electron", ["electron", "."], {
+	const electron = spawn("electron", electronDevCommand(), {
 		cwd: desktopRoot,
 		env: {
 			DAEDALUS_PROJECT_ROOT: repoRoot,

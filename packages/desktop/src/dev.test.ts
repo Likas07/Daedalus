@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isUrlServing, waitForUrl } from "./dev";
+import { electronDevCommand, isUrlServing, waitForUrl } from "./dev";
 
 describe("desktop dev launcher helpers", () => {
 	test("isUrlServing returns true only for successful responses", async () => {
@@ -35,5 +35,12 @@ describe("desktop dev launcher helpers", () => {
 				fetcher: async () => new Response("not ready", { status: 503 }),
 			}),
 		).rejects.toThrow("Timed out waiting for http://example.test: HTTP 503");
+	});
+
+	test("launches Electron from the freshly built dev main entry", () => {
+		expect(electronDevCommand("/repo/packages/desktop/.daedalus/desktop-dev/main.js")).toEqual([
+			"electron",
+			"/repo/packages/desktop/.daedalus/desktop-dev/main.js",
+		]);
 	});
 });
