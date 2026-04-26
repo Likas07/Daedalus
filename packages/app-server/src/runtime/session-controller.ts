@@ -34,9 +34,12 @@ export type RuntimeFactory = (input: RuntimeFactoryInput) => Promise<ControlledS
 export interface SessionControllerOptions {
 	readonly runtimeFactory: RuntimeFactory;
 	readonly eventSink: RuntimeEventSink;
-	readonly makeSessionManager: (input: { cwd: string; sessionPath?: string; sessionId?: string; parentSession?: string }) =>
-		| RuntimeSessionManager
-		| Promise<RuntimeSessionManager>;
+	readonly makeSessionManager: (input: {
+		cwd: string;
+		sessionPath?: string;
+		sessionId?: string;
+		parentSession?: string;
+	}) => RuntimeSessionManager | Promise<RuntimeSessionManager>;
 	readonly agentDir: string;
 	readonly nextSessionId?: () => SessionId;
 	readonly nextTurnId?: () => TurnId;
@@ -65,6 +68,8 @@ export interface StartSessionInput {
 	readonly prompt?: string;
 	readonly sessionId?: SessionId;
 	readonly context?: PromptContextInput;
+	readonly projectId?: string;
+	readonly worktreeId?: string;
 }
 
 export interface ResumeSessionInput {
@@ -121,7 +126,13 @@ export class SessionController {
 			type: "session/started",
 			ts: this.nowIso(),
 			sessionId,
-			payload: { sessionId, cwd: runtime.cwd, sessionFile: runtime.session.sessionFile },
+			payload: {
+				sessionId,
+				cwd: runtime.cwd,
+				sessionFile: runtime.session.sessionFile,
+				projectId: input.projectId,
+				worktreeId: input.worktreeId,
+			},
 		});
 		await this.emit({ kind: "notification", method: "session/changed", params: { sessionId, status: "active" } });
 		if (input.prompt) {
@@ -135,7 +146,11 @@ export class SessionController {
 		const runtime = await this.options.runtimeFactory({
 			cwd: input.cwd,
 			agentDir: this.options.agentDir,
-			sessionManager: await this.options.makeSessionManager({ cwd: input.cwd, sessionPath: input.sessionPath, sessionId }),
+			sessionManager: await this.options.makeSessionManager({
+				cwd: input.cwd,
+				sessionPath: input.sessionPath,
+				sessionId,
+			}),
 			sessionId,
 			applyProcessCwd: false,
 		});
@@ -160,7 +175,7 @@ export class SessionController {
 			type: "turn/started",
 			ts: this.nowIso(),
 			sessionId: input.sessionId,
-			payload: { sessionId: input.sessionId, turnId, prompt: input.prompt },
+			payload: { sessionId: input.sessionId, turnId, role: "user", content: input.prompt, prompt: input.prompt },
 		});
 		await this.emit({
 			kind: "notification",
@@ -200,7 +215,13 @@ export class SessionController {
 	}
 
 	async emitRuntimeControlChanged(sessionId: SessionId, control: string, payload: unknown): Promise<void> {
-		await this.emit({ id: this.nextEventId(), type: "runtime/control-changed", ts: this.nowIso(), sessionId, payload: { sessionId, control, ...((payload && typeof payload === "object") ? payload : { value: payload }) } });
+		await this.emit({
+			id: this.nextEventId(),
+			type: "runtime/control-changed",
+			ts: this.nowIso(),
+			sessionId,
+			payload: { sessionId, control, ...(payload && typeof payload === "object" ? payload : { value: payload }) },
+		});
 		await this.emit({ kind: "notification", method: "runtime/changed", params: { sessionId, control, payload } });
 	}
 
@@ -251,7 +272,10 @@ export class SessionController {
 		return record;
 	}
 
-	private async resolvePromptContext(cwd: string, context?: PromptContextInput): Promise<{ preamble?: string; images?: ImageContent[] }> {
+	private async resolvePromptContext(
+		cwd: string,
+		context?: PromptContextInput,
+	): Promise<{ preamble?: string; images?: ImageContent[] }> {
 		if (!context || !this.options.promptContextResolver) return {};
 		return this.options.promptContextResolver.resolve({ ...context, cwd });
 	}

@@ -825,7 +825,14 @@ async function hydrateGuiState(client: AppServerClient, state: GuiState): Promis
 	});
 	await safeHydrateStep(state, "sessions", async () => {
 		const result = (await client.request("session/list", {})) as {
-			sessions?: Array<{ id?: string; sessionId?: string; title?: string; status?: string }>;
+			sessions?: Array<{
+				id?: string;
+				sessionId?: string;
+				title?: string;
+				name?: string;
+				status?: string;
+				archived?: boolean;
+			}>;
 		};
 		for (const session of result.sessions ?? []) {
 			const id =
@@ -834,7 +841,12 @@ async function hydrateGuiState(client: AppServerClient, state: GuiState): Promis
 					: typeof session.sessionId === "string"
 						? session.sessionId
 						: undefined;
-			if (id) upsertSession(state, { id, title: session.title ?? id, status: session.status ?? "active" });
+			if (id)
+				upsertSession(state, {
+					id,
+					title: session.title ?? session.name ?? id,
+					status: session.status ?? (session.archived ? "archived" : "active"),
+				});
 		}
 	});
 	await safeHydrateStep(state, "worktrees", async () => {
@@ -893,9 +905,9 @@ async function hydrateGuiState(client: AppServerClient, state: GuiState): Promis
 		state.accessPolicy = result.policy;
 		state.accessMode = result.policy.mode;
 	});
-	await safeHydrateStep(state, "events", async () => {
-		const result = await client.replayEvents({});
-		for (const event of result.events ?? []) recordEvent(state, event);
+	await safeHydrateStep(state, "event-cursor", async () => {
+		const result = await client.replayEvents({ cursor: { after: state.lastEventCursor }, types: [] });
+		state.lastEventCursor = result.next?.after ?? state.lastEventCursor;
 	});
 }
 

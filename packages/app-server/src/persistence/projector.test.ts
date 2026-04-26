@@ -129,6 +129,52 @@ describe("runtime event projector", () => {
 		expect(listTerminalSessions(db, "project-1")[0]).toMatchObject({ id: "terminal-1", cwd: "/repo" });
 		expect(listIntegrationResources(db)).toEqual([]);
 	});
+
+	test("survives restart-style projection and normalizes live runtime messages", () => {
+		const db = migratedInMemoryDatabase();
+
+		appendEvent(db, {
+			streamId: "project:project-2",
+			type: "project/registered",
+			payload: { projectId: "project-2", name: "Repo", path: "/repo" },
+		});
+		appendEvent(db, {
+			streamId: "session-2",
+			type: "session/started",
+			payload: { sessionId: "session-2", projectId: "project-2", title: "Restart me" },
+		});
+		appendEvent(db, {
+			streamId: "session-2",
+			type: "agent/message_end",
+			payload: { message: { id: "message-1", role: "assistant", content: "durable answer" } },
+		});
+		appendEvent(db, {
+			streamId: "terminal-2",
+			type: "terminal/closed",
+			payload: {
+				terminalId: "terminal-2",
+				projectId: "project-2",
+				cwd: "/repo",
+				status: "exited",
+				history: "hello",
+				exitCode: 0,
+			},
+		});
+
+		expect(projectRuntimeEvents(db)).toMatchObject({ projected: 4, lastSeq: 4 });
+		expect(projectRuntimeEvents(db)).toEqual({ projected: 0, lastSeq: 4 });
+
+		expect(listProjectSessions(db, "project-2")[0]).toMatchObject({ id: "session-2", title: "Restart me" });
+		expect(listSessionTurns(db, "session-2")).toEqual([
+			expect.objectContaining({ id: "message-1", role: "assistant", content: "durable answer" }),
+		]);
+		expect(listTerminalSessions(db, "project-2")[0]).toMatchObject({
+			id: "terminal-2",
+			status: "exited",
+			history: "hello",
+			exitCode: 0,
+		});
+	});
 });
 
 function rowCount(database: AppServerDatabase, table: string): number {

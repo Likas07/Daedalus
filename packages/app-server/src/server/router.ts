@@ -216,6 +216,8 @@ export class AppRouter {
 				return this.options.controller.startSession({
 					cwd,
 					prompt: request.params.prompt,
+					projectId: request.params.projectId,
+					worktreeId: request.params.worktreeId,
 					context: request.params,
 				});
 			}

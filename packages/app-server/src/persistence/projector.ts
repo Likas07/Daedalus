@@ -70,6 +70,9 @@ function projectEvent(database: AppServerDatabase, event: StoredEvent): void {
 		case "turn/completed":
 			projectTurn(database, payload, occurredAt);
 			break;
+		case "agent/message_end":
+			projectAgentMessage(database, event, payload, occurredAt);
+			break;
 		case "approval/requested":
 			projectApprovalRequested(database, payload, occurredAt);
 			break;
@@ -80,6 +83,7 @@ function projectEvent(database: AppServerDatabase, event: StoredEvent): void {
 			projectCheckpoint(database, payload, occurredAt);
 			break;
 		case "terminal/started":
+		case "terminal/closed":
 			projectTerminal(database, payload, occurredAt);
 			break;
 	}
@@ -150,6 +154,34 @@ function projectTurn(database: AppServerDatabase, payload: PayloadRecord, create
 			 ON CONFLICT(id) DO UPDATE SET session_id = excluded.session_id, role = excluded.role, content = excluded.content`,
 		)
 		.run(id, sessionId, text(payload, "role") ?? "assistant", content(payload), createdAt);
+}
+
+function projectAgentMessage(
+	database: AppServerDatabase,
+	event: StoredEvent,
+	payload: PayloadRecord,
+	createdAt: string,
+): void {
+	const message = asRecord(payload.message);
+	const sessionId = text(payload, "sessionId", "session_id") ?? event.streamId;
+	if (!sessionId || sessionId === "app") return;
+	const id =
+		text(payload, "messageId", "message_id", "id") ??
+		text(message, "id", "messageId", "message_id") ??
+		`${event.seq}`;
+	database
+		.query(
+			`INSERT INTO turns (id, session_id, role, content, created_at)
+			 VALUES (?, ?, ?, ?, ?)
+			 ON CONFLICT(id) DO UPDATE SET session_id = excluded.session_id, role = excluded.role, content = excluded.content`,
+		)
+		.run(
+			id,
+			sessionId,
+			text(message, "role") ?? text(payload, "role") ?? "assistant",
+			content(message) || content(payload),
+			createdAt,
+		);
 }
 
 function projectApprovalRequested(database: AppServerDatabase, payload: PayloadRecord, createdAt: string): void {
