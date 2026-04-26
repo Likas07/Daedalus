@@ -1,12 +1,17 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { serializeSessionJsonl, type SessionEntry, type SessionMessageEntry } from "@daedalus-pi/coding-agent";
+import { type SessionEntry, type SessionMessageEntry, serializeSessionJsonl } from "@daedalus-pi/coding-agent";
 import type { AppServerDatabase } from "../persistence/database";
 import { openAppServerDatabase } from "../persistence/database";
 import { runMigrations } from "../persistence/migrations";
-import { AppRouter } from "./router";
-import { SessionController, type ControlledSessionRuntime, type RuntimeSessionManager } from "../runtime/session-controller";
+import {
+	type ControlledSessionRuntime,
+	type RuntimeControllerMessage,
+	type RuntimeSessionManager,
+	SessionController,
+} from "../runtime/session-controller";
 import { SqliteSessionManager } from "../runtime/sqlite-session-manager";
 import { SqliteSessionStore } from "../sessions/sqlite-session-store";
+import { AppRouter } from "./router";
 
 let database: AppServerDatabase | undefined;
 
@@ -81,16 +86,25 @@ class PromptRecordingRuntime implements ControlledSessionRuntime {
 	async dispose(): Promise<void> {}
 }
 
-function appRouterWithRealController(): { appRouter: AppRouter; sessionStore: SqliteSessionStore; runtimes: PromptRecordingRuntime[] } {
+function appRouterWithRealController(): {
+	appRouter: AppRouter;
+	sessionStore: SqliteSessionStore;
+	runtimes: PromptRecordingRuntime[];
+	events: RuntimeControllerMessage[];
+} {
 	database = openAppServerDatabase(":memory:");
 	runMigrations(database);
 	const sessionStore = new SqliteSessionStore({ database });
 	const runtimes: PromptRecordingRuntime[] = [];
+	const events: RuntimeControllerMessage[] = [];
 	const controller = new SessionController({
 		agentDir: "/agent",
-		eventSink: () => {},
+		eventSink: (event) => {
+			events.push(event);
+		},
 		makeSessionManager: async ({ cwd, sessionId, sessionPath }) =>
 			SqliteSessionManager.create({ store: sessionStore, cwd, sessionId, sessionPath }).initialized(),
+		nextEventId: () => `event-${events.length + 1}`,
 		nextSessionId: () => "session-controller-id",
 		nextTurnId: () => "turn-1",
 		runtimeFactory: async ({ cwd, sessionManager }) => {
@@ -99,65 +113,180 @@ function appRouterWithRealController(): { appRouter: AppRouter; sessionStore: Sq
 			return runtime;
 		},
 	});
-	return { appRouter: new AppRouter({ database, publish: () => {}, controller }), sessionStore, runtimes };
+	return { appRouter: new AppRouter({ database, publish: () => {}, controller }), sessionStore, runtimes, events };
+}
+
+function controllerEvent(events: RuntimeControllerMessage[], type: string): RuntimeControllerMessage {
+	const event = events.find((message) => "type" in message && message.type === type);
+	expect(event).toBeTruthy();
+	return event as RuntimeControllerMessage;
 }
 
 describe("session store routes", () => {
 	test("imports and exports JSONL through the router", async () => {
 		const appRouter = router();
 		const content = serializeSessionJsonl({
-			header: { type: "session", version: 3, id: "route-session", timestamp: "2026-04-26T00:00:00.000Z", cwd: "/repo" },
+			header: {
+				type: "session",
+				version: 3,
+				id: "route-session",
+				timestamp: "2026-04-26T00:00:00.000Z",
+				cwd: "/repo",
+			},
 			entries: [userMessage("msg-1", "hello sqlite route")],
 		});
 
-		const imported = await appRouter.handle({ kind: "request", id: "1", method: "session/import-jsonl", params: { content } });
+		const imported = await appRouter.handle({
+			kind: "request",
+			id: "1",
+			method: "session/import-jsonl",
+			params: { content },
+		});
 		expect(imported).toEqual({ sessionId: "route-session" });
 
-		const listed = await appRouter.handle({ kind: "request", id: "2", method: "session/list", params: { cwd: "/repo" } });
+		const listed = await appRouter.handle({
+			kind: "request",
+			id: "2",
+			method: "session/list",
+			params: { cwd: "/repo" },
+		});
 		expect(listed).toMatchObject({ sessions: [{ id: "route-session", messageCount: 1 }] });
 
-		const exported = await appRouter.handle({ kind: "request", id: "3", method: "session/export-jsonl", params: { sessionId: "route-session" } });
+		const exported = await appRouter.handle({
+			kind: "request",
+			id: "3",
+			method: "session/export-jsonl",
+			params: { sessionId: "route-session" },
+		});
 		expect(exported).toEqual({ content, filename: "route-session.jsonl" });
 	});
 
 	test("starts a prompted session through AppRouter with an empty SQLite store", async () => {
-		const { appRouter, sessionStore, runtimes } = appRouterWithRealController();
+		const { appRouter, sessionStore, runtimes, events } = appRouterWithRealController();
 
-		const started = await appRouter.handle({
+		const started = (await appRouter.handle({
 			kind: "request",
 			id: "start",
 			method: "session/start",
 			params: { projectId: "/repo", prompt: "hello from gui" },
-		});
+		})) as { sessionId: string };
 
 		expect(started).toEqual({ sessionId: "session-controller-id" });
-		expect(runtimes[0]?.sessionId).toBe("session-controller-id");
+		expect(runtimes[0]?.sessionId).toBe(started.sessionId);
 		expect(runtimes[0]?.prompts).toEqual(["hello from gui"]);
-		const persisted = await sessionStore.read({ sessionId: "session-controller-id" });
-		expect(persisted.header.id).toBe("session-controller-id");
+		expect(runtimes[0]?.session.sessionFile).toBe(`sqlite://${started.sessionId}`);
+
+		const sessionStarted = controllerEvent(events, "session/started") as {
+			sessionId: string;
+			payload: { sessionId: string };
+		};
+		expect(sessionStarted.sessionId).toBe(started.sessionId);
+		expect(sessionStarted.payload.sessionId).toBe(started.sessionId);
+		const turnStarted = controllerEvent(events, "turn/started") as {
+			sessionId: string;
+			payload: { sessionId: string };
+		};
+		expect(turnStarted.sessionId).toBe(started.sessionId);
+		expect(turnStarted.payload.sessionId).toBe(started.sessionId);
+		const persisted = await sessionStore.read({ sessionId: started.sessionId });
+		expect(persisted.header.id).toBe(started.sessionId);
+		expect(persisted.header.id).toBe(sessionStarted.sessionId);
 		expect(persisted.entries).toHaveLength(1);
-		expect(runtimes[0]?.session.sessionFile).toBe("sqlite://session-controller-id");
 	});
 
-	test("resumes an existing SQLite session through AppRouter", async () => {
-		const { appRouter, sessionStore, runtimes } = appRouterWithRealController();
+	test("starts an empty session then accepts the first turn using the returned id", async () => {
+		const { appRouter, sessionStore, runtimes, events } = appRouterWithRealController();
+
+		const started = (await appRouter.handle({
+			kind: "request",
+			id: "start",
+			method: "session/start",
+			params: { projectId: "/repo" },
+		})) as { sessionId: string };
+
+		expect(started.sessionId).toBe("session-controller-id");
+		expect(runtimes[0]?.sessionId).toBe(started.sessionId);
+		expect(runtimes[0]?.prompts).toEqual([]);
+		expect((await sessionStore.read({ sessionId: started.sessionId })).header.id).toBe(started.sessionId);
+
+		const turn = await appRouter.handle({
+			kind: "request",
+			id: "turn",
+			method: "turn/start",
+			params: { sessionId: started.sessionId, prompt: "first turn after empty start" },
+		});
+
+		expect(turn).toEqual({ turnId: "turn-1" });
+		expect(runtimes[0]?.prompts).toEqual(["first turn after empty start"]);
+		const sessionStarted = controllerEvent(events, "session/started") as {
+			sessionId: string;
+			payload: { sessionId: string };
+		};
+		const turnStarted = controllerEvent(events, "turn/started") as {
+			sessionId: string;
+			payload: { sessionId: string };
+		};
+		expect(sessionStarted.sessionId).toBe(started.sessionId);
+		expect(sessionStarted.payload.sessionId).toBe(started.sessionId);
+		expect(turnStarted.sessionId).toBe(started.sessionId);
+		expect(turnStarted.payload.sessionId).toBe(started.sessionId);
+		const persisted = await sessionStore.read({ sessionId: started.sessionId });
+		expect(persisted.header.id).toBe(started.sessionId);
+		expect(persisted.header.id).toBe(sessionStarted.sessionId);
+		expect(persisted.entries).toHaveLength(1);
+	});
+
+	test("resumes an existing SQLite session then accepts a turn using the resumed id", async () => {
+		const { appRouter, sessionStore, runtimes, events } = appRouterWithRealController();
 		await sessionStore.import({
 			session: {
-				header: { type: "session", version: 3, id: "existing-session", timestamp: "2026-04-26T00:00:00.000Z", cwd: "/repo" },
+				header: {
+					type: "session",
+					version: 3,
+					id: "existing-session",
+					timestamp: "2026-04-26T00:00:00.000Z",
+					cwd: "/repo",
+				},
 				entries: [userMessage("msg-1", "already here")],
 			},
 		});
 
-		const resumed = await appRouter.handle({
+		const resumed = (await appRouter.handle({
 			kind: "request",
 			id: "resume",
 			method: "session/resume",
 			params: { sessionId: "existing-session" },
-		});
+		})) as { sessionId: string; status: string };
 
 		expect(resumed).toEqual({ sessionId: "existing-session", status: "active" });
-		expect(runtimes[0]?.sessionId).toBe("existing-session");
+		expect(runtimes[0]?.sessionId).toBe(resumed.sessionId);
 		expect(runtimes[0]?.initialEntryCount).toBe(1);
-		expect((await sessionStore.read({ sessionId: "existing-session" })).entries).toHaveLength(1);
+		expect((await sessionStore.read({ sessionId: resumed.sessionId })).entries).toHaveLength(1);
+
+		const turn = await appRouter.handle({
+			kind: "request",
+			id: "turn",
+			method: "turn/start",
+			params: { sessionId: resumed.sessionId, prompt: "turn after resume" },
+		});
+
+		expect(turn).toEqual({ turnId: "turn-1" });
+		expect(runtimes[0]?.prompts).toEqual(["turn after resume"]);
+		const sessionResumed = controllerEvent(events, "session/resumed") as {
+			sessionId: string;
+			payload: { sessionId: string };
+		};
+		const turnStarted = controllerEvent(events, "turn/started") as {
+			sessionId: string;
+			payload: { sessionId: string };
+		};
+		expect(sessionResumed.sessionId).toBe(resumed.sessionId);
+		expect(sessionResumed.payload.sessionId).toBe(resumed.sessionId);
+		expect(turnStarted.sessionId).toBe(resumed.sessionId);
+		expect(turnStarted.payload.sessionId).toBe(resumed.sessionId);
+		const persisted = await sessionStore.read({ sessionId: resumed.sessionId });
+		expect(persisted.header.id).toBe(resumed.sessionId);
+		expect(persisted.header.id).toBe(sessionResumed.sessionId);
+		expect(persisted.entries).toHaveLength(2);
 	});
 });

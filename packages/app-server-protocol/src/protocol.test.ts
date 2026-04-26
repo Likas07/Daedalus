@@ -38,6 +38,14 @@ describe("app-server protocol schemas", () => {
 				},
 			}),
 		).toBe(true);
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
+				id: "req-3",
+				method: "session/start",
+				params: { projectId: "project-1" },
+			}),
+		).toBe(true);
 	});
 
 	test("validates turn/start requests", () => {
@@ -190,7 +198,9 @@ describe("app-server protocol schemas", () => {
 			{ method: "session/tree", params: { rootSessionId: "session-1", includeArchived: false } },
 		];
 		for (const request of requests) {
-			expect(Value.Check(ClientRequestSchema, { kind: "request", id: `req-${request.method}`, ...request })).toBe(true);
+			expect(Value.Check(ClientRequestSchema, { kind: "request", id: `req-${request.method}`, ...request })).toBe(
+				true,
+			);
 		}
 	});
 
@@ -211,7 +221,9 @@ describe("app-server protocol schemas", () => {
 			{ method: "runtime/get-keybindings", params: {} },
 		];
 		for (const request of requests) {
-			expect(Value.Check(ClientRequestSchema, { kind: "request", id: `req-${request.method}`, ...request })).toBe(true);
+			expect(Value.Check(ClientRequestSchema, { kind: "request", id: `req-${request.method}`, ...request })).toBe(
+				true,
+			);
 		}
 	});
 	test("rejects invalid GUI protocol values", () => {

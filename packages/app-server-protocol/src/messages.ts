@@ -1,8 +1,24 @@
 import { type Static, type TSchema, Type } from "@sinclair/typebox";
 import { AccessModeSchema } from "./access-policy";
-import { ComposerAttachmentSaveParamsSchema, ComposerCommandListParamsSchema, ComposerFileSearchParamsSchema } from "./composer";
+import {
+	ComposerAttachmentSaveParamsSchema,
+	ComposerCommandListParamsSchema,
+	ComposerFileSearchParamsSchema,
+} from "./composer";
 import { EventReplayParamsSchema, EventReplayResultSchema } from "./events";
 import { ExtensionUiRequestSchema, ExtensionUiResponseSchema } from "./extension-ui";
+import {
+	ApprovalIdSchema,
+	CheckpointIdSchema,
+	DiffIdSchema,
+	ProjectIdSchema,
+	ProtocolVersionSchema,
+	RequestIdSchema,
+	SessionIdSchema,
+	TerminalIdSchema,
+	TurnIdSchema,
+	WorktreeIdSchema,
+} from "./ids";
 import {
 	RuntimeAbortParamsSchema,
 	RuntimeCommandsParamsSchema,
@@ -30,18 +46,6 @@ import {
 	SessionStatsParamsSchema,
 	SessionTreeParamsSchema,
 } from "./session-store";
-import {
-	ApprovalIdSchema,
-	CheckpointIdSchema,
-	DiffIdSchema,
-	ProjectIdSchema,
-	ProtocolVersionSchema,
-	RequestIdSchema,
-	SessionIdSchema,
-	TerminalIdSchema,
-	TurnIdSchema,
-	WorktreeIdSchema,
-} from "./ids";
 
 const EmptyParamsSchema = Type.Object({});
 const JsonObjectSchema = Type.Record(Type.String(), Type.Unknown());
@@ -94,7 +98,7 @@ export const SessionStartParamsSchema = Type.Intersect([
 	Type.Object({
 		projectId: ProjectIdSchema,
 		worktreeId: Type.Optional(WorktreeIdSchema),
-		prompt: Type.String({ minLength: 1 }),
+		prompt: Type.Optional(Type.String({ minLength: 1 })),
 	}),
 	PromptContextParamsSchema,
 ]);
@@ -109,14 +113,22 @@ export const TurnStartParamsSchema = Type.Intersect([
 ]);
 export type TurnStartParams = Static<typeof TurnStartParamsSchema>;
 
-
-export const ResourceKindSchema = Type.Union([Type.Literal("extension"), Type.Literal("skill"), Type.Literal("prompt-template"), Type.Literal("theme"), Type.Literal("package")]);
+export const ResourceKindSchema = Type.Union([
+	Type.Literal("extension"),
+	Type.Literal("skill"),
+	Type.Literal("prompt-template"),
+	Type.Literal("theme"),
+	Type.Literal("package"),
+]);
 export const ResourceOperationParamsSchema = Type.Object({
-  kind: ResourceKindSchema,
-  id: Type.String({ minLength: 1 }),
-  sourcePath: Type.Optional(Type.String({ minLength: 1 })),
+	kind: ResourceKindSchema,
+	id: Type.String({ minLength: 1 }),
+	sourcePath: Type.Optional(Type.String({ minLength: 1 })),
 });
-export const ResourceListResultSchema = Type.Object({ resources: Type.Array(Type.Unknown()), diagnostics: Type.Array(Type.String()) });
+export const ResourceListResultSchema = Type.Object({
+	resources: Type.Array(Type.Unknown()),
+	diagnostics: Type.Array(Type.String()),
+});
 export type ResourceListResult = Static<typeof ResourceListResultSchema>;
 export type ResourceOperationParams = Static<typeof ResourceOperationParamsSchema>;
 export const ClientRequestSchema = Type.Union([
@@ -124,7 +136,15 @@ export const ClientRequestSchema = Type.Union([
 	request("project/list", EmptyParamsSchema),
 	request("project/open", Type.Object({ path: Type.String({ minLength: 1 }) })),
 	request("worktree/list", Type.Object({ projectId: ProjectIdSchema })),
-	request("worktree/create", Type.Object({ projectId: ProjectIdSchema, branch: Type.String({ minLength: 1 }), path: Type.Optional(Type.String({ minLength: 1 })), baseBranch: Type.Optional(Type.String({ minLength: 1 })) })),
+	request(
+		"worktree/create",
+		Type.Object({
+			projectId: ProjectIdSchema,
+			branch: Type.String({ minLength: 1 }),
+			path: Type.Optional(Type.String({ minLength: 1 })),
+			baseBranch: Type.Optional(Type.String({ minLength: 1 })),
+		}),
+	),
 	request("session/start", SessionStartParamsSchema),
 	request("session/stop", Type.Object({ sessionId: SessionIdSchema })),
 	request("session/list", SessionListParamsSchema),
@@ -154,8 +174,21 @@ export const ClientRequestSchema = Type.Union([
 	request("runtime/get-commands", RuntimeCommandsParamsSchema),
 	request("runtime/get-keybindings", RuntimeKeybindingsParamsSchema),
 	request("settings/read", EmptyParamsSchema),
-	request("settings/set", Type.Object({ scope: Type.Union([Type.Literal("global"), Type.Literal("project")]), key: Type.String({ minLength: 1 }), value: Type.Unknown() })),
-	request("settings/reset", Type.Object({ scope: Type.Union([Type.Literal("global"), Type.Literal("project")]), key: Type.String({ minLength: 1 }) })),
+	request(
+		"settings/set",
+		Type.Object({
+			scope: Type.Union([Type.Literal("global"), Type.Literal("project")]),
+			key: Type.String({ minLength: 1 }),
+			value: Type.Unknown(),
+		}),
+	),
+	request(
+		"settings/reset",
+		Type.Object({
+			scope: Type.Union([Type.Literal("global"), Type.Literal("project")]),
+			key: Type.String({ minLength: 1 }),
+		}),
+	),
 	request("settings/reload-resources", EmptyParamsSchema),
 	request("resources/list", EmptyParamsSchema),
 	request("resources/reload", EmptyParamsSchema),
@@ -180,7 +213,10 @@ export const ClientRequestSchema = Type.Union([
 	request("git/unstage", Type.Object({ diffId: DiffIdSchema, paths: Type.Array(Type.String({ minLength: 1 })) })),
 	request("git/discard", Type.Object({ diffId: DiffIdSchema, paths: Type.Array(Type.String({ minLength: 1 })) })),
 	request("git/commit", Type.Object({ diffId: DiffIdSchema, message: Type.String() })),
-	request("git/checkpoint-restore", Type.Object({ diffId: DiffIdSchema, checkpointRef: Type.String({ minLength: 1 }) })),
+	request(
+		"git/checkpoint-restore",
+		Type.Object({ diffId: DiffIdSchema, checkpointRef: Type.String({ minLength: 1 }) }),
+	),
 	request("composer/file-search", ComposerFileSearchParamsSchema),
 	request("composer/command-list", ComposerCommandListParamsSchema),
 	request("composer/attachment/save", ComposerAttachmentSaveParamsSchema),
@@ -341,7 +377,10 @@ export const ServerNotificationSchema = Type.Union([
 	notification("integration/changed", Type.Object({ provider: Type.String(), status: Type.String() })),
 	notification("access/changed", Type.Object({ mode: AccessModeSchema })),
 	notification("event/appended", Type.Object({ event: Type.Unknown() })),
-	notification("runtime/changed", Type.Object({ sessionId: SessionIdSchema, control: Type.String(), payload: Type.Unknown() })),
+	notification(
+		"runtime/changed",
+		Type.Object({ sessionId: SessionIdSchema, control: Type.String(), payload: Type.Unknown() }),
+	),
 ]);
 export type ServerNotification = Static<typeof ServerNotificationSchema>;
 
