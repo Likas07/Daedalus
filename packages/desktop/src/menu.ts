@@ -38,6 +38,13 @@ export function installDaedalusMenu(options: InstallDaedalusMenuOptions): void {
 			submenu: [
 				{ label: "Open Project…", accelerator: "CmdOrCtrl+O", click: openProject },
 				{
+					label: "Open File…",
+					accelerator: "CmdOrCtrl+Shift+O",
+					click: () => options.router?.send("open-file", {}),
+				},
+				{ label: "Reveal Project in Folder", click: () => options.router?.send("open-folder", {}) },
+				{ label: "Open Project in External Editor", click: () => options.router?.send("open-external-editor", {}) },
+				{
 					label: "Recent Projects",
 					submenu: [
 						...listRecentProjects().map((project) => ({
@@ -45,7 +52,13 @@ export function installDaedalusMenu(options: InstallDaedalusMenuOptions): void {
 							click: () => options.router?.send("open-recent-project", { path: project.path }),
 						})),
 						{ type: "separator" },
-						{ label: "Clear Recent Projects", click: () => { clearRecentProjects(); options.onRecentProjectsChanged?.(); } },
+						{
+							label: "Clear Recent Projects",
+							click: () => {
+								clearRecentProjects();
+								options.onRecentProjectsChanged?.();
+							},
+						},
 					],
 				},
 			],
@@ -56,7 +69,11 @@ export function installDaedalusMenu(options: InstallDaedalusMenuOptions): void {
 				{ role: "reload" },
 				{ role: "toggleDevTools" },
 				{ type: "separator" },
-				{ label: "Toggle Terminal", accelerator: "Ctrl+`", click: () => options.router?.send("toggle-terminal", {}) },
+				{
+					label: "Toggle Terminal",
+					accelerator: "Ctrl+`",
+					click: () => options.router?.send("toggle-terminal", {}),
+				},
 				{ label: "Export Diagnostics…", click: () => options.router?.send("export-diagnostics", {}) },
 				{ type: "separator" },
 				{ role: "resetZoom" },

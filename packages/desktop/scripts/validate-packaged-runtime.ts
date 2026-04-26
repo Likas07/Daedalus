@@ -9,7 +9,7 @@ interface PackagedRuntimeValidationInput {
 
 function resourcesCandidates(appOutDir?: string): string[] {
 	const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-	const candidates = [join(desktopRoot, "resources")];
+	const candidates = [join(desktopRoot, "resources"), join(desktopRoot, "release", "linux-unpacked", "resources")];
 	if (appOutDir) {
 		candidates.push(join(appOutDir, "resources"));
 		candidates.push(join(appOutDir, "Daedalus.app", "Contents", "Resources"));

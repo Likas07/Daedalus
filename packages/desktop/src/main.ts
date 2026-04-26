@@ -23,6 +23,18 @@ const refreshMenu = (): void =>
 		onRecentProjectsChanged: refreshMenu,
 	});
 
+function dispatchDeepLink(url: string): void {
+	if (mainWindow) {
+		nativeCommands.send("open-deep-link", { url });
+		mainWindow.focus();
+		return;
+	}
+	app.whenReady().then(() => {
+		const window = createMainWindow();
+		window.webContents.once("did-finish-load", () => nativeCommands.send("open-deep-link", { url }));
+	});
+}
+
 function createMainWindow(): BrowserWindow {
 	const window = new BrowserWindow({
 		width: 1280,
@@ -134,8 +146,15 @@ function registerIpc(): void {
 }
 
 registerIpc();
+app.setAsDefaultProtocolClient("daedalus");
+app.on("open-url", (event, url) => {
+	event.preventDefault();
+	dispatchDeepLink(url);
+});
+const argvDeepLink = process.argv.find((arg) => arg.startsWith("daedalus://"));
+if (argvDeepLink) app.whenReady().then(() => dispatchDeepLink(argvDeepLink));
 app.whenReady().then(() => {
-	createMainWindow();
+	if (!mainWindow) createMainWindow();
 	refreshMenu();
 	app.on("activate", () => {
 		if (BrowserWindow.getAllWindows().length === 0) createMainWindow();

@@ -3,6 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { toRendererServerBootstrap } from "../../src/native-bridge";
+
+import { NativeCommandRouter } from "../../src/native-command-router";
 import { resolvePackagedAppServerRuntime } from "../../src/server-process";
 
 describe("desktop GUI E2E smoke", () => {
@@ -44,5 +46,32 @@ describe("desktop GUI E2E smoke", () => {
 		} finally {
 			rmSync(resources, { recursive: true, force: true });
 		}
+	});
+
+	test("routes desktop-native menu commands and deep links into renderer envelopes", () => {
+		const sent: unknown[] = [];
+		const router = new NativeCommandRouter({
+			getMainWindow: () => ({
+				webContents: { send: (_channel: string, payload: unknown) => sent.push(payload) } as never,
+			}),
+		});
+		const url = "daedalus://open?project=project-1&session=session-1&worktree=worktree-1";
+		router.send("open-file", {});
+		router.send("open-folder", {});
+		router.send("open-external-editor", {});
+		router.send("toggle-terminal", {});
+		router.send("export-diagnostics", {});
+		router.send("show-notification", { kind: "run-completed", body: "done" });
+		router.send("open-deep-link", { url });
+		expect(url).toBe("daedalus://open?project=project-1&session=session-1&worktree=worktree-1");
+		expect(sent).toEqual([
+			{ id: "open-file", payload: {} },
+			{ id: "open-folder", payload: {} },
+			{ id: "open-external-editor", payload: {} },
+			{ id: "toggle-terminal", payload: {} },
+			{ id: "export-diagnostics", payload: {} },
+			{ id: "show-notification", payload: { kind: "run-completed", body: "done" } },
+			{ id: "open-deep-link", payload: { url } },
+		]);
 	});
 });

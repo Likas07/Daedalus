@@ -124,7 +124,15 @@ export interface GuiRuntime {
 	restoreCheckpoint?(input: { sessionId: string; checkpointId: string }): Promise<RendererDiffSummary | undefined>;
 	diffCheckpoint?(checkpointRef: string, diffId?: string): Promise<RendererDiffSummary | undefined>;
 	refreshIntegrations?(projectId?: string): Promise<readonly IntegrationViewState[]>;
-	createPullRequest?(input: { provider?: string; title: string; body?: string; head: string; base?: string; draft?: boolean; projectId?: string }): Promise<unknown>;
+	createPullRequest?(input: {
+		provider?: string;
+		title: string;
+		body?: string;
+		head: string;
+		base?: string;
+		draft?: boolean;
+		projectId?: string;
+	}): Promise<unknown>;
 	openPullRequest?(url: string, input?: { provider?: string; projectId?: string }): Promise<boolean>;
 	createWorktree(input: CreateWorktreeInput): Promise<WorkflowWorktreeMetadata>;
 	openInEditor(path?: string): Promise<void>;
@@ -501,7 +509,11 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 		},
 		async resumeSession(sessionId, prompt) {
 			const result = await client.request("session/resume", { sessionId, prompt });
-			upsertSession(state, { id: sessionId, title: state.sessions.find((item) => item.id === sessionId)?.title ?? sessionId, status: "active" });
+			upsertSession(state, {
+				id: sessionId,
+				title: state.sessions.find((item) => item.id === sessionId)?.title ?? sessionId,
+				status: "active",
+			});
 			selectSession(state, sessionId);
 			notify();
 			return result;
@@ -673,24 +685,40 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 		},
 		async diffCheckpoint(checkpointRef, diffId = state.lastProjectId ?? state.projectRoot) {
 			if (!diffId) return undefined;
-			const result = (await client.request("git/checkpoint-restore", { diffId, checkpointRef })) as { diff?: RendererDiffSummary };
+			const result = (await client.request("git/checkpoint-restore", { diffId, checkpointRef })) as {
+				diff?: RendererDiffSummary;
+			};
 			state.activeDiff = result.diff;
 			notify();
 			return state.activeDiff;
 		},
 		async refreshIntegrations(projectId = state.lastProjectId) {
-			const result = (await client.request("integration/list", projectId ? { projectId } : {})) as { integrations?: IntegrationViewState[] };
+			const result = (await client.request("integration/list", projectId ? { projectId } : {})) as {
+				integrations?: IntegrationViewState[];
+			};
 			state.integrations = result.integrations ?? [];
 			notify();
 			return state.integrations;
 		},
 		async createPullRequest(input) {
-			const result = await client.request("integration/pr-create", { provider: input.provider ?? "github", projectId: input.projectId ?? state.lastProjectId, title: input.title, body: input.body, head: input.head, base: input.base, draft: input.draft });
+			const result = await client.request("integration/pr-create", {
+				provider: input.provider ?? "github",
+				projectId: input.projectId ?? state.lastProjectId,
+				title: input.title,
+				body: input.body,
+				head: input.head,
+				base: input.base,
+				draft: input.draft,
+			});
 			await refreshIntegrationsForState(client, state, notify, input.projectId ?? state.lastProjectId);
 			return result;
 		},
 		async openPullRequest(url, input = {}) {
-			const result = (await client.request("integration/pr-open", { provider: input.provider ?? "github", projectId: input.projectId ?? state.lastProjectId, url })) as { ok?: boolean };
+			const result = (await client.request("integration/pr-open", {
+				provider: input.provider ?? "github",
+				projectId: input.projectId ?? state.lastProjectId,
+				url,
+			})) as { ok?: boolean };
 			await refreshIntegrationsForState(client, state, notify, input.projectId ?? state.lastProjectId);
 			return result.ok === true;
 		},
@@ -809,7 +837,7 @@ async function refreshDiffForState(
 	state: GuiState,
 	notify: () => void,
 	diffId = state.lastProjectId ?? state.projectRoot,
-	): Promise<RendererDiffSummary | undefined> {
+): Promise<RendererDiffSummary | undefined> {
 	if (!diffId) return undefined;
 	const result = (await client.request("diff/get", { diffId })) as { diff?: RendererDiffSummary };
 	state.activeDiff = result.diff;
@@ -822,8 +850,10 @@ async function refreshIntegrationsForState(
 	state: GuiState,
 	notify: () => void,
 	projectId = state.lastProjectId,
-	): Promise<IntegrationViewState[]> {
-	const result = (await client.request("integration/list", projectId ? { projectId } : {})) as { integrations?: IntegrationViewState[] };
+): Promise<IntegrationViewState[]> {
+	const result = (await client.request("integration/list", projectId ? { projectId } : {})) as {
+		integrations?: IntegrationViewState[];
+	};
 	state.integrations = result.integrations ?? [];
 	notify();
 	return state.integrations;
@@ -899,7 +929,8 @@ function recordUsageFromEvent(state: GuiState, event: AppEvent): void {
 }
 
 function recordOrchestrationProjection(state: GuiState, payload: unknown): void {
-	const projection = payload && typeof payload === "object" ? (payload as { projection?: unknown }).projection : undefined;
+	const projection =
+		payload && typeof payload === "object" ? (payload as { projection?: unknown }).projection : undefined;
 	if (projection && typeof projection === "object") state.orchestration = projection as OrchestrationProjection;
 }
 
@@ -1072,7 +1103,8 @@ async function hydrateGuiState(client: AppServerClient, state: GuiState): Promis
 		};
 		const config = result.config ?? result.values ?? {};
 		if (typeof config["composer.effort"] === "string") state.effort = config["composer.effort"];
-		if (!state.selectedModel && typeof config["model.selected"] === "string") state.selectedModel = config["model.selected"];
+		if (!state.selectedModel && typeof config["model.selected"] === "string")
+			state.selectedModel = config["model.selected"];
 		if (typeof config["composer.mode"] === "string") state.mode = config["composer.mode"];
 		if (typeof config["composer.fastMode"] === "boolean") state.fastMode = config["composer.fastMode"];
 	});
@@ -1120,7 +1152,8 @@ async function hydrateDesktopNativeBridge(
 					await bridge.shell?.openFile(path);
 					break;
 				case "open-folder":
-					await bridge.shell?.openFolder(path);
+					await bridge.shell?.openFolder(path ?? state.projectRoot);
+
 					break;
 				case "open-external-editor":
 					await bridge.shell?.openExternalEditor(path ?? state.projectRoot);
@@ -1137,9 +1170,13 @@ async function hydrateDesktopNativeBridge(
 						typeof command.payload.body === "string" ? command.payload.body : undefined,
 					);
 					break;
-				case "open-deep-link":
-					state.diagnostics.push(`deep link: ${String(command.payload.url ?? "")}`);
+				case "open-deep-link": {
+					const url = typeof command.payload.url === "string" ? command.payload.url : "";
+
+					applyDesktopDeepLink(state, url);
+
 					break;
+				}
 			}
 		} catch (error) {
 			state.diagnostics.push(
@@ -1150,6 +1187,27 @@ async function hydrateDesktopNativeBridge(
 		}
 	});
 }
+function applyDesktopDeepLink(state: GuiState, rawUrl: string): void {
+	try {
+		const url = new URL(rawUrl);
+		if (url.protocol !== "daedalus:") {
+			state.diagnostics.push(`deep link: ${rawUrl}`);
+			return;
+		}
+		const projectId = url.searchParams.get("project") ?? undefined;
+		const sessionId = url.searchParams.get("session") ?? undefined;
+		const worktreeId = url.searchParams.get("worktree") ?? undefined;
+		if (projectId) state.lastProjectId = projectId;
+		if (sessionId) selectSession(state, sessionId);
+		if (worktreeId && !state.worktrees.some((worktree) => worktree.id === worktreeId)) {
+			state.diagnostics.push(`deep link worktree not hydrated: ${worktreeId}`);
+		}
+		state.diagnostics.push(`deep link opened: ${rawUrl}`);
+	} catch {
+		state.diagnostics.push(`deep link: ${rawUrl}`);
+	}
+}
+
 async function safeHydrateStep(state: GuiState, label: string, step: () => Promise<void>): Promise<void> {
 	try {
 		await step();
