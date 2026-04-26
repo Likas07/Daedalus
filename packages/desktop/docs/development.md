@@ -14,14 +14,21 @@ bun --cwd=packages/desktop run start
 
 `bun run start` launches Electron when a graphical environment is available. CI and headless shells may not have a display; use the smoke test for display-independent validation.
 
-For renderer iteration, start the Vite GUI in one shell and Electron in another:
+For renderer/native-shell iteration, run one command from the repository root:
 
 ```bash
-bun run dev:gui
 bun run dev:desktop
 ```
 
-`dev:gui` starts the browser GUI and a fixed local development app-server. `dev:desktop` points Electron at the same Vite URL (`http://127.0.0.1:5173/`) and still uses the desktop preload bridge/server bootstrap, so it remains usable for native-shell testing while the GUI dev server is running.
+`dev:desktop` builds the Electron main/preload dev bundle, starts or reuses Vite at `http://127.0.0.1:5173/`, then launches Electron with the desktop preload bridge/server bootstrap. If you already have the browser GUI running with `bun run dev:gui`, `dev:desktop` reuses that Vite server instead of starting another one. CI/headless checks can set `DAEDALUS_DESKTOP_DEV_CHECK=1` to verify the dev server startup without opening Electron.
+
+To produce a ready-to-use desktop app artifact from the repository root:
+
+```bash
+bun run package:desktop
+```
+
+`package:desktop` builds the GUI, Electron main/preload files, and app-server runtime, then runs electron-builder for the current OS. It prints the created artifact paths when complete. On Linux, expect an AppImage plus the unpacked executable at `packages/desktop/release/linux-unpacked/daedalus`; `package:dir` remains available for unpacked-only packaging.
 
 ## App-server bootstrap
 

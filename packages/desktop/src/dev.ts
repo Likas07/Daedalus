@@ -73,7 +73,7 @@ async function main(): Promise<void> {
 		return;
 	}
 
-	const electron = spawn("electron", electronDevCommand(), {
+	const electron = spawn("electron", electronDevCommand().slice(1), {
 		cwd: desktopRoot,
 		env: {
 			DAEDALUS_PROJECT_ROOT: repoRoot,

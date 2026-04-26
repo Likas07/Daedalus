@@ -3,6 +3,7 @@ import type { Configuration } from "electron-builder";
 const config: Configuration = {
 	appId: "dev.daedalus.daedalus",
 	productName: "Daedalus",
+	executableName: "daedalus",
 	directories: {
 		app: ".",
 		output: "release",
@@ -32,14 +33,14 @@ const config: Configuration = {
 	afterPack: "./scripts/validate-packaged-runtime.ts",
 	linux: {
 		category: "Development",
-		target: ["dir"],
+		target: ["AppImage", "dir"],
 	},
 	mac: {
 		category: "public.app-category.developer-tools",
-		target: ["dir"],
+		target: ["dmg", "dir"],
 	},
 	win: {
-		target: ["dir"],
+		target: ["nsis", "dir"],
 	},
 };
 
