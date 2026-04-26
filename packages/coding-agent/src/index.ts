@@ -208,6 +208,25 @@ export {
 	type ThinkingLevelChangeEntry,
 } from "./core/session-manager.js";
 export {
+	assertRoundTripStable,
+	parseSessionJsonl,
+	serializeSessionJsonl,
+	SessionJsonlParseError,
+	type AppendSessionStoreEntriesOptions,
+	type ArchiveSessionStoreSessionOptions,
+	type CreateSessionStoreSessionOptions,
+	type DeleteSessionStoreSessionOptions,
+	type ExportSessionStoreSessionOptions,
+	type ImportSessionStoreSessionOptions,
+	type ListSessionStoreSessionsOptions,
+	type OpenSessionStoreSessionOptions,
+	type ReadSessionStoreSessionOptions,
+	type RenameSessionStoreSessionOptions,
+	type SessionStore,
+	type SessionStoreSession,
+	type SessionStoreSummary,
+} from "./core/session-store/index.js";
+export {
 	type CompactionSettings,
 	type ImageSettings,
 	type PackageSource,
