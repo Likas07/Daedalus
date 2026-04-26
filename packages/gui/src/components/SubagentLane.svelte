@@ -1,11 +1,45 @@
 <script lang="ts">
 	import type { OrchestrationLane } from "@daedalus-pi/app-server-protocol";
 	const { lane } = $props<{ lane: OrchestrationLane }>();
+
+	function statusToneClass(status: string): string {
+		if (status === "running" || status === "active") return "pill pill-blue";
+		if (status === "blocked" || status === "waiting") return "pill pill-ember";
+		if (status === "failed" || status === "error") return "pill pill-crimson";
+		if (status === "completed" || status === "done") return "pill pill-green";
+		return "pill";
+	}
 </script>
-<div class="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3" data-testid="subagent-lane">
-	<div class="flex items-center justify-between gap-2"><h4 class="text-sm font-medium text-zinc-100">{lane.title}</h4><span class="rounded bg-zinc-800 px-2 py-0.5 text-[11px] text-zinc-300">{lane.status}</span></div>
-	<p class="mt-1 text-xs text-zinc-400">{lane.summary || lane.kind}</p>
-	{#if lane.dependencies.length}<p class="mt-2 text-[11px] text-zinc-500">Depends on {lane.dependencies.join(", ")}</p>{/if}
-	{#if lane.blockedBy?.length}<p class="mt-2 text-[11px] text-amber-300">Blocked by {lane.blockedBy.join(", ")}</p>{/if}
-	<div class="mt-2 flex flex-wrap gap-1">{#each lane.artifacts as artifact}<span class="rounded border border-zinc-800 px-2 py-0.5 text-[10px] text-cyan-300">{artifact.label}</span>{/each}</div>
+
+<div class="inspector-card" data-testid="subagent-lane">
+	<div class="inspector-card-title">
+		<span class="flex items-center gap-2">
+			<span aria-hidden="true" class="font-display text-[14px] italic text-[color:var(--brass)]">⌬</span>
+			<span>{lane.title}</span>
+		</span>
+		<span class={statusToneClass(lane.status)}>{lane.status}</span>
+	</div>
+	<p class="inspector-card-meta">{lane.summary || lane.kind}</p>
+	{#if lane.dependencies.length}
+		<p class="font-mono text-[10px] text-[color:var(--bone-faint)]">
+			<span class="uppercase tracking-[0.14em]">depends on</span>
+			<span class="ml-1.5 text-[color:var(--bone-soft)]">{lane.dependencies.join(", ")}</span>
+		</p>
+	{/if}
+	{#if lane.blockedBy?.length}
+		<p class="font-mono text-[10px] text-[color:var(--ember)]">
+			<span class="uppercase tracking-[0.14em]">blocked by</span>
+			<span class="ml-1.5">{lane.blockedBy.join(", ")}</span>
+		</p>
+	{/if}
+	{#if lane.artifacts.length > 0}
+		<div class="mt-1 flex flex-wrap gap-1">
+			{#each lane.artifacts as artifact}
+				<span class="context-chip">
+					<span class="context-chip-key">art</span>
+					<span class="context-chip-val">{artifact.label}</span>
+				</span>
+			{/each}
+		</div>
+	{/if}
 </div>

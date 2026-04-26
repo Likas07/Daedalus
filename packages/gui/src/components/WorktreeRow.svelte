@@ -1,10 +1,45 @@
 <script lang="ts">
 	import type { WorkflowWorktreeMetadata } from "@daedalus-pi/app-server-protocol";
-	const { worktree, active = false, onSelect } = $props<{ worktree: WorkflowWorktreeMetadata; active?: boolean; onSelect?: (id: string) => void }>();
+	const { worktree, active = false, onSelect } = $props<{
+		worktree: WorkflowWorktreeMetadata;
+		active?: boolean;
+		onSelect?: (id: string) => void;
+	}>();
 </script>
 
-<button class={`w-full rounded-lg border px-3 py-2 text-left text-xs ${active ? 'border-cyan-600 bg-cyan-950/30' : 'border-zinc-800 bg-zinc-900/40'}`} onclick={() => onSelect?.(String(worktree.id))}>
-	<div class="flex items-center justify-between gap-3"><span class="truncate font-medium text-zinc-200">{worktree.branch ?? 'detached'}</span><span class="text-zinc-500">{worktree.dirtyCount} dirty</span></div>
-	<div class="mt-1 truncate text-[11px] text-zinc-500">{worktree.path}</div>
-	<div class="mt-2 flex gap-2 text-[10px] uppercase tracking-wide text-zinc-500"><span>{worktree.upstream ?? 'no upstream'}</span><span>{worktree.activeSessionCount} sessions</span>{#if worktree.cleanupRequiresConfirmation}<span class="text-amber-300">confirm cleanup</span>{/if}</div>
+<button
+	class="group relative w-full rounded-sm border px-3 py-2.5 text-left transition"
+	class:border-[color:var(--brass-rule)]={active}
+	class:bg-[color:var(--brass-glow)]={active}
+	class:border-[color:var(--rule)]={!active}
+	class:bg-[color:var(--ink-3)]={!active}
+	class:hover:border-[color:var(--rule-strong)]={!active}
+	onclick={() => onSelect?.(String(worktree.id))}
+>
+	<div class="flex items-center justify-between gap-3">
+		<span class="flex items-center gap-2 truncate">
+			<span aria-hidden="true" class="font-display text-[14px] italic"
+				class:text-[color:var(--brass)]={active}
+				class:text-[color:var(--bone-faint)]={!active}
+			>›</span>
+			<span class="truncate font-mono text-[12px] text-[color:var(--bone)]">
+				{worktree.branch ?? "detached"}
+			</span>
+		</span>
+		<span class="font-mono text-[10.5px] tabular-nums text-[color:var(--bone-faint)]">
+			{worktree.dirtyCount} dirty
+		</span>
+	</div>
+	<div class="mt-1 truncate font-mono text-[10.5px] text-[color:var(--bone-faint)]">
+		{worktree.path}
+	</div>
+	<div class="mt-2 flex flex-wrap gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-[color:var(--bone-faint)]">
+		<span>{worktree.upstream ?? "no upstream"}</span>
+		<span aria-hidden="true">·</span>
+		<span>{worktree.activeSessionCount} sessions</span>
+		{#if worktree.cleanupRequiresConfirmation}
+			<span aria-hidden="true">·</span>
+			<span class="text-[color:var(--ember)]">confirm cleanup</span>
+		{/if}
+	</div>
 </button>

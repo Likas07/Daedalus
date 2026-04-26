@@ -1,14 +1,15 @@
 import type { GuiRuntime, GuiState } from "../client/runtime";
 
 interface TerminalSummary {
-	id: string;
+	id?: string;
+	terminalId?: string;
 	cwd: string;
-	shell: string;
+	shell?: string;
 	status: string;
-	nextSeq: number;
+	nextSeq?: number;
 }
 interface TerminalReplay {
-	chunks: { seq: number; data: string }[];
+	chunks: readonly { seq: number; data: string }[];
 	nextSeq: number;
 	status: string;
 }
@@ -36,7 +37,7 @@ export function renderTerminalPane(runtime: GuiRuntime): HTMLElement {
 		const result = (await runtime.client.request("terminal/create", { cwd: cwd.value, cols: 100, rows: 24 })) as {
 			terminal: TerminalWorkflowSummary;
 		};
-		runtime.state.activeTerminalId = result.terminal.id;
+		runtime.state.activeTerminalId = result.terminal.id ?? result.terminal.terminalId;
 		runtime.state.terminalCursor = 0;
 	});
 	const send = button("Send", "secondary", async () => {

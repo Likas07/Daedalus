@@ -1,9 +1,47 @@
 <script lang="ts">
-	import type { WorkflowTerminalMetadata } from "@daedalus-pi/app-server-protocol";
-	const { terminals = [], selectedTerminalId, onSelect } = $props<{ terminals?: readonly WorkflowTerminalMetadata[]; selectedTerminalId?: string; onSelect?: (id: string) => void }>();
+	import type { RendererTerminal } from "../client/gui-state-types";
+	import { terminalCloseLabel, terminalLabel } from "./terminal/terminal-state";
+	const { terminals = [], selectedTerminalId, onSelect, onNew, onClose } = $props<{
+		terminals?: readonly RendererTerminal[];
+		selectedTerminalId?: string;
+		onSelect?: (id: string) => void;
+		onNew?: () => void;
+		onClose?: (id: string) => void;
+	}>();
+
+	function onTabKeydown(event: KeyboardEvent, terminalId: string): void {
+		const index = terminals.findIndex((terminal: RendererTerminal) => terminal.id === terminalId);
+		if (index < 0) return;
+		if (event.key === "ArrowRight") {
+			event.preventDefault();
+			onSelect?.(terminals[(index + 1) % terminals.length].id);
+		} else if (event.key === "ArrowLeft") {
+			event.preventDefault();
+			onSelect?.(terminals[(index - 1 + terminals.length) % terminals.length].id);
+		}
+	}
 </script>
-<div class="flex gap-1 overflow-x-auto border-b border-zinc-900 px-2 pt-2">
+
+<div class="flex items-end gap-1 overflow-x-auto border-b border-ink-500 px-3 pt-1.5" role="tablist" aria-label="Terminal tabs">
 	{#each terminals as terminal}
-		<button class={`rounded-t-md border border-b-0 px-3 py-1 text-xs ${String(terminal.id) === selectedTerminalId ? 'border-cyan-700 bg-zinc-900 text-cyan-100' : 'border-zinc-800 bg-black text-zinc-500'}`} onclick={() => onSelect?.(String(terminal.id))}>{terminal.status} · {terminal.cwd.split('/').at(-1)}</button>
-	{:else}<span class="px-2 py-1 text-xs text-zinc-600">No terminals</span>{/each}
+		<button
+			type="button"
+			class="terminal-tab"
+			data-active={terminal.id === selectedTerminalId}
+
+			role="tab"
+			aria-selected={terminal.id === selectedTerminalId}
+			aria-controls={`terminal-panel-${terminal.id}`}
+			tabindex={terminal.id === selectedTerminalId ? 0 : -1}
+			onkeydown={(event) => onTabKeydown(event, terminal.id)}
+			onclick={() => onSelect?.(terminal.id)}
+		>
+			<span class="text-bone-400">{terminal.status}</span>
+			<span class="ml-1.5">{terminalLabel(terminal)}</span>
+		</button>
+		<button class="btn-mini mb-1" type="button" aria-label={terminalCloseLabel(terminal)} onclick={() => onClose?.(terminal.id)}>×</button>
+	{:else}
+		<span class="px-2 pb-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-bone-400">No terminals</span>
+	{/each}
+	<button class="btn-mini mb-1 ml-auto" type="button" onclick={onNew}>New terminal</button>
 </div>

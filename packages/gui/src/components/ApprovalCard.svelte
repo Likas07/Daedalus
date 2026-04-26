@@ -3,54 +3,66 @@
 
 	const { approval, respond } = $props<{
 		approval: ApprovalItem;
-		respond: (approval: ApprovalItem, decision: "approved" | "denied") => void;
+		respond: (approval: ApprovalItem, decision: "approved" | "denied", message?: string) => void;
 	}>();
 	let revisionMessage = $state("");
-	const riskClass = $derived(
-		approval.risk === "high"
-			? "border-red-500/40 bg-red-500/10 text-red-200"
-			: approval.risk === "medium"
-				? "border-amber-500/40 bg-amber-500/10 text-amber-200"
-				: "border-emerald-500/40 bg-emerald-500/10 text-emerald-200",
-	);
 
 	function askToRevise(): void {
-		revisionMessage = "Revision request drafted locally. Ask the agent to propose a safer alternative in chat; no approval protocol message was sent.";
+		const message = "Please revise this tool request and propose a safer alternative.";
+		revisionMessage = message;
+		respond(approval, "denied", message);
 	}
+
+	const accentClass = $derived.by(() => {
+		if (approval.risk === "high") return "border-red-500";
+		if (approval.risk === "medium") return "border-amber-400";
+		return "border-gold";
+	});
 </script>
 
-<article class="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3" data-testid="approval-card" aria-label={`Approval requested: ${approval.summary}. Risk: ${approval.risk}`}> 
-	<div class="mb-3 flex items-start justify-between gap-3">
-		<div>
-			<h4 class="text-sm font-medium text-zinc-100">Approval requested</h4>
-			<p class="mt-1 text-xs text-zinc-400">{approval.summary}</p>
-		</div>
-		<span class={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${riskClass}`} aria-label={`Risk level: ${approval.risk}`}>{approval.risk} risk</span>
+<section
+	class="border-l pl-5 {accentClass}"
+	data-testid="approval-card"
+	data-risk={approval.risk}
+	role="listitem"
+	aria-label="Approval requested: {approval.summary}. Risk: {approval.risk}"
+>
+	<header class="mb-2 flex items-baseline gap-3">
+		<h3 class="text-[13px] font-medium text-bone-50">Permission required</h3>
+		<span class="caps text-bone-400">{approval.risk} risk</span>
+	</header>
+
+	<p class="mb-4 max-w-[60ch] text-[13px] text-bone-200">{approval.summary}</p>
+
+	<div class="mb-5">
+		<code class="block font-mono text-[12px] text-bone-100">{approval.summary}</code>
+		<span class="mt-1 block font-mono text-[10px] text-bone-400">scope · {approval.scope}</span>
 	</div>
 
-	<dl class="grid gap-2 text-xs">
-		<div class="grid grid-cols-[4rem_minmax(0,1fr)] gap-2">
-			<dt class="text-zinc-500">What</dt>
-			<dd class="text-zinc-300">{approval.summary}</dd>
-		</div>
-		<div class="grid grid-cols-[4rem_minmax(0,1fr)] gap-2">
-			<dt class="text-zinc-500">Why</dt>
-			<dd class="text-zinc-300">Agent needs operator approval before continuing.</dd>
-		</div>
-		<div class="grid grid-cols-[4rem_minmax(0,1fr)] gap-2">
-			<dt class="text-zinc-500">Where</dt>
-			<dd class="text-zinc-300">{approval.sessionId ?? "Current project"}</dd>
-		</div>
-		<div class="grid grid-cols-[4rem_minmax(0,1fr)] gap-2">
-			<dt class="text-zinc-500">Scope</dt>
-			<dd class="break-words text-zinc-300">{approval.scope}</dd>
-		</div>
-	</dl>
-
-	<div class="mt-3 grid grid-cols-3 gap-2">
-		<button type="button" class="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5 text-xs text-emerald-200 hover:border-emerald-400" aria-label={`Approve once: ${approval.summary}`} onclick={() => respond(approval, "approved")}>Approve once</button>
-		<button type="button" class="rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1.5 text-xs text-red-200 hover:border-red-400" aria-label={`Deny approval: ${approval.summary}`} onclick={() => respond(approval, "denied")}>Deny</button>
-		<button type="button" class="rounded-md border border-zinc-700 bg-zinc-900/70 px-2 py-1.5 text-xs text-zinc-300 hover:border-cyan-700/60" onclick={askToRevise}>Ask agent to revise</button>
+	<div class="flex items-center gap-5">
+		<button
+			type="button"
+			onclick={() => respond(approval, "approved")}
+			class="caps border border-gold px-4 py-1.5 text-gold transition hover:bg-gold hover:text-ink-950"
+			aria-label="Approve once: {approval.summary}"
+		>
+			Approve once
+			<span class="ml-2 font-mono text-[10px] tracking-normal opacity-70">Super+↵</span>
+		</button>
+		<button
+			type="button"
+			onclick={() => respond(approval, "denied")}
+			class="caps text-bone-300 transition hover:text-bone-50"
+			aria-label="Deny approval: {approval.summary}"
+		>Deny</button>
+		<button
+			type="button"
+			onclick={askToRevise}
+			class="caps ml-auto text-bone-400 transition hover:text-bone-100"
+		>Ask to revise</button>
 	</div>
-	{#if revisionMessage}<p class="mt-2 rounded-md border border-cyan-500/20 bg-cyan-500/10 p-2 text-xs text-cyan-200" role="status">{revisionMessage}</p>{/if}
-</article>
+
+	{#if revisionMessage}
+		<p class="mt-3 font-mono text-[10.5px] text-bone-400" role="status">{revisionMessage}</p>
+	{/if}
+</section>

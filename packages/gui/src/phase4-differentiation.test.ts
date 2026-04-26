@@ -70,6 +70,8 @@ describe("phase 4 differentiation projections", () => {
 		const workspace = readFileSync(new URL("./components/SessionWorkspace.svelte", import.meta.url), "utf8");
 		const settings = readFileSync(new URL("./components/SettingsPanel.svelte", import.meta.url), "utf8");
 		const palette = readFileSync(new URL("./components/CommandPalette.svelte", import.meta.url), "utf8");
+		const diffViewer = readFileSync(new URL("./components/DiffViewer.svelte", import.meta.url), "utf8");
+		const inspectorMock = readFileSync(new URL("./components/Inspector.svelte", import.meta.url), "utf8");
 
 		expect(inspector).toContain("OrchestrationPanel");
 		expect(inspector).toContain("AuditTrailPanel");
@@ -79,5 +81,11 @@ describe("phase 4 differentiation projections", () => {
 		expect(settings).toContain("AutomationRulesPanel");
 		expect(settings).toContain("ExtensionsManager");
 		expect(palette).toContain("extensionCommands(extensions)");
+		expect(inspectorMock).toContain("guiState.activeDiff?.files");
+		expect(diffViewer).toContain("@pierre/diffs/ssr");
+		expect(diffViewer).toContain("preloadPatchDiff");
+		expect(diffViewer).toContain("Requires Git mutation policy");
+		expect(diffViewer).toContain("Requires destructive-action policy");
+		expect(diffViewer).toContain("Requires commit/push policy");
 	});
 });

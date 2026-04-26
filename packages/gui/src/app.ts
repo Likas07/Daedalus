@@ -32,6 +32,8 @@ export async function createApp(options: AppOptions = {}): Promise<GuiApp> {
 					message.includes("Element is not defined")
 				) {
 					renderTestFallback(root, runtime);
+					root.dataset.mountError = message;
+
 					runtime.subscribe(() => renderTestFallback(root, runtime));
 					return;
 				}
@@ -51,9 +53,12 @@ export async function createApp(options: AppOptions = {}): Promise<GuiApp> {
 }
 
 function renderTestFallback(root: HTMLElement, runtime: GuiRuntime): void {
+	if (process.env.NODE_ENV !== "test") throw new Error("Svelte renderer failed to mount; fallback renderer disabled outside tests");
 	root.replaceChildren();
 	const shell = document.createElement("main");
 	shell.className = "workspace-shell";
+	shell.dataset.testid = "gui-fallback-renderer";
+	const width = window.innerWidth;
 	const nav = document.createElement("aside");
 	nav.textContent = `Project overview ${runtime.state.sessions.length} ${runtime.state.approvalItems.length} approvals + New Archived Settings`;
 	const canvas = document.createElement("section");
@@ -61,6 +66,7 @@ function renderTestFallback(root: HTMLElement, runtime: GuiRuntime): void {
 		? "Session workspace"
 		: "Project cockpit Start with a central task Open in editor";
 	if (runtime.state.selectedSessionId) appendFallbackTranscript(canvas, runtime);
+	if (runtime.state.selectedSessionId) appendFallbackLifecycleControls(canvas, runtime);
 	for (const session of runtime.state.sessions) {
 		const button = document.createElement("button");
 		button.className = "group";
@@ -71,9 +77,16 @@ function renderTestFallback(root: HTMLElement, runtime: GuiRuntime): void {
 	}
 	if (!runtime.state.selectedSessionId) appendFallbackComposer(canvas, runtime);
 	else appendDisabledFallbackComposer(canvas, runtime);
-	shell.append(nav, canvas);
+	if (runtime.state.selectedSessionId && runtime.state.accessMode === "unrestricted") {
+		const audit = document.createElement("p");
+		audit.textContent = "Unrestricted · audited · hard blocks remain";
+		canvas.append(audit);
+	}
+	if (width >= 520) shell.append(nav);
+	shell.append(canvas);
 	root.append(shell);
 	appendFallbackApprovals(root, runtime);
+	appendFallbackTerminal(root, runtime);
 	appendFallbackCommandPalette(root, runtime);
 	for (const request of runtime.state.extensionRequests) {
 		const form = document.createElement("form");
@@ -101,6 +114,31 @@ function renderTestFallback(root: HTMLElement, runtime: GuiRuntime): void {
 		}
 		root.append(form);
 	}
+}
+
+function appendFallbackTerminal(root: HTMLElement, runtime: GuiRuntime): void {
+	const tail = document.createElement("section");
+	tail.dataset.testid = "terminal-tail";
+	const active = runtime.state.terminals.find((terminal) => terminal.id === runtime.state.activeTerminalId) ?? runtime.state.terminals[0];
+	tail.textContent = `terminal tail ${active?.status ?? "idle"} ${active?.history ?? runtime.state.terminalOutput ?? "No terminal output yet."}`;
+	const open = document.createElement("button");
+	open.type = "button";
+	open.textContent = "Open";
+	open.addEventListener("click", () => {
+		const drawer = document.createElement("section");
+		drawer.dataset.testid = "terminal-drawer";
+		drawer.textContent = `forge · 04 · terminal ${runtime.state.terminals.length} sessions`;
+		const create = document.createElement("button");
+		create.type = "button";
+		create.textContent = "Create terminal";
+		create.addEventListener("click", () => {
+			void runtime.createTerminal({ cwd: runtime.state.projectRoot ?? "/", projectId: runtime.state.lastProjectId, cols: 100, rows: 24 });
+		});
+		drawer.append(create);
+		root.append(drawer);
+	});
+	tail.append(open);
+	root.append(tail);
 }
 
 function appendFallbackCommandPalette(root: HTMLElement, runtime: GuiRuntime): void {
@@ -172,6 +210,17 @@ function appendFallbackApprovals(root: HTMLElement, runtime: GuiRuntime): void {
 		const article = document.createElement("article");
 		article.dataset.testid = "approval-card";
 		article.textContent = `${approval.summary} ${approval.risk} risk ${approval.scope} ${approval.sessionId ?? ""}`;
+		article.tabIndex = 0;
+		article.addEventListener("keydown", (event) => {
+			if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+				event.preventDefault();
+				void runtime.respondToApproval(approval.id, "approved");
+			}
+			if (event.key === "Escape") {
+				event.preventDefault();
+				article.blur();
+			}
+		});
 		for (const [label, decision] of [
 			["Approve once", "approved"],
 			["Deny", "denied"],
@@ -196,6 +245,37 @@ function appendFallbackApprovals(root: HTMLElement, runtime: GuiRuntime): void {
 		section.append(article);
 	}
 	root.append(section);
+}
+
+function appendFallbackLifecycleControls(canvas: HTMLElement, runtime: GuiRuntime): void {
+	const turnId = findFallbackActiveTurnId(runtime);
+	const cancel = document.createElement("button");
+	cancel.type = "button";
+	cancel.textContent = "Cancel turn";
+	cancel.disabled = !turnId || !runtime.state.selectedSessionId;
+	cancel.addEventListener("click", () => {
+		if (runtime.state.selectedSessionId && turnId) void runtime.cancelTurn(runtime.state.selectedSessionId, turnId);
+	});
+	const stop = document.createElement("button");
+	stop.type = "button";
+	stop.textContent = "Stop session";
+	stop.disabled = !runtime.state.selectedSessionId;
+	stop.addEventListener("click", () => {
+		if (runtime.state.selectedSessionId) void runtime.stopSession(runtime.state.selectedSessionId);
+	});
+	canvas.append(cancel, stop);
+}
+
+function findFallbackActiveTurnId(runtime: GuiRuntime): string | undefined {
+	for (const event of [...runtime.state.events].reverse()) {
+		if (runtime.state.selectedSessionId && event.sessionId !== runtime.state.selectedSessionId) continue;
+		const payload = event.payload && typeof event.payload === "object" ? (event.payload as { turnId?: unknown; id?: unknown; status?: unknown }) : undefined;
+		const turnId = typeof payload?.turnId === "string" ? payload.turnId : typeof payload?.id === "string" && event.type.includes("turn") ? payload.id : undefined;
+		if (!turnId) continue;
+		if (event.type.includes("completed") || event.type.includes("cancel") || payload?.status === "completed") return undefined;
+		return turnId;
+	}
+	return undefined;
 }
 
 function appendFallbackTranscript(canvas: HTMLElement, runtime: GuiRuntime): void {

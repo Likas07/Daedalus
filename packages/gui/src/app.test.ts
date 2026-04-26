@@ -8,14 +8,14 @@ class MemoryTransport implements AppServerTransport {
 	readonly sent: unknown[] = [];
 	send(message: unknown): void {
 		this.sent.push(message);
-		const request = message as { kind?: string; id?: string; method?: string };
+		const request = message as { kind?: string; id?: string; method?: string; params?: unknown };
 		if (request.kind === "request" && request.id)
 			queueMicrotask(() =>
 				this.listener?.({
 					kind: "response",
 					id: request.id,
 					ok: true,
-					result: responseFor(request.method),
+					result: responseFor(request.method, request),
 				}),
 			);
 	}
@@ -28,7 +28,7 @@ class MemoryTransport implements AppServerTransport {
 	close(): void {}
 }
 
-function responseFor(method: string | undefined): unknown {
+function responseFor(method: string | undefined, request?: { params?: unknown }): unknown {
 	switch (method) {
 		case "initialize":
 			return { server: { name: "test", version: "0" }, capabilities: {} };
@@ -36,6 +36,41 @@ function responseFor(method: string | undefined): unknown {
 			return { projectId: "project-1" };
 		case "session/start":
 			return { sessionId: "session-1" };
+		case "project/list":
+			return { projects: [] };
+		case "session/list":
+			return { sessions: [] };
+		case "terminal/list":
+			return { terminals: [] };
+		case "terminal/create":
+			return { terminal: { terminalId: "term-1", cwd: "/repo", cols: 100, rows: 24, status: "running", history: "server output", updatedAt: "now" } };
+		case "terminal/input":
+			return {};
+		case "terminal/replay":
+			return { chunks: [{ seq: 1, data: "server output" }] };
+		case "terminal/resize":
+			return { terminal: { terminalId: "term-1", cwd: "/repo", cols: 100, rows: 24, status: "running", history: "server output", updatedAt: "now" } };
+		case "terminal/kill":
+			return { terminal: { terminalId: "term-1", cwd: "/repo", cols: 100, rows: 24, status: "killed", history: "server output", updatedAt: "now" } };
+		case "model/list":
+			return { models: [], selectedModel: undefined };
+		case "auth/status":
+			return { providers: [] };
+		case "config/get":
+			return { config: {} };
+		case "access/get":
+		case "access/set": {
+			const mode = (request?.params as { mode?: string } | undefined)?.mode ?? "supervised";
+			return { policy: { mode, autoApproveSoftPrompts: mode !== "supervised", bypassHardBlocks: false, auditRequired: true } };
+		}
+		case "composer/file-search":
+			return { files: [{ path: "src/App.svelte", label: "App.svelte", kind: "file", extension: "svelte" }] };
+		case "composer/command-list":
+			return { commands: [{ name: "plan", label: "Plan", description: "Plan first", source: "core" }] };
+		case "composer/attachment/save":
+			return { attachment: { id: "attachment-1", kind: "text", filename: "notes.txt", size: 5 } };
+		case "event/replay":
+			return { events: [] };
 		default:
 			return {};
 	}
@@ -50,6 +85,8 @@ beforeEach(() => {
 		window,
 		document: window.document,
 		HTMLElement: window.HTMLElement,
+		Element: window.Element,
+		SVGElement: window.SVGElement,
 		HTMLInputElement: window.HTMLInputElement,
 		HTMLTextAreaElement: window.HTMLTextAreaElement,
 		HTMLSelectElement: window.HTMLSelectElement,
@@ -57,9 +94,12 @@ beforeEach(() => {
 		Event: window.Event,
 		location: window.location,
 		Node: window.Node,
+		Text: window.Text,
+		Comment: window.Comment,
 		SyntaxError: window.SyntaxError ?? SyntaxError,
 		localStorage: window.localStorage,
 		KeyboardEvent: window.KeyboardEvent,
+		CustomEvent: window.CustomEvent,
 	});
 });
 
@@ -93,12 +133,11 @@ describe("GUI app", () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		root.querySelector<HTMLButtonElement>('button[data-action-id="approve"]')?.click();
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(transport.sent).toContainEqual({
+		expect(transport.sent).toContainEqual(expect.objectContaining({
 			kind: "request",
-			id: "gui-2",
 			method: "extension/ui/respond",
 			params: { requestId: "confirm-1", actionId: "approve", values: { reason: "ok" } },
-		});
+		}));
 		await app.close();
 	});
 
@@ -132,12 +171,11 @@ describe("GUI app", () => {
 			.find((button) => button.textContent?.includes("Approve once"))
 			?.click();
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(transport.sent).toContainEqual({
+		expect(transport.sent).toContainEqual(expect.objectContaining({
 			kind: "request",
-			id: "gui-2",
 			method: "approval/respond",
-			params: { approvalId: "approval-1", decision: "approved" },
-		});
+			params: expect.objectContaining({ approvalId: "approval-1", decision: "approved" }),
+		}));
 
 		transport.listener?.({
 			kind: "notification",
@@ -155,12 +193,11 @@ describe("GUI app", () => {
 			.find((button) => button.textContent?.includes("Deny"))
 			?.click();
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(transport.sent).toContainEqual({
+		expect(transport.sent).toContainEqual(expect.objectContaining({
 			kind: "request",
-			id: "gui-3",
 			method: "approval/respond",
-			params: { approvalId: "approval-2", decision: "denied" },
-		});
+			params: expect.objectContaining({ approvalId: "approval-2", decision: "denied" }),
+		}));
 		await app.close();
 	});
 
@@ -252,18 +289,16 @@ describe("GUI app", () => {
 		expect(prompt?.value).toBe("Saved task");
 		root.querySelector<HTMLButtonElement>('[data-testid="composer-submit"]')?.click();
 		await new Promise((resolve) => setTimeout(resolve, 25));
-		expect(transport.sent).toContainEqual({
+		expect(transport.sent).toContainEqual(expect.objectContaining({
 			kind: "request",
-			id: "gui-2",
 			method: "project/open",
 			params: { path: "/repo" },
-		});
-		expect(transport.sent).toContainEqual({
+		}));
+		expect(transport.sent).toContainEqual(expect.objectContaining({
 			kind: "request",
-			id: "gui-3",
 			method: "session/start",
-			params: { projectId: "project-1", prompt: "Saved task" },
-		});
+			params: expect.objectContaining({ projectId: "project-1", prompt: "Saved task" }),
+		}));
 		expect(localStorage.getItem("daedalus.gui.draft.project:/repo")).toBeNull();
 		expect(prompt?.value).toBe("");
 		await app.close();
@@ -313,6 +348,34 @@ describe("GUI app", () => {
 		await app.close();
 	});
 
+	test("opens terminal drawer and creates a PTY terminal", async () => {
+		const root = document.createElement("div");
+		document.body.replaceChildren(root);
+		const transport = new MemoryTransport();
+		const app = await createApp({
+			root,
+			transport,
+			bootstrap: { wsEndpoint: "ws://localhost/ws", projectRoot: "/repo" },
+		});
+		await app.start();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		const terminalButton = [...root.querySelectorAll<HTMLButtonElement>('[data-testid="terminal-tail"] button')].at(-1);
+		if (!terminalButton) throw new Error(root.innerHTML);
+		terminalButton.click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(root.querySelector('[data-testid="terminal-drawer"]')).not.toBeNull();
+		[...root.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Create terminal") || button.textContent?.includes("New terminal"))?.click();
+		await new Promise((resolve) => setTimeout(resolve, 25));
+		expect(transport.sent).toContainEqual(expect.objectContaining({
+			kind: "request",
+			method: "terminal/create",
+			params: expect.objectContaining({ cwd: "/repo", cols: 100, rows: 24 }),
+		}));
+		expect(app.runtime.state.activeTerminalId).toBe("term-1");
+		expect(root.textContent).toContain("running");
+		await app.close();
+	});
+
 	test("opens settings and renders provider status placeholders without server provider data", async () => {
 		const root = document.createElement("div");
 		document.body.replaceChildren(root);
@@ -338,4 +401,51 @@ describe("GUI app", () => {
 		expect(root.querySelector('[data-testid="provider-status-row"]')?.textContent).toContain("Model count pending");
 		await app.close();
 	});
+	test("session lifecycle controls, approval shortcut, and unrestricted audit copy are wired", async () => {
+		const root = document.createElement("div");
+		document.body.replaceChildren(root);
+		const transport = new MemoryTransport();
+		const app = await createApp({
+			root,
+			transport,
+			bootstrap: { wsEndpoint: "ws://localhost/ws", projectRoot: "/repo" },
+		});
+		await app.start();
+		app.runtime.state.sessions.push({ id: "session-1", title: "Lifecycle session", status: "running" });
+		app.runtime.selectSession("session-1");
+		app.runtime.state.accessMode = "unrestricted";
+		app.runtime.state.events.push({
+			id: "turn-started",
+			ts: "2026-04-26T00:00:00.000Z",
+			type: "turn/started",
+			sessionId: "session-1",
+			payload: { turnId: "turn-1", status: "running" },
+		});
+		app.runtime.state.approvalItems.push({ id: "approval-1", sessionId: "session-1", summary: "Read package metadata", risk: "low", scope: "workspace" });
+		app.runtime.notify();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(root.textContent).toContain("Unrestricted · audited · hard blocks remain");
+		[...root.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Cancel turn"))?.click();
+		[...root.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Stop session"))?.click();
+		const approvalCard = root.querySelector<HTMLElement>('[data-testid="approval-card"]');
+		approvalCard?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true }));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(transport.sent).toContainEqual(expect.objectContaining({
+			kind: "request",
+			method: "turn/cancel",
+			params: { sessionId: "session-1", turnId: "turn-1" },
+		}));
+		expect(transport.sent).toContainEqual(expect.objectContaining({
+			kind: "request",
+			method: "session/stop",
+			params: { sessionId: "session-1" },
+		}));
+		expect(transport.sent).toContainEqual(expect.objectContaining({
+			kind: "request",
+			method: "approval/respond",
+			params: expect.objectContaining({ approvalId: "approval-1", decision: "approved" }),
+		}));
+		await app.close();
+	});
+
 });

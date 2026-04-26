@@ -1,48 +1,116 @@
 <script lang="ts">
-	import type { GuiRuntime, GuiState } from "../client/runtime";
+	import type { GuiRuntime, GuiState, SessionSummary } from "../client/runtime";
 	import type { ApprovalItem } from "../client/view-model";
-	const { state: guiState, runtime, onOpenSettings } = $props<{ state: GuiState; runtime: GuiRuntime; onOpenSettings?: () => void }>();
+
+	const { state: guiState, runtime, onOpenSettings } = $props<{
+		state: GuiState;
+		runtime: GuiRuntime;
+		onOpenSettings?: () => void;
+	}>();
+
 	function sessionHasApproval(sessionId: string): boolean {
 		return guiState.approvalItems.some((approval: ApprovalItem) => approval.sessionId === sessionId);
 	}
+
+	function sessionStatusLabel(session: SessionSummary): string {
+		return sessionHasApproval(session.id) ? "waiting approval" : session.status;
+	}
+
+	function sessionToneClass(session: SessionSummary): string {
+		if (sessionHasApproval(session.id)) return "pill pill-ember";
+		const s = session.status;
+		if (s === "running" || s === "active") return "pill pill-blue";
+		if (s === "failed" || s === "error") return "pill pill-crimson";
+		if (s === "completed" || s === "done") return "pill pill-green";
+		return "pill";
+	}
 </script>
 
-<aside class="flex h-full min-h-0 flex-col bg-zinc-950/70">
-	<div class="border-b border-zinc-800 p-3">
-		<p class="text-[10px] uppercase tracking-[0.22em] text-zinc-500">Navigation</p>
-		<button class="mt-2 flex w-full items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/60 px-2 py-2 text-left text-xs hover:border-cyan-700/50" onclick={() => runtime.selectSession(undefined)} aria-label={`Project overview, ${guiState.sessions.length} sessions, ${guiState.approvalItems.length} approvals pending`}> 
-			<span class="sidebar-optional-label text-zinc-300">Project overview</span>
-			<span class="flex items-center gap-1" aria-live="polite" aria-atomic="true"><span class="rounded bg-cyan-500/10 px-1.5 py-0.5 text-[10px] text-cyan-300" aria-label={`${guiState.sessions.length} sessions`}>{guiState.sessions.length}</span><span class="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-300" aria-label={`${guiState.approvalItems.length} approvals pending`}>{guiState.approvalItems.length}</span></span>
+<aside class="flex h-full min-h-0 flex-col">
+	<!-- project overview row -->
+	<div class="px-3 pt-4 pb-2">
+		<div class="eyebrow eyebrow-brass mb-2 px-1">drawer · 01</div>
+		<button
+			class="group relative flex w-full items-center justify-between gap-2 rounded-md border border-[color:var(--rule)] bg-[color:var(--ink-2)] px-3 py-2.5 text-left transition hover:border-[color:var(--brass-rule)]"
+			onclick={() => runtime.selectSession(undefined)}
+			aria-label={`Project overview, ${guiState.sessions.length} sessions, ${guiState.approvalItems.length} approvals pending`}
+		>
+			<span class="flex min-w-0 items-center gap-2">
+				<span aria-hidden="true" class="font-display text-[18px] italic leading-none text-[color:var(--brass-hi)]">¶</span>
+				<span class="sidebar-optional-label truncate text-[13px] font-medium text-[color:var(--bone)]">Project overview</span>
+			</span>
+			<span class="flex items-center gap-1" aria-live="polite" aria-atomic="true">
+				<span class="pill" aria-label={`${guiState.sessions.length} sessions`}>
+					<span class="text-[color:var(--bone-faint)]">s</span><span class="tnum">{guiState.sessions.length}</span>
+				</span>
+				<span
+					class="pill {guiState.approvalItems.length > 0 ? 'pill-ember' : ''}"
+					aria-label={`${guiState.approvalItems.length} approvals pending`}
+				>
+					<span class="text-[color:var(--bone-faint)]">a</span><span class="tnum">{guiState.approvalItems.length}</span>
+				</span>
+			</span>
 		</button>
 	</div>
 
-	<div class="min-h-0 flex-1 overflow-auto p-2">
-		<p class="sidebar-secondary px-2 pb-2 pt-1 text-[10px] uppercase tracking-wider text-zinc-600">Sessions</p>
-		<div class="space-y-1">
-			{#each guiState.sessions as session}
-				<button class="relative w-full rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-left transition hover:border-cyan-700/60 {guiState.selectedSessionId === session.id ? 'border-cyan-700/60 bg-cyan-500/5' : ''} {sessionHasApproval(session.id) ? 'border-amber-500/50' : ''}" onclick={() => runtime.selectSession(session.id)} aria-label={`Open session ${session.title}. Status: ${sessionHasApproval(session.id) ? 'waiting approval' : session.status}`}> 
-					{#if guiState.selectedSessionId === session.id}<span class="absolute left-0 top-2 bottom-2 w-0.5 rounded-r bg-cyan-300" aria-hidden="true"></span>{/if}
-					<div class="flex items-center justify-between gap-2">
-						<span class="truncate text-xs font-medium text-zinc-200">{session.title}</span>
-						<span class="rounded px-1.5 py-0.5 text-[10px] {sessionHasApproval(session.id) ? 'bg-amber-500/10 text-amber-300' : 'bg-emerald-500/10 text-emerald-300'}">Status: {sessionHasApproval(session.id) ? 'waiting approval' : session.status}</span>
-					</div>
-					<div class="sidebar-secondary mt-2 flex items-center justify-between gap-2 text-[10px] text-zinc-500">
-						<span class="truncate">{session.id}</span>
-						<span>diff 0</span>
+	<!-- sessions list -->
+	<div class="min-h-0 flex-1 overflow-auto pb-2">
+		<div class="nav-section-label sidebar-secondary">
+			<span>Sessions</span>
+			<span class="ml-auto font-mono text-[10px] not-italic text-[color:var(--bone-faint)]">
+				{guiState.sessions.length.toString().padStart(2, "0")}
+			</span>
+		</div>
+		<div>
+			{#each guiState.sessions as session, idx}
+				<button
+					class="nav-row group"
+					data-active={guiState.selectedSessionId === session.id}
+					onclick={() => runtime.selectSession(session.id)}
+					aria-label={`Open session ${session.title}. Status: ${sessionStatusLabel(session)}`}
+				>
+					<div class="flex items-start justify-between gap-2">
+						<div class="min-w-0">
+							<div class="flex items-center gap-2">
+								<span class="font-mono text-[10px] tabular-nums text-[color:var(--bone-faint)]">
+									{(idx + 1).toString().padStart(2, "0")}
+								</span>
+								<span class="truncate text-[13px] font-medium text-[color:var(--bone)] group-hover:text-[color:var(--bone)]">
+									{session.title}
+								</span>
+							</div>
+							<div class="sidebar-secondary mt-1 flex items-center gap-2 text-[10.5px] text-[color:var(--bone-faint)]">
+								<span class="font-mono">{session.id.slice(0, 14)}</span>
+								<span aria-hidden="true">·</span>
+								<span class="font-mono">diff +0 -0</span>
+							</div>
+						</div>
+						<span class={sessionToneClass(session)} aria-label={`Status: ${sessionStatusLabel(session)}`}>
+							Status: {sessionStatusLabel(session)}
+						</span>
 					</div>
 				</button>
 			{:else}
-				<p class="rounded-lg border border-dashed border-zinc-800 p-3 text-xs text-zinc-500">No sessions yet. App-server events will appear here.</p>
+				<div class="hatch m-3 rounded-md border border-dashed border-[color:var(--rule)] p-5 text-center">
+					<p class="font-display text-[15px] italic text-[color:var(--bone-soft)]">No sessions yet</p>
+					<p class="mt-1 font-mono text-[10.5px] tracking-wide text-[color:var(--bone-faint)]">
+						app-server events will populate this drawer
+					</p>
+				</div>
 			{/each}
 		</div>
 	</div>
 
-	<footer class="space-y-2 border-t border-zinc-800 p-3">
-		<div class="grid grid-cols-3 gap-2">
-			<button class="rounded-md border border-zinc-800 bg-zinc-900/70 px-2 py-1.5 text-xs text-zinc-300 hover:border-cyan-700/60">+ New</button>
-			<button class="rounded-md border border-zinc-800 bg-zinc-900/70 px-2 py-1.5 text-xs text-zinc-400 hover:border-zinc-700">Archived</button>
-			<button class="rounded-md border border-zinc-800 bg-zinc-900/70 px-2 py-1.5 text-xs text-zinc-400 hover:border-zinc-700" onclick={() => onOpenSettings?.()}>Settings</button>
+	<!-- footer actions -->
+	<footer class="border-t border-[color:var(--rule)] p-3">
+		<div class="grid grid-cols-3 gap-1.5">
+			<button class="foot-action" type="button">+ New</button>
+			<button class="foot-action" type="button">Archived</button>
+			<button class="foot-action" type="button" onclick={() => onOpenSettings?.()}>Settings</button>
 		</div>
-		<p class="sidebar-footer-note text-[10px] text-zinc-600">Status placeholders · branch main · diff idle</p>
+		<p class="sidebar-footer-note mt-3 flex items-center gap-2 px-1 font-mono text-[9.5px] uppercase tracking-[0.16em] text-[color:var(--bone-faint)]">
+			<span class="size-1 rounded-full bg-[color:var(--brass)]" aria-hidden="true"></span>
+			branch · main · diff idle
+		</p>
 	</footer>
 </aside>

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import type { IntegrationProviderState } from "@daedalus-pi/app-server-protocol";
 import {
 	canCreateOrUpdatePullRequest,
@@ -40,4 +41,10 @@ describe("phase 3 desktop and integrations helpers", () => {
 		expect(reconnectMessage(true)).toBeUndefined();
 		expect(reconnectMessage(false, "ws://localhost:1/ws")).toContain("ws://localhost:1/ws");
 	});
+});
+
+
+test("documents renderer-safe extension command palette exposure", () => {
+	const docs = readFileSync(new URL("../docs/extension-support.md", import.meta.url), "utf8");
+	expect(docs).toContain("GUI command palette exposes extension command labels");
 });

@@ -1,9 +1,33 @@
 <script lang="ts">
 	import type { WorkflowWorktreeMetadata } from "@daedalus-pi/app-server-protocol";
 	import WorktreeRow from "./WorktreeRow.svelte";
-	const { worktrees = [], selectedWorktreeId, onSelect } = $props<{ worktrees?: readonly WorkflowWorktreeMetadata[]; selectedWorktreeId?: string; onSelect?: (id: string) => void }>();
+	const { worktrees = [], selectedWorktreeId, onSelect, onCreate } = $props<{
+		worktrees?: readonly WorkflowWorktreeMetadata[];
+		selectedWorktreeId?: string;
+		onSelect?: (id: string) => void;
+		onCreate?: () => void;
+	}>();
 </script>
-<section class="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
-	<header class="mb-3 flex items-center justify-between"><h3 class="text-sm font-semibold text-zinc-200">Worktrees</h3><span class="text-xs text-zinc-500">{worktrees.length}</span></header>
-	<div class="space-y-2">{#each worktrees as worktree}<WorktreeRow {worktree} active={String(worktree.id) === selectedWorktreeId} {onSelect} />{:else}<p class="text-xs text-zinc-500">No worktrees yet.</p>{/each}</div>
+
+<section class="rounded-md border border-[color:var(--rule)] bg-[color:var(--ink-2)] p-4">
+	<header class="mb-3 flex items-baseline justify-between gap-2">
+		<div>
+			<div class="eyebrow eyebrow-brass">plate · worktrees</div>
+			<h3 class="mt-0.5 font-display text-[18px] italic text-[color:var(--bone)]">Worktrees</h3>
+		</div>
+		<div class="flex items-center gap-1.5">
+			<button class="pill tnum" type="button" onclick={() => onCreate?.()} disabled={!onCreate} title={onCreate ? "Create worktree" : "Open a project before creating a worktree"}>+ worktree</button>
+			<span class="pill tnum">
+				<span class="text-[color:var(--bone-faint)]">count</span>
+				<span>{worktrees.length}</span>
+			</span>
+		</div>
+	</header>
+	<div class="space-y-1.5">
+		{#each worktrees as worktree}
+			<WorktreeRow {worktree} active={String(worktree.id) === selectedWorktreeId} {onSelect} />
+		{:else}
+			<p class="inspector-empty">No worktrees yet.</p>
+		{/each}
+	</div>
 </section>

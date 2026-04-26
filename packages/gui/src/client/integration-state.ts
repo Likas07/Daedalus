@@ -7,6 +7,23 @@ export interface IntegrationArtifactChip {
 	readonly url?: string;
 }
 
+export interface IntegrationPanelViewModel {
+	readonly provider: string;
+	readonly status: string;
+	readonly repositoryLabel: string;
+	readonly backendStatus: string;
+	readonly issueCount: number;
+	readonly pullRequestCount: number;
+	readonly ciSummary: string;
+	readonly loading: boolean;
+	readonly error?: string;
+}
+
+export interface IntegrationLoadState {
+	readonly loading?: boolean;
+	readonly error?: string;
+}
+
 export function summarizeIntegration(state: IntegrationProviderState): string {
 	const repo = state.repository ? `${state.repository.owner}/${state.repository.name}` : "No repository";
 	return `${state.provider}: ${state.status} · ${repo}`;
@@ -27,6 +44,27 @@ export function integrationArtifactChips(state: IntegrationProviderState): reado
 			url: pr.url,
 		})),
 	];
+}
+
+export function integrationPanelViewModel(state: IntegrationProviderState, load: IntegrationLoadState = {}): IntegrationPanelViewModel {
+	const repo = state.repository ? `${state.repository.owner}/${state.repository.name}` : "No repository detected";
+	const failures = state.ciChecks.filter((check) => check.status === "failure").length;
+	const pending = state.ciChecks.filter((check) => check.status === "queued" || check.status === "in_progress").length;
+	return {
+		provider: state.provider,
+		status: state.status,
+		repositoryLabel: repo,
+		backendStatus: state.message ?? state.syncErrors[0]?.message ?? (state.status === "authenticated" ? "GitHub CLI connected" : "GitHub CLI needs attention"),
+		issueCount: state.issues.length,
+		pullRequestCount: state.pullRequests.length,
+		ciSummary: state.ciChecks.length === 0 ? "No CI checks" : `${state.ciChecks.length} checks · ${failures} failing · ${pending} pending`,
+		loading: load.loading === true,
+		error: load.error ?? state.syncErrors[0]?.message,
+	};
+}
+
+export function prCreateApprovalSummary(input: { readonly title: string; readonly head: string; readonly base?: string }): string {
+	return `Create GitHub pull request \"${input.title}\" from ${input.head}${input.base ? ` into ${input.base}` : ""}`;
 }
 
 export function canCreateOrUpdatePullRequest(input: { readonly safePushEnabled?: boolean }): boolean {

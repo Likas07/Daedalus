@@ -1,4 +1,6 @@
 import type { AppEvent } from "@daedalus-pi/app-server-protocol";
+import type { AccessMode } from "./gui-state-types";
+import { projectTranscriptEvent, type TranscriptKind } from "./transcript-projection";
 import type { SessionSummary } from "./runtime";
 
 export type SessionStatus = "idle" | "active" | "running" | "waiting" | "failed" | "completed" | "disconnected";
@@ -19,12 +21,14 @@ export interface WorktreeSummary {
 export interface TranscriptItem {
 	readonly id: string;
 	readonly type: "message" | "tool" | "approval" | "diff" | "terminal" | "error" | "debug";
+	readonly kind: TranscriptKind;
 	readonly sessionId?: string;
 	readonly title: string;
 	readonly summary: string;
 	readonly timestamp?: string;
 	readonly expandable: boolean;
 	readonly raw: unknown;
+	readonly containsSensitiveRaw?: boolean;
 }
 
 export interface ApprovalItem {
@@ -38,7 +42,14 @@ export interface ApprovalItem {
 export interface ProviderStatus {
 	readonly provider: string;
 	readonly authenticated: boolean;
-	readonly status: "ready" | "missing-auth" | "unavailable" | "unknown";
+	readonly status: "ready" | "missing-auth" | "env-key" | "oauth" | "unavailable" | "error" | "unknown";
+	readonly authMethod?: "oauth" | "api-key" | "env" | "config";
+	readonly actionable?: boolean;
+	readonly canLogin?: boolean;
+	readonly canLogout?: boolean;
+	readonly canRelogin?: boolean;
+	readonly instruction?: string;
+	readonly message?: string;
 	readonly source?: string;
 	readonly version?: string;
 	readonly modelCount?: number;
@@ -90,22 +101,23 @@ export function diffSummary(worktrees: readonly WorktreeSummary[]): DiffSummary 
 	);
 }
 
-export function transcriptItemFromEvent(event: AppEvent): TranscriptItem {
-	const type = transcriptType(event.type);
-	return {
-		id: event.id,
-		type,
-		sessionId: event.sessionId,
-		title: transcriptTitle(event.type),
-		summary: payloadSummary(event.payload),
-		timestamp: event.ts,
-		expandable: event.payload !== undefined && event.payload !== null,
-		raw: event,
-	};
+export function transcriptItemFromEvent(event: AppEvent): TranscriptItem[] {
+	return projectTranscriptEvent(event).map((row) => ({
+		id: row.id,
+		type: transcriptType(row.kind),
+		kind: row.kind,
+		sessionId: row.sessionId,
+		title: row.title,
+		summary: row.summary,
+		timestamp: row.timestamp,
+		expandable: row.kind === "debug" || row.containsSensitiveRaw === true,
+		raw: row.raw,
+		containsSensitiveRaw: row.containsSensitiveRaw,
+	}));
 }
 
 export function transcriptItemsFromEvents(events: readonly AppEvent[]): TranscriptItem[] {
-	return events.map(transcriptItemFromEvent);
+	return events.flatMap(transcriptItemFromEvent);
 }
 
 export function approvalItemFromPayload(payload: unknown, fallbackSessionId?: string): ApprovalItem | undefined {
@@ -132,13 +144,13 @@ export function approvalItemFromPayload(payload: unknown, fallbackSessionId?: st
 	return { id, sessionId, summary, risk, scope };
 }
 
-function transcriptType(type: string): TranscriptItem["type"] {
-	if (type.startsWith("approval/")) return "approval";
-	if (type.startsWith("diff/")) return "diff";
-	if (type.startsWith("terminal/")) return "terminal";
-	if (type.includes("error") || type.includes("diagnostic")) return "error";
-	if (type.includes("tool")) return "tool";
-	if (type.includes("debug")) return "debug";
+function transcriptType(kind: TranscriptKind): TranscriptItem["type"] {
+	if (kind === "approval") return "approval";
+	if (kind === "diff") return "diff";
+	if (kind === "terminal") return "terminal";
+	if (kind === "error") return "error";
+	if (kind === "tool" || kind === "bash" || kind === "skill") return "tool";
+	if (kind === "debug") return "debug";
 	return "message";
 }
 
@@ -175,4 +187,32 @@ function inferApprovalScope(request: unknown): string {
 	if (typeof value.path === "string") return value.path;
 	if (typeof value.command === "string") return value.command;
 	return "workspace";
+}
+
+
+export function accessModeLabel(mode: AccessMode): string {
+	switch (mode) {
+		case "supervised":
+			return "Supervised";
+		case "auto-accept":
+			return "Auto-accept";
+		case "unrestricted":
+			return "Unrestricted · audited · hard blocks remain";
+	}
+}
+
+export function terminalStatusTone(status: string | undefined): StatusTone {
+	switch (status) {
+		case "running":
+		case "starting":
+			return "info";
+		case "exited":
+			return "success";
+		case "killed":
+			return "warning";
+		case "error":
+			return "danger";
+		default:
+			return "muted";
+	}
 }

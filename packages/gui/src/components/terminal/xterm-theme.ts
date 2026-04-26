@@ -1,0 +1,25 @@
+import type { ITheme } from "@xterm/xterm";
+
+export const daedalusXtermTheme: ITheme = {
+	background: "#0a0a0a",
+	foreground: "#d8d1bf",
+	cursor: "#c9a961",
+	cursorAccent: "#0a0a0a",
+	selectionBackground: "#3a342d",
+	black: "#0a0a0a",
+	red: "#a44a4a",
+	green: "#7f9f7f",
+	yellow: "#c9a961",
+	blue: "#6f8fa8",
+	magenta: "#9d7fa8",
+	cyan: "#7fa8a1",
+	white: "#d8d1bf",
+	brightBlack: "#3a342d",
+	brightRed: "#c05b5b",
+	brightGreen: "#95b995",
+	brightYellow: "#d8b86d",
+	brightBlue: "#86a7c0",
+	brightMagenta: "#b593c0",
+	brightCyan: "#93c0b8",
+	brightWhite: "#ece6d6",
+};

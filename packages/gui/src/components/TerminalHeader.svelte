@@ -1,9 +1,25 @@
 <script lang="ts">
-	import type { WorkflowTerminalMetadata } from "@daedalus-pi/app-server-protocol";
-	import { terminalElapsedLabel } from "../client/workflow-state";
-	const { terminal, onInterrupt, onKill, onDetach } = $props<{ terminal?: WorkflowTerminalMetadata; onInterrupt?: () => void; onKill?: () => void; onDetach?: () => void }>();
+	import type { RendererTerminal } from "../client/gui-state-types";
+	const { terminal, onKill, onCollapse } = $props<{
+		terminal?: RendererTerminal;
+		onKill?: () => void;
+		onCollapse?: () => void;
+	}>();
 </script>
-<header class="flex h-8 items-center justify-between border-b border-zinc-900 px-3 text-xs">
-	<span class="font-medium text-zinc-300">{terminal ? `${terminal.shell} · ${terminalElapsedLabel(terminal)}` : 'Terminal drawer'}</span>
-	<div class="flex gap-2 text-zinc-500">{#if terminal}<span>seq {terminal.replayCursor}</span><button onclick={onInterrupt}>Interrupt</button><button onclick={onDetach}>Detach</button><button class="text-red-300" onclick={onKill}>Kill</button>{:else}<span>no terminal</span>{/if}</div>
+
+<header class="flex h-9 items-center justify-between gap-2 border-b border-ink-500 bg-black/40 px-4">
+	<div class="flex min-w-0 items-center gap-3">
+		<span aria-hidden="true" class="size-1.5 rounded-full bg-gold"></span>
+		<span class="truncate font-mono text-[11px] tabular-nums text-bone-50">{terminal ? terminal.cwd : "Terminal drawer"}</span>
+		{#if terminal}
+			<span class="font-mono text-[10px] text-bone-400">{terminal.cols}×{terminal.rows}</span>
+		{/if}
+	</div>
+	<div class="flex items-center gap-1.5">
+		{#if terminal}
+			<span class="font-mono text-[10px] text-bone-400">{terminal.status}</span>
+			<button class="btn-mini text-[color:var(--crimson)]" type="button" onclick={onKill}>Kill</button>
+		{/if}
+		<button class="btn-mini" type="button" onclick={onCollapse}>Collapse</button>
+	</div>
 </header>

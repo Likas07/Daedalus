@@ -1,5 +1,14 @@
 <script lang="ts">
-	export type ComposerChipKind = "project" | "session" | "mode" | "draft" | "file" | "diff" | "issue" | "pr" | "link";
+	export type ComposerChipKind =
+		| "project"
+		| "session"
+		| "mode"
+		| "draft"
+		| "file"
+		| "diff"
+		| "issue"
+		| "pr"
+		| "link";
 	export interface ComposerChip {
 		readonly id: string;
 		readonly kind: ComposerChipKind;
@@ -7,25 +16,48 @@
 		readonly removable?: boolean;
 	}
 
-	const {
-		chips = [],
-		onRemove,
-	} = $props<{
+	const { chips = [], onRemove } = $props<{
 		chips?: readonly ComposerChip[];
 		onRemove?: (chip: ComposerChip) => void;
 	}>();
+
+	function chipGlyph(kind: ComposerChipKind): string {
+		switch (kind) {
+			case "project":
+				return "¶";
+			case "session":
+				return "§";
+			case "mode":
+				return "Δ";
+			case "draft":
+				return "✎";
+			case "file":
+				return "▤";
+			case "diff":
+				return "±";
+			case "issue":
+				return "◆";
+			case "pr":
+				return "⇄";
+			case "link":
+				return "↗";
+			default:
+				return "·";
+		}
+	}
 </script>
 
 {#if chips.length > 0}
-	<div class="flex flex-wrap gap-1.5" aria-label="Composer context">
+	<div class="composer-chip-row" aria-label="Composer context">
 		{#each chips as chip (chip.id)}
-			<span class="inline-flex items-center gap-1.5 rounded-full border border-zinc-700/80 bg-zinc-900/80 px-2 py-1 text-[11px] text-zinc-300">
-				<span class="text-zinc-500">{chip.kind}</span>
-				<span>{chip.label}</span>
+			<span class="context-chip context-chip-data" data-kind={chip.kind}>
+				<span aria-hidden="true" class="context-chip-glyph">{chipGlyph(chip.kind)}</span>
+				<span class="context-chip-key">{chip.kind}</span>
+				<span class="context-chip-val">{chip.label}</span>
 				{#if chip.removable !== false}
 					<button
 						type="button"
-						class="rounded-full px-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+						class="context-chip-remove"
 						aria-label={`Remove ${chip.kind} ${chip.label}`}
 						onclick={() => onRemove?.(chip)}
 					>

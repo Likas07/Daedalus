@@ -4,22 +4,46 @@
 
 	const { approvals, respond } = $props<{
 		approvals: readonly ApprovalItem[];
-		respond: (approval: ApprovalItem, decision: "approved" | "denied") => void;
+		respond: (approval: ApprovalItem, decision: "approved" | "denied", message?: string) => void;
 	}>();
+
+	function onQueueKeydown(event: KeyboardEvent): void {
+		const approval = approvals[0];
+		if (!approval) return;
+		if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+			event.preventDefault();
+			respond(approval, "approved");
+		} else if (event.key === "Escape") {
+			event.preventDefault();
+			respond(approval, "denied");
+		}
+	}
 </script>
 
-<section class="space-y-3" data-testid="approval-queue">
-	<div class="flex items-center justify-between gap-3">
-		<div>
-			<h3 class="text-xs font-semibold uppercase tracking-wide text-zinc-400">Approval queue</h3>
-			<p class="text-xs text-zinc-500">Review risk, scope, and session context before responding.</p>
-		</div>
-		<span class="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-200" data-testid="approval-count">{approvals.length}</span>
-	</div>
+	<svelte:window onkeydown={onQueueKeydown} />
 
-	{#each approvals as approval (approval.id)}
-		<ApprovalCard {approval} {respond} />
-	{:else}
-		<p class="rounded-lg border border-dashed border-zinc-800 p-3 text-xs text-zinc-500">No pending approvals.</p>
-	{/each}
+<section class="space-y-4" data-testid="approval-queue" aria-labelledby="approval-queue-title">
+	<header class="flex items-baseline justify-between gap-3">
+		<div>
+			<div id="approval-queue-title" class="caps text-bone-400">queue · approvals</div>
+			<p class="mt-1 font-mono text-[10.5px] text-bone-400">
+				review risk, scope, and session context before responding.
+			</p>
+		</div>
+		<span
+			class="caps text-bone-300 tabular-nums"
+			data-testid="approval-count"
+			aria-label={`${approvals.length} approvals pending`}
+		>
+			pending {approvals.length.toString().padStart(2, "0")}
+		</span>
+	</header>
+
+	<div class="space-y-4" role="list" aria-label="Pending approval requests">
+		{#each approvals as approval (approval.id)}
+			<ApprovalCard {approval} {respond} />
+		{:else}
+			<p class="font-mono text-[11px] text-bone-400">No pending approvals.</p>
+		{/each}
+	</div>
 </section>
