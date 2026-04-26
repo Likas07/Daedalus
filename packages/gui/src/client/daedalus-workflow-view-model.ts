@@ -25,7 +25,11 @@ export function buildDaedalusWorkflowViewModel(workflow: DaedalusWorkflowState):
 
 export function workflowFromTypedEvents(events: readonly AppEvent[]): DaedalusWorkflowState | undefined {
 	for (const event of [...events].reverse()) {
-		if (event.type === "daedalus/workflow/projected" && isRecord(event.payload) && isWorkflow(event.payload.workflow)) {
+		if (
+			event.type === "daedalus/workflow/projected" &&
+			isRecord(event.payload) &&
+			isWorkflow(event.payload.workflow)
+		) {
 			return event.payload.workflow;
 		}
 	}
@@ -33,7 +37,9 @@ export function workflowFromTypedEvents(events: readonly AppEvent[]): DaedalusWo
 }
 
 function isWorkflow(value: unknown): value is DaedalusWorkflowState {
-	return isRecord(value) && typeof value.sessionId === "string" && Array.isArray(value.todos) && Array.isArray(value.plans);
+	return (
+		isRecord(value) && typeof value.sessionId === "string" && Array.isArray(value.todos) && Array.isArray(value.plans)
+	);
 }
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;

@@ -36,7 +36,9 @@ describe("daedalus gui E2E smoke", () => {
 				return {
 					stdout: new ReadableStream({
 						start(controller) {
-							controller.enqueue(new TextEncoder().encode('{"httpUrl":"http://0.0.0.0:4173","token":"<redacted>"}\n'));
+							controller.enqueue(
+								new TextEncoder().encode('{"httpUrl":"http://0.0.0.0:4173","token":"<redacted>"}\n'),
+							);
 							controller.close();
 						},
 					}),

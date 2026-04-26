@@ -1,18 +1,18 @@
 import {
+	type CreateAgentSessionRuntimeFactory,
 	createAgentSessionFromServices,
 	createAgentSessionRuntime,
 	createAgentSessionServices,
 	getAgentDir,
 	SessionManager,
-	type CreateAgentSessionRuntimeFactory,
 } from "@daedalus-pi/coding-agent";
-import type { RuntimeFactory } from "./session-controller";
-import { resolveRuntimeOptions } from "./runtime-options-resolver";
-import type { AccessPolicyService } from "./access-policy-service";
-import type { ApprovalService } from "./approval-service";
-import { ToolApprovalGate } from "./tool-approval-gate";
 import { ExtensionUIBridge } from "../extensions/extension-ui-bridge";
 import type { ExtensionUiRouter } from "../extensions/extension-ui-router";
+import type { AccessPolicyService } from "./access-policy-service";
+import type { ApprovalService } from "./approval-service";
+import { resolveRuntimeOptions } from "./runtime-options-resolver";
+import type { RuntimeFactory } from "./session-controller";
+import { ToolApprovalGate } from "./tool-approval-gate";
 
 export interface CodingAgentRuntimeFactoryOptions {
 	readonly approvalService?: ApprovalService;
@@ -27,19 +27,39 @@ export function createCodingAgentRuntimeFactory(options: CodingAgentRuntimeFacto
 		let currentServices: Awaited<ReturnType<typeof createAgentSessionServices>> | undefined;
 		const applyOptions = async (session: unknown, nextContext = context) => {
 			if (!currentServices) return;
-			const resolved = await resolveRuntimeOptions({ services: currentServices, sessionManager, context: nextContext });
+			const resolved = await resolveRuntimeOptions({
+				services: currentServices,
+				sessionManager,
+				context: nextContext,
+			});
 			currentServices.diagnostics.push(...resolved.diagnostics);
-			const agentSession = session as { agent?: { state?: { model?: unknown; thinkingLevel?: unknown } }; setActiveTools?: (tools: unknown[]) => void };
+			const agentSession = session as {
+				agent?: { state?: { model?: unknown; thinkingLevel?: unknown } };
+				setActiveTools?: (tools: unknown[]) => void;
+			};
 			if (resolved.model && agentSession.agent?.state) agentSession.agent.state.model = resolved.model;
-			if (resolved.thinkingLevel && agentSession.agent?.state) agentSession.agent.state.thinkingLevel = resolved.thinkingLevel;
+			if (resolved.thinkingLevel && agentSession.agent?.state)
+				agentSession.agent.state.thinkingLevel = resolved.thinkingLevel;
 			agentSession.setActiveTools?.(resolved.tools ?? []);
 		};
-		const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd: runtimeCwd, sessionManager, sessionStartEvent }) => {
+		const createRuntime: CreateAgentSessionRuntimeFactory = async ({
+			cwd: runtimeCwd,
+			sessionManager,
+			sessionStartEvent,
+		}) => {
 			const services = await createAgentSessionServices({ cwd: runtimeCwd, agentDir: resolvedAgentDir });
 			currentServices = services;
 			const resolved = await resolveRuntimeOptions({ services, sessionManager, context });
 			services.diagnostics.push(...resolved.diagnostics);
-			const session = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model: resolved.model, thinkingLevel: resolved.thinkingLevel, scopedModels: resolved.scopedModels, tools: resolved.tools });
+			const session = await createAgentSessionFromServices({
+				services,
+				sessionManager,
+				sessionStartEvent,
+				model: resolved.model,
+				thinkingLevel: resolved.thinkingLevel,
+				scopedModels: resolved.scopedModels,
+				tools: resolved.tools,
+			});
 			if (options.extensionUiRouter && sessionId) {
 				await session.session.bindExtensions({
 					uiContext: new ExtensionUIBridge({
@@ -50,7 +70,16 @@ export function createCodingAgentRuntimeFactory(options: CodingAgentRuntimeFacto
 					}) as never,
 				});
 			}
-			if (options.approvalService && options.accessPolicy && sessionId) installApprovalGate(session.session, new ToolApprovalGate({ sessionId, approvalService: options.approvalService, accessPolicy: options.accessPolicy, timeoutMs: options.approvalTimeoutMs }));
+			if (options.approvalService && options.accessPolicy && sessionId)
+				installApprovalGate(
+					session.session,
+					new ToolApprovalGate({
+						sessionId,
+						approvalService: options.approvalService,
+						accessPolicy: options.accessPolicy,
+						timeoutMs: options.approvalTimeoutMs,
+					}),
+				);
 			return { ...session, services, diagnostics: services.diagnostics };
 		};
 		const runtime = await createAgentSessionRuntime(createRuntime, {
@@ -81,7 +110,10 @@ export function createCodingAgentRuntimeFactory(options: CodingAgentRuntimeFacto
 }
 
 function installApprovalGate(session: unknown, gate: ToolApprovalGate): void {
-	const agentSession = session as { __approvalGate?: ToolApprovalGate; agent?: { beforeToolCall?: (context: any, signal?: AbortSignal) => Promise<unknown> | unknown } };
+	const agentSession = session as {
+		__approvalGate?: ToolApprovalGate;
+		agent?: { beforeToolCall?: (context: any, signal?: AbortSignal) => Promise<unknown> | unknown };
+	};
 	agentSession.__approvalGate?.dispose("Approval gate replaced.");
 	agentSession.__approvalGate = gate;
 	const previous = agentSession.agent?.beforeToolCall;
@@ -89,6 +121,11 @@ function installApprovalGate(session: unknown, gate: ToolApprovalGate): void {
 	agentSession.agent.beforeToolCall = async (context: any, signal?: AbortSignal) => {
 		const existing = await previous?.(context, signal);
 		if (existing && typeof existing === "object" && (existing as { block?: unknown }).block === true) return existing;
-		return gate.beforeToolCall({ toolName: context.toolCall.name, toolCallId: context.toolCall.id, args: context.args, signal });
+		return gate.beforeToolCall({
+			toolName: context.toolCall.name,
+			toolCallId: context.toolCall.id,
+			args: context.args,
+			signal,
+		});
 	};
 }

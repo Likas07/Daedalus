@@ -1,12 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+	type ControlledSessionRuntime,
+	type RuntimeControllerMessage,
+	SessionController,
+} from "../runtime/session-controller";
 import { AttachmentService } from "./attachment-service";
 import { CommandService } from "./command-service";
 import { FileSearchService } from "./file-search-service";
 import { PromptContextService } from "./prompt-context-service";
-import { type ControlledSessionRuntime, type RuntimeControllerMessage, SessionController } from "../runtime/session-controller";
 
 class FakeRuntime implements ControlledSessionRuntime {
 	readonly session: ControlledSessionRuntime["session"];
@@ -40,10 +44,20 @@ describe("GUI composer context services", () => {
 	test("stores valid image attachments and rejects invalid attachment types", async () => {
 		const dir = await mkdtemp(join(tmpdir(), "daedalus-composer-attachments-"));
 		const service = new AttachmentService(dir);
-		const attachment = await service.save({ filename: "screen.png", mimeType: "image/png", dataBase64: Buffer.from("png").toString("base64") });
+		const attachment = await service.save({
+			filename: "screen.png",
+			mimeType: "image/png",
+			dataBase64: Buffer.from("png").toString("base64"),
+		});
 		expect(attachment).toMatchObject({ kind: "image", filename: "screen.png", mimeType: "image/png", size: 3 });
-		await expect(service.get(attachment.id)).resolves.toMatchObject({ id: attachment.id, kind: "image", filename: "screen.png" });
-		await expect(service.save({ filename: "archive.zip", mimeType: "application/zip", dataBase64: "eA==" })).rejects.toThrow("Unsupported attachment type");
+		await expect(service.get(attachment.id)).resolves.toMatchObject({
+			id: attachment.id,
+			kind: "image",
+			filename: "screen.png",
+		});
+		await expect(
+			service.save({ filename: "archive.zip", mimeType: "application/zip", dataBase64: "eA==" }),
+		).rejects.toThrow("Unsupported attachment type");
 	});
 
 	test("returns slash command summaries", () => {
@@ -56,12 +70,18 @@ describe("GUI composer context services", () => {
 		await writeFile(join(dir, "note.txt"), "important context");
 		const attachmentDir = join(dir, ".attachments");
 		const attachments = new AttachmentService(attachmentDir);
-		const image = await attachments.save({ filename: "screen.png", mimeType: "image/png", dataBase64: Buffer.from("image-bytes").toString("base64") });
+		const image = await attachments.save({
+			filename: "screen.png",
+			mimeType: "image/png",
+			dataBase64: Buffer.from("image-bytes").toString("base64"),
+		});
 		const messages: RuntimeControllerMessage[] = [];
 		let runtime: FakeRuntime | undefined;
 		const controller = new SessionController({
 			agentDir: join(dir, ".agent"),
-			eventSink: (message) => { messages.push(message); },
+			eventSink: (message) => {
+				messages.push(message);
+			},
 			makeSessionManager: () => ({}),
 			nextSessionId: () => "session-1",
 			nextTurnId: () => "turn-1",
@@ -73,7 +93,20 @@ describe("GUI composer context services", () => {
 			},
 		});
 		await controller.startSession({ cwd: dir });
-		await controller.startTurn({ sessionId: "session-1", prompt: "use this", context: { filePaths: ["note.txt"], attachmentIds: [image.id], model: "m", effort: "high", accessMode: "supervised", projectId: "project-1", worktreeId: "worktree-1", draftState: { prompt: "use this" } } });
+		await controller.startTurn({
+			sessionId: "session-1",
+			prompt: "use this",
+			context: {
+				filePaths: ["note.txt"],
+				attachmentIds: [image.id],
+				model: "m",
+				effort: "high",
+				accessMode: "supervised",
+				projectId: "project-1",
+				worktreeId: "worktree-1",
+				draftState: { prompt: "use this" },
+			},
+		});
 		expect(runtime?.prompts[0]).toContain("<gui-context>");
 		expect(runtime?.prompts[0]).toContain("projectId=project-1");
 		expect(runtime?.prompts[0]).toContain("worktreeId=worktree-1");

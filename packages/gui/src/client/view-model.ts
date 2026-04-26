@@ -1,7 +1,7 @@
 import type { AppEvent } from "@daedalus-pi/app-server-protocol";
 import type { AccessMode } from "./gui-state-types";
-import { projectTranscriptEvent, type TranscriptKind } from "./transcript-projection";
 import type { SessionSummary } from "./runtime";
+import { projectTranscriptEvent, type TranscriptKind } from "./transcript-projection";
 
 export type SessionStatus = "idle" | "active" | "running" | "waiting" | "failed" | "completed" | "disconnected";
 export type StatusTone = "muted" | "info" | "success" | "warning" | "danger";
@@ -55,7 +55,13 @@ export interface ProviderStatus {
 	readonly source?: string;
 	readonly version?: string;
 	readonly modelCount?: number;
-	readonly models?: readonly { id: string; label?: string; available?: boolean; capabilities?: readonly string[]; diagnostics?: readonly string[] }[];
+	readonly models?: readonly {
+		id: string;
+		label?: string;
+		available?: boolean;
+		capabilities?: readonly string[];
+		diagnostics?: readonly string[];
+	}[];
 	readonly capabilities?: readonly string[];
 	readonly diagnostics?: readonly string[];
 	readonly updatedAt?: string;
@@ -160,7 +166,7 @@ function transcriptType(kind: TranscriptKind): TranscriptItem["type"] {
 	return "message";
 }
 
-function transcriptTitle(type: string): string {
+function _transcriptTitle(type: string): string {
 	return type
 		.split("/")
 		.map((part) => part.charAt(0).toUpperCase() + part.slice(1).replaceAll("_", " "))
@@ -194,7 +200,6 @@ function inferApprovalScope(request: unknown): string {
 	if (typeof value.command === "string") return value.command;
 	return "workspace";
 }
-
 
 export function accessModeLabel(mode: AccessMode): string {
 	switch (mode) {

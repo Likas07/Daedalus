@@ -43,15 +43,45 @@ function responseFor(method: string | undefined, request?: { params?: unknown })
 		case "terminal/list":
 			return { terminals: [] };
 		case "terminal/create":
-			return { terminal: { terminalId: "term-1", cwd: "/repo", cols: 100, rows: 24, status: "running", history: "server output", updatedAt: "now" } };
+			return {
+				terminal: {
+					terminalId: "term-1",
+					cwd: "/repo",
+					cols: 100,
+					rows: 24,
+					status: "running",
+					history: "server output",
+					updatedAt: "now",
+				},
+			};
 		case "terminal/input":
 			return {};
 		case "terminal/replay":
 			return { chunks: [{ seq: 1, data: "server output" }] };
 		case "terminal/resize":
-			return { terminal: { terminalId: "term-1", cwd: "/repo", cols: 100, rows: 24, status: "running", history: "server output", updatedAt: "now" } };
+			return {
+				terminal: {
+					terminalId: "term-1",
+					cwd: "/repo",
+					cols: 100,
+					rows: 24,
+					status: "running",
+					history: "server output",
+					updatedAt: "now",
+				},
+			};
 		case "terminal/kill":
-			return { terminal: { terminalId: "term-1", cwd: "/repo", cols: 100, rows: 24, status: "killed", history: "server output", updatedAt: "now" } };
+			return {
+				terminal: {
+					terminalId: "term-1",
+					cwd: "/repo",
+					cols: 100,
+					rows: 24,
+					status: "killed",
+					history: "server output",
+					updatedAt: "now",
+				},
+			};
 		case "model/list":
 			return { models: [], selectedModel: undefined };
 		case "auth/status":
@@ -61,7 +91,14 @@ function responseFor(method: string | undefined, request?: { params?: unknown })
 		case "access/get":
 		case "access/set": {
 			const mode = (request?.params as { mode?: string } | undefined)?.mode ?? "supervised";
-			return { policy: { mode, autoApproveSoftPrompts: mode !== "supervised", bypassHardBlocks: false, auditRequired: true } };
+			return {
+				policy: {
+					mode,
+					autoApproveSoftPrompts: mode !== "supervised",
+					bypassHardBlocks: false,
+					auditRequired: true,
+				},
+			};
 		}
 		case "composer/file-search":
 			return { files: [{ path: "src/App.svelte", label: "App.svelte", kind: "file", extension: "svelte" }] };
@@ -133,11 +170,13 @@ describe("GUI app", () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		root.querySelector<HTMLButtonElement>('button[data-action-id="approve"]')?.click();
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(transport.sent).toContainEqual(expect.objectContaining({
-			kind: "request",
-			method: "extension/ui/respond",
-			params: { requestId: "confirm-1", actionId: "approve", values: { reason: "ok" } },
-		}));
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({
+				kind: "request",
+				method: "extension/ui/respond",
+				params: { requestId: "confirm-1", actionId: "approve", values: { reason: "ok" } },
+			}),
+		);
 		await app.close();
 	});
 
@@ -171,11 +210,13 @@ describe("GUI app", () => {
 			.find((button) => button.textContent?.includes("Approve once"))
 			?.click();
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(transport.sent).toContainEqual(expect.objectContaining({
-			kind: "request",
-			method: "approval/respond",
-			params: expect.objectContaining({ approvalId: "approval-1", decision: "approved" }),
-		}));
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({
+				kind: "request",
+				method: "approval/respond",
+				params: expect.objectContaining({ approvalId: "approval-1", decision: "approved" }),
+			}),
+		);
 
 		transport.listener?.({
 			kind: "notification",
@@ -193,11 +234,13 @@ describe("GUI app", () => {
 			.find((button) => button.textContent?.includes("Deny"))
 			?.click();
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(transport.sent).toContainEqual(expect.objectContaining({
-			kind: "request",
-			method: "approval/respond",
-			params: expect.objectContaining({ approvalId: "approval-2", decision: "denied" }),
-		}));
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({
+				kind: "request",
+				method: "approval/respond",
+				params: expect.objectContaining({ approvalId: "approval-2", decision: "denied" }),
+			}),
+		);
 		await app.close();
 	});
 
@@ -289,16 +332,20 @@ describe("GUI app", () => {
 		expect(prompt?.value).toBe("Saved task");
 		root.querySelector<HTMLButtonElement>('[data-testid="composer-submit"]')?.click();
 		await new Promise((resolve) => setTimeout(resolve, 25));
-		expect(transport.sent).toContainEqual(expect.objectContaining({
-			kind: "request",
-			method: "project/open",
-			params: { path: "/repo" },
-		}));
-		expect(transport.sent).toContainEqual(expect.objectContaining({
-			kind: "request",
-			method: "session/start",
-			params: expect.objectContaining({ projectId: "project-1", prompt: "Saved task" }),
-		}));
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({
+				kind: "request",
+				method: "project/open",
+				params: { path: "/repo" },
+			}),
+		);
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({
+				kind: "request",
+				method: "session/start",
+				params: expect.objectContaining({ projectId: "project-1", prompt: "Saved task" }),
+			}),
+		);
 		expect(localStorage.getItem("daedalus.gui.draft.project:/repo")).toBeNull();
 		expect(prompt?.value).toBe("");
 		await app.close();
@@ -308,7 +355,11 @@ describe("GUI app", () => {
 		const root = document.createElement("div");
 		document.body.replaceChildren(root);
 		const transport = new MemoryTransport();
-		const app = await createApp({ root, transport, bootstrap: { wsEndpoint: "ws://localhost/ws", projectRoot: "/repo" } });
+		const app = await createApp({
+			root,
+			transport,
+			bootstrap: { wsEndpoint: "ws://localhost/ws", projectRoot: "/repo" },
+		});
 		await app.start();
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		const prompt = root.querySelector<HTMLTextAreaElement>('[data-testid="composer-prompt"]');
@@ -321,12 +372,14 @@ describe("GUI app", () => {
 		await new Promise((resolve) => setTimeout(resolve, 25));
 		const starts = transport.sent.filter((message) => (message as { method?: string }).method === "session/start");
 		expect(starts).toHaveLength(1);
-		expect(starts[0]).toEqual(expect.objectContaining({
-			params: expect.objectContaining({
-				prompt: "Line one",
-				mode: "daedalus",
+		expect(starts[0]).toEqual(
+			expect.objectContaining({
+				params: expect.objectContaining({
+					prompt: "Line one",
+					mode: "daedalus",
+				}),
 			}),
-		}));
+		);
 		await app.close();
 	});
 
@@ -394,11 +447,13 @@ describe("GUI app", () => {
 		input.dispatchEvent(new Event("input", { bubbles: true }));
 		document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
 		await new Promise((resolve) => setTimeout(resolve, 25));
-		expect(transport.sent).toContainEqual(expect.objectContaining({
-			kind: "request",
-			method: "project/open",
-			params: { path: "/tmp/new-project" },
-		}));
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({
+				kind: "request",
+				method: "project/open",
+				params: { path: "/tmp/new-project" },
+			}),
+		);
 		expect(app.runtime.state.projectRoot).toBe("/tmp/new-project");
 		await app.close();
 	});
@@ -428,11 +483,13 @@ describe("GUI app", () => {
 		root.querySelector<HTMLButtonElement>('[data-testid="project-native-folder"]')?.click();
 		await new Promise((resolve) => setTimeout(resolve, 25));
 		expect(pickerStart).toBe("/repo");
-		expect(transport.sent).toContainEqual(expect.objectContaining({
-			kind: "request",
-			method: "project/open",
-			params: { path: "/picked/project" },
-		}));
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({
+				kind: "request",
+				method: "project/open",
+				params: { path: "/picked/project" },
+			}),
+		);
 		expect(app.runtime.state.projectRoot).toBe("/picked/project");
 		await app.close();
 	});
@@ -448,18 +505,26 @@ describe("GUI app", () => {
 		});
 		await app.start();
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		const terminalButton = [...root.querySelectorAll<HTMLButtonElement>('[data-testid="terminal-tail"] button')].at(-1);
+		const terminalButton = [...root.querySelectorAll<HTMLButtonElement>('[data-testid="terminal-tail"] button')].at(
+			-1,
+		);
 		if (!terminalButton) throw new Error(root.innerHTML);
 		terminalButton.click();
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		expect(root.querySelector('[data-testid="terminal-drawer"]')).not.toBeNull();
-		[...root.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Create terminal") || button.textContent?.includes("New terminal"))?.click();
+		[...root.querySelectorAll<HTMLButtonElement>("button")]
+			.find(
+				(button) => button.textContent?.includes("Create terminal") || button.textContent?.includes("New terminal"),
+			)
+			?.click();
 		await new Promise((resolve) => setTimeout(resolve, 25));
-		expect(transport.sent).toContainEqual(expect.objectContaining({
-			kind: "request",
-			method: "terminal/create",
-			params: expect.objectContaining({ cwd: "/repo", cols: 100, rows: 24 }),
-		}));
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({
+				kind: "request",
+				method: "terminal/create",
+				params: expect.objectContaining({ cwd: "/repo", cols: 100, rows: 24 }),
+			}),
+		);
 		expect(app.runtime.state.activeTerminalId).toBe("term-1");
 		expect(root.textContent).toContain("running");
 		await app.close();
@@ -510,31 +575,46 @@ describe("GUI app", () => {
 			sessionId: "session-1",
 			payload: { turnId: "turn-1", status: "running" },
 		});
-		app.runtime.state.approvalItems.push({ id: "approval-1", sessionId: "session-1", summary: "Read package metadata", risk: "low", scope: "workspace" });
+		app.runtime.state.approvalItems.push({
+			id: "approval-1",
+			sessionId: "session-1",
+			summary: "Read package metadata",
+			risk: "low",
+			scope: "workspace",
+		});
 		app.runtime.notify();
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		expect(root.textContent).toContain("Unrestricted · audited · hard blocks remain");
-		[...root.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Cancel turn"))?.click();
-		[...root.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Stop session"))?.click();
+		[...root.querySelectorAll<HTMLButtonElement>("button")]
+			.find((button) => button.textContent?.includes("Cancel turn"))
+			?.click();
+		[...root.querySelectorAll<HTMLButtonElement>("button")]
+			.find((button) => button.textContent?.includes("Stop session"))
+			?.click();
 		const approvalCard = root.querySelector<HTMLElement>('[data-testid="approval-card"]');
 		approvalCard?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true }));
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(transport.sent).toContainEqual(expect.objectContaining({
-			kind: "request",
-			method: "turn/cancel",
-			params: { sessionId: "session-1", turnId: "turn-1" },
-		}));
-		expect(transport.sent).toContainEqual(expect.objectContaining({
-			kind: "request",
-			method: "session/stop",
-			params: { sessionId: "session-1" },
-		}));
-		expect(transport.sent).toContainEqual(expect.objectContaining({
-			kind: "request",
-			method: "approval/respond",
-			params: expect.objectContaining({ approvalId: "approval-1", decision: "approved" }),
-		}));
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({
+				kind: "request",
+				method: "turn/cancel",
+				params: { sessionId: "session-1", turnId: "turn-1" },
+			}),
+		);
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({
+				kind: "request",
+				method: "session/stop",
+				params: { sessionId: "session-1" },
+			}),
+		);
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({
+				kind: "request",
+				method: "approval/respond",
+				params: expect.objectContaining({ approvalId: "approval-1", decision: "approved" }),
+			}),
+		);
 		await app.close();
 	});
-
 });

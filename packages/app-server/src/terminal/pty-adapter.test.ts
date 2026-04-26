@@ -14,8 +14,14 @@ describe("NodePtyAdapter", () => {
 					write: (data) => calls.push({ write: data }),
 					resize: (cols, rows) => calls.push({ resize: [cols, rows] }),
 					kill: (signal) => calls.push({ kill: signal }),
-					onData(listener) { dataListener = listener; return { dispose: () => calls.push("disposeData") }; },
-					onExit(listener) { exitListener = listener; return { dispose: () => calls.push("disposeExit") }; },
+					onData(listener) {
+						dataListener = listener;
+						return { dispose: () => calls.push("disposeData") };
+					},
+					onExit(listener) {
+						exitListener = listener;
+						return { dispose: () => calls.push("disposeExit") };
+					},
 				};
 			},
 		});
@@ -29,7 +35,8 @@ describe("NodePtyAdapter", () => {
 		proc.kill("SIGTERM");
 		dataListener("hello");
 		exitListener({ exitCode: 0, signal: "SIGTERM" });
-		offData(); offExit();
+		offData();
+		offExit();
 		expect(proc.pid).toBe(42);
 		expect(data).toEqual(["hello"]);
 		expect(exits).toEqual([{ exitCode: 0, signal: "SIGTERM" }]);

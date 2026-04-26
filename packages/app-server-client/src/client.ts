@@ -2,20 +2,20 @@ import type {
 	AccessMode,
 	ClientNotification,
 	ClientRequest,
-	ClientRequestResultMap as ProtocolClientRequestResultMap,
 	EventReplayParams,
 	EventReplayResult,
 	ExtensionUiRequest,
 	ExtensionUiResponse,
 	InitializeParams,
 	InitializeResult,
+	ClientRequestResultMap as ProtocolClientRequestResultMap,
 	ServerNotification,
 	ServerRequest,
 	ServerResponse,
 	SessionStartParams,
 } from "@daedalus-pi/app-server-protocol";
-import { SessionClient } from "./sessions";
 import { RuntimeControlClient } from "./runtime-control";
+import { SessionClient } from "./sessions";
 
 export interface AppServerTransport {
 	send(message: unknown): void | Promise<void>;

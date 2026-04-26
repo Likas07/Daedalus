@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
-	GUI_CAPABILITIES,
-	REQUIRED_GUI_FULL_PARITY_CAPABILITY_IDS,
 	assertStrictGuiFullParity,
 	disabledReasonFor,
+	GUI_CAPABILITIES,
+	type GuiCapability,
 	getGuiCapability,
 	isGuiCapabilityEnabled,
+	REQUIRED_GUI_FULL_PARITY_CAPABILITY_IDS,
 	strictGuiParityViolations,
-	type GuiCapability,
 } from "./capability-registry";
 
 function requiredCapabilities(): readonly GuiCapability[] {

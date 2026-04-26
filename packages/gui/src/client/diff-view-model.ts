@@ -43,9 +43,17 @@ export interface BuildDiffReviewInput {
 
 export function buildDiffReviewViewModel(input: BuildDiffReviewInput): DiffReviewViewModel {
 	const files = input.diff?.files ?? [];
-	const selectedPath = input.selectedPath && files.some((file) => file.path === input.selectedPath) ? input.selectedPath : (files[0]?.path ?? null);
+	const selectedPath =
+		input.selectedPath && files.some((file) => file.path === input.selectedPath)
+			? input.selectedPath
+			: (files[0]?.path ?? null);
 	const canMutate = input.capabilities?.gitMutations === true && input.accessPolicy?.mode === "unrestricted";
-	const mutationDisabledReason = input.capabilities?.gitMutations !== true ? "Backend does not advertise Git mutation capability." : input.accessPolicy?.mode !== "unrestricted" ? "Git mutations require unrestricted approval policy." : undefined;
+	const mutationDisabledReason =
+		input.capabilities?.gitMutations !== true
+			? "Backend does not advertise Git mutation capability."
+			: input.accessPolicy?.mode !== "unrestricted"
+				? "Git mutations require unrestricted approval policy."
+				: undefined;
 	return {
 		files,
 		tree: buildChangedFilesTree(files, selectedPath),
@@ -58,9 +66,17 @@ export function buildDiffReviewViewModel(input: BuildDiffReviewInput): DiffRevie
 	};
 }
 
-interface MutableDirectory { name: string; path: string; dirs: Map<string, MutableDirectory>; files: DiffFileNode[] }
+interface MutableDirectory {
+	name: string;
+	path: string;
+	dirs: Map<string, MutableDirectory>;
+	files: DiffFileNode[];
+}
 
-export function buildChangedFilesTree(files: readonly WorkflowChangedFile[], selectedPath: string | null): readonly DiffTreeNode[] {
+export function buildChangedFilesTree(
+	files: readonly WorkflowChangedFile[],
+	selectedPath: string | null,
+): readonly DiffTreeNode[] {
 	const root: MutableDirectory = { name: "", path: "", dirs: new Map(), files: [] };
 	for (const file of [...files].sort((a, b) => a.path.localeCompare(b.path))) {
 		const parts = file.path.split("/");
@@ -75,13 +91,30 @@ export function buildChangedFilesTree(files: readonly WorkflowChangedFile[], sel
 			}
 			dir = child;
 		}
-		dir.files.push({ kind: "file", name: parts.at(-1) ?? file.path, path: file.path, status: file.status, additions: file.insertions, deletions: file.deletions, staged: file.staged, selected: file.path === selectedPath });
+		dir.files.push({
+			kind: "file",
+			name: parts.at(-1) ?? file.path,
+			path: file.path,
+			status: file.status,
+			additions: file.insertions,
+			deletions: file.deletions,
+			staged: file.staged,
+			selected: file.path === selectedPath,
+		});
 	}
 	return materialize(root);
 }
 
 function materialize(dir: MutableDirectory): readonly DiffTreeNode[] {
-	return [...dir.files, ...[...dir.dirs.values()].map((child) => ({ kind: "directory" as const, name: child.name, path: child.path, children: materialize(child) }))];
+	return [
+		...dir.files,
+		...[...dir.dirs.values()].map((child) => ({
+			kind: "directory" as const,
+			name: child.name,
+			path: child.path,
+			children: materialize(child),
+		})),
+	];
 }
 
 export function extractFilePatch(patch: string, path: string): string {
@@ -100,5 +133,3 @@ export function extractFilePatch(patch: string, path: string): string {
 	if (include) chunks.push(current.join("\n"));
 	return chunks.join("\n");
 }
-
-

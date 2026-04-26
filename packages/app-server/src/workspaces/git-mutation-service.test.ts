@@ -11,8 +11,22 @@ function service(decision: "approved" | "denied" = "approved") {
 				request: () => approval,
 				waitForDecision: async () => ({ approvalId: "a1", decision }),
 			} as never,
-			diffService: { get: async () => ({ branch: "main", upstream: null, ahead: 0, behind: 0, stagedCount: 0, unstagedCount: 0, files: [], riskyGroups: [], patch: "" }) } as never,
-			git: (async (_cwd, args) => { commands.push([...args]); }) as GitRunner,
+			diffService: {
+				get: async () => ({
+					branch: "main",
+					upstream: null,
+					ahead: 0,
+					behind: 0,
+					stagedCount: 0,
+					unstagedCount: 0,
+					files: [],
+					riskyGroups: [],
+					patch: "",
+				}),
+			} as never,
+			git: (async (_cwd, args) => {
+				commands.push([...args]);
+			}) as GitRunner,
 		}),
 	};
 }
@@ -32,13 +46,17 @@ describe("GitMutationService", () => {
 
 	test("deny prevents mutation", async () => {
 		const harness = service("denied");
-		await expect(harness.service.stage({ cwd: "/repo", paths: ["src/a.ts"] })).rejects.toBeInstanceOf(GitMutationDeniedError);
+		await expect(harness.service.stage({ cwd: "/repo", paths: ["src/a.ts"] })).rejects.toBeInstanceOf(
+			GitMutationDeniedError,
+		);
 		expect(harness.commands).toEqual([]);
 	});
 
 	test("commit requires non-empty message", async () => {
 		const harness = service();
-		await expect(harness.service.commit({ cwd: "/repo", message: "  " })).rejects.toThrow("Commit message is required.");
+		await expect(harness.service.commit({ cwd: "/repo", message: "  " })).rejects.toThrow(
+			"Commit message is required.",
+		);
 		expect(harness.commands).toEqual([]);
 	});
 });

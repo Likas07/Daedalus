@@ -20,7 +20,8 @@ export class ExtensionUiRouter {
 	constructor(private readonly emit?: ExtensionUiRouterEmit) {}
 
 	register(request: ExtensionUiRequest, resolve: (response: ExtensionUiResponse) => void): void {
-		if (this.pending.has(request.requestId)) throw new Error(`Extension UI request already registered: ${request.requestId}`);
+		if (this.pending.has(request.requestId))
+			throw new Error(`Extension UI request already registered: ${request.requestId}`);
 		this.pending.set(request.requestId, { request, resolve });
 	}
 

@@ -92,7 +92,8 @@ export function projectGuiSessionReadModel(options: ProjectGuiSessionReadModelOp
 			pendingApprovalCount -= 1;
 		}
 		if (event.type.includes("error")) status = "error";
-		else if (!options.archived && (event.type.includes("started") || event.type.includes("running"))) status = "active";
+		else if (!options.archived && (event.type.includes("started") || event.type.includes("running")))
+			status = "active";
 	}
 
 	if (options.archived) status = "archived";

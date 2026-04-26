@@ -45,7 +45,8 @@ export function createProjectDashboardViewModel(state: GuiState): ProjectDashboa
 	const editorPath = activeWorktree?.path ?? projectPath;
 	return {
 		projectPath,
-		projectName: projectPath?.split(/[\\/]/).filter(Boolean).at(-1) ?? state.projects[0]?.name ?? "Choose a workspace",
+		projectName:
+			projectPath?.split(/[\\/]/).filter(Boolean).at(-1) ?? state.projects[0]?.name ?? "Choose a workspace",
 		activeWorktree,
 		branchLabel: activeDiff?.branch ?? activeWorktree?.branch ?? "detached",
 		upstreamLabel: activeDiff?.upstream ?? activeWorktree?.upstream ?? "no upstream",
@@ -61,15 +62,24 @@ export function createProjectDashboardViewModel(state: GuiState): ProjectDashboa
 		activeDiff,
 		activeSessions,
 		approvalCount: state.approvalItems.length,
-		terminalCount: state.terminals.filter((terminal) => terminal.status === "running" || terminal.status === "starting").length,
+		terminalCount: state.terminals.filter(
+			(terminal) => terminal.status === "running" || terminal.status === "starting",
+		).length,
 		worktrees: state.worktrees,
 		openInEditor: editorPath
-			? { enabled: hasDesktopEditorBridge(), path: editorPath, reason: hasDesktopEditorBridge() ? undefined : "Open in editor is available only in the desktop app." }
+			? {
+					enabled: hasDesktopEditorBridge(),
+					path: editorPath,
+					reason: hasDesktopEditorBridge() ? undefined : "Open in editor is available only in the desktop app.",
+				}
 			: { enabled: false, reason: "Choose a project before opening an editor." },
 	};
 }
 
-export function selectActiveWorktree(state: GuiState, projectPath = state.projectRoot): WorkflowWorktreeMetadata | undefined {
+export function selectActiveWorktree(
+	state: GuiState,
+	projectPath = state.projectRoot,
+): WorkflowWorktreeMetadata | undefined {
 	if (state.activeDiff && projectPath) {
 		const match = state.worktrees.find((worktree) => worktree.path === projectPath);
 		if (match) return match;
@@ -77,7 +87,11 @@ export function selectActiveWorktree(state: GuiState, projectPath = state.projec
 	return state.worktrees.find((worktree) => worktree.path === projectPath) ?? state.worktrees[0];
 }
 
-export function hasDesktopEditorBridge(win: Pick<Window, "desktopBridge" | "daedalusNative"> | undefined = typeof window === "undefined" ? undefined : window): boolean {
+export function hasDesktopEditorBridge(
+	win: Pick<Window, "desktopBridge" | "daedalusNative"> | undefined = typeof window === "undefined"
+		? undefined
+		: window,
+): boolean {
 	const bridge = win?.desktopBridge ?? win?.daedalusNative;
 	return typeof bridge?.openInEditor === "function";
 }

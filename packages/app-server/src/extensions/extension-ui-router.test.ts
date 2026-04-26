@@ -12,8 +12,18 @@ function request(kind: "select" | "confirm" | "input" | "editor", requestId: str
 		fields:
 			kind === "confirm"
 				? []
-				: [{ id: "value", label: kind, type: kind === "editor" ? "textarea" : kind === "select" ? "select" : "text", options: kind === "select" ? [{ label: "A", value: "a" }] : undefined }],
-		actions: [{ id: "submit", label: "OK" }, { id: "cancel", label: "Cancel" }],
+				: [
+						{
+							id: "value",
+							label: kind,
+							type: kind === "editor" ? "textarea" : kind === "select" ? "select" : "text",
+							options: kind === "select" ? [{ label: "A", value: "a" }] : undefined,
+						},
+					],
+		actions: [
+			{ id: "submit", label: "OK" },
+			{ id: "cancel", label: "Cancel" },
+		],
 	};
 }
 
@@ -62,7 +72,9 @@ describe("ExtensionUiRouter", () => {
 
 	test("unknown or expired ids throw", () => {
 		const router = new ExtensionUiRouter();
-		expect(() => router.respond({ requestId: "missing", actionId: "submit", values: {} })).toThrow("Unknown or expired");
+		expect(() => router.respond({ requestId: "missing", actionId: "submit", values: {} })).toThrow(
+			"Unknown or expired",
+		);
 		expect(() => router.close("missing")).toThrow("Unknown or expired");
 	});
 

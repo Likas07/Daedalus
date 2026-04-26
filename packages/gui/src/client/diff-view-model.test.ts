@@ -34,7 +34,12 @@ const diff: RendererDiffSummary = {
 
 describe("buildDiffReviewViewModel", () => {
 	test("models changed files as a selectable tree with diff ids", () => {
-		const model = buildDiffReviewViewModel({ diff, selectedPath: "test/b.test.ts", workingTreeDiffId: "repo", checkpointDiffId: "cp" });
+		const model = buildDiffReviewViewModel({
+			diff,
+			selectedPath: "test/b.test.ts",
+			workingTreeDiffId: "repo",
+			checkpointDiffId: "cp",
+		});
 		expect(model.selectedPath).toBe("test/b.test.ts");
 		expect(model.workingTreeDiffId).toBe("repo");
 		expect(model.checkpointDiffId).toBe("cp");
@@ -50,8 +55,41 @@ describe("buildDiffReviewViewModel", () => {
 	});
 
 	test("mutations stay disabled until capability and approval policy allow", () => {
-		expect(buildDiffReviewViewModel({ diff, capabilities: {}, accessPolicy: { mode: "unrestricted", autoApproveSoftPrompts: true, bypassHardBlocks: false, auditRequired: true } }).canMutate).toBe(false);
-		expect(buildDiffReviewViewModel({ diff, capabilities: { gitMutations: true }, accessPolicy: { mode: "supervised", autoApproveSoftPrompts: false, bypassHardBlocks: false, auditRequired: true } }).canMutate).toBe(false);
-		expect(buildDiffReviewViewModel({ diff, capabilities: { gitMutations: true }, accessPolicy: { mode: "unrestricted", autoApproveSoftPrompts: true, bypassHardBlocks: false, auditRequired: true } }).canMutate).toBe(true);
+		expect(
+			buildDiffReviewViewModel({
+				diff,
+				capabilities: {},
+				accessPolicy: {
+					mode: "unrestricted",
+					autoApproveSoftPrompts: true,
+					bypassHardBlocks: false,
+					auditRequired: true,
+				},
+			}).canMutate,
+		).toBe(false);
+		expect(
+			buildDiffReviewViewModel({
+				diff,
+				capabilities: { gitMutations: true },
+				accessPolicy: {
+					mode: "supervised",
+					autoApproveSoftPrompts: false,
+					bypassHardBlocks: false,
+					auditRequired: true,
+				},
+			}).canMutate,
+		).toBe(false);
+		expect(
+			buildDiffReviewViewModel({
+				diff,
+				capabilities: { gitMutations: true },
+				accessPolicy: {
+					mode: "unrestricted",
+					autoApproveSoftPrompts: true,
+					bypassHardBlocks: false,
+					auditRequired: true,
+				},
+			}).canMutate,
+		).toBe(true);
 	});
 });

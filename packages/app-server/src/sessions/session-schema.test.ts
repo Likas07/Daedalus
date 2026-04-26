@@ -42,7 +42,11 @@ const entries: SessionEntry[] = [
 		id: "e-user",
 		parentId: null,
 		timestamp: "2026-04-26T00:00:01.000Z",
-		message: { role: "user", content: [{ type: "text", text: "Build the SQLite session read model" }], timestamp: 1777161601000 },
+		message: {
+			role: "user",
+			content: [{ type: "text", text: "Build the SQLite session read model" }],
+			timestamp: 1777161601000,
+		},
 	},
 	{
 		type: "model_change",
@@ -64,7 +68,10 @@ const entries: SessionEntry[] = [
 		id: "e-assistant",
 		parentId: "e-thinking",
 		timestamp: "2026-04-26T00:00:04.000Z",
-		message: { role: "assistant", content: [{ type: "text", text: "Created the read model projection." }] } as MessageSessionEntry["message"],
+		message: {
+			role: "assistant",
+			content: [{ type: "text", text: "Created the read model projection." }],
+		} as MessageSessionEntry["message"],
 	},
 ];
 
@@ -80,30 +87,47 @@ describe("GUI session SQLite schema", () => {
 		expect(tables).toContain(GUI_SESSION_TABLES.exports);
 		expect(tables).toContain(GUI_SESSION_TABLES.attachments);
 		expect(tables).toContain(GUI_SESSION_TABLES.approvals);
-		expect(indexes).toEqual(expect.arrayContaining([
-			"gui_sessions_cwd_idx",
-			"gui_sessions_updated_at_idx",
-			"gui_session_entries_session_id_idx",
-			"gui_session_entries_session_seq_idx",
-			"gui_session_entries_entry_id_idx",
-			"gui_session_entries_parent_id_idx",
-			"gui_session_entries_type_idx",
-			"gui_session_read_model_cwd_idx",
-			"gui_session_read_model_updated_at_idx",
-		]));
+		expect(indexes).toEqual(
+			expect.arrayContaining([
+				"gui_sessions_cwd_idx",
+				"gui_sessions_updated_at_idx",
+				"gui_session_entries_session_id_idx",
+				"gui_session_entries_session_seq_idx",
+				"gui_session_entries_entry_id_idx",
+				"gui_session_entries_parent_id_idx",
+				"gui_session_entries_type_idx",
+				"gui_session_read_model_cwd_idx",
+				"gui_session_read_model_updated_at_idx",
+			]),
+		);
 	});
 
 	test("inserts sample session rows and projects a read model", () => {
 		const db = migratedInMemoryDatabase();
 		db.query(
 			"INSERT INTO gui_sessions (id, cwd, parent_session_id, header_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-		).run(header.id, header.cwd, null, JSON.stringify(header), header.timestamp, entries.at(-1)?.timestamp ?? header.timestamp);
+		).run(
+			header.id,
+			header.cwd,
+			null,
+			JSON.stringify(header),
+			header.timestamp,
+			entries.at(-1)?.timestamp ?? header.timestamp,
+		);
 
 		const insertEntry = db.query(
 			"INSERT INTO gui_session_entries (session_id, seq, entry_id, parent_id, type, entry_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
 		);
 		entries.forEach((entry, index) => {
-			insertEntry.run(header.id, index + 1, entry.id, entry.parentId, entry.type, JSON.stringify(entry), entry.timestamp);
+			insertEntry.run(
+				header.id,
+				index + 1,
+				entry.id,
+				entry.parentId,
+				entry.type,
+				JSON.stringify(entry),
+				entry.timestamp,
+			);
 		});
 
 		const readModel = projectGuiSessionReadModel({
@@ -128,7 +152,17 @@ describe("GUI session SQLite schema", () => {
 		);
 
 		const stored = db
-			.query<{ title: string; model: string; thinking_level: string; message_count: number; pending_approval_count: number; status: string }, []>(
+			.query<
+				{
+					title: string;
+					model: string;
+					thinking_level: string;
+					message_count: number;
+					pending_approval_count: number;
+					status: string;
+				},
+				[]
+			>(
 				"SELECT title, model, thinking_level, message_count, pending_approval_count, status FROM gui_session_read_model",
 			)
 			.get();

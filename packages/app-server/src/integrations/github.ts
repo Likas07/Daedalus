@@ -25,9 +25,15 @@ export class GitHubAdapter implements IntegrationAdapter {
 	async getState(input: { readonly cwd?: string } = {}): Promise<IntegrationState> {
 		const cwd = input.cwd ?? this.options.cwd;
 		const auth = await this.cli.status(cwd);
-		const [repo, issues, pullRequests, checks] = auth.status === "authenticated"
-			? await Promise.all([this.detectRepository(cwd), this.cli.issues(cwd), this.cli.pullRequests(cwd), this.getCiChecks({ cwd })])
-			: [undefined, [], [], []] as const;
+		const [repo, issues, pullRequests, checks] =
+			auth.status === "authenticated"
+				? await Promise.all([
+						this.detectRepository(cwd),
+						this.cli.issues(cwd),
+						this.cli.pullRequests(cwd),
+						this.getCiChecks({ cwd }),
+					])
+				: ([undefined, [], [], []] as const);
 		return {
 			provider: this.provider,
 			status: auth.status,
@@ -35,7 +41,17 @@ export class GitHubAdapter implements IntegrationAdapter {
 			issues,
 			pullRequests,
 			ciChecks: checks,
-			syncErrors: auth.message ? [{ provider: this.provider, message: auth.message, code: auth.code, retryable: auth.status !== "not-configured", occurredAt: new Date().toISOString() }] : [],
+			syncErrors: auth.message
+				? [
+						{
+							provider: this.provider,
+							message: auth.message,
+							code: auth.code,
+							retryable: auth.status !== "not-configured",
+							occurredAt: new Date().toISOString(),
+						},
+					]
+				: [],
 			updatedAt: new Date().toISOString(),
 			message: auth.message,
 		};
@@ -54,12 +70,28 @@ export class GitHubAdapter implements IntegrationAdapter {
 	}
 
 	async lookupIssue(input: { readonly id: string; readonly cwd?: string }): Promise<LinkedIssue | undefined> {
-		const result = await this.options.runner(["gh", "issue", "view", input.id, "--json", "number,title,url,state,labels"], {
-			cwd: input.cwd ?? this.options.cwd,
-		});
+		const result = await this.options.runner(
+			["gh", "issue", "view", input.id, "--json", "number,title,url,state,labels"],
+			{
+				cwd: input.cwd ?? this.options.cwd,
+			},
+		);
 		if (result.exitCode !== 0) return undefined;
-		const row = JSON.parse(result.stdout) as { number?: number; title?: string; url?: string; state?: string; labels?: Array<{ name?: string }> };
-		return { id: String(row.number ?? input.id), number: row.number, title: row.title, url: row.url, state: row.state?.toLowerCase(), labels: row.labels?.map((label) => label.name ?? "").filter(Boolean) };
+		const row = JSON.parse(result.stdout) as {
+			number?: number;
+			title?: string;
+			url?: string;
+			state?: string;
+			labels?: Array<{ name?: string }>;
+		};
+		return {
+			id: String(row.number ?? input.id),
+			number: row.number,
+			title: row.title,
+			url: row.url,
+			state: row.state?.toLowerCase(),
+			labels: row.labels?.map((label) => label.name ?? "").filter(Boolean),
+		};
 	}
 
 	async getPullRequestStatus(input: {
@@ -71,8 +103,23 @@ export class GitHubAdapter implements IntegrationAdapter {
 			{ cwd: input.cwd ?? this.options.cwd },
 		);
 		if (result.exitCode !== 0) return undefined;
-		const row = JSON.parse(result.stdout) as { number: number; title?: string; url?: string; state?: string; headRefName?: string; baseRefName?: string };
-		return { number: row.number, title: row.title, url: row.url, state: row.state?.toLowerCase(), head: row.headRefName, base: row.baseRefName, createUpdateGuarded: true };
+		const row = JSON.parse(result.stdout) as {
+			number: number;
+			title?: string;
+			url?: string;
+			state?: string;
+			headRefName?: string;
+			baseRefName?: string;
+		};
+		return {
+			number: row.number,
+			title: row.title,
+			url: row.url,
+			state: row.state?.toLowerCase(),
+			head: row.headRefName,
+			base: row.baseRefName,
+			createUpdateGuarded: true,
+		};
 	}
 
 	async createPullRequest(

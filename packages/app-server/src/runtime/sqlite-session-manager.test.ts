@@ -64,14 +64,22 @@ describe("SqliteSessionManager", () => {
 		expect(manager.buildSessionContext().messages.map((message) => message.role)).toEqual(["user", "assistant"]);
 		expect(manager.getTree()[0]?.entry.id).toBe(first);
 
-		const reopened = await SqliteSessionManager.create({ store: sessionStore, cwd: "/repo", sessionPath: manager.getSessionId() }).initialized();
+		const reopened = await SqliteSessionManager.create({
+			store: sessionStore,
+			cwd: "/repo",
+			sessionPath: manager.getSessionId(),
+		}).initialized();
 		expect(reopened.getEntries()).toHaveLength(3);
 		expect(parseSessionJsonl(await reopened.exportJsonl()).header.id).toBe(manager.getSessionId());
 	});
 
 	test("creates a new SQLite session with a provided controller session id", async () => {
 		const sessionStore = store();
-		const manager = await SqliteSessionManager.create({ store: sessionStore, cwd: "/repo", sessionId: "session-controller-id" }).initialized();
+		const manager = await SqliteSessionManager.create({
+			store: sessionStore,
+			cwd: "/repo",
+			sessionId: "session-controller-id",
+		}).initialized();
 
 		expect(manager.getSessionId()).toBe("session-controller-id");
 		expect((await sessionStore.read({ sessionId: "session-controller-id" })).header.id).toBe("session-controller-id");
@@ -81,12 +89,22 @@ describe("SqliteSessionManager", () => {
 		const sessionStore = store();
 		await sessionStore.import({
 			session: {
-				header: { type: "session", version: 3, id: "imported", timestamp: "2026-04-26T00:00:00.000Z", cwd: "/repo" },
+				header: {
+					type: "session",
+					version: 3,
+					id: "imported",
+					timestamp: "2026-04-26T00:00:00.000Z",
+					cwd: "/repo",
+				},
 				entries: [userEntry("msg-1", "from jsonl")],
 			},
 		});
 
-		const manager = await SqliteSessionManager.create({ store: sessionStore, cwd: "/repo", sessionPath: "imported" }).initialized();
+		const manager = await SqliteSessionManager.create({
+			store: sessionStore,
+			cwd: "/repo",
+			sessionPath: "imported",
+		}).initialized();
 		expect(manager.getSessionId()).toBe("imported");
 		expect(manager.buildSessionContext().messages).toHaveLength(1);
 		expect(await manager.exportJsonl()).toContain('"id":"imported"');

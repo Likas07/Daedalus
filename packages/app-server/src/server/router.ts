@@ -1,11 +1,11 @@
-import { stat } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { stat } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import type {
 	AppEvent,
 	AuditQuery,
-	ClientRequest,
 	ClientNotification,
+	ClientRequest,
 	ServerNotification,
 	ServerRequest,
 } from "@daedalus-pi/app-server-protocol";
@@ -13,31 +13,30 @@ import { type AppServerDatabase, appendEvent, type EventPayload, readEventsAfter
 import { AttachmentService } from "../composer/attachment-service";
 import { CommandService } from "../composer/command-service";
 import { FileSearchService } from "../composer/file-search-service";
+import type { ExtensionUiRouter } from "../extensions/extension-ui-router";
 import type { CommandRunner } from "../integrations/integration-api";
 import { IntegrationService } from "../integrations/integration-service";
 import { projectRuntimeEvents } from "../persistence/projector";
-import { ExtensionUiRouter } from "../extensions/extension-ui-router";
-
-import { projectAuditTrail } from "../runtime/audit-projection";
-import { SqliteSessionStore } from "../sessions/sqlite-session-store";
-import { AutomationService } from "../runtime/automation-service";
-import { projectOrchestration } from "../runtime/orchestration-projection";
-import { DaedalusWorkflowService } from "../runtime/daedalus-workflow-service";
 import { AccessPolicyService } from "../runtime/access-policy-service";
 import { ApprovalService } from "../runtime/approval-service";
+import { projectAuditTrail } from "../runtime/audit-projection";
+import { AutomationService } from "../runtime/automation-service";
+import { DaedalusWorkflowService } from "../runtime/daedalus-workflow-service";
 import { GuiConfigService } from "../runtime/gui-config-service";
-import { RuntimeControlService } from "../runtime/runtime-control-service";
+import { projectOrchestration } from "../runtime/orchestration-projection";
 import { ProviderAuthService } from "../runtime/provider-auth-service";
-import { SettingsService, type SettingsKey } from "../runtime/settings-service";
 import { ResourceManagementService } from "../runtime/resource-management-service";
+import { RuntimeControlService } from "../runtime/runtime-control-service";
 import type { SessionController } from "../runtime/session-controller";
+import { type SettingsKey, SettingsService } from "../runtime/settings-service";
+import { SqliteSessionStore } from "../sessions/sqlite-session-store";
 import type { PtyAdapter } from "../terminal/pty-adapter";
 import { TerminalService } from "../terminal/terminal-service";
-import { ProjectService } from "../workspaces/project-service";
-import { WorktreeService } from "../workspaces/worktree-service";
+import { CheckpointService } from "../workspaces/checkpoint-service";
 import { DiffService } from "../workspaces/diff-service";
 import { GitMutationService } from "../workspaces/git-mutation-service";
-import { CheckpointService } from "../workspaces/checkpoint-service";
+import { ProjectService } from "../workspaces/project-service";
+import { WorktreeService } from "../workspaces/worktree-service";
 
 import { ExportService } from "./export-service";
 
@@ -452,7 +451,7 @@ export class AppRouter {
 				return { integration: await this.integrationService.importArtifacts(request.params) };
 			case "integration/pr-create": {
 				const cwd = request.params.projectId ? this.projects.get(String(request.params.projectId)) : undefined;
-				const summary = `Create GitHub pull request \"${request.params.title}\" from ${request.params.head}${request.params.base ? ` into ${request.params.base}` : ""}`;
+				const summary = `Create GitHub pull request "${request.params.title}" from ${request.params.head}${request.params.base ? ` into ${request.params.base}` : ""}`;
 				const approval = this.approvalService.request({
 					request: {
 						action: "integration/pr-create",

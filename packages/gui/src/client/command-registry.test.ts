@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { assertCommandRegistryRunnable, createCommandRegistry } from "./command-registry";
 import type { AppServerClient } from "@daedalus-pi/app-server-client";
+import { assertCommandRegistryRunnable, createCommandRegistry } from "./command-registry";
 import type { GuiRuntime, GuiState } from "./runtime";
 import type { UiState } from "./ui-state.svelte";
 

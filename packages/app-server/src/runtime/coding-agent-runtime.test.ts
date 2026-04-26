@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { SessionController, type RuntimeFactory } from "./session-controller";
+import { type RuntimeFactory, SessionController } from "./session-controller";
 
 test("session controller accepts deterministic runtime factory injection", async () => {
 	const prompts: string[] = [];
@@ -29,7 +29,9 @@ test("session controller accepts deterministic runtime factory injection", async
 		now: () => new Date("2026-04-25T00:00:00.000Z"),
 	});
 
-	expect(await controller.startSession({ cwd: "/tmp/project", prompt: "hello" })).toEqual({ sessionId: "session-test" });
+	expect(await controller.startSession({ cwd: "/tmp/project", prompt: "hello" })).toEqual({
+		sessionId: "session-test",
+	});
 	expect(prompts).toEqual(["hello"]);
 	expect(controller.readState().sessions).toEqual([
 		{ sessionId: "session-test", cwd: "/tmp/project", sessionFile: "fake-session.jsonl" },

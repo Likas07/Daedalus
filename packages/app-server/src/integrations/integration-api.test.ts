@@ -24,7 +24,15 @@ describe("integration adapter framework", () => {
 			calls.push([...args]);
 			if (args.join(" ") === "gh --version") return { stdout: "gh version", exitCode: 0 };
 			if (args.join(" ") === "gh auth status") return { stdout: "Logged in", exitCode: 0 };
-			if (args.join(" ") === "gh repo view --json owner,name,url") return { stdout: JSON.stringify({ owner: { login: "acme" }, name: "project", url: "git@github.com:acme/project.git" }), exitCode: 0 };
+			if (args.join(" ") === "gh repo view --json owner,name,url")
+				return {
+					stdout: JSON.stringify({
+						owner: { login: "acme" },
+						name: "project",
+						url: "git@github.com:acme/project.git",
+					}),
+					exitCode: 0,
+				};
 			if (args[0] === "gh" && args[1] === "issue" && args[2] === "list") return { stdout: "[]", exitCode: 0 };
 			if (args[0] === "gh" && args[1] === "pr" && args[2] === "list") return { stdout: "[]", exitCode: 0 };
 			if (args[0] === "gh" && args[1] === "pr" && args[2] === "checks")

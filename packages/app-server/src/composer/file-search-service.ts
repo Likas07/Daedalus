@@ -8,7 +8,16 @@ export interface ComposerFileSearchResult {
 	readonly extension?: string;
 }
 
-const IGNORED_DIRS = new Set([".git", "node_modules", "dist", "build", ".svelte-kit", ".next", "coverage", ".daedalus"]);
+const IGNORED_DIRS = new Set([
+	".git",
+	"node_modules",
+	"dist",
+	"build",
+	".svelte-kit",
+	".next",
+	"coverage",
+	".daedalus",
+]);
 
 export class FileSearchService {
 	async search(input: { cwd: string; query: string; limit: number }): Promise<ComposerFileSearchResult[]> {
@@ -31,7 +40,12 @@ export class FileSearchService {
 				const path = relative(root, absolute);
 				const haystack = path.toLowerCase();
 				if (!needle || haystack.includes(needle)) {
-					results.push({ path, label: entry.name, kind: entry.isDirectory() ? "directory" : "file", extension: entry.isDirectory() ? undefined : extname(entry.name).slice(1) || undefined });
+					results.push({
+						path,
+						label: entry.name,
+						kind: entry.isDirectory() ? "directory" : "file",
+						extension: entry.isDirectory() ? undefined : extname(entry.name).slice(1) || undefined,
+					});
 				}
 				if (entry.isDirectory()) await walk(absolute, depth + 1);
 			}

@@ -63,7 +63,12 @@ export class GitMutationService {
 
 	restoreCheckpoint(input: GitMutationInput): Promise<GitMutationResult> {
 		if (!input.checkpointRef?.trim()) throw new Error("Checkpoint ref is required.");
-		return this.withApproval("checkpoint-restore", input, ["restore", "--source", input.checkpointRef, "--worktree", "--staged", "--", "."], true);
+		return this.withApproval(
+			"checkpoint-restore",
+			input,
+			["restore", "--source", input.checkpointRef, "--worktree", "--staged", "--", "."],
+			true,
+		);
 	}
 
 	private requirePaths(input: GitMutationInput): readonly string[] {
@@ -71,14 +76,29 @@ export class GitMutationService {
 		return input.paths;
 	}
 
-	private async withApproval(kind: GitMutationKind, input: GitMutationInput, args: readonly string[], hardBlock = false): Promise<GitMutationResult> {
+	private async withApproval(
+		kind: GitMutationKind,
+		input: GitMutationInput,
+		args: readonly string[],
+		hardBlock = false,
+	): Promise<GitMutationResult> {
 		const { approvalId, autoApproved } = this.options.approvalService.request({
 			sessionId: input.sessionId,
 			hardBlock,
-			request: { type: "git/mutation", kind, cwd: input.cwd, paths: input.paths ?? [], message: input.message, checkpointRef: input.checkpointRef, command: ["git", ...args] },
+			request: {
+				type: "git/mutation",
+				kind,
+				cwd: input.cwd,
+				paths: input.paths ?? [],
+				message: input.message,
+				checkpointRef: input.checkpointRef,
+				command: ["git", ...args],
+			},
 		});
 		if (!autoApproved) {
-			const decision = await this.options.approvalService.waitForDecision(approvalId, { timeoutMs: this.options.approvalTimeoutMs });
+			const decision = await this.options.approvalService.waitForDecision(approvalId, {
+				timeoutMs: this.options.approvalTimeoutMs,
+			});
 			if (decision.decision !== "approved") throw new GitMutationDeniedError(approvalId);
 		}
 		await this.runGit(input.cwd, args);

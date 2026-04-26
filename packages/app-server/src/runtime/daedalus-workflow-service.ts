@@ -1,4 +1,3 @@
-import type { SessionEntry, SessionStore } from "@daedalus-pi/coding-agent";
 import type {
 	DaedalusPlanState,
 	DaedalusQuestionPrompt,
@@ -10,6 +9,7 @@ import type {
 	OrchestrationProjection,
 	SessionId,
 } from "@daedalus-pi/app-server-protocol";
+import type { SessionEntry, SessionStore } from "@daedalus-pi/coding-agent";
 
 export interface DaedalusWorkflowServiceOptions {
 	readonly sessionStore: SessionStore;
@@ -43,18 +43,20 @@ export function projectDaedalusWorkflow(sessionId: SessionId, entries: readonly 
 		if (question) questions.set(question.id, question);
 		semanticWorkspace = readSemantic(customType, data, entry.timestamp) ?? semanticWorkspace;
 	}
-	const lanes = [...todos.values()].map((todo): OrchestrationLane => ({
-		id: todo.id,
-		sessionId,
-		kind: "subagent",
-		title: todo.title,
-		status: laneStatus(todo.status),
-		summary: todo.summary,
-		dependencies: todo.dependencies,
-		blockedBy: todo.status === "blocked" ? todo.dependencies : undefined,
-		artifacts: resultArtifacts(todo),
-		updatedAt,
-	}));
+	const lanes = [...todos.values()].map(
+		(todo): OrchestrationLane => ({
+			id: todo.id,
+			sessionId,
+			kind: "subagent",
+			title: todo.title,
+			status: laneStatus(todo.status),
+			summary: todo.summary,
+			dependencies: todo.dependencies,
+			blockedBy: todo.status === "blocked" ? todo.dependencies : undefined,
+			artifacts: resultArtifacts(todo),
+			updatedAt,
+		}),
+	);
 	const orchestration: OrchestrationProjection = {
 		sessionId,
 		mode,
@@ -62,7 +64,15 @@ export function projectDaedalusWorkflow(sessionId: SessionId, entries: readonly 
 		checkpoints: lanes.filter((lane) => lane.status === "completed"),
 		updatedAt,
 	};
-	return { sessionId, plans: [...plans.values()], todos: [...todos.values()], questions: [...questions.values()], semanticWorkspace, orchestration, updatedAt };
+	return {
+		sessionId,
+		plans: [...plans.values()],
+		todos: [...todos.values()],
+		questions: [...questions.values()],
+		semanticWorkspace,
+		orchestration,
+		updatedAt,
+	};
 }
 
 function customTypeOf(entry: SessionEntry): string | undefined {
@@ -75,27 +85,70 @@ function dataOf(entry: SessionEntry): Record<string, unknown> {
 }
 function readTodos(customType: string | undefined, data: Record<string, unknown>): DaedalusTodoItem[] {
 	const source = Array.isArray(data.todos) ? data.todos : Array.isArray(data.items) ? data.items : undefined;
-	if (!source || !(customType?.includes("todo") || customType === "plan-execution-init" || customType === "status-dashboard")) return [];
+	if (
+		!source ||
+		!(customType?.includes("todo") || customType === "plan-execution-init" || customType === "status-dashboard")
+	)
+		return [];
 	return source.filter(isRecord).map((item, index) => ({
 		id: text(item, "id") ?? `todo-${index + 1}`,
-		title: sanitize(text(item, "title") ?? text(item, "content") ?? text(item, "text") ?? `Todo ${index + 1}`) ?? `Todo ${index + 1}`,
+		title:
+			sanitize(text(item, "title") ?? text(item, "content") ?? text(item, "text") ?? `Todo ${index + 1}`) ??
+			`Todo ${index + 1}`,
 		status: todoStatus(text(item, "status")),
 		summary: sanitize(text(item, "summary")),
 		dependencies: strings(item.dependencies),
 	}));
 }
-function readPlan(customType: string | undefined, data: Record<string, unknown>, updatedAt?: string): DaedalusPlanState | undefined {
-	const plan = isRecord(data.plan) ? data.plan : customType?.includes("plan") && customType !== "plan-mode" ? data : undefined;
+function readPlan(
+	customType: string | undefined,
+	data: Record<string, unknown>,
+	updatedAt?: string,
+): DaedalusPlanState | undefined {
+	const plan = isRecord(data.plan)
+		? data.plan
+		: customType?.includes("plan") && customType !== "plan-mode"
+			? data
+			: undefined;
 	if (!plan) return undefined;
-	return { id: text(plan, "id") ?? text(plan, "planId") ?? "plan", title: sanitize(text(plan, "title") ?? text(plan, "goal") ?? "Plan") ?? "Plan", status: planStatus(text(plan, "status") ?? customType), path: text(plan, "path"), taskIds: strings(plan.taskIds), updatedAt };
+	return {
+		id: text(plan, "id") ?? text(plan, "planId") ?? "plan",
+		title: sanitize(text(plan, "title") ?? text(plan, "goal") ?? "Plan") ?? "Plan",
+		status: planStatus(text(plan, "status") ?? customType),
+		path: text(plan, "path"),
+		taskIds: strings(plan.taskIds),
+		updatedAt,
+	};
 }
-function readQuestion(customType: string | undefined, data: Record<string, unknown>, updatedAt?: string): DaedalusQuestionPrompt | undefined {
+function readQuestion(
+	customType: string | undefined,
+	data: Record<string, unknown>,
+	updatedAt?: string,
+): DaedalusQuestionPrompt | undefined {
 	if (customType !== "question" && customType !== "questionnaire") return undefined;
-	return { id: text(data, "id") ?? customType, kind: customType, prompt: sanitize(text(data, "prompt") ?? text(data, "question") ?? "Question") ?? "Question", status: data.answer ? "answered" : "open", choices: strings(data.choices).map((choice) => sanitize(choice) ?? ""), answer: sanitize(text(data, "answer")), updatedAt };
+	return {
+		id: text(data, "id") ?? customType,
+		kind: customType,
+		prompt: sanitize(text(data, "prompt") ?? text(data, "question") ?? "Question") ?? "Question",
+		status: data.answer ? "answered" : "open",
+		choices: strings(data.choices).map((choice) => sanitize(choice) ?? ""),
+		answer: sanitize(text(data, "answer")),
+		updatedAt,
+	};
 }
-function readSemantic(customType: string | undefined, data: Record<string, unknown>, updatedAt?: string): DaedalusSemanticWorkspaceState | undefined {
+function readSemantic(
+	customType: string | undefined,
+	data: Record<string, unknown>,
+	updatedAt?: string,
+): DaedalusSemanticWorkspaceState | undefined {
 	if (!customType?.includes("sem")) return undefined;
-	return { status: semanticStatus(text(data, "status")), indexedPath: text(data, "indexedPath") ?? text(data, "path"), indexName: text(data, "indexName"), summary: sanitize(text(data, "summary")), updatedAt };
+	return {
+		status: semanticStatus(text(data, "status")),
+		indexedPath: text(data, "indexedPath") ?? text(data, "path"),
+		indexName: text(data, "indexName"),
+		summary: sanitize(text(data, "summary")),
+		updatedAt,
+	};
 }
 function laneStatus(status: DaedalusTodoItem["status"]): OrchestrationLane["status"] {
 	if (status === "in_progress") return "running";

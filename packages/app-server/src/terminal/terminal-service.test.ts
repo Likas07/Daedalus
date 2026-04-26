@@ -114,9 +114,35 @@ describe("TerminalService", () => {
 	test("persists canonical scoped snapshots and replays history after restart", async () => {
 		const pty = fakePty();
 		const db = migratedInMemoryDatabase();
-		db.query("INSERT INTO projects (id, name, path, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run("project-1", "tmp", "/tmp", "2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z");
-		db.query("INSERT INTO worktrees (id, project_id, path, branch, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run("worktree-1", "project-1", "/tmp", "main", "active", "2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z");
-		db.query("INSERT INTO sessions (id, project_id, worktree_id, status, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run("session-1", "project-1", "worktree-1", "active", "Session", "2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z");
+		db.query("INSERT INTO projects (id, name, path, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run(
+			"project-1",
+			"tmp",
+			"/tmp",
+			"2026-01-01T00:00:00.000Z",
+			"2026-01-01T00:00:00.000Z",
+		);
+		db.query(
+			"INSERT INTO worktrees (id, project_id, path, branch, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		).run(
+			"worktree-1",
+			"project-1",
+			"/tmp",
+			"main",
+			"active",
+			"2026-01-01T00:00:00.000Z",
+			"2026-01-01T00:00:00.000Z",
+		);
+		db.query(
+			"INSERT INTO sessions (id, project_id, worktree_id, status, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		).run(
+			"session-1",
+			"project-1",
+			"worktree-1",
+			"active",
+			"Session",
+			"2026-01-01T00:00:00.000Z",
+			"2026-01-01T00:00:00.000Z",
+		);
 		const service = new TerminalService({ pty: pty.adapter, database: db });
 		const terminal = await service.create({
 			cwd: "/tmp",

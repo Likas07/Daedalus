@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import type { AppServerClient } from "@daedalus-pi/app-server-client";
 import { GUI_CAPABILITIES, strictGuiParityViolations } from "./capability-registry";
 import { assertCommandRegistryRunnable, createCommandRegistry } from "./command-registry";
-import type { AppServerClient } from "@daedalus-pi/app-server-client";
 import type { GuiRuntime, GuiState } from "./runtime";
 import type { UiState } from "./ui-state.svelte";
 

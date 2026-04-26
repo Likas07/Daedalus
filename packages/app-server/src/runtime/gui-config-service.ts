@@ -14,7 +14,9 @@ CREATE TABLE IF NOT EXISTS gui_config (
 
 	get(key?: string): Record<string, unknown> {
 		if (key) {
-			const row = this.database.query<{ value: string }, [string]>("SELECT value FROM gui_config WHERE key = ?").get(key);
+			const row = this.database
+				.query<{ value: string }, [string]>("SELECT value FROM gui_config WHERE key = ?")
+				.get(key);
 			return row ? { [key]: safeParse(row.value) } : {};
 		}
 		const rows = this.database.query<{ key: string; value: string }, []>("SELECT key, value FROM gui_config").all();

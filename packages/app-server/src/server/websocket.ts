@@ -38,7 +38,9 @@ export function createWebSocketHandlers(router: AppRouter, clients: Set<WebSocke
 		async message(ws: AppServerWebSocket, data: string | Buffer) {
 			const client = ws.data.client;
 			try {
-				const message = JSON.parse(typeof data === "string" ? data : data.toString()) as ClientRequest | ClientNotification;
+				const message = JSON.parse(typeof data === "string" ? data : data.toString()) as
+					| ClientRequest
+					| ClientNotification;
 				if (message.kind === "request") {
 					try {
 						const result = await router.handle(message);

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createComposerSubmitContext, type ComposerSubmitContext } from "../../client/composer-state";
+import { type ComposerSubmitContext, createComposerSubmitContext } from "../../client/composer-state";
 
 describe("composer submit context", () => {
 	const fullContext: ComposerSubmitContext = {

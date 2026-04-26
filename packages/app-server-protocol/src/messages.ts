@@ -10,7 +10,7 @@ import {
 	ComposerFileSearchResultSchema,
 } from "./composer";
 import { DaedalusWorkflowStateSchema } from "./daedalus-workflow";
-import { DiagnosticExportKindSchema, DiagnosticExportParamsSchema, DiagnosticExportResultSchema } from "./diagnostics";
+import { DiagnosticExportParamsSchema, DiagnosticExportResultSchema } from "./diagnostics";
 import { EventReplayParamsSchema, EventReplayResultSchema } from "./events";
 import { ExtensionUiRequestSchema, ExtensionUiResponseSchema } from "./extension-ui";
 import {
@@ -32,7 +32,6 @@ import {
 	IntegrationImportParamsSchema,
 	IntegrationListResultSchema,
 	IntegrationManualLinkParamsSchema,
-	IntegrationProviderStateSchema,
 	IntegrationPullRequestCreateParamsSchema,
 	IntegrationPullRequestCreateResultSchema,
 	IntegrationPullRequestOpenParamsSchema,

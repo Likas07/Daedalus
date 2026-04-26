@@ -47,28 +47,81 @@ export function projectSessionEntries(entries: readonly SessionEntryLike[], sess
 	return entries.flatMap((entry, index) => projectSessionEntry(entry, { sessionId, sequence: index }));
 }
 
-export function projectSessionEntry(entry: SessionEntryLike, options: { readonly sessionId?: string; readonly sequence?: number } = {}): TimelineRow[] {
+export function projectSessionEntry(
+	entry: SessionEntryLike,
+	options: { readonly sessionId?: string; readonly sequence?: number } = {},
+): TimelineRow[] {
 	const base = baseRow(entry, options);
 	switch (entry.type) {
 		case "message":
 			return projectMessageEntry(entry, base);
 		case "model_change":
-			return [{ ...base, kind: "model", title: "Model changed", summary: `${stringField(entry.provider)} ${stringField(entry.modelId)}`.trim() }];
+			return [
+				{
+					...base,
+					kind: "model",
+					title: "Model changed",
+					summary: `${stringField(entry.provider)} ${stringField(entry.modelId)}`.trim(),
+				},
+			];
 		case "thinking_level_change":
 			return [{ ...base, kind: "thinking", title: "Thinking changed", summary: stringField(entry.thinkingLevel) }];
 		case "fast_mode_change":
 			return [{ ...base, kind: "fast-mode", title: "Fast mode", summary: entry.fastMode ? "Enabled" : "Disabled" }];
 		case "compaction":
-			return [{ ...base, kind: "compaction", title: "Context compacted", summary: stringField(entry.summary), details: [`Tokens before: ${numberField(entry.tokensBefore)}`, `First kept: ${stringField(entry.firstKeptEntryId)}`] }];
+			return [
+				{
+					...base,
+					kind: "compaction",
+					title: "Context compacted",
+					summary: stringField(entry.summary),
+					details: [
+						`Tokens before: ${numberField(entry.tokensBefore)}`,
+						`First kept: ${stringField(entry.firstKeptEntryId)}`,
+					],
+				},
+			];
 		case "branch_summary":
-			return [{ ...base, kind: "branch-summary", title: "Branch summary", summary: stringField(entry.summary), details: [`From: ${stringField(entry.fromId)}`] }];
+			return [
+				{
+					...base,
+					kind: "branch-summary",
+					title: "Branch summary",
+					summary: stringField(entry.summary),
+					details: [`From: ${stringField(entry.fromId)}`],
+				},
+			];
 		case "custom":
-			return [{ ...base, kind: customKind(entry), title: customTitle(entry, "Custom event"), summary: summarizeUnknown(entry.data) }];
+			return [
+				{
+					...base,
+					kind: customKind(entry),
+					title: customTitle(entry, "Custom event"),
+					summary: summarizeUnknown(entry.data),
+				},
+			];
 		case "custom_message":
 			if (entry.display === false) return [];
-			return [{ ...base, kind: customKind(entry) === "skill" ? "skill" : "custom-message", title: customTitle(entry, "Custom message"), summary: contentText(entry.content), content: contentText(entry.content), details: [stringField(entry.customType)].filter(Boolean) }];
+			return [
+				{
+					...base,
+					kind: customKind(entry) === "skill" ? "skill" : "custom-message",
+					title: customTitle(entry, "Custom message"),
+					summary: contentText(entry.content),
+					content: contentText(entry.content),
+					details: [stringField(entry.customType)].filter(Boolean),
+				},
+			];
 		case "label":
-			return [{ ...base, kind: "label", title: "Label", summary: stringField(entry.label), details: [`Target: ${stringField(entry.targetId)}`] }];
+			return [
+				{
+					...base,
+					kind: "label",
+					title: "Label",
+					summary: stringField(entry.label),
+					details: [`Target: ${stringField(entry.targetId)}`],
+				},
+			];
 		case "session_info":
 			return [{ ...base, kind: "system", title: "Session renamed", summary: stringField(entry.name) }];
 		default:
@@ -76,27 +129,80 @@ export function projectSessionEntry(entry: SessionEntryLike, options: { readonly
 	}
 }
 
-function projectMessageEntry(entry: SessionEntryLike, base: Omit<TimelineRow, "kind" | "title" | "summary">): TimelineRow[] {
+function projectMessageEntry(
+	entry: SessionEntryLike,
+	base: Omit<TimelineRow, "kind" | "title" | "summary">,
+): TimelineRow[] {
 	const message = record(entry.message);
 	const role = stringField(message.role);
 	if (role === "toolResult") {
 		const toolName = stringField(message.toolName);
-		return [{ ...base, kind: toolName === "bash" ? "bash" : "tool", title: `${toolName || "Tool"} result`, summary: contentText(message.content), content: contentText(message.content), status: message.isError ? "error" : "completed", messageId: stringField(message.toolCallId) || entry.id }];
+		return [
+			{
+				...base,
+				kind: toolName === "bash" ? "bash" : "tool",
+				title: `${toolName || "Tool"} result`,
+				summary: contentText(message.content),
+				content: contentText(message.content),
+				status: message.isError ? "error" : "completed",
+				messageId: stringField(message.toolCallId) || entry.id,
+			},
+		];
 	}
 	if (role === "assistant") {
 		const content = Array.isArray(message.content) ? message.content : [];
-		const text = content.map((part) => record(part)).filter((part) => part.type === "text" || part.type === "thinking").map((part) => stringField(part.text) || stringField(part.thinking)).filter(Boolean).join("\n");
+		const text = content
+			.map((part) => record(part))
+			.filter((part) => part.type === "text" || part.type === "thinking")
+			.map((part) => stringField(part.text) || stringField(part.thinking))
+			.filter(Boolean)
+			.join("\n");
 		const calls = content.map((part) => record(part)).filter((part) => part.type === "toolCall");
 		return [
-			{ ...base, kind: "assistant", title: "Assistant", summary: text, content: text, messageId: stringField(message.responseId) || entry.id, details: [stringField(message.model)].filter(Boolean) },
-			...calls.map((call) => ({ ...base, id: `entry:${entry.id}:tool:${stringField(call.id)}`, kind: stringField(call.name) === "bash" ? "bash" as const : "tool" as const, title: `${stringField(call.name) || "Tool"} call`, summary: summarizeUnknown(call.arguments), messageId: stringField(call.id) || undefined, raw: call })),
+			{
+				...base,
+				kind: "assistant",
+				title: "Assistant",
+				summary: text,
+				content: text,
+				messageId: stringField(message.responseId) || entry.id,
+				details: [stringField(message.model)].filter(Boolean),
+			},
+			...calls.map((call) => ({
+				...base,
+				id: `entry:${entry.id}:tool:${stringField(call.id)}`,
+				kind: stringField(call.name) === "bash" ? ("bash" as const) : ("tool" as const),
+				title: `${stringField(call.name) || "Tool"} call`,
+				summary: summarizeUnknown(call.arguments),
+				messageId: stringField(call.id) || undefined,
+				raw: call,
+			})),
 		];
 	}
-	return [{ ...base, kind: role === "user" ? "user" : "system", title: role === "user" ? "User" : titleCase(role || "message"), summary: contentText(message.content), content: contentText(message.content), messageId: entry.id }];
+	return [
+		{
+			...base,
+			kind: role === "user" ? "user" : "system",
+			title: role === "user" ? "User" : titleCase(role || "message"),
+			summary: contentText(message.content),
+			content: contentText(message.content),
+			messageId: entry.id,
+		},
+	];
 }
 
-function baseRow(entry: SessionEntryLike, options: { readonly sessionId?: string; readonly sequence?: number }): Omit<TimelineRow, "kind" | "title" | "summary"> {
-	return { id: `entry:${entry.id || options.sequence || "unknown"}`, sessionId: options.sessionId, timestamp: entry.timestamp, raw: entry, entryId: entry.id, parentId: typeof entry.parentId === "string" || entry.parentId === null ? entry.parentId : undefined };
+function baseRow(
+	entry: SessionEntryLike,
+	options: { readonly sessionId?: string; readonly sequence?: number },
+): Omit<TimelineRow, "kind" | "title" | "summary"> {
+	return {
+		id: `entry:${entry.id || options.sequence || "unknown"}`,
+		sessionId: options.sessionId,
+		timestamp: entry.timestamp,
+		raw: entry,
+		entryId: entry.id,
+		parentId: typeof entry.parentId === "string" || entry.parentId === null ? entry.parentId : undefined,
+	};
 }
 
 function customKind(entry: SessionEntryLike): TimelineRowKind {
@@ -106,10 +212,40 @@ function customKind(entry: SessionEntryLike): TimelineRowKind {
 	if (type.includes("approval")) return "approval";
 	return "custom";
 }
-function customTitle(entry: SessionEntryLike, fallback: string): string { return stringField(entry.customType) ? `${fallback}: ${stringField(entry.customType)}` : fallback; }
-function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" ? value as Record<string, unknown> : {}; }
-function stringField(value: unknown): string { return typeof value === "string" ? value : ""; }
-function numberField(value: unknown): number | string { return typeof value === "number" ? value : "unknown"; }
-function contentText(value: unknown): string { if (typeof value === "string") return value; if (Array.isArray(value)) return value.map((part) => stringField(record(part).text) || (record(part).type === "image" ? "[image]" : "")).filter(Boolean).join("\n"); return summarizeUnknown(value); }
-function summarizeUnknown(value: unknown): string { if (value == null) return ""; if (typeof value === "string") return value; try { return JSON.stringify(value); } catch { return String(value); } }
-function titleCase(value: string): string { return value.split(/[/_-]/).filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" "); }
+function customTitle(entry: SessionEntryLike, fallback: string): string {
+	return stringField(entry.customType) ? `${fallback}: ${stringField(entry.customType)}` : fallback;
+}
+function record(value: unknown): Record<string, unknown> {
+	return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+function stringField(value: unknown): string {
+	return typeof value === "string" ? value : "";
+}
+function numberField(value: unknown): number | string {
+	return typeof value === "number" ? value : "unknown";
+}
+function contentText(value: unknown): string {
+	if (typeof value === "string") return value;
+	if (Array.isArray(value))
+		return value
+			.map((part) => stringField(record(part).text) || (record(part).type === "image" ? "[image]" : ""))
+			.filter(Boolean)
+			.join("\n");
+	return summarizeUnknown(value);
+}
+function summarizeUnknown(value: unknown): string {
+	if (value == null) return "";
+	if (typeof value === "string") return value;
+	try {
+		return JSON.stringify(value);
+	} catch {
+		return String(value);
+	}
+}
+function titleCase(value: string): string {
+	return value
+		.split(/[/_-]/)
+		.filter(Boolean)
+		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+		.join(" ");
+}

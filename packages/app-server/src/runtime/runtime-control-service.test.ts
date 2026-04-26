@@ -51,7 +51,8 @@ function makeHarness() {
 	};
 	const controller = {
 		getSessionRuntime: () => runtime,
-		emitRuntimeControlChanged: async (_sessionId: string, control: string, payload: unknown) => events.push({ control, payload }),
+		emitRuntimeControlChanged: async (_sessionId: string, control: string, payload: unknown) =>
+			events.push({ control, payload }),
 	} as unknown as SessionController;
 	return { service: new RuntimeControlService(controller), session, events, calls };
 }
@@ -59,9 +60,13 @@ function makeHarness() {
 describe("RuntimeControlService", () => {
 	test("changes model and thinking", async () => {
 		const { service, session, events } = makeHarness();
-		expect(await service.setModel("session-1", "openai", "gpt-5")).toEqual({ model: { provider: "openai", id: "gpt-5", name: "GPT 5" } });
+		expect(await service.setModel("session-1", "openai", "gpt-5")).toEqual({
+			model: { provider: "openai", id: "gpt-5", name: "GPT 5" },
+		});
 		expect(session.model.id).toBe("gpt-5");
-		expect(await service.cycleModel("session-1")).toEqual({ result: { provider: "openai", id: "gpt-5", name: "GPT 5" } });
+		expect(await service.cycleModel("session-1")).toEqual({
+			result: { provider: "openai", id: "gpt-5", name: "GPT 5" },
+		});
 		expect(await service.setThinking("session-1", "high")).toEqual({ level: "high" });
 		expect(await service.cycleThinking("session-1")).toEqual({ level: "medium" });
 		expect(events.length).toBe(4);
@@ -69,14 +74,20 @@ describe("RuntimeControlService", () => {
 
 	test("compacts and aborts", async () => {
 		const { service, calls } = makeHarness();
-		expect(await service.compact("session-1", "keep goals")).toEqual({ result: { ok: true, customInstructions: "keep goals" } });
+		expect(await service.compact("session-1", "keep goals")).toEqual({
+			result: { ok: true, customInstructions: "keep goals" },
+		});
 		expect(await service.abort("session-1")).toEqual({});
 		expect(calls).toContain("abort");
 	});
 
 	test("lists commands and keybindings", () => {
 		const { service } = makeHarness();
-		expect(service.getCommands("session-1").commands.map((command) => command.name)).toEqual(["fix", "plan", "skill:debug"]);
+		expect(service.getCommands("session-1").commands.map((command) => command.name)).toEqual([
+			"fix",
+			"plan",
+			"skill:debug",
+		]);
 		expect(service.getKeybindings().keybindings.some((binding) => binding.action === "app.interrupt")).toBe(true);
 	});
 

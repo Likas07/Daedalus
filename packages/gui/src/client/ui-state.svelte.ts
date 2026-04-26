@@ -28,7 +28,7 @@ export interface UiState {
 }
 
 export function createUiState(): UiState {
-	let state = $state({
+	const state = $state({
 		view: "empty" as ShellView,
 		paletteOpen: false,
 		paletteMode: "commands" as PaletteMode,

@@ -1,9 +1,15 @@
-import { mkdir, readFile, stat, writeFile, readdir } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import type { ComposerAttachment } from "@daedalus-pi/app-server-protocol";
 
 export const MAX_GUI_ATTACHMENT_BYTES = 10 * 1024 * 1024;
-export const ALLOWED_IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"]);
+export const ALLOWED_IMAGE_MIME_TYPES = new Set([
+	"image/png",
+	"image/jpeg",
+	"image/gif",
+	"image/webp",
+	"image/svg+xml",
+]);
 const ALLOWED_TEXT_MIME_TYPES = new Set(["text/plain", "text/markdown", "application/json"]);
 
 export interface StoredComposerAttachment extends ComposerAttachment {
@@ -18,7 +24,8 @@ export class AttachmentService {
 		if (data.byteLength > MAX_GUI_ATTACHMENT_BYTES) throw new Error("Attachment exceeds 10 MiB");
 		const mimeType = input.mimeType ?? "application/octet-stream";
 		const kind = this.kindFor(mimeType);
-		if (kind === "file" && mimeType !== "application/octet-stream") throw new Error(`Unsupported attachment type: ${mimeType}`);
+		if (kind === "file" && mimeType !== "application/octet-stream")
+			throw new Error(`Unsupported attachment type: ${mimeType}`);
 		const id = `attachment-${crypto.randomUUID()}`;
 		const safeName = basename(input.filename).replaceAll(/[^\w. -]/g, "_") || "attachment";
 		await mkdir(this.rootDir, { recursive: true });
@@ -35,9 +42,18 @@ export class AttachmentService {
 		if (!filename) throw new Error(`Unknown attachment: ${attachmentId}`);
 		const storagePath = join(this.rootDir, filename);
 		const size = (await stat(storagePath)).size;
-		const metadata = await readFile(`${storagePath}.json`, "utf8").then((text) => JSON.parse(text) as ComposerAttachment).catch(() => undefined);
+		const metadata = await readFile(`${storagePath}.json`, "utf8")
+			.then((text) => JSON.parse(text) as ComposerAttachment)
+			.catch(() => undefined);
 		const original = filename.slice(attachmentId.length + 1);
-		return { id: attachmentId, kind: metadata?.kind ?? "file", filename: metadata?.filename ?? original, mimeType: metadata?.mimeType, size: metadata?.size ?? size, storagePath };
+		return {
+			id: attachmentId,
+			kind: metadata?.kind ?? "file",
+			filename: metadata?.filename ?? original,
+			mimeType: metadata?.mimeType,
+			size: metadata?.size ?? size,
+			storagePath,
+		};
 	}
 
 	async read(attachmentId: string): Promise<Buffer> {

@@ -56,33 +56,55 @@ export type SessionExportHtmlParams = Static<typeof SessionExportHtmlParamsSchem
 export const SessionExportHtmlResultSchema = Type.Object({ content: Type.String(), filename: Type.String() });
 export type SessionExportHtmlResult = Static<typeof SessionExportHtmlResultSchema>;
 
-export const SessionResumeParamsSchema = Type.Object({ sessionId: SessionIdSchema, prompt: Type.Optional(Type.String()) });
+export const SessionResumeParamsSchema = Type.Object({
+	sessionId: SessionIdSchema,
+	prompt: Type.Optional(Type.String()),
+});
 export type SessionResumeParams = Static<typeof SessionResumeParamsSchema>;
 export const SessionResumeResultSchema = Type.Object({ sessionId: SessionIdSchema, status: Type.String() });
 export type SessionResumeResult = Static<typeof SessionResumeResultSchema>;
 
-export const SessionForkParamsSchema = Type.Object({ sessionId: SessionIdSchema, cwd: Type.Optional(Type.String({ minLength: 1 })), prompt: Type.Optional(Type.String()) });
+export const SessionForkParamsSchema = Type.Object({
+	sessionId: SessionIdSchema,
+	cwd: Type.Optional(Type.String({ minLength: 1 })),
+	prompt: Type.Optional(Type.String()),
+});
 export type SessionForkParams = Static<typeof SessionForkParamsSchema>;
 export const SessionForkResultSchema = Type.Object({ sessionId: SessionIdSchema, status: Type.String() });
 export type SessionForkResult = Static<typeof SessionForkResultSchema>;
 
-export const SessionRenameParamsSchema = Type.Object({ sessionId: SessionIdSchema, name: Type.Optional(Type.String()) });
+export const SessionRenameParamsSchema = Type.Object({
+	sessionId: SessionIdSchema,
+	name: Type.Optional(Type.String()),
+});
 export type SessionRenameParams = Static<typeof SessionRenameParamsSchema>;
 export const SessionMutationResultSchema = Type.Object({ ok: Type.Boolean() });
 export type SessionMutationResult = Static<typeof SessionMutationResultSchema>;
 
-export const SessionArchiveParamsSchema = Type.Object({ sessionId: SessionIdSchema, archived: Type.Optional(Type.Boolean()) });
+export const SessionArchiveParamsSchema = Type.Object({
+	sessionId: SessionIdSchema,
+	archived: Type.Optional(Type.Boolean()),
+});
 export type SessionArchiveParams = Static<typeof SessionArchiveParamsSchema>;
 export const SessionDeleteParamsSchema = Type.Object({ sessionId: SessionIdSchema });
 export type SessionDeleteParams = Static<typeof SessionDeleteParamsSchema>;
 
 export const SessionStatsParamsSchema = Type.Object({ sessionId: Type.Optional(SessionIdSchema) });
 export type SessionStatsParams = Static<typeof SessionStatsParamsSchema>;
-export const SessionStatsResultSchema = Type.Object({ sessionCount: Type.Integer({ minimum: 0 }), archivedCount: Type.Integer({ minimum: 0 }), messageCount: Type.Integer({ minimum: 0 }) });
+export const SessionStatsResultSchema = Type.Object({
+	sessionCount: Type.Integer({ minimum: 0 }),
+	archivedCount: Type.Integer({ minimum: 0 }),
+	messageCount: Type.Integer({ minimum: 0 }),
+});
 export type SessionStatsResult = Static<typeof SessionStatsResultSchema>;
 
-export const SessionTreeParamsSchema = Type.Object({ rootSessionId: Type.Optional(SessionIdSchema), includeArchived: Type.Optional(Type.Boolean()) });
+export const SessionTreeParamsSchema = Type.Object({
+	rootSessionId: Type.Optional(SessionIdSchema),
+	includeArchived: Type.Optional(Type.Boolean()),
+});
 export type SessionTreeParams = Static<typeof SessionTreeParamsSchema>;
-export const SessionTreeNodeSchema = Type.Recursive((Self) => Type.Object({ session: SessionStoreSummarySchema, children: Type.Array(Self) }));
+export const SessionTreeNodeSchema = Type.Recursive((Self) =>
+	Type.Object({ session: SessionStoreSummarySchema, children: Type.Array(Self) }),
+);
 export const SessionTreeResultSchema = Type.Object({ roots: Type.Array(SessionTreeNodeSchema) });
 export type SessionTreeResult = Static<typeof SessionTreeResultSchema>;

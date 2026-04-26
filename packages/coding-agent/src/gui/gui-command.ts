@@ -105,7 +105,12 @@ export async function runGuiCommand(rawArgs: readonly string[], deps: GuiCommand
 	if (!isLoopbackHost(options.host)) {
 		stderr.error(`Warning: binding Daedalus GUI to non-loopback host ${options.host}; bearer token is required.`);
 	}
-	if (options.reuseServer && !options.newServer && options.port > 0 && (await canReuseServer(requestedUrl, fetchImpl))) {
+	if (
+		options.reuseServer &&
+		!options.newServer &&
+		options.port > 0 &&
+		(await canReuseServer(requestedUrl, fetchImpl))
+	) {
 		stdout.log(`Daedalus GUI reusing app-server at ${requestedUrl}`);
 		stdout.log(`Daedalus GUI ready: ${requestedUrl}`);
 		if (options.open) await (deps.openBrowser ?? defaultOpenBrowser)(requestedUrl);
@@ -113,20 +118,23 @@ export async function runGuiCommand(rawArgs: readonly string[], deps: GuiCommand
 	}
 	const dbPath = resolve(options.project, ".daedalus", "app-server.sqlite");
 	if (options.logFile) await mkdir(dirname(options.logFile), { recursive: true });
-	const proc = spawn([
-		"bun",
-		appServerEntrypoint(),
-		"--db",
-		dbPath,
-		"--host",
-		options.host,
-		"--port",
-		String(options.port),
-		"--gui",
-		"--project",
-		options.project,
-		...(token ? ["--token", token] : []),
-	], { stdout: "pipe", stderr: "pipe" });
+	const proc = spawn(
+		[
+			"bun",
+			appServerEntrypoint(),
+			"--db",
+			dbPath,
+			"--host",
+			options.host,
+			"--port",
+			String(options.port),
+			"--gui",
+			"--project",
+			options.project,
+			...(token ? ["--token", token] : []),
+		],
+		{ stdout: "pipe", stderr: "pipe" },
+	);
 	const reader = proc.stdout.getReader();
 	const chunk = await reader.read();
 	reader.releaseLock();

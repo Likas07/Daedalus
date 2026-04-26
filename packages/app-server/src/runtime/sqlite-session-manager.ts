@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import {
 	buildSessionContext,
-	serializeSessionJsonl,
 	type ModelChangeEntry,
 	type SessionContext,
 	type SessionEntry,
 	type SessionHeader,
 	type SessionMessageEntry,
 	type SessionStoreSession,
+	serializeSessionJsonl,
 	type ThinkingLevelChangeEntry,
 } from "@daedalus-pi/coding-agent";
 
@@ -23,7 +23,14 @@ type CustomMessageEntry = SessionEntry & {
 	details?: unknown;
 	display?: boolean;
 };
-type BranchSummaryEntry = SessionEntry & { type: "branch_summary"; fromId: string; summary: string; details?: unknown; fromHook?: boolean };
+type BranchSummaryEntry = SessionEntry & {
+	type: "branch_summary";
+	fromId: string;
+	summary: string;
+	details?: unknown;
+	fromHook?: boolean;
+};
+
 import type { SqliteSessionStore } from "../sessions/sqlite-session-store";
 
 export interface SqliteSessionManagerOptions {
@@ -59,7 +66,11 @@ export class SqliteSessionManager {
 	private async load(): Promise<void> {
 		this.session = this.options.sessionPath
 			? await this.options.store.open({ id: this.options.sessionPath })
-			: await this.options.store.create({ cwd: this.options.cwd, id: this.options.sessionId, parentSession: this.options.parentSession });
+			: await this.options.store.create({
+					cwd: this.options.cwd,
+					id: this.options.sessionId,
+					parentSession: this.options.parentSession,
+				});
 		if (this.options.name) this.appendSessionInfo(this.options.name);
 		this.rebuildIndex();
 	}
@@ -179,7 +190,11 @@ export class SqliteSessionManager {
 	}
 
 	appendThinkingLevelChange(thinkingLevel: string): string {
-		return this.append({ type: "thinking_level_change", ...this.makeBase(), thinkingLevel } as ThinkingLevelChangeEntry);
+		return this.append({
+			type: "thinking_level_change",
+			...this.makeBase(),
+			thinkingLevel,
+		} as ThinkingLevelChangeEntry);
 	}
 
 	appendFastModeChange(fastMode: boolean): string {
@@ -195,7 +210,14 @@ export class SqliteSessionManager {
 	}
 
 	appendCustomMessageEntry(customType: string, content: string, details?: unknown, display?: boolean): string {
-		return this.append({ type: "custom_message", ...this.makeBase(), customType, content, details, display } as CustomMessageEntry);
+		return this.append({
+			type: "custom_message",
+			...this.makeBase(),
+			customType,
+			content,
+			details,
+			display,
+		} as CustomMessageEntry);
 	}
 
 	appendSessionInfo(name: string): string {
@@ -210,8 +232,22 @@ export class SqliteSessionManager {
 		return id;
 	}
 
-	appendCompaction(summary: string, firstKeptEntryId: string, tokensBefore: number, details?: unknown, fromHook?: boolean): string {
-		return this.append({ type: "compaction", ...this.makeBase(), summary, firstKeptEntryId, tokensBefore, details, fromHook });
+	appendCompaction(
+		summary: string,
+		firstKeptEntryId: string,
+		tokensBefore: number,
+		details?: unknown,
+		fromHook?: boolean,
+	): string {
+		return this.append({
+			type: "compaction",
+			...this.makeBase(),
+			summary,
+			firstKeptEntryId,
+			tokensBefore,
+			details,
+			fromHook,
+		});
 	}
 
 	branch(branchFromId: string): void {
@@ -225,7 +261,14 @@ export class SqliteSessionManager {
 
 	branchWithSummary(branchFromId: string | null, summary: string, details?: unknown, fromHook?: boolean): string {
 		this.leafId = branchFromId;
-		return this.append({ type: "branch_summary", ...this.makeBase(), fromId: branchFromId ?? "root", summary, details, fromHook } as BranchSummaryEntry);
+		return this.append({
+			type: "branch_summary",
+			...this.makeBase(),
+			fromId: branchFromId ?? "root",
+			summary,
+			details,
+			fromHook,
+		} as BranchSummaryEntry);
 	}
 
 	async exportJsonl(): Promise<string> {

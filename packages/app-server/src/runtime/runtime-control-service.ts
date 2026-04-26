@@ -1,5 +1,11 @@
+import type {
+	RuntimeCommand,
+	RuntimeKeybinding,
+	RuntimeQueueMode,
+	RuntimeState,
+	SessionId,
+} from "@daedalus-pi/app-server-protocol";
 import type { AgentSessionRuntimeDiagnostic } from "@daedalus-pi/coding-agent";
-import type { RuntimeCommand, RuntimeKeybinding, RuntimeQueueMode, RuntimeState, SessionId } from "@daedalus-pi/app-server-protocol";
 import type { ControlledSessionRuntime, SessionController } from "./session-controller";
 
 type AnySession = Record<string, any>;
@@ -28,7 +34,9 @@ export class RuntimeControlService {
 	async setModel(sessionId: SessionId, provider: string, modelId: string): Promise<{ model: unknown }> {
 		const session = this.session(sessionId);
 		const models = await session.modelRegistry?.getAvailable?.();
-		const model = models?.find((candidate: { provider: string; id: string }) => candidate.provider === provider && candidate.id === modelId);
+		const model = models?.find(
+			(candidate: { provider: string; id: string }) => candidate.provider === provider && candidate.id === modelId,
+		);
 		if (!model) throw new Error(`Model not found: ${provider}/${modelId}`);
 		await session.setModel?.(model);
 		await this.changed(sessionId, "model", { model });
@@ -56,7 +64,9 @@ export class RuntimeControlService {
 	async setTools(sessionId: SessionId, tools: readonly string[]): Promise<{ tools: readonly string[] }> {
 		const session = this.session(sessionId);
 		const available = session.tools ?? session.services?.tools ?? [];
-		const selected = Array.isArray(available) ? available.filter((tool: { name?: string }) => tools.includes(String(tool.name))) : [];
+		const selected = Array.isArray(available)
+			? available.filter((tool: { name?: string }) => tools.includes(String(tool.name)))
+			: [];
 		session.setActiveTools?.(selected);
 		await this.changed(sessionId, "tools", { tools });
 		return { tools };
@@ -87,7 +97,9 @@ export class RuntimeControlService {
 	}
 
 	async reloadResources(sessionId: SessionId): Promise<{ diagnostics: readonly AgentSessionRuntimeDiagnostic[] }> {
-		const runtime = this.controller.getSessionRuntime(sessionId) as ControlledSessionRuntime & { control?: { reload?: () => Promise<void>; diagnostics?: readonly AgentSessionRuntimeDiagnostic[] } };
+		const runtime = this.controller.getSessionRuntime(sessionId) as ControlledSessionRuntime & {
+			control?: { reload?: () => Promise<void>; diagnostics?: readonly AgentSessionRuntimeDiagnostic[] };
+		};
 		await (runtime.control?.reload?.() ?? this.session(sessionId).reload?.());
 		const diagnostics = runtime.control?.diagnostics ?? this.session(sessionId).diagnostics ?? [];
 		await this.changed(sessionId, "reloadResources", { diagnostics });
@@ -97,9 +109,27 @@ export class RuntimeControlService {
 	getCommands(sessionId: SessionId): { commands: readonly RuntimeCommand[] } {
 		const session = this.session(sessionId);
 		const commands: RuntimeCommand[] = [];
-		for (const command of session.extensionRunner?.getRegisteredCommands?.() ?? []) commands.push({ name: command.invocationName, description: command.description, source: "extension", sourceInfo: command.sourceInfo });
-		for (const template of session.promptTemplates ?? []) commands.push({ name: template.name, description: template.description, source: "prompt", sourceInfo: template.sourceInfo });
-		for (const skill of session.resourceLoader?.getSkills?.().skills ?? []) commands.push({ name: `skill:${skill.name}`, description: skill.description, source: "skill", sourceInfo: skill.sourceInfo });
+		for (const command of session.extensionRunner?.getRegisteredCommands?.() ?? [])
+			commands.push({
+				name: command.invocationName,
+				description: command.description,
+				source: "extension",
+				sourceInfo: command.sourceInfo,
+			});
+		for (const template of session.promptTemplates ?? [])
+			commands.push({
+				name: template.name,
+				description: template.description,
+				source: "prompt",
+				sourceInfo: template.sourceInfo,
+			});
+		for (const skill of session.resourceLoader?.getSkills?.().skills ?? [])
+			commands.push({
+				name: `skill:${skill.name}`,
+				description: skill.description,
+				source: "skill",
+				sourceInfo: skill.sourceInfo,
+			});
 		return { commands };
 	}
 

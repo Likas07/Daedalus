@@ -10,10 +10,17 @@ import { classifyToolRisk, ToolApprovalGate } from "./tool-approval-gate";
 function setup() {
 	const database = openAppServerDatabase(join(mkdtempSync(join(tmpdir(), "daedalus-gate-")), "app.sqlite"));
 	runMigrations(database);
-	database.query("INSERT INTO sessions (id, status, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run("session-1", "active", "Test", new Date().toISOString(), new Date().toISOString());
+	database
+		.query("INSERT INTO sessions (id, status, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+		.run("session-1", "active", "Test", new Date().toISOString(), new Date().toISOString());
 	const access = new AccessPolicyService(database);
 	const approvals = new ApprovalService(database, access);
-	const gate = new ToolApprovalGate({ sessionId: "session-1", approvalService: approvals, accessPolicy: access, timeoutMs: 1_000 });
+	const gate = new ToolApprovalGate({
+		sessionId: "session-1",
+		approvalService: approvals,
+		accessPolicy: access,
+		timeoutMs: 1_000,
+	});
 	return { database, access, approvals, gate };
 }
 
@@ -62,7 +69,9 @@ test("deny blocks tool execution", async () => {
 test("unrestricted auto-approves soft prompts", async () => {
 	const { database, access, gate } = setup();
 	access.setMode("unrestricted");
-	expect(await gate.beforeToolCall({ toolName: "write", toolCallId: "call-auto", args: { path: "a" } })).toBeUndefined();
+	expect(
+		await gate.beforeToolCall({ toolName: "write", toolCallId: "call-auto", args: { path: "a" } }),
+	).toBeUndefined();
 	expect(readEvents(database).map((event) => event.type)).toContain("access/auto-approved");
 	database.close();
 });
@@ -70,7 +79,9 @@ test("unrestricted auto-approves soft prompts", async () => {
 test("hard blocks remain blocked", async () => {
 	const { database, access, gate } = setup();
 	access.setMode("unrestricted");
-	expect(await gate.beforeToolCall({ toolName: "bash", toolCallId: "call-hard", args: { command: "sudo rm -rf /" } })).toEqual({
+	expect(
+		await gate.beforeToolCall({ toolName: "bash", toolCallId: "call-hard", args: { command: "sudo rm -rf /" } }),
+	).toEqual({
 		block: true,
 		reason: "Blocked by access policy: bash is not allowed from the GUI.",
 	});

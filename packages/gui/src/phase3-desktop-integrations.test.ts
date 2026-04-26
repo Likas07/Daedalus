@@ -43,7 +43,6 @@ describe("phase 3 desktop and integrations helpers", () => {
 	});
 });
 
-
 test("documents renderer-safe extension command palette exposure", () => {
 	const docs = readFileSync(new URL("../docs/extension-support.md", import.meta.url), "utf8");
 	expect(docs).toContain("GUI command palette exposes extension command labels");

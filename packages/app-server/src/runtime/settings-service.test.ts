@@ -5,7 +5,11 @@ import { SettingsService } from "./settings-service";
 describe("SettingsService", () => {
 	test("reads schema-backed settings, models, and keybindings", async () => {
 		const service = new SettingsService({
-			settingsManager: SettingsManager.inMemory({ defaultProvider: "openai", defaultModel: "gpt-5", theme: "daedalus-dark" }),
+			settingsManager: SettingsManager.inMemory({
+				defaultProvider: "openai",
+				defaultModel: "gpt-5",
+				theme: "daedalus-dark",
+			}),
 			listModels: async () => [{ id: "gpt-5", provider: "openai", reasoningLevels: ["low", "medium"] }],
 		});
 		const snapshot = await service.read();
@@ -40,7 +44,6 @@ describe("SettingsService", () => {
 	});
 
 	test("persists keybinding overrides by scope", async () => {
-
 		const manager = SettingsManager.inMemory();
 
 		const service = new SettingsService({ settingsManager: manager });
@@ -52,6 +55,5 @@ describe("SettingsService", () => {
 		expect(snapshot.project.keybindings).toEqual({ "app.commandPalette": ["ctrl+p"] });
 
 		expect(snapshot.keybindings.find((binding) => binding.id === "app.commandPalette")?.keys).toEqual(["ctrl+p"]);
-
 	});
 });

@@ -1,12 +1,4 @@
-import { randomUUID } from "crypto";
 import {
-	parseSessionJsonl,
-	serializeSessionJsonl,
-	type SessionEntry,
-	type SessionHeader,
-	type SessionStore,
-	type SessionStoreSession,
-	type SessionStoreSummary,
 	type AppendSessionStoreEntriesOptions,
 	type ArchiveSessionStoreSessionOptions,
 	type CreateSessionStoreSessionOptions,
@@ -15,12 +7,25 @@ import {
 	type ImportSessionStoreSessionOptions,
 	type ListSessionStoreSessionsOptions,
 	type OpenSessionStoreSessionOptions,
+	parseSessionJsonl,
 	type ReadSessionStoreSessionOptions,
 	type RenameSessionStoreSessionOptions,
+	type SessionEntry,
+	type SessionHeader,
+	type SessionStore,
+	type SessionStoreSession,
+	type SessionStoreSummary,
+	serializeSessionJsonl,
 } from "@daedalus-pi/coding-agent";
+import { randomUUID } from "crypto";
 import type { AppServerDatabase } from "../persistence/database";
 import { projectGuiSessionReadModel, toGuiSessionReadModelRow } from "./session-read-model";
-import { GUI_SESSION_TABLES, type GuiSessionEntryRow, type GuiSessionReadModelRow, type GuiSessionRow } from "./session-schema";
+import {
+	GUI_SESSION_TABLES,
+	type GuiSessionEntryRow,
+	type GuiSessionReadModelRow,
+	type GuiSessionRow,
+} from "./session-schema";
 
 export interface SqliteSessionStoreOptions {
 	database: AppServerDatabase;
@@ -35,8 +40,6 @@ export interface ImportSessionJsonlOptions {
 function nowIso(): string {
 	return new Date().toISOString();
 }
-
-
 
 export class SqliteSessionStore implements SessionStore {
 	readonly database: AppServerDatabase;
@@ -114,11 +117,21 @@ export class SqliteSessionStore implements SessionStore {
 				 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			);
 			for (const entry of entries) {
-				insert.run(sessionId, nextSeq, entry.id, entry.parentId, entry.type, JSON.stringify(entry), entry.timestamp);
+				insert.run(
+					sessionId,
+					nextSeq,
+					entry.id,
+					entry.parentId,
+					entry.type,
+					JSON.stringify(entry),
+					entry.timestamp,
+				);
 				nextSeq += 1;
 			}
 			const updatedAt = entries.at(-1)?.timestamp ?? nowIso();
-			this.database.query(`UPDATE ${GUI_SESSION_TABLES.sessions} SET updated_at = ? WHERE id = ?`).run(updatedAt, sessionId);
+			this.database
+				.query(`UPDATE ${GUI_SESSION_TABLES.sessions} SET updated_at = ? WHERE id = ?`)
+				.run(updatedAt, sessionId);
 			this.projectReadModel(session.header, [...session.entries, ...entries], this.isArchived(sessionId), updatedAt);
 		});
 		appendTransaction(options.sessionId, options.entries);
@@ -176,16 +189,26 @@ export class SqliteSessionStore implements SessionStore {
 
 	private insertSession(session: SessionStoreSession, overwrite: boolean): void {
 		const transaction = this.database.transaction((value: SessionStoreSession) => {
-			const existing = this.database.query(`SELECT id FROM ${GUI_SESSION_TABLES.sessions} WHERE id = ?`).get(value.header.id);
+			const existing = this.database
+				.query(`SELECT id FROM ${GUI_SESSION_TABLES.sessions} WHERE id = ?`)
+				.get(value.header.id);
 			if (existing && !overwrite) throw new Error(`Session ${value.header.id} already exists`);
-			if (existing) this.database.query(`DELETE FROM ${GUI_SESSION_TABLES.sessions} WHERE id = ?`).run(value.header.id);
+			if (existing)
+				this.database.query(`DELETE FROM ${GUI_SESSION_TABLES.sessions} WHERE id = ?`).run(value.header.id);
 			this.database
 				.query(
 					`INSERT INTO ${GUI_SESSION_TABLES.sessions}
 					 (id, cwd, parent_session_id, header_json, archived, created_at, updated_at)
 					 VALUES (?, ?, ?, ?, 0, ?, ?)`,
 				)
-				.run(value.header.id, value.header.cwd, value.header.parentSession ?? null, JSON.stringify(value.header), value.header.timestamp, value.header.timestamp);
+				.run(
+					value.header.id,
+					value.header.cwd,
+					value.header.parentSession ?? null,
+					JSON.stringify(value.header),
+					value.header.timestamp,
+					value.header.timestamp,
+				);
 			let seq = 1;
 			const insertEntry = this.database.query(
 				`INSERT INTO ${GUI_SESSION_TABLES.entries}
@@ -193,19 +216,36 @@ export class SqliteSessionStore implements SessionStore {
 				 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			);
 			for (const entry of value.entries) {
-				insertEntry.run(value.header.id, seq, entry.id, entry.parentId, entry.type, JSON.stringify(entry), entry.timestamp);
+				insertEntry.run(
+					value.header.id,
+					seq,
+					entry.id,
+					entry.parentId,
+					entry.type,
+					JSON.stringify(entry),
+					entry.timestamp,
+				);
 				seq += 1;
 			}
-			this.projectReadModel(value.header, value.entries, false, value.entries.at(-1)?.timestamp ?? value.header.timestamp);
+			this.projectReadModel(
+				value.header,
+				value.entries,
+				false,
+				value.entries.at(-1)?.timestamp ?? value.header.timestamp,
+			);
 		});
 		transaction(session);
 	}
 
 	private readSync(sessionId: string): SessionStoreSession {
-		const row = this.database.query<GuiSessionRow, [string]>(`SELECT * FROM ${GUI_SESSION_TABLES.sessions} WHERE id = ?`).get(sessionId);
+		const row = this.database
+			.query<GuiSessionRow, [string]>(`SELECT * FROM ${GUI_SESSION_TABLES.sessions} WHERE id = ?`)
+			.get(sessionId);
 		if (!row) throw new Error(`Session ${sessionId} not found`);
 		const entries = this.database
-			.query<GuiSessionEntryRow, [string]>(`SELECT * FROM ${GUI_SESSION_TABLES.entries} WHERE session_id = ? ORDER BY seq ASC`)
+			.query<GuiSessionEntryRow, [string]>(
+				`SELECT * FROM ${GUI_SESSION_TABLES.entries} WHERE session_id = ? ORDER BY seq ASC`,
+			)
 			.all(sessionId)
 			.map((entryRow) => JSON.parse(entryRow.entry_json) as SessionEntry);
 		return { header: JSON.parse(row.header_json) as SessionHeader, entries };
@@ -213,17 +253,26 @@ export class SqliteSessionStore implements SessionStore {
 
 	private nextSequence(sessionId: string): number {
 		const row = this.database
-			.query<{ next_seq: number | null }, [string]>(`SELECT COALESCE(MAX(seq), 0) + 1 AS next_seq FROM ${GUI_SESSION_TABLES.entries} WHERE session_id = ?`)
+			.query<{ next_seq: number | null }, [string]>(
+				`SELECT COALESCE(MAX(seq), 0) + 1 AS next_seq FROM ${GUI_SESSION_TABLES.entries} WHERE session_id = ?`,
+			)
 			.get(sessionId);
 		return row?.next_seq ?? 1;
 	}
 
 	private isArchived(sessionId: string): boolean {
-		const row = this.database.query<{ archived: 0 | 1 }, [string]>(`SELECT archived FROM ${GUI_SESSION_TABLES.sessions} WHERE id = ?`).get(sessionId);
+		const row = this.database
+			.query<{ archived: 0 | 1 }, [string]>(`SELECT archived FROM ${GUI_SESSION_TABLES.sessions} WHERE id = ?`)
+			.get(sessionId);
 		return row?.archived === 1;
 	}
 
-	private projectReadModel(header: SessionHeader, entries: readonly SessionEntry[], archived: boolean, updatedAt: string): void {
+	private projectReadModel(
+		header: SessionHeader,
+		entries: readonly SessionEntry[],
+		archived: boolean,
+		updatedAt: string,
+	): void {
 		const row = toGuiSessionReadModelRow(projectGuiSessionReadModel({ header, entries, archived, updatedAt }));
 		this.database
 			.query(

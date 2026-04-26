@@ -3,6 +3,8 @@ import { dirname, join } from "node:path";
 import type { Server } from "bun";
 import { openAppServerDatabase, runMigrations } from "..";
 import { PromptContextService } from "../composer/prompt-context-service";
+import { ExtensionUiRouter } from "../extensions/extension-ui-router";
+import type { CommandRunner } from "../integrations/integration-api";
 import { AccessPolicyService } from "../runtime/access-policy-service";
 import { ApprovalService } from "../runtime/approval-service";
 import { createCodingAgentRuntimeFactory } from "../runtime/coding-agent-runtime";
@@ -11,12 +13,10 @@ import { SessionController } from "../runtime/session-controller";
 import { SqliteSessionManager } from "../runtime/sqlite-session-manager";
 import { SqliteSessionStore } from "../sessions/sqlite-session-store";
 import type { PtyAdapter } from "../terminal/pty-adapter";
-import type { CommandRunner } from "../integrations/integration-api";
 import { authenticateRequest, createCapabilityToken } from "./auth";
 import { AppRouter, type OutboundMessage } from "./router";
-import { createWebSocketHandlers, type WebSocketClient } from "./websocket";
 import { serveStaticGui } from "./static-gui";
-import { ExtensionUiRouter } from "../extensions/extension-ui-router";
+import { createWebSocketHandlers, type WebSocketClient } from "./websocket";
 
 export interface CreateAppServerOptions {
 	readonly databasePath: string;
@@ -120,7 +120,7 @@ export async function startAppServer(options: CreateAppServerOptions): Promise<A
 	};
 }
 
-const fakeRuntimeFactory: RuntimeFactory = async (input) => {
+const _fakeRuntimeFactory: RuntimeFactory = async (input) => {
 	const listeners = new Set<(event: unknown) => void>();
 	return {
 		cwd: input.cwd,

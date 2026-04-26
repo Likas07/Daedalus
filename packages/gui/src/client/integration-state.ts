@@ -77,7 +77,7 @@ export function prCreateApprovalSummary(input: {
 	readonly head: string;
 	readonly base?: string;
 }): string {
-	return `Create GitHub pull request \"${input.title}\" from ${input.head}${input.base ? ` into ${input.base}` : ""}`;
+	return `Create GitHub pull request "${input.title}" from ${input.head}${input.base ? ` into ${input.base}` : ""}`;
 }
 
 export function canCreateOrUpdatePullRequest(input: { readonly safePushEnabled?: boolean }): boolean {

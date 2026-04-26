@@ -49,7 +49,12 @@ export function detectComposerTrigger(text: string, cursor: number): ComposerTri
 	return null;
 }
 
-export function replaceTextRange(text: string, rangeStart: number, rangeEnd: number, replacement: string): { text: string; cursor: number } {
+export function replaceTextRange(
+	text: string,
+	rangeStart: number,
+	rangeEnd: number,
+	replacement: string,
+): { text: string; cursor: number } {
 	const next = `${text.slice(0, rangeStart)}${replacement}${text.slice(rangeEnd)}`;
 	return { text: next, cursor: rangeStart + replacement.length };
 }
@@ -80,8 +85,17 @@ export function shouldSubmitComposerKey(event: Pick<KeyboardEvent, "key" | "shif
 	return event.key === "Enter" && !event.shiftKey && !event.isComposing;
 }
 
-export function validateAttachmentFile(file: Pick<File, "size" | "type" | "name">, maxBytes = 10 * 1024 * 1024): string | undefined {
+export function validateAttachmentFile(
+	file: Pick<File, "size" | "type" | "name">,
+	maxBytes = 10 * 1024 * 1024,
+): string | undefined {
 	if (file.size > maxBytes) return `${file.name} is larger than ${Math.round(maxBytes / 1024 / 1024)}MB.`;
-	if (file.type && !file.type.startsWith("image/") && !file.type.startsWith("text/") && file.type !== "application/json") return `${file.name} is not a supported attachment type.`;
+	if (
+		file.type &&
+		!file.type.startsWith("image/") &&
+		!file.type.startsWith("text/") &&
+		file.type !== "application/json"
+	)
+		return `${file.name} is not a supported attachment type.`;
 	return undefined;
 }

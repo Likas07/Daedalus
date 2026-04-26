@@ -113,7 +113,11 @@ export function resolvePackagedAppServerRuntime(options: {
 }): PackagedAppServerRuntime {
 	if (options.appServerBinary) return { command: options.appServerBinary, args: [], kind: "binary" };
 	const resourcesRoot = options.resourcesPath ?? options.projectRoot ?? process.cwd();
-	const binary = join(resourcesRoot, "app-server", process.platform === "win32" ? "daedalus-app-server.exe" : "daedalus-app-server");
+	const binary = join(
+		resourcesRoot,
+		"app-server",
+		process.platform === "win32" ? "daedalus-app-server.exe" : "daedalus-app-server",
+	);
 	if (existsSync(binary)) return { command: binary, args: [], kind: "binary" };
 	const fallback = join(resourcesRoot, "app-server", "main.ts");
 	if (existsSync(fallback)) return { command: "bun", args: [fallback], kind: "bun-script" };

@@ -83,7 +83,10 @@ export class ProviderAuthService {
 		if (!oauthProvider) return this.apiKeyOnlyStatus(provider);
 		try {
 			await this.authStorage.login(provider, this.buildOAuthCallbacks(oauthProvider.name));
-			return this.status(provider).providers[0] ?? this.errorStatus(provider, "Provider login completed, but provider is not in the model registry.");
+			return (
+				this.status(provider).providers[0] ??
+				this.errorStatus(provider, "Provider login completed, but provider is not in the model registry.")
+			);
 		} catch (error) {
 			return this.errorStatus(provider, error instanceof Error ? error.message : String(error));
 		}
@@ -108,9 +111,12 @@ export class ProviderAuthService {
 			};
 			modelsByProvider.set(provider, [...(modelsByProvider.get(provider) ?? []), entry]);
 		}
-		for (const provider of this.authStorage.list()) if (!modelsByProvider.has(provider)) modelsByProvider.set(provider, []);
-		for (const provider of Object.keys(this.authStorage.getAll())) if (!modelsByProvider.has(provider)) modelsByProvider.set(provider, []);
-		for (const provider of this.oauthProviders().keys()) if (!modelsByProvider.has(provider)) modelsByProvider.set(provider, []);
+		for (const provider of this.authStorage.list())
+			if (!modelsByProvider.has(provider)) modelsByProvider.set(provider, []);
+		for (const provider of Object.keys(this.authStorage.getAll()))
+			if (!modelsByProvider.has(provider)) modelsByProvider.set(provider, []);
+		for (const provider of this.oauthProviders().keys())
+			if (!modelsByProvider.has(provider)) modelsByProvider.set(provider, []);
 		return [...modelsByProvider.entries()]
 			.sort(([a], [b]) => a.localeCompare(b))
 			.map(([provider, models]) => this.providerStatus(provider, models));
@@ -123,27 +129,127 @@ export class ProviderAuthService {
 		const modelCount = models.length;
 		const diagnostics = errors.map((error) => error.message);
 		if (errors.length > 0) return this.errorStatus(provider, diagnostics.join("; "), modelCount, models, diagnostics);
-		if (credential?.type === "oauth") return { ...this.base(provider, models), label: oauthProvider?.name, enabled: true, authenticated: true, status: "oauth", authMethod: "oauth", actionable: true, canLogin: true, canLogout: true, canRelogin: true, source: "auth-storage" };
-		if (credential?.type === "api_key") return { ...this.base(provider, models), enabled: true, authenticated: true, status: "ready", authMethod: "api-key", actionable: true, canLogin: false, canLogout: true, canRelogin: false, source: "auth-storage" };
-		if (getEnvApiKey(provider)) return { ...this.base(provider, models), enabled: true, authenticated: true, status: "env-key", authMethod: "env", actionable: false, canLogin: false, canLogout: false, canRelogin: false, source: "environment", instruction: this.envInstruction(provider) };
-		if (oauthProvider) return { ...this.base(provider, models), label: oauthProvider.name, enabled: false, authenticated: false, status: "missing-auth", authMethod: "oauth", actionable: true, canLogin: true, canLogout: false, canRelogin: false, instruction: `Use Login to authenticate ${oauthProvider.name} with OAuth.` };
+		if (credential?.type === "oauth")
+			return {
+				...this.base(provider, models),
+				label: oauthProvider?.name,
+				enabled: true,
+				authenticated: true,
+				status: "oauth",
+				authMethod: "oauth",
+				actionable: true,
+				canLogin: true,
+				canLogout: true,
+				canRelogin: true,
+				source: "auth-storage",
+			};
+		if (credential?.type === "api_key")
+			return {
+				...this.base(provider, models),
+				enabled: true,
+				authenticated: true,
+				status: "ready",
+				authMethod: "api-key",
+				actionable: true,
+				canLogin: false,
+				canLogout: true,
+				canRelogin: false,
+				source: "auth-storage",
+			};
+		if (getEnvApiKey(provider))
+			return {
+				...this.base(provider, models),
+				enabled: true,
+				authenticated: true,
+				status: "env-key",
+				authMethod: "env",
+				actionable: false,
+				canLogin: false,
+				canLogout: false,
+				canRelogin: false,
+				source: "environment",
+				instruction: this.envInstruction(provider),
+			};
+		if (oauthProvider)
+			return {
+				...this.base(provider, models),
+				label: oauthProvider.name,
+				enabled: false,
+				authenticated: false,
+				status: "missing-auth",
+				authMethod: "oauth",
+				actionable: true,
+				canLogin: true,
+				canLogout: false,
+				canRelogin: false,
+				instruction: `Use Login to authenticate ${oauthProvider.name} with OAuth.`,
+			};
 		return this.missingStatus(provider, models);
 	}
 
 	private apiKeyOnlyStatus(provider: string): ProviderAuthStatus {
-		return { ...this.missingStatus(provider, this.modelsForProvider(provider)), status: "unavailable", message: this.apiKeyInstruction(provider), instruction: this.apiKeyInstruction(provider) };
+		return {
+			...this.missingStatus(provider, this.modelsForProvider(provider)),
+			status: "unavailable",
+			message: this.apiKeyInstruction(provider),
+			instruction: this.apiKeyInstruction(provider),
+		};
 	}
 
-	private missingStatus(provider: string, models: readonly ProviderAuthModel[] = this.modelsForProvider(provider)): ProviderAuthStatus {
-		return { ...this.base(provider, models), enabled: false, authenticated: false, status: "missing-auth", authMethod: "api-key", actionable: false, canLogin: false, canLogout: false, canRelogin: false, instruction: this.apiKeyInstruction(provider) };
+	private missingStatus(
+		provider: string,
+		models: readonly ProviderAuthModel[] = this.modelsForProvider(provider),
+	): ProviderAuthStatus {
+		return {
+			...this.base(provider, models),
+			enabled: false,
+			authenticated: false,
+			status: "missing-auth",
+			authMethod: "api-key",
+			actionable: false,
+			canLogin: false,
+			canLogout: false,
+			canRelogin: false,
+			instruction: this.apiKeyInstruction(provider),
+		};
 	}
 
-	private errorStatus(provider: string, message: string, modelCount = this.countModels(provider), models: readonly ProviderAuthModel[] = this.modelsForProvider(provider), diagnostics: readonly string[] = [message]): ProviderAuthStatus {
-		return { ...this.base(provider, models), enabled: false, authenticated: false, status: "error", actionable: false, canLogin: false, canLogout: false, canRelogin: false, message, diagnostics };
+	private errorStatus(
+		provider: string,
+		message: string,
+		_modelCount = this.countModels(provider),
+		models: readonly ProviderAuthModel[] = this.modelsForProvider(provider),
+		diagnostics: readonly string[] = [message],
+	): ProviderAuthStatus {
+		return {
+			...this.base(provider, models),
+			enabled: false,
+			authenticated: false,
+			status: "error",
+			actionable: false,
+			canLogin: false,
+			canLogout: false,
+			canRelogin: false,
+			message,
+			diagnostics,
+		};
 	}
 
-	private base(provider: string, models: readonly ProviderAuthModel[]): Omit<ProviderAuthStatus, "enabled" | "authenticated" | "status" | "actionable" | "canLogin" | "canLogout" | "canRelogin"> {
-		return { provider, modelCount: models.length, models, capabilities: [...new Set(models.flatMap((model) => model.capabilities))].sort(), diagnostics: [], updatedAt: new Date().toISOString() };
+	private base(
+		provider: string,
+		models: readonly ProviderAuthModel[],
+	): Omit<
+		ProviderAuthStatus,
+		"enabled" | "authenticated" | "status" | "actionable" | "canLogin" | "canLogout" | "canRelogin"
+	> {
+		return {
+			provider,
+			modelCount: models.length,
+			models,
+			capabilities: [...new Set(models.flatMap((model) => model.capabilities))].sort(),
+			diagnostics: [],
+			updatedAt: new Date().toISOString(),
+		};
 	}
 
 	private countModels(provider: string): number {
@@ -151,16 +257,24 @@ export class ProviderAuthService {
 	}
 
 	private modelsForProvider(provider: string): ProviderAuthModel[] {
-		return this.modelRegistry.getAll().filter((model) => model.provider === provider).map((model) => ({
-			id: model.id ?? model.name ?? "unknown",
-			label: model.name,
-			available: true,
-			capabilities: this.modelCapabilities(model),
-			diagnostics: [],
-		}));
+		return this.modelRegistry
+			.getAll()
+			.filter((model) => model.provider === provider)
+			.map((model) => ({
+				id: model.id ?? model.name ?? "unknown",
+				label: model.name,
+				available: true,
+				capabilities: this.modelCapabilities(model),
+				diagnostics: [],
+			}));
 	}
 
-	private modelCapabilities(model: { reasoning?: boolean; input?: readonly string[]; contextWindow?: number; maxTokens?: number }): string[] {
+	private modelCapabilities(model: {
+		reasoning?: boolean;
+		input?: readonly string[];
+		contextWindow?: number;
+		maxTokens?: number;
+	}): string[] {
 		const capabilities = new Set<string>();
 		if (model.reasoning) capabilities.add("reasoning");
 		for (const input of model.input ?? []) capabilities.add(`input:${input}`);
@@ -176,7 +290,11 @@ export class ProviderAuthService {
 	private buildOAuthCallbacks(providerName: string): OAuthLoginCallbacks {
 		return {
 			onAuth: this.oauthCallbacks?.onAuth ?? (() => {}),
-			onPrompt: this.oauthCallbacks?.onPrompt ?? (async (prompt) => { throw new Error(`${providerName} OAuth requires interactive input: ${prompt.message}`); }),
+			onPrompt:
+				this.oauthCallbacks?.onPrompt ??
+				(async (prompt) => {
+					throw new Error(`${providerName} OAuth requires interactive input: ${prompt.message}`);
+				}),
 			onProgress: this.oauthCallbacks?.onProgress,
 			onManualCodeInput: this.oauthCallbacks?.onManualCodeInput,
 			signal: this.oauthCallbacks?.signal,

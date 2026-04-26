@@ -5,7 +5,9 @@ describe("native command router", () => {
 	test("routes menu commands to renderer channel", () => {
 		const sent: unknown[] = [];
 		const router = new NativeCommandRouter({
-			getMainWindow: () => ({ webContents: { send: (_channel: string, payload: unknown) => sent.push(payload) } as never }),
+			getMainWindow: () => ({
+				webContents: { send: (_channel: string, payload: unknown) => sent.push(payload) } as never,
+			}),
 		});
 		router.send("toggle-terminal", {});
 		router.send("open-project", { path: "/repo" });
@@ -16,12 +18,20 @@ describe("native command router", () => {
 	});
 
 	test("accepts daedalus deep links and safe http URLs", () => {
-		expect(() => validateNativeCommand({ id: "open-deep-link", payload: { url: "daedalus://open?project=p" } })).not.toThrow();
-		expect(() => validateNativeCommand({ id: "open-deep-link", payload: { url: "https://daedalus.local/open" } })).not.toThrow();
+		expect(() =>
+			validateNativeCommand({ id: "open-deep-link", payload: { url: "daedalus://open?project=p" } }),
+		).not.toThrow();
+		expect(() =>
+			validateNativeCommand({ id: "open-deep-link", payload: { url: "https://daedalus.local/open" } }),
+		).not.toThrow();
 	});
 
 	test("rejects unsafe URL and empty path commands", () => {
-		expect(() => validateNativeCommand({ id: "open-deep-link", payload: { url: "javascript:alert(1)" } })).toThrow("Unsupported native command URL");
-		expect(() => validateNativeCommand({ id: "open-project", payload: { path: "" } })).toThrow("path must not be empty");
+		expect(() => validateNativeCommand({ id: "open-deep-link", payload: { url: "javascript:alert(1)" } })).toThrow(
+			"Unsupported native command URL",
+		);
+		expect(() => validateNativeCommand({ id: "open-project", payload: { path: "" } })).toThrow(
+			"path must not be empty",
+		);
 	});
 });

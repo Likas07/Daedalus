@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import type { AppServerEndpoint } from "./server-process";
 import type { NativeCommandEnvelope } from "./native-command-router";
+import type { AppServerEndpoint } from "./server-process";
 
 export interface LocalEnvironmentBootstrap {
 	readonly platform: NodeJS.Platform;

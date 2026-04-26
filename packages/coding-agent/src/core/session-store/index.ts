@@ -1,15 +1,15 @@
 export {
 	assertRoundTripStable,
 	parseSessionJsonl,
-	serializeSessionJsonl,
 	SessionJsonlParseError,
+	serializeSessionJsonl,
 } from "./jsonl-codec.js";
+export type { JsonlSessionStoreOptions } from "./jsonl-session-store.js";
 export {
 	createJsonlSessionStore,
-	JsonlSessionStore,
 	JSONL_SESSION_STORE_ARCHIVE_ERROR,
+	JsonlSessionStore,
 } from "./jsonl-session-store.js";
-export type { JsonlSessionStoreOptions } from "./jsonl-session-store.js";
 export type {
 	AppendSessionStoreEntriesOptions,
 	ArchiveSessionStoreSessionOptions,

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { ClientRequestResultSchemas } from "@daedalus-pi/app-server-protocol";
-import { Value } from "@sinclair/typebox/value";
 import { type SessionEntry, type SessionMessageEntry, serializeSessionJsonl } from "@daedalus-pi/coding-agent";
+import { Value } from "@sinclair/typebox/value";
 import type { AppServerDatabase } from "../persistence/database";
 import { openAppServerDatabase } from "../persistence/database";
 import { runMigrations } from "../persistence/migrations";

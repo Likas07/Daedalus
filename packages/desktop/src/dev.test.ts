@@ -1,7 +1,7 @@
+import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { $ } from "bun";
-import { describe, expect, test } from "bun:test";
 import { electronDevCommand, isUrlServing, waitForUrl } from "./dev";
 
 describe("desktop dev launcher helpers", () => {

@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { parseSessionJsonl, serializeSessionJsonl, type SessionEntry, type SessionHeader } from "@daedalus-pi/coding-agent";
+import {
+	parseSessionJsonl,
+	type SessionEntry,
+	type SessionHeader,
+	serializeSessionJsonl,
+} from "@daedalus-pi/coding-agent";
 import type { AppServerDatabase } from "../persistence/database";
 import { openAppServerDatabase } from "../persistence/database";
 import { runMigrations } from "../persistence/migrations";
@@ -51,7 +56,10 @@ describe("SqliteSessionStore", () => {
 		expect(created.header.id).toBe("sqlite-session-1");
 		expect((await sessionStore.open({ id: "sqlite-session-1" })).header.cwd).toBe("/workspace/daedalus");
 
-		await sessionStore.append({ sessionId: "sqlite-session-1", entries: [userMessage("msg-1", "Build SQLite sessions"), modelEntry] });
+		await sessionStore.append({
+			sessionId: "sqlite-session-1",
+			entries: [userMessage("msg-1", "Build SQLite sessions"), modelEntry],
+		});
 		await sessionStore.rename({ sessionId: "sqlite-session-1", name: "SQLite Sessions" });
 
 		const read = await sessionStore.read({ sessionId: "sqlite-session-1" });
@@ -60,7 +68,12 @@ describe("SqliteSessionStore", () => {
 
 		const listed = await sessionStore.list({ cwd: "/workspace/daedalus" });
 		expect(listed).toHaveLength(1);
-		expect(listed[0]).toMatchObject({ id: "sqlite-session-1", name: "SQLite Sessions", messageCount: 1, archived: false });
+		expect(listed[0]).toMatchObject({
+			id: "sqlite-session-1",
+			name: "SQLite Sessions",
+			messageCount: 1,
+			archived: false,
+		});
 
 		await sessionStore.archive({ sessionId: "sqlite-session-1" });
 		expect(await sessionStore.list()).toHaveLength(0);
@@ -77,12 +90,17 @@ describe("SqliteSessionStore", () => {
 		const sessionStore = store();
 		await sessionStore.create({ id: "seq-session", cwd: "/repo", timestamp: "2026-04-26T00:00:00.000Z" });
 		const first = userMessage("first", "first", "2026-04-26T00:00:01.000Z");
-		const second = { ...userMessage("second", "second", "2026-04-26T00:00:02.000Z"), extraPreservedField: { nested: true } } as unknown as SessionEntry;
+		const second = {
+			...userMessage("second", "second", "2026-04-26T00:00:02.000Z"),
+			extraPreservedField: { nested: true },
+		} as unknown as SessionEntry;
 		await sessionStore.append({ sessionId: "seq-session", entries: [first] });
 		await sessionStore.append({ sessionId: "seq-session", entries: [second] });
 
 		const rows = database
-			?.query<{ seq: number; entry_json: string }, []>(`SELECT seq, entry_json FROM ${GUI_SESSION_TABLES.entries} ORDER BY seq`)
+			?.query<{ seq: number; entry_json: string }, []>(
+				`SELECT seq, entry_json FROM ${GUI_SESSION_TABLES.entries} ORDER BY seq`,
+			)
 			.all();
 		expect(rows?.map((row) => row.seq)).toEqual([1, 2]);
 		expect(rows?.[1]?.entry_json).toBe(JSON.stringify(second));
@@ -91,10 +109,22 @@ describe("SqliteSessionStore", () => {
 	test("updates gui_session_read_model in append and archive transactions", async () => {
 		const sessionStore = store();
 		await sessionStore.create({ id: "rm-session", cwd: "/repo", timestamp: "2026-04-26T00:00:00.000Z" });
-		await sessionStore.append({ sessionId: "rm-session", entries: [userMessage("msg-1", "Read model preview"), modelEntry] });
+		await sessionStore.append({
+			sessionId: "rm-session",
+			entries: [userMessage("msg-1", "Read model preview"), modelEntry],
+		});
 
 		let row = database
-			?.query<{ title: string | null; last_message_preview: string | null; model: string | null; message_count: number; status: string }, []>(
+			?.query<
+				{
+					title: string | null;
+					last_message_preview: string | null;
+					model: string | null;
+					message_count: number;
+					status: string;
+				},
+				[]
+			>(
 				`SELECT title, last_message_preview, model, message_count, status FROM ${GUI_SESSION_TABLES.readModel} WHERE session_id = 'rm-session'`,
 			)
 			.get();
@@ -108,7 +138,9 @@ describe("SqliteSessionStore", () => {
 
 		await sessionStore.archive({ sessionId: "rm-session" });
 		row = database
-			?.query<{ status: string }, []>(`SELECT status FROM ${GUI_SESSION_TABLES.readModel} WHERE session_id = 'rm-session'`)
+			?.query<{ status: string }, []>(
+				`SELECT status FROM ${GUI_SESSION_TABLES.readModel} WHERE session_id = 'rm-session'`,
+			)
 			.get() as typeof row;
 		expect(row?.status).toBe("archived");
 	});
@@ -137,6 +169,11 @@ describe("SqliteSessionStore", () => {
 			cwd: "/jsonl/override",
 		});
 		expect(overridden.header.cwd).toBe("/jsonl/override");
-		expect(overridden.entries[0]).toMatchObject({ id: "jsonl-entry", parentId: null, timestamp: entry.timestamp, type: "message" });
+		expect(overridden.entries[0]).toMatchObject({
+			id: "jsonl-entry",
+			parentId: null,
+			timestamp: entry.timestamp,
+			type: "message",
+		});
 	});
 });

@@ -9,7 +9,10 @@ describe("integration view model", () => {
 		repository: { provider: "github", owner: "acme", name: "app" },
 		issues: [{ id: "1", number: 1, title: "Fix", state: "open" }],
 		pullRequests: [{ number: 2, title: "Ship", state: "open", createUpdateGuarded: true }],
-		ciChecks: [{ name: "test", status: "failure" }, { name: "lint", status: "in_progress" }],
+		ciChecks: [
+			{ name: "test", status: "failure" },
+			{ name: "lint", status: "in_progress" },
+		],
 		syncErrors: [],
 		updatedAt: "2026-04-26T00:00:00.000Z",
 	};
@@ -29,13 +32,22 @@ describe("integration view model", () => {
 	});
 
 	test("surfaces loading and actionable backend errors", () => {
-		const vm = integrationPanelViewModel({ ...state, status: "not-configured", syncErrors: [{ provider: "github", message: "Install gh", code: "gh-missing", occurredAt: "now" }] }, { loading: true });
+		const vm = integrationPanelViewModel(
+			{
+				...state,
+				status: "not-configured",
+				syncErrors: [{ provider: "github", message: "Install gh", code: "gh-missing", occurredAt: "now" }],
+			},
+			{ loading: true },
+		);
 		expect(vm.loading).toBe(true);
 		expect(vm.backendStatus).toBe("Install gh");
 		expect(vm.error).toBe("Install gh");
 	});
 
 	test("builds exact approval summary for PR creation", () => {
-		expect(prCreateApprovalSummary({ title: "Ship", head: "feature", base: "main" })).toBe('Create GitHub pull request "Ship" from feature into main');
+		expect(prCreateApprovalSummary({ title: "Ship", head: "feature", base: "main" })).toBe(
+			'Create GitHub pull request "Ship" from feature into main',
+		);
 	});
 });

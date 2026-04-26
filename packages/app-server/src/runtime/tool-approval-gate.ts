@@ -1,4 +1,8 @@
-export interface ToolGateResult { readonly block?: boolean; readonly reason?: string; }
+export interface ToolGateResult {
+	readonly block?: boolean;
+	readonly reason?: string;
+}
+
 import type { AccessPolicyService } from "./access-policy-service";
 import type { ApprovalService } from "./approval-service";
 
@@ -60,7 +64,10 @@ export class ToolApprovalGate {
 				signal: input.signal,
 			});
 			if (decision.decision === "approved") return undefined;
-			return { block: true, reason: decision.reason || decision.message || `Tool ${input.toolName} was denied by the user.` };
+			return {
+				block: true,
+				reason: decision.reason || decision.message || `Tool ${input.toolName} was denied by the user.`,
+			};
 		} finally {
 			this.pending.delete(approvalId);
 		}
@@ -83,7 +90,14 @@ export function classifyToolRisk(toolName: string, args?: unknown): ToolRisk {
 		return isDangerousShell(args) ? "hard" : "soft";
 	}
 	if (name.includes("git")) return isGitMutation(args) ? "soft" : "safe";
-	if (name.includes("write") || name.includes("edit") || name.includes("delete") || name.includes("move") || name.includes("patch")) return "soft";
+	if (
+		name.includes("write") ||
+		name.includes("edit") ||
+		name.includes("delete") ||
+		name.includes("move") ||
+		name.includes("patch")
+	)
+		return "soft";
 	return "safe";
 }
 

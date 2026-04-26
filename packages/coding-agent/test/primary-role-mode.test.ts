@@ -370,7 +370,8 @@ describe("primary role runtime mode", () => {
 				queuedUserMessages.push({ content, options });
 			},
 		} as any);
-		if (!toolResultHandler || !sessionTreeHandler || !commandHandlers.muse) throw new Error("primary-role did not register handlers");
+		if (!toolResultHandler || !sessionTreeHandler || !commandHandlers.muse)
+			throw new Error("primary-role did not register handlers");
 
 		const ctx = {
 			cwd: tempDir,

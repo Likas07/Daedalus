@@ -49,8 +49,12 @@ export class ResourceManagementService {
 				resources.push(...this.listDir(kind, source, join(base, DIRS[kind]), diagnostics));
 			}
 		}
-		if (this.options.packageDir) resources.push(...this.listDir("package", "package", this.options.packageDir, diagnostics));
-		return { resources: resources.sort((a, b) => `${a.kind}:${a.name}`.localeCompare(`${b.kind}:${b.name}`)), diagnostics };
+		if (this.options.packageDir)
+			resources.push(...this.listDir("package", "package", this.options.packageDir, diagnostics));
+		return {
+			resources: resources.sort((a, b) => `${a.kind}:${a.name}`.localeCompare(`${b.kind}:${b.name}`)),
+			diagnostics,
+		};
 	}
 
 	reload(): { resources: ManagedResource[]; diagnostics: string[] } {
@@ -79,7 +83,12 @@ export class ResourceManagementService {
 		return this.resourceFor(params, "disabled", "Disabled by GUI resource manager");
 	}
 
-	private listDir(kind: ResourceKind, source: ManagedResource["source"], dir: string, diagnostics: string[]): ManagedResource[] {
+	private listDir(
+		kind: ResourceKind,
+		source: ManagedResource["source"],
+		dir: string,
+		diagnostics: string[],
+	): ManagedResource[] {
 		if (!existsSync(dir)) return [];
 		try {
 			return readdirSync(dir).map((entry) => {
@@ -87,8 +96,22 @@ export class ResourceManagementService {
 				const disabled = entry.endsWith(".disabled");
 				const id = entry.replace(/\.disabled$/, "").replace(/\.(md|json|ts|js|mjs|cjs|yaml|yml)$/, "");
 				const entryDiagnostics: string[] = [];
-				try { statSync(sourcePath); } catch (error) { entryDiagnostics.push(error instanceof Error ? error.message : String(error)); }
-				return { id, name: id, kind, status: disabled ? "disabled" : entryDiagnostics.length ? "error" : "enabled", enabled: !disabled && entryDiagnostics.length === 0, source, sourcePath, diagnostics: entryDiagnostics, disabledReason: disabled ? "Disabled on disk" : undefined } satisfies ManagedResource;
+				try {
+					statSync(sourcePath);
+				} catch (error) {
+					entryDiagnostics.push(error instanceof Error ? error.message : String(error));
+				}
+				return {
+					id,
+					name: id,
+					kind,
+					status: disabled ? "disabled" : entryDiagnostics.length ? "error" : "enabled",
+					enabled: !disabled && entryDiagnostics.length === 0,
+					source,
+					sourcePath,
+					diagnostics: entryDiagnostics,
+					disabledReason: disabled ? "Disabled on disk" : undefined,
+				} satisfies ManagedResource;
 			});
 		} catch (error) {
 			diagnostics.push(`${dir}: ${error instanceof Error ? error.message : String(error)}`);
@@ -96,7 +119,21 @@ export class ResourceManagementService {
 		}
 	}
 
-	private resourceFor(params: ResourceOperationParams, status: ResourceStatus, disabledReason?: string): ManagedResource {
-		return { id: params.id, name: params.id, kind: params.kind, status, enabled: status === "enabled", source: "project", sourcePath: params.sourcePath, diagnostics: [], disabledReason };
+	private resourceFor(
+		params: ResourceOperationParams,
+		status: ResourceStatus,
+		disabledReason?: string,
+	): ManagedResource {
+		return {
+			id: params.id,
+			name: params.id,
+			kind: params.kind,
+			status,
+			enabled: status === "enabled",
+			source: "project",
+			sourcePath: params.sourcePath,
+			diagnostics: [],
+			disabledReason,
+		};
 	}
 }

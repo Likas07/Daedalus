@@ -16,13 +16,21 @@ export interface ResourcesViewModel {
 	readonly total: number;
 }
 
-export function createResourcesViewModel(snapshot?: { resources?: readonly ResourceItem[]; diagnostics?: readonly string[] }): ResourcesViewModel {
+export function createResourcesViewModel(snapshot?: {
+	resources?: readonly ResourceItem[];
+	diagnostics?: readonly string[];
+}): ResourcesViewModel {
 	const resources = [...(snapshot?.resources ?? [])];
 	const kinds = [...new Set(resources.map((resource) => resource.kind))].sort();
 	return {
 		groups: kinds.map((kind) => {
 			const items = resources.filter((resource) => resource.kind === kind);
-			return { kind, resources: items, count: items.length, diagnostics: items.reduce((sum, item) => sum + (item.diagnostics?.length ?? 0), 0) };
+			return {
+				kind,
+				resources: items,
+				count: items.length,
+				diagnostics: items.reduce((sum, item) => sum + (item.diagnostics?.length ?? 0), 0),
+			};
 		}),
 		diagnostics: snapshot?.diagnostics ?? [],
 		total: resources.length,

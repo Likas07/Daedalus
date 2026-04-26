@@ -18,7 +18,10 @@ export interface SettingsViewModel {
 	readonly images: { blockImages: boolean; autoResize: boolean };
 }
 
-export function createSettingsViewModel(snapshot: SettingsSnapshotResult | undefined, providers: readonly RendererAuthStatus[] = []): SettingsViewModel {
+export function createSettingsViewModel(
+	snapshot: SettingsSnapshotResult | undefined,
+	providers: readonly RendererAuthStatus[] = [],
+): SettingsViewModel {
 	const effective = snapshot?.effective ?? {};
 	const terminal = readRecord(effective.terminal);
 	const images = readRecord(effective.images);

@@ -12,7 +12,11 @@ export interface PtyAdapter {
 }
 
 type NodePtyModule = {
-	spawn(file: string, args: readonly string[], options: { cwd: string; cols: number; rows: number; env: NodeJS.ProcessEnv }): {
+	spawn(
+		file: string,
+		args: readonly string[],
+		options: { cwd: string; cols: number; rows: number; env: NodeJS.ProcessEnv },
+	): {
 		readonly pid: number;
 		write(data: string): void;
 		resize(cols: number, rows: number): void;

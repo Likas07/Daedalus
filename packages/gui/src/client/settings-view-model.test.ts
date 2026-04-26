@@ -22,10 +22,43 @@ describe("createSettingsViewModel", () => {
 				selectedModel: "gpt-5",
 				enabledModels: ["openai/*"],
 				thinkingLevels: ["low", "high"],
-				keybindings: [{ id: "app.commandPalette", description: "Open palette", defaultKeys: ["super+k"], keys: ["ctrl+k"], overridden: true }],
-				schema: [{ key: "density", label: "Density", type: "string", scopes: ["global", "project"], values: ["compact", "comfortable", "spacious"] }],
+				keybindings: [
+					{
+						id: "app.commandPalette",
+						description: "Open palette",
+						defaultKeys: ["super+k"],
+						keys: ["ctrl+k"],
+						overridden: true,
+					},
+				],
+				schema: [
+					{
+						key: "density",
+						label: "Density",
+						type: "string",
+						scopes: ["global", "project"],
+						values: ["compact", "comfortable", "spacious"],
+					},
+				],
 			},
-			[{ provider: "openai", enabled: true, authenticated: true, status: "env-key", authMethod: "env", actionable: false, canLogin: false, canLogout: false, canRelogin: false, modelCount: 1, models: [{ id: "gpt-5", available: true, capabilities: ["reasoning"], diagnostics: [] }], capabilities: ["reasoning"], diagnostics: [], updatedAt: "2026-04-26T00:00:00.000Z" }],
+			[
+				{
+					provider: "openai",
+					enabled: true,
+					authenticated: true,
+					status: "env-key",
+					authMethod: "env",
+					actionable: false,
+					canLogin: false,
+					canLogout: false,
+					canRelogin: false,
+					modelCount: 1,
+					models: [{ id: "gpt-5", available: true, capabilities: ["reasoning"], diagnostics: [] }],
+					capabilities: ["reasoning"],
+					diagnostics: [],
+					updatedAt: "2026-04-26T00:00:00.000Z",
+				},
+			],
 		);
 		expect(vm.selectedModel).toBe("gpt-5");
 		expect(vm.theme).toBe("obsidian");

@@ -4,9 +4,9 @@ import {
 	type CommandRunner,
 	type IntegrationAdapter,
 	type IntegrationState,
+	integrationStateEvent,
 	type PullRequestCreateRequest,
 	type PullRequestCreateResult,
-	integrationStateEvent,
 } from "./integration-api";
 
 export interface IntegrationServiceOptions {
@@ -76,9 +76,12 @@ export class IntegrationService {
 		return imported;
 	}
 
-	async createPullRequest(input: PullRequestCreateRequest & { readonly provider: string; readonly cwd?: string }): Promise<PullRequestCreateResult> {
+	async createPullRequest(
+		input: PullRequestCreateRequest & { readonly provider: string; readonly cwd?: string },
+	): Promise<PullRequestCreateResult> {
 		const adapter = this.adapters.find((item) => item.provider === input.provider);
-		if (!adapter?.createPullRequest) throw new Error(`Integration provider cannot create pull requests: ${input.provider}`);
+		if (!adapter?.createPullRequest)
+			throw new Error(`Integration provider cannot create pull requests: ${input.provider}`);
 		return adapter.createPullRequest(input);
 	}
 

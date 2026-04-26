@@ -1,9 +1,25 @@
 import type { ThinkingLevel } from "@daedalus-pi/agent-core";
-import { type AgentSessionRuntimeDiagnostic, type AgentSessionServices, createBashTool, createFindTool, createGrepTool, createLsTool, createReadTool, createWriteTool } from "@daedalus-pi/coding-agent";
 import type { Model } from "@daedalus-pi/ai";
-import { toPolicy, type AccessPolicy } from "./access-policy-service";
+import {
+	type AgentSessionRuntimeDiagnostic,
+	type AgentSessionServices,
+	createBashTool,
+	createFindTool,
+	createGrepTool,
+	createLsTool,
+	createReadTool,
+	createWriteTool,
+} from "@daedalus-pi/coding-agent";
+import { type AccessPolicy, toPolicy } from "./access-policy-service";
 import type { PromptContextInput, RuntimeSessionManager } from "./session-controller";
-type Tool = ReturnType<typeof createReadTool> | ReturnType<typeof createBashTool> | ReturnType<typeof createWriteTool> | ReturnType<typeof createGrepTool> | ReturnType<typeof createFindTool> | ReturnType<typeof createLsTool>;
+
+type Tool =
+	| ReturnType<typeof createReadTool>
+	| ReturnType<typeof createBashTool>
+	| ReturnType<typeof createWriteTool>
+	| ReturnType<typeof createGrepTool>
+	| ReturnType<typeof createFindTool>
+	| ReturnType<typeof createLsTool>;
 const TOOL_CWD = process.cwd();
 
 export interface ResolvedRuntimeOptions {
@@ -74,19 +90,32 @@ export async function resolveRuntimeOptions(input: RuntimeOptionsResolverInput):
 
 function findModel(reference: string, models: Model<any>[]): Model<any> | undefined {
 	const lower = reference.toLowerCase();
-	return models.find((model) => `${model.provider}/${model.id}`.toLowerCase() === lower || model.id.toLowerCase() === lower);
+	return models.find(
+		(model) => `${model.provider}/${model.id}`.toLowerCase() === lower || model.id.toLowerCase() === lower,
+	);
 }
 
-function clampThinking(value: string | undefined, model: Model<any> | undefined, diagnostics: AgentSessionRuntimeDiagnostic[]): ThinkingLevel | undefined {
+function clampThinking(
+	value: string | undefined,
+	model: Model<any> | undefined,
+	diagnostics: AgentSessionRuntimeDiagnostic[],
+): ThinkingLevel | undefined {
 	if (!value) return undefined;
 	const requested = THINKING_LEVELS.includes(value as ThinkingLevel) ? (value as ThinkingLevel) : "medium";
-	if (requested !== value) diagnostics.push({ type: "warning", message: `Invalid thinking effort '${value}', using medium` });
+	if (requested !== value)
+		diagnostics.push({ type: "warning", message: `Invalid thinking effort '${value}', using medium` });
 	if (model && !model.reasoning && requested !== "off") {
-		diagnostics.push({ type: "warning", message: `Model ${model.provider}/${model.id} does not support thinking; using off` });
+		diagnostics.push({
+			type: "warning",
+			message: `Model ${model.provider}/${model.id} does not support thinking; using off`,
+		});
 		return "off";
 	}
 	if (requested === "xhigh" && model && !String(model.id).toLowerCase().includes("opus")) {
-		diagnostics.push({ type: "warning", message: `Thinking effort xhigh is not supported by ${model.provider}/${model.id}; using high` });
+		diagnostics.push({
+			type: "warning",
+			message: `Thinking effort xhigh is not supported by ${model.provider}/${model.id}; using high`,
+		});
 		return "high";
 	}
 	return requested;
@@ -102,11 +131,19 @@ function resolveTools(names: readonly string[], diagnostics: AgentSessionRuntime
 	return tools;
 }
 
-function persistFastMode(sessionManager: RuntimeSessionManager, fastMode: boolean | undefined, diagnostics: AgentSessionRuntimeDiagnostic[]): void {
+function persistFastMode(
+	sessionManager: RuntimeSessionManager,
+	fastMode: boolean | undefined,
+	diagnostics: AgentSessionRuntimeDiagnostic[],
+): void {
 	if (fastMode === undefined) return;
 	const manager = sessionManager as { appendFastModeChange?: (fastMode: boolean) => string };
 	manager.appendFastModeChange?.(fastMode);
-	diagnostics.push({ type: "info", message: "Fast mode selection was persisted; runtime fast-mode API support is handled by coding-agent session creation." });
+	diagnostics.push({
+		type: "info",
+		message:
+			"Fast mode selection was persisted; runtime fast-mode API support is handled by coding-agent session creation.",
+	});
 }
 
 function sessionDirOf(sessionManager: RuntimeSessionManager): string | undefined {

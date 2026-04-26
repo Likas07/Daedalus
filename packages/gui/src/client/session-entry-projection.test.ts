@@ -8,8 +8,29 @@ describe("session entry projection", () => {
 	test("covers TUI session entry types", () => {
 		const entries: SessionEntryLike[] = [
 			{ ...base("message", "u"), message: { role: "user", content: "hello" } },
-			{ ...base("message", "a"), message: { role: "assistant", responseId: "r1", model: "claude", content: [{ type: "thinking", thinking: "plan" }, { type: "text", text: "hi" }, { type: "toolCall", id: "tc1", name: "read", arguments: { path: "x" } }] } },
-			{ ...base("message", "tr"), message: { role: "toolResult", toolCallId: "tc1", toolName: "read", content: [{ type: "text", text: "ok" }], isError: false } },
+			{
+				...base("message", "a"),
+				message: {
+					role: "assistant",
+					responseId: "r1",
+					model: "claude",
+					content: [
+						{ type: "thinking", thinking: "plan" },
+						{ type: "text", text: "hi" },
+						{ type: "toolCall", id: "tc1", name: "read", arguments: { path: "x" } },
+					],
+				},
+			},
+			{
+				...base("message", "tr"),
+				message: {
+					role: "toolResult",
+					toolCallId: "tc1",
+					toolName: "read",
+					content: [{ type: "text", text: "ok" }],
+					isError: false,
+				},
+			},
 			{ ...base("model_change"), provider: "anthropic", modelId: "claude" },
 			{ ...base("thinking_level_change"), thinkingLevel: "high" },
 			{ ...base("fast_mode_change"), fastMode: true },
@@ -35,6 +56,8 @@ describe("session entry projection", () => {
 	});
 
 	test("hides custom messages marked display false", () => {
-		expect(projectSessionEntries([{ ...base("custom_message"), customType: "hidden", content: "no", display: false }])).toHaveLength(0);
+		expect(
+			projectSessionEntries([{ ...base("custom_message"), customType: "hidden", content: "no", display: false }]),
+		).toHaveLength(0);
 	});
 });

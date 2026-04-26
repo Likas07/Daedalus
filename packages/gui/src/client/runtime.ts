@@ -1,15 +1,15 @@
 import {
 	AppServerClient,
 	type AppServerTransport,
-	type SettingsSnapshotResult,
 	createWebSocketTransport,
+	type SettingsSnapshotResult,
 	subscribeToEvents,
 } from "@daedalus-pi/app-server-client";
 import {
 	type AppEvent,
-	appServerProtocolVersion,
 	type AuditTrailProjection,
 	type AutomationProjection,
+	appServerProtocolVersion,
 	type DaedalusWorkflowState,
 	type ExtensionUiRequest,
 	type ExtensionUiResponse,
@@ -17,7 +17,6 @@ import {
 	type TerminalSnapshot,
 	type WorkflowWorktreeMetadata,
 } from "@daedalus-pi/app-server-protocol";
-import { type ApprovalItem, approvalItemFromPayload, type DisplayDensity, type ProviderStatus } from "./view-model";
 import {
 	applyTerminalOutput,
 	capTerminalHistory,
@@ -38,16 +37,17 @@ import type {
 	RendererTerminal,
 } from "./gui-state-types";
 import {
+	type ConnectionStatus,
 	createReconnectState,
 	nextReconnectDelay,
+	type ReconnectState,
 	setConnected,
 	setDisconnected,
 	setFailed,
 	setReplaying,
 	shouldAcceptEvent,
-	type ConnectionStatus,
-	type ReconnectState,
 } from "./reconnect-state";
+import { type ApprovalItem, approvalItemFromPayload, type DisplayDensity, type ProviderStatus } from "./view-model";
 
 export interface GuiBootstrap {
 	readonly wsEndpoint?: string;

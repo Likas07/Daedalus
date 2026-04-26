@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ClientRequestResultSchemas, appServerProtocolVersion } from "@daedalus-pi/app-server-protocol";
+import { appServerProtocolVersion, ClientRequestResultSchemas } from "@daedalus-pi/app-server-protocol";
 import { Value } from "@sinclair/typebox/value";
 import {
 	AppRouter,

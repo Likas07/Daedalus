@@ -12,7 +12,12 @@ const workflow: DaedalusWorkflowState = {
 	],
 	questions: [{ id: "q1", kind: "question", prompt: "Continue?", status: "open", choices: [] }],
 	semanticWorkspace: { status: "ready", indexedPath: "/repo" },
-	orchestration: { sessionId: "s1", mode: "build", lanes: [{ id: "t2", kind: "subagent", title: "Blocked", status: "blocked", dependencies: ["t1"], artifacts: [] }], checkpoints: [] },
+	orchestration: {
+		sessionId: "s1",
+		mode: "build",
+		lanes: [{ id: "t2", kind: "subagent", title: "Blocked", status: "blocked", dependencies: ["t1"], artifacts: [] }],
+		checkpoints: [],
+	},
 };
 
 describe("daedalus workflow view model", () => {
@@ -27,7 +32,13 @@ describe("daedalus workflow view model", () => {
 	test("uses typed workflow events instead of substring lane inference", () => {
 		const unrelated: AppEvent = { id: "e1", type: "agent mentioned subagent in prose", ts: "now", payload: {} };
 		expect(orchestrationFromEvents([unrelated]).lanes).toEqual([]);
-		const typed: AppEvent = { id: "e2", type: "daedalus/workflow/projected", ts: "now", sessionId: "s1", payload: { workflow } };
+		const typed: AppEvent = {
+			id: "e2",
+			type: "daedalus/workflow/projected",
+			ts: "now",
+			sessionId: "s1",
+			payload: { workflow },
+		};
 		expect(workflowFromTypedEvents([unrelated, typed])?.orchestration.lanes[0]?.id).toBe("t2");
 	});
 });

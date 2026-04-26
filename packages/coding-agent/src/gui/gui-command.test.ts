@@ -8,19 +8,22 @@ describe("gui command", () => {
 	});
 
 	test("parses supported flags", () => {
-		const parsed = parseGuiCommand([
-			"gui",
-			"--host",
-			"0.0.0.0",
-			"--port",
-			"7331",
-			"--no-open",
-			"--project",
-			"demo",
-			"--new-server",
-			"--log-file",
-			"gui.log",
-		], "/tmp/work");
+		const parsed = parseGuiCommand(
+			[
+				"gui",
+				"--host",
+				"0.0.0.0",
+				"--port",
+				"7331",
+				"--no-open",
+				"--project",
+				"demo",
+				"--new-server",
+				"--log-file",
+				"gui.log",
+			],
+			"/tmp/work",
+		);
 		expect(parsed.host).toBe("0.0.0.0");
 		expect(parsed.port).toBe(7331);
 		expect(parsed.open).toBe(false);
@@ -66,7 +69,13 @@ describe("gui command", () => {
 			randomToken: () => "secret-token",
 			spawn: ((cmd: string[]) => {
 				spawned = cmd;
-				return { stdout: new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode('{"httpUrl":"http://0.0.0.0:1"}\n')); } }) };
+				return {
+					stdout: new ReadableStream({
+						start(controller) {
+							controller.enqueue(new TextEncoder().encode('{"httpUrl":"http://0.0.0.0:1"}\n'));
+						},
+					}),
+				};
 			}) as typeof Bun.spawn,
 		});
 		expect(errors.join("\n")).toContain("non-loopback");

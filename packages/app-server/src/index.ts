@@ -2,9 +2,9 @@ export interface AppServerOptions {
 	readonly databasePath: string;
 }
 
-export { AttachmentService, ALLOWED_IMAGE_MIME_TYPES, MAX_GUI_ATTACHMENT_BYTES } from "./composer/attachment-service";
+export { ALLOWED_IMAGE_MIME_TYPES, AttachmentService, MAX_GUI_ATTACHMENT_BYTES } from "./composer/attachment-service";
 export { CommandService, type ComposerCommandSummary } from "./composer/command-service";
-export { FileSearchService, type ComposerFileSearchResult } from "./composer/file-search-service";
+export { type ComposerFileSearchResult, FileSearchService } from "./composer/file-search-service";
 export { PromptContextService } from "./composer/prompt-context-service";
 export { type ExtensionCommandDescriptor, ExtensionCommandRegistry } from "./extensions/extension-commands";
 export {
@@ -67,17 +67,66 @@ export {
 	type TurnReadModel,
 	type WorktreeReadModel,
 } from "./persistence/read-model";
+export { type AccessPolicy, AccessPolicyService, toPolicy } from "./runtime/access-policy-service";
+export { type ApprovalRequestInput, ApprovalService } from "./runtime/approval-service";
+export { createCodingAgentRuntimeFactory } from "./runtime/coding-agent-runtime";
 export {
-	projectGuiSessionReadModel,
-	toGuiSessionReadModelRow,
+	type MapRuntimeEventOptions,
+	mapRuntimeEvent,
+	type RuntimeAgentEvent,
+	type RuntimeEventEnvelope,
+} from "./runtime/event-mapper";
+export { GuiConfigService } from "./runtime/gui-config-service";
+export {
+	createSessionRuntimeFactory,
+	type SessionRuntime,
+	type SessionRuntimeCreator,
+	type SessionRuntimeFactory,
+	type SessionRuntimeFactoryInput,
+} from "./runtime/runtime-factory";
+export {
+	type ControlledSessionRuntime,
+	type InterruptTurnInput,
+	type PromptContextInput,
+	type PromptContextResolver,
+	type ResumeSessionInput,
+	type RuntimeControllerMessage,
+	type RuntimeEventSink,
+	type RuntimeFactory,
+	type RuntimeFactoryInput,
+	type RuntimeSessionManager,
+	SessionController,
+	type SessionControllerOptions,
+	type SessionControllerState,
+	type StartSessionInput,
+	type StartTurnInput,
+} from "./runtime/session-controller";
+export {
+	classifyToolRisk,
+	ToolApprovalGate,
+	type ToolApprovalGateOptions,
+	type ToolApprovalInput,
+} from "./runtime/tool-approval-gate";
+export { type AppServerInstance, type CreateAppServerOptions, startAppServer } from "./server/app-server";
+export {
+	type AuthOptions,
+	authenticateRequest,
+	createCapabilityToken,
+	isAllowedOrigin,
+	isLoopbackHost,
+} from "./server/auth";
+export { AppRouter, type AppRouterOptions, type OutboundMessage, type Publish } from "./server/router";
+export {
 	type GuiSessionReadModel,
 	type ProjectGuiSessionReadModelOptions,
+	projectGuiSessionReadModel,
 	type RuntimeSessionEvent,
+	toGuiSessionReadModelRow,
 } from "./sessions/session-read-model";
 export {
 	GUI_SESSION_TABLES,
-	type GuiSessionAttachmentRow,
 	type GuiSessionApprovalRow,
+	type GuiSessionAttachmentRow,
 	type GuiSessionEntry,
 	type GuiSessionEntryRow,
 	type GuiSessionExportRow,
@@ -92,45 +141,7 @@ export {
 	SqliteSessionStore,
 	type SqliteSessionStoreOptions,
 } from "./sessions/sqlite-session-store";
-export {
-	type MapRuntimeEventOptions,
-	mapRuntimeEvent,
-	type RuntimeAgentEvent,
-	type RuntimeEventEnvelope,
-} from "./runtime/event-mapper";
-export {
-	createSessionRuntimeFactory,
-	type SessionRuntime,
-	type SessionRuntimeCreator,
-	type SessionRuntimeFactory,
-	type SessionRuntimeFactoryInput,
-} from "./runtime/runtime-factory";
-export {
-	type ControlledSessionRuntime,
-	type InterruptTurnInput,
-	type ResumeSessionInput,
-	type RuntimeControllerMessage,
-	type RuntimeEventSink,
-	type RuntimeFactory,
-	type RuntimeFactoryInput,
-	type RuntimeSessionManager,
-	SessionController,
-	type SessionControllerOptions,
-	type SessionControllerState,
-	type StartSessionInput,
-	type StartTurnInput,
-	type PromptContextInput,
-	type PromptContextResolver,
-} from "./runtime/session-controller";
-export { type AppServerInstance, type CreateAppServerOptions, startAppServer } from "./server/app-server";
-export {
-	type AuthOptions,
-	authenticateRequest,
-	createCapabilityToken,
-	isAllowedOrigin,
-	isLoopbackHost,
-} from "./server/auth";
-export { AppRouter, type AppRouterOptions, type OutboundMessage, type Publish } from "./server/router";
+export { createNodePtyAdapter, NodePtyAdapter, type PtyAdapter, type PtyProcessHandle } from "./terminal/pty-adapter";
 export type {
 	TerminalCreateParams,
 	TerminalDimensions,
@@ -141,7 +152,6 @@ export type {
 	TerminalStatus,
 } from "./terminal/terminal-protocol";
 export { TerminalService, type TerminalServiceOptions } from "./terminal/terminal-service";
-export { type PtyAdapter, type PtyProcessHandle, NodePtyAdapter, createNodePtyAdapter } from "./terminal/pty-adapter";
 export {
 	type CheckpointRecord,
 	CheckpointService,
@@ -151,8 +161,3 @@ export {
 export { type DiffFileSummary, type DiffResult, DiffService, parseNameStatus } from "./workspaces/diff-service";
 export { type OpenProjectInput, ProjectService, type ProjectServiceOptions } from "./workspaces/project-service";
 export { type CreateWorktreeInput, WorktreeService, type WorktreeServiceOptions } from "./workspaces/worktree-service";
-export { createCodingAgentRuntimeFactory } from "./runtime/coding-agent-runtime";
-export { AccessPolicyService, toPolicy, type AccessPolicy } from "./runtime/access-policy-service";
-export { ApprovalService, type ApprovalRequestInput } from "./runtime/approval-service";
-export { classifyToolRisk, ToolApprovalGate, type ToolApprovalGateOptions, type ToolApprovalInput } from "./runtime/tool-approval-gate";
-export { GuiConfigService } from "./runtime/gui-config-service";

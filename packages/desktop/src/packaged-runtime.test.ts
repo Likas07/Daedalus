@@ -20,7 +20,11 @@ async function tempResources(): Promise<string> {
 describe("packaged app-server runtime", () => {
 	test("prefers staged compiled app-server binary", async () => {
 		const resources = await tempResources();
-		const binary = join(resources, "app-server", process.platform === "win32" ? "daedalus-app-server.exe" : "daedalus-app-server");
+		const binary = join(
+			resources,
+			"app-server",
+			process.platform === "win32" ? "daedalus-app-server.exe" : "daedalus-app-server",
+		);
 		await writeFile(binary, "#!/bin/sh\n", { mode: 0o755 });
 
 		expect(resolvePackagedAppServerRuntime({ resourcesPath: resources })).toEqual({

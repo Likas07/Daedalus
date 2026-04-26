@@ -10,7 +10,12 @@ describe("daedalus workflow service", () => {
 	test("projects plans, todos, questions, semantic workspace, and typed lanes", () => {
 		const workflow = projectDaedalusWorkflow("s1", [
 			custom("plan-mode", { mode: "plan" }),
-			custom("plan-execution-init", { plan: { id: "p1", title: "GUI parity", status: "executing", taskIds: ["t1"] }, todos: [{ id: "t1", title: "Build UI", status: "in_progress", dependencies: ["p1"], summary: "worker active" }] }),
+			custom("plan-execution-init", {
+				plan: { id: "p1", title: "GUI parity", status: "executing", taskIds: ["t1"] },
+				todos: [
+					{ id: "t1", title: "Build UI", status: "in_progress", dependencies: ["p1"], summary: "worker active" },
+				],
+			}),
 			custom("question", { id: "q1", prompt: "Proceed?", choices: ["yes", "no"] }),
 			custom("sem-search-workspace", { status: "ready", path: "/repo", summary: "indexed" }),
 		]);
@@ -42,7 +47,10 @@ describe("daedalus workflow service", () => {
 	});
 
 	test("reads from persisted session store", async () => {
-		const session: SessionStoreSession = { header: { type: "session", version: 3, id: "s1", timestamp: "now", cwd: "/repo" }, entries: [custom("questionnaire", { prompt: "Pick one", answer: "A" })] };
+		const session: SessionStoreSession = {
+			header: { type: "session", version: 3, id: "s1", timestamp: "now", cwd: "/repo" },
+			entries: [custom("questionnaire", { prompt: "Pick one", answer: "A" })],
+		};
 		const store = { read: async () => session } as unknown as SessionStore;
 		const service = new DaedalusWorkflowService({ sessionStore: store });
 		expect((await service.read("s1")).questions[0]?.status).toBe("answered");

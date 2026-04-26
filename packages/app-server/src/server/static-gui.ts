@@ -41,5 +41,7 @@ export async function serveStaticGui(request: Request, options: StaticGuiOptions
 	if (!candidate.startsWith(resolve(distDir))) return new Response("Forbidden", { status: 403 });
 	const filePath = existsSync(candidate) ? candidate : join(distDir, "index.html");
 	if (!existsSync(filePath)) return undefined;
-	return new Response(Bun.file(filePath), { headers: { "content-type": CONTENT_TYPES[extname(filePath)] ?? "application/octet-stream" } });
+	return new Response(Bun.file(filePath), {
+		headers: { "content-type": CONTENT_TYPES[extname(filePath)] ?? "application/octet-stream" },
+	});
 }

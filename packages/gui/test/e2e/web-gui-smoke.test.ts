@@ -3,10 +3,10 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AppServerInstance, startAppServer } from "@daedalus-pi/app-server";
-import type { AppEvent } from "@daedalus-pi/app-server-protocol";
 import type { CommandRunner } from "@daedalus-pi/app-server/src/integrations/integration-api";
 import type { RuntimeFactory } from "@daedalus-pi/app-server/src/runtime/session-controller";
 import type { PtyAdapter } from "@daedalus-pi/app-server/src/terminal/pty-adapter";
+import type { AppEvent } from "@daedalus-pi/app-server-protocol";
 
 const runtimeFactory: RuntimeFactory = async (input) => ({
 	cwd: input.cwd,

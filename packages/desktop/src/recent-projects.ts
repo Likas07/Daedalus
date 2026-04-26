@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { isAbsolute, dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { app } from "electron";
 import { daedalusGlobalStateDir } from "./server-manifest";
 

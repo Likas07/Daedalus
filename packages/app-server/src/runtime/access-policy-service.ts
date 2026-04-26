@@ -27,7 +27,12 @@ export class AccessPolicyService {
 		appendEvent(this.database, {
 			streamId: "app",
 			type: "access/changed",
-			payload: { type: "access/changed", mode: policy.mode, policy: policy as unknown as EventPayload, ts: new Date().toISOString() } satisfies EventPayload,
+			payload: {
+				type: "access/changed",
+				mode: policy.mode,
+				policy: policy as unknown as EventPayload,
+				ts: new Date().toISOString(),
+			} satisfies EventPayload,
 		});
 		projectRuntimeEvents(this.database);
 		return policy;
@@ -37,7 +42,12 @@ export class AccessPolicyService {
 		appendEvent(this.database, {
 			streamId: "app",
 			type: "access/auto-approved",
-			payload: { type: "access/auto-approved", approvalId, mode: "unrestricted", ts: new Date().toISOString() } satisfies EventPayload,
+			payload: {
+				type: "access/auto-approved",
+				approvalId,
+				mode: "unrestricted",
+				ts: new Date().toISOString(),
+			} satisfies EventPayload,
 		});
 	}
 }

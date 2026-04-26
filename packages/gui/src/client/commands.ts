@@ -43,11 +43,40 @@ export const GUI_COMMANDS: readonly CommandDescriptor[] = [
 	{ id: "cancel-turn", label: "Cancel turn", group: "Lifecycle", keywords: ["stop", "interrupt"] },
 	{ id: "stop-session", label: "Stop session", group: "Lifecycle", keywords: ["terminate", "halt"] },
 	{ id: "create-terminal", label: "Create terminal", group: "Terminal", keywords: ["shell", "pty"] },
-	{ id: "set-access-mode-supervised", label: "Access mode: supervised", group: "Access", keywords: ["safe", "approval"] },
-	{ id: "set-access-mode-auto-accept", label: "Access mode: auto-accept", group: "Access", keywords: ["automated", "soft"] },
-	{ id: "set-access-mode-unrestricted", label: "Access mode: unrestricted", group: "Access", keywords: ["danger", "bypass"] },
-	{ id: "search-files", label: "Search files", group: "Composer", keywords: ["mention", "context"], disabled: true, disabledReason: "File search is available from composer mentions, not as a standalone command." },
-	{ id: "archived-sessions", label: "Archived sessions", group: "Sessions", keywords: ["history"], disabled: true, disabledReason: "Archived session browsing is not wired to app-server yet." },
+	{
+		id: "set-access-mode-supervised",
+		label: "Access mode: supervised",
+		group: "Access",
+		keywords: ["safe", "approval"],
+	},
+	{
+		id: "set-access-mode-auto-accept",
+		label: "Access mode: auto-accept",
+		group: "Access",
+		keywords: ["automated", "soft"],
+	},
+	{
+		id: "set-access-mode-unrestricted",
+		label: "Access mode: unrestricted",
+		group: "Access",
+		keywords: ["danger", "bypass"],
+	},
+	{
+		id: "search-files",
+		label: "Search files",
+		group: "Composer",
+		keywords: ["mention", "context"],
+		disabled: true,
+		disabledReason: "File search is available from composer mentions, not as a standalone command.",
+	},
+	{
+		id: "archived-sessions",
+		label: "Archived sessions",
+		group: "Sessions",
+		keywords: ["history"],
+		disabled: true,
+		disabledReason: "Archived session browsing is not wired to app-server yet.",
+	},
 ];
 
 export function commandDisabledReason(command: CommandDescriptor): string | undefined {

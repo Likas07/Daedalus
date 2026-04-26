@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { getGuiCapability, strictGuiParityViolations, type GuiCapability } from "./client/capability-registry";
 import type { AppEvent } from "@daedalus-pi/app-server-protocol";
 import { projectAuditTrail } from "../../app-server/src/runtime/audit-projection";
 import { defaultAutomationRules } from "../../app-server/src/runtime/automation-service";
 import { projectOrchestration } from "../../app-server/src/runtime/orchestration-projection";
+import { type GuiCapability, getGuiCapability, strictGuiParityViolations } from "./client/capability-registry";
 import type { RendererSafeExtensionMetadata } from "./client/extension-surfaces";
 import { extensionCommands } from "./client/extension-surfaces";
 import { orchestrationFromEvents } from "./client/orchestration-state";

@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionEntry, SessionHeader } from "../session-manager.js";
-import { assertRoundTripStable, parseSessionJsonl, serializeSessionJsonl, SessionJsonlParseError } from "./jsonl-codec.js";
+import {
+	assertRoundTripStable,
+	parseSessionJsonl,
+	SessionJsonlParseError,
+	serializeSessionJsonl,
+} from "./jsonl-codec.js";
 
 const header: SessionHeader = {
 	type: "session",
@@ -91,7 +96,9 @@ describe("session JSONL codec", () => {
 	});
 
 	test("rejects malformed lines", () => {
-		expect(() => parseSessionJsonl(`${JSON.stringify(header)}\n{not-json}`)).toThrow("Malformed session JSONL line 2");
+		expect(() => parseSessionJsonl(`${JSON.stringify(header)}\n{not-json}`)).toThrow(
+			"Malformed session JSONL line 2",
+		);
 	});
 
 	test("preserves message, model, thinking, fast-mode, compaction, label, and custom entries", () => {

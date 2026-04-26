@@ -51,9 +51,15 @@ export class GitHubCliService {
 	}
 
 	async issues(cwd = this.options.cwd): Promise<readonly LinkedIssue[]> {
-		const result = await this.options.runner(["gh", "issue", "list", "--limit", "25", "--json", "number,title,url,state,labels"], { cwd });
+		const result = await this.options.runner(
+			["gh", "issue", "list", "--limit", "25", "--json", "number,title,url,state,labels"],
+			{ cwd },
+		);
 		if (result.exitCode !== 0) return [];
-		const rows = parseJson<Array<{ number?: number; title?: string; url?: string; state?: string; labels?: Array<{ name?: string }> }>>(result.stdout) ?? [];
+		const rows =
+			parseJson<
+				Array<{ number?: number; title?: string; url?: string; state?: string; labels?: Array<{ name?: string }> }>
+			>(result.stdout) ?? [];
 		return rows.map((row) => ({
 			id: String(row.number ?? row.url ?? row.title ?? "issue"),
 			number: row.number,
@@ -65,28 +71,55 @@ export class GitHubCliService {
 	}
 
 	async pullRequests(cwd = this.options.cwd): Promise<readonly PullRequestStatus[]> {
-		const result = await this.options.runner(["gh", "pr", "list", "--limit", "25", "--json", "number,title,url,state,headRefName,baseRefName,isDraft"], { cwd });
+		const result = await this.options.runner(
+			["gh", "pr", "list", "--limit", "25", "--json", "number,title,url,state,headRefName,baseRefName,isDraft"],
+			{ cwd },
+		);
 		if (result.exitCode !== 0) return [];
-		const rows = parseJson<Array<{ number?: number; title?: string; url?: string; state?: string; headRefName?: string; baseRefName?: string; isDraft?: boolean }>>(result.stdout) ?? [];
-		return rows.filter((row) => typeof row.number === "number").map((row) => ({
-			number: row.number!,
-			title: row.title ?? `PR #${row.number}`,
-			url: row.url,
-			state: row.isDraft ? "draft" : normalizeState(row.state),
-			head: row.headRefName,
-			base: row.baseRefName,
-			createUpdateGuarded: true,
-		}));
+		const rows =
+			parseJson<
+				Array<{
+					number?: number;
+					title?: string;
+					url?: string;
+					state?: string;
+					headRefName?: string;
+					baseRefName?: string;
+					isDraft?: boolean;
+				}>
+			>(result.stdout) ?? [];
+		return rows
+			.filter((row) => typeof row.number === "number")
+			.map((row) => ({
+				number: row.number!,
+				title: row.title ?? `PR #${row.number}`,
+				url: row.url,
+				state: row.isDraft ? "draft" : normalizeState(row.state),
+				head: row.headRefName,
+				base: row.baseRefName,
+				createUpdateGuarded: true,
+			}));
 	}
 
 	async checks(ref = "HEAD", cwd = this.options.cwd): Promise<readonly CiCheck[]> {
-		const result = await this.options.runner(["gh", "pr", "checks", ref, "--json", "name,state,link,bucket,description"], { cwd });
+		const result = await this.options.runner(
+			["gh", "pr", "checks", ref, "--json", "name,state,link,bucket,description"],
+			{ cwd },
+		);
 		if (result.exitCode !== 0) return [];
-		const rows = parseJson<Array<{ name?: string; state?: string; link?: string; description?: string }>>(result.stdout) ?? [];
-		return rows.map((row) => ({ name: row.name ?? "check", status: normalizeCheckState(row.state), url: row.link, summary: row.description }));
+		const rows =
+			parseJson<Array<{ name?: string; state?: string; link?: string; description?: string }>>(result.stdout) ?? [];
+		return rows.map((row) => ({
+			name: row.name ?? "check",
+			status: normalizeCheckState(row.state),
+			url: row.link,
+			summary: row.description,
+		}));
 	}
 
-	async createPullRequest(input: PullRequestCreateRequest & { readonly cwd?: string }): Promise<PullRequestCreateResult> {
+	async createPullRequest(
+		input: PullRequestCreateRequest & { readonly cwd?: string },
+	): Promise<PullRequestCreateResult> {
 		const args = ["gh", "pr", "create", "--title", input.title, "--head", input.head, "--json", "number,url"];
 		if (input.body) args.push("--body", input.body);
 		if (input.base) args.push("--base", input.base);
@@ -104,7 +137,11 @@ export class GitHubCliService {
 }
 
 function parseJson<T>(value: string): T | undefined {
-	try { return JSON.parse(value) as T; } catch { return undefined; }
+	try {
+		return JSON.parse(value) as T;
+	} catch {
+		return undefined;
+	}
 }
 
 function normalizeState(state: string | undefined): string {

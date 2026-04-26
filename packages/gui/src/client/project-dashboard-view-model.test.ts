@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { GuiState } from "./runtime";
 import { createProjectDashboardViewModel } from "./project-dashboard-view-model";
+import type { GuiState } from "./runtime";
 
 function state(overrides: Partial<GuiState> = {}): GuiState {
 	return {

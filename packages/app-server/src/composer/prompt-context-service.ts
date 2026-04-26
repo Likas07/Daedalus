@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
-import { join, relative, resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import type { ImageContent } from "@daedalus-pi/ai";
-import { AttachmentService } from "./attachment-service";
 import type { PromptContextInput, PromptContextResolver } from "../runtime/session-controller";
+import { AttachmentService } from "./attachment-service";
 
 const MAX_CONTEXT_FILE_BYTES = 64 * 1024;
 
@@ -26,7 +26,9 @@ export class PromptContextService implements PromptContextResolver {
 			if (metadata.kind === "image" && metadata.mimeType) {
 				images.push({ type: "image", data: data.toString("base64"), mimeType: metadata.mimeType });
 			} else if (metadata.kind === "text") {
-				sections.push(`Attachment context: ${metadata.filename}\n\n${data.subarray(0, MAX_CONTEXT_FILE_BYTES).toString("utf8")}`);
+				sections.push(
+					`Attachment context: ${metadata.filename}\n\n${data.subarray(0, MAX_CONTEXT_FILE_BYTES).toString("utf8")}`,
+				);
 			} else {
 				sections.push(`Attached file: ${metadata.filename} (${metadata.size} bytes)`);
 			}
@@ -42,10 +44,18 @@ export class PromptContextService implements PromptContextResolver {
 		if (input.draftState) metadata.push(`draftState=${JSON.stringify(input.draftState)}`);
 		if (metadata.length) sections.unshift(`GUI submission context: ${metadata.join("; ")}`);
 		if (input.mode && input.mode !== "daedalus") {
-			const role = input.mode === "sage" ? "Sage (read-only investigator)" : input.mode === "muse" ? "Muse (markdown-only planner)" : input.mode;
+			const role =
+				input.mode === "sage"
+					? "Sage (read-only investigator)"
+					: input.mode === "muse"
+						? "Muse (markdown-only planner)"
+						: input.mode;
 			sections.unshift(`Operating role: ${role}. Runtime tool restrictions are applied before the prompt.`);
 		}
 
-		return { preamble: sections.length ? `<gui-context>\n${sections.join("\n\n---\n\n")}\n</gui-context>` : undefined, images };
+		return {
+			preamble: sections.length ? `<gui-context>\n${sections.join("\n\n---\n\n")}\n</gui-context>` : undefined,
+			images,
+		};
 	}
 }

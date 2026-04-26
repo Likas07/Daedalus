@@ -12,7 +12,13 @@ interface Args {
 }
 
 function parseArgs(argv: readonly string[]): Args {
-	const args: Args = { db: ".daedalus/app-server.sqlite", host: "127.0.0.1", port: 0, gui: false, project: process.cwd() };
+	const args: Args = {
+		db: ".daedalus/app-server.sqlite",
+		host: "127.0.0.1",
+		port: 0,
+		gui: false,
+		project: process.cwd(),
+	};
 	for (let i = 0; i < argv.length; i += 1) {
 		const arg = argv[i];
 		const next = argv[i + 1];

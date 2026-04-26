@@ -1,7 +1,7 @@
+import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { $ } from "bun";
-import { describe, expect, test } from "bun:test";
 
 async function electronCommand(): Promise<string[]> {
 	const electron = (await import("electron")).default;

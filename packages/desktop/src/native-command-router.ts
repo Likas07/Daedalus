@@ -21,7 +21,10 @@ export interface NativeCommandPayloads {
 	readonly "toggle-terminal": Record<string, never>;
 	readonly "export-diagnostics": Record<string, never>;
 	readonly "open-deep-link": { readonly url: string };
-	readonly "show-notification": { readonly kind: "approval" | "run-completed" | "run-failed" | "provider-error"; readonly body?: string };
+	readonly "show-notification": {
+		readonly kind: "approval" | "run-completed" | "run-failed" | "provider-error";
+		readonly body?: string;
+	};
 }
 
 export type NativeCommandEnvelope<K extends NativeCommandId = NativeCommandId> = {
@@ -52,7 +55,7 @@ export class NativeCommandRouter {
 }
 
 export function validateNativeCommand(command: NativeCommandEnvelope): NativeCommandEnvelope {
-	if (("path" in command.payload && typeof command.payload.path === "string" && command.payload.path.length === 0)) {
+	if ("path" in command.payload && typeof command.payload.path === "string" && command.payload.path.length === 0) {
 		throw new Error("Native command path must not be empty");
 	}
 	if (command.id === "open-deep-link") {

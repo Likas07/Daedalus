@@ -34,8 +34,12 @@ export interface TerminalLike {
 	onData(handler: (data: string) => void): { dispose(): void };
 	loadAddon?(addon: XtermAddonLike): void;
 }
-export interface XtermAddonLike { dispose?(): void }
-export interface FitAddonLike extends XtermAddonLike { fit(): void }
+export interface XtermAddonLike {
+	dispose?(): void;
+}
+export interface FitAddonLike extends XtermAddonLike {
+	fit(): void;
+}
 interface ManagerDeps {
 	TerminalCtor?: new (options: Record<string, unknown>) => TerminalLike;
 	FitAddonCtor?: new () => FitAddonLike;
@@ -55,7 +59,11 @@ class Managed implements ManagedXterm {
 	#container?: HTMLElement;
 	#dataDisposable?: { dispose(): void };
 	#lastHistory = "";
-	constructor(readonly terminalId: string, readonly runtime: XtermRuntime, deps: Required<ManagerDeps>) {
+	constructor(
+		readonly terminalId: string,
+		readonly runtime: XtermRuntime,
+		deps: Required<ManagerDeps>,
+	) {
 		this.terminal = new deps.TerminalCtor({
 			convertEol: true,
 			cursorBlink: true,
@@ -80,8 +88,12 @@ class Managed implements ManagedXterm {
 		this.terminal.open(container);
 		this.fit();
 	}
-	detach(): void { this.#container = undefined; }
-	write(data: string): void { if (data) this.terminal.write(data); }
+	detach(): void {
+		this.#container = undefined;
+	}
+	write(data: string): void {
+		if (data) this.terminal.write(data);
+	}
 	replay(history: string): void {
 		if (history === this.#lastHistory) return;
 		const delta = history.startsWith(this.#lastHistory) ? history.slice(this.#lastHistory.length) : history;
@@ -93,10 +105,18 @@ class Managed implements ManagedXterm {
 		this.fitAddon.fit();
 		void this.runtime.resizeTerminal(this.terminalId, { cols: this.terminal.cols, rows: this.terminal.rows });
 	}
-	dispose(): void { this.#dataDisposable?.dispose(); this.terminal.dispose(); instances.delete(this.terminalId); }
+	dispose(): void {
+		this.#dataDisposable?.dispose();
+		this.terminal.dispose();
+		instances.delete(this.terminalId);
+	}
 }
 
-export function getManagedXterm(terminalId: string, runtime: XtermRuntime, deps: ManagerDeps = {}): ManagedXterm & { replay(history: string): void } {
+export function getManagedXterm(
+	terminalId: string,
+	runtime: XtermRuntime,
+	deps: ManagerDeps = {},
+): ManagedXterm & { replay(history: string): void } {
 	const existing = instances.get(terminalId);
 	if (existing) return existing;
 	const managed = new Managed(terminalId, runtime, {
@@ -110,5 +130,10 @@ export function getManagedXterm(terminalId: string, runtime: XtermRuntime, deps:
 	return managed;
 }
 
-export function disposeManagedXterm(terminalId: string): void { instances.get(terminalId)?.dispose(); }
-export function resetXtermManagerForTests(): void { for (const item of [...instances.values()]) item.dispose(); instances.clear(); }
+export function disposeManagedXterm(terminalId: string): void {
+	instances.get(terminalId)?.dispose();
+}
+export function resetXtermManagerForTests(): void {
+	for (const item of [...instances.values()]) item.dispose();
+	instances.clear();
+}

@@ -95,7 +95,9 @@ export class JsonlSessionStore implements SessionStore {
 
 		const dir = this.getSessionDir(options.session.header.cwd);
 		if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-		const sessionFile = existing ?? join(dir, `${this.fileTimestamp(options.session.header.timestamp)}_${options.session.header.id}.jsonl`);
+		const sessionFile =
+			existing ??
+			join(dir, `${this.fileTimestamp(options.session.header.timestamp)}_${options.session.header.id}.jsonl`);
 		writeFileSync(sessionFile, serializeSessionJsonl(options.session));
 		return this.managerSession(SessionManager.open(sessionFile, dir));
 	}

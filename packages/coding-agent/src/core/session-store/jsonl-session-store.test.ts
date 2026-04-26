@@ -30,7 +30,23 @@ function assistantEntry(id = "entry-assistant", parentId = "entry-user"): Sessio
 		id,
 		parentId,
 		timestamp: "2026-04-26T00:00:02.000Z",
-		message: { role: "assistant", content: [{ type: "text", text: "hi" }], api: "anthropic-messages", provider: "anthropic", model: "claude", usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: "stop", timestamp: 1777161602000 },
+		message: {
+			role: "assistant",
+			content: [{ type: "text", text: "hi" }],
+			api: "anthropic-messages",
+			provider: "anthropic",
+			model: "claude",
+			usage: {
+				input: 1,
+				output: 1,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 2,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "stop",
+			timestamp: 1777161602000,
+		},
 	};
 }
 
@@ -113,7 +129,9 @@ describe("JsonlSessionStore", () => {
 		const { cwd, sessionDir } = tempSessionDir();
 		const store = new JsonlSessionStore({ cwd, sessionDir });
 
-		await expect(store.archive({ sessionId: "missing", archived: true })).rejects.toThrow(JSONL_SESSION_STORE_ARCHIVE_ERROR);
+		await expect(store.archive({ sessionId: "missing", archived: true })).rejects.toThrow(
+			JSONL_SESSION_STORE_ARCHIVE_ERROR,
+		);
 		await expect(store.list({ includeArchived: true })).rejects.toThrow(JSONL_SESSION_STORE_ARCHIVE_ERROR);
 	});
 });
