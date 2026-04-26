@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+@theme {
+  /* ── Daedalus · obsidian + a single thread of gold ── */
+  --color-ink-950: #0a0a0a;     /* page */
+  --color-ink-900: #0e0d0c;     /* surface */
+  --color-ink-850: #131210;     /* raised surface */
+  --color-ink-800: #1a1816;     /* hover */
+  --color-ink-700: #221f1c;     /* hairline-faint */
+  --color-ink-600: #2c2823;
+  --color-ink-500: #3a342d;     /* divider */
+  --color-ink-400: #4a4239;     /* divider-strong */
+
+  --color-bone-50:  #ece6d6;
+  --color-bone-100: #d8d1bf;
+  --color-bone-200: #b8b0a0;
+  --color-bone-300: #8a8377;
+  --color-bone-400: #5e584f;
+  --color-bone-500: #3e3a34;
+
+  /* Gold is one note, not a chord. Use sparingly. */
+  --color-gold:      #c9a961;
+  --color-gold-soft: #8a7440;
+  --color-gold-deep: #4a3d20;
+
+  /* Restraint accent for removals — muted brick, never red. */
+  --color-blood:     #8a5048;
+
+  --font-wordmark: "Cinzel", ui-serif, serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+}
+
+@layer base {
+  :root { color-scheme: dark; }
+  html, body, #app { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--color-ink-950);
+    color: var(--color-bone-100);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  /* Very thin scrollbars; nearly invisible until hovered. */
+  *::-webkit-scrollbar { width: 6px; height: 6px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 3px;
+  }
+  *:hover::-webkit-scrollbar-thumb {
+    background: var(--color-ink-600);
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--color-ink-500);
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-gold) 25%, transparent);
+    color: var(--color-bone-50);
+  }
+
+  button { cursor: pointer; }
+  button:focus-visible, [tabindex]:focus-visible, textarea:focus-visible {
+    outline: 1px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+}
+
+/* Letter-spaced section heading — a sober plate, not a flourish */
+@utility label-caps {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-bone-300);
+}
+
+/* Letter-spaced uppercase for stone-cut emphasis */
+@utility caps {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* A single gold underline — like an architrave */
+@utility rule-gold {
+  background-image: linear-gradient(to right, var(--color-gold) 0 28px, transparent 28px);
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 100% 1px;
+  padding-bottom: 8px;
+}

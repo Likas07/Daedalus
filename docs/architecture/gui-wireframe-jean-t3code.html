@@ -1,0 +1,495 @@
+<!doctype html>
+<!-- static architecture wireframe inspired by Jean and T3Code -->
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Daedalus GUI Wireframe — Jean + T3Code</title>
+	<style>
+		:root {
+			--bg: #f4f4f4;
+			--surface: #ffffff;
+			--surface-2: #eeeeee;
+			--surface-3: #e2e2e2;
+			--line: #c9c9c9;
+			--line-strong: #9a9a9a;
+			--text: #1f1f1f;
+			--muted: #6b6b6b;
+			--quiet: #8d8d8d;
+			--focus: #3f3f3f;
+			--shadow: rgba(0, 0, 0, 0.08);
+		}
+
+		* { box-sizing: border-box; }
+
+		body {
+			margin: 0;
+			background: var(--bg);
+			color: var(--text);
+			font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+			font-size: 13px;
+			line-height: 1.35;
+		}
+
+		button, input, textarea {
+			font: inherit;
+			color: inherit;
+		}
+
+		.app-frame {
+			display: grid;
+			grid-template-rows: 46px 1fr 104px;
+			height: 100vh;
+			min-height: 720px;
+			border: 1px solid var(--line-strong);
+			background: var(--surface);
+		}
+
+		.project-bar {
+			display: grid;
+			grid-template-columns: 300px 1fr auto;
+			align-items: center;
+			gap: 16px;
+			padding: 0 14px;
+			border-bottom: 1px solid var(--line);
+			background: var(--surface-2);
+		}
+
+		.repo-title {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			min-width: 0;
+			font-weight: 600;
+		}
+
+		.repo-mark {
+			width: 24px;
+			height: 24px;
+			border: 1px solid var(--line-strong);
+			background: var(--surface);
+			display: grid;
+			place-items: center;
+			font-size: 11px;
+			font-weight: 700;
+		}
+
+		.repo-path, .bar-note, .muted { color: var(--muted); }
+
+		.mode-switcher {
+			display: inline-flex;
+			justify-self: center;
+			border: 1px solid var(--line);
+			background: var(--surface);
+		}
+
+		.mode-switcher span {
+			padding: 5px 12px;
+			border-right: 1px solid var(--line);
+			color: var(--muted);
+		}
+
+		.mode-switcher span:last-child { border-right: 0; }
+		.mode-switcher .active {
+			background: var(--surface-3);
+			color: var(--text);
+			box-shadow: inset 0 -2px 0 var(--focus);
+		}
+
+		.bar-actions {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			color: var(--muted);
+		}
+
+		.main-grid {
+			display: grid;
+			grid-template-columns: 68px 232px minmax(420px, 1fr) 326px;
+			min-height: 0;
+		}
+
+		.left-rail {
+			border-right: 1px solid var(--line);
+			background: var(--surface-2);
+			padding: 10px 7px;
+			display: flex;
+			flex-direction: column;
+			gap: 8px;
+		}
+
+		.rail-item {
+			height: 50px;
+			border: 1px solid transparent;
+			display: grid;
+			place-items: center;
+			text-align: center;
+			font-size: 10px;
+			color: var(--muted);
+			background: transparent;
+		}
+
+		.rail-item.active {
+			border-color: var(--line-strong);
+			background: var(--surface);
+			color: var(--text);
+		}
+
+		.rail-spacer { flex: 1; }
+
+		.structure-pane {
+			border-right: 1px solid var(--line);
+			background: var(--surface);
+			padding: 12px;
+			overflow: auto;
+		}
+
+		.pane-title {
+			font-size: 11px;
+			font-weight: 700;
+			letter-spacing: 0.06em;
+			text-transform: uppercase;
+			color: var(--muted);
+			margin: 0 0 8px;
+		}
+
+		.tree-section { margin-bottom: 18px; }
+
+		.tree-row {
+			display: grid;
+			grid-template-columns: 1fr auto;
+			gap: 8px;
+			padding: 7px 8px;
+			border: 1px solid transparent;
+			margin-bottom: 5px;
+			color: var(--muted);
+		}
+
+		.tree-row.active {
+			border-color: var(--line-strong);
+			background: var(--surface-2);
+			color: var(--text);
+		}
+
+		.badge {
+			border: 1px solid var(--line);
+			padding: 1px 5px;
+			font-size: 10px;
+			color: var(--muted);
+			background: var(--surface);
+		}
+
+		.annotation {
+			border: 1px dashed var(--line-strong);
+			padding: 8px;
+			margin-top: 10px;
+			font-size: 11px;
+			color: var(--muted);
+			background: #fafafa;
+		}
+
+		.chat-pane {
+			display: grid;
+			grid-template-rows: 44px 1fr 132px;
+			min-width: 0;
+			background: var(--surface);
+		}
+
+		.chat-header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 0 16px;
+			border-bottom: 1px solid var(--line);
+		}
+
+		.chat-title { font-weight: 600; }
+		.session-meta { color: var(--muted); font-size: 12px; }
+
+		.transcript {
+			padding: 18px 22px;
+			overflow: auto;
+			background: #fbfbfb;
+		}
+
+		.message {
+			max-width: 760px;
+			border: 1px solid var(--line);
+			background: var(--surface);
+			margin: 0 auto 12px;
+			padding: 12px 14px;
+		}
+
+		.message.user {
+			border-color: var(--line-strong);
+			background: #f7f7f7;
+		}
+
+		.message-head {
+			display: flex;
+			justify-content: space-between;
+			margin-bottom: 7px;
+			font-size: 11px;
+			color: var(--muted);
+			text-transform: uppercase;
+			letter-spacing: 0.04em;
+		}
+
+		.agent-strip {
+			display: flex;
+			gap: 6px;
+			margin-top: 9px;
+			flex-wrap: wrap;
+		}
+
+		.agent-chip {
+			border: 1px solid var(--line);
+			padding: 3px 7px;
+			background: var(--surface-2);
+			font-size: 11px;
+			color: var(--muted);
+		}
+
+		.composer {
+			border-top: 1px solid var(--line);
+			padding: 12px 16px;
+			background: var(--surface);
+		}
+
+		.composer-box {
+			border: 1px solid var(--line-strong);
+			background: #fbfbfb;
+			display: grid;
+			grid-template-rows: 1fr auto;
+			height: 108px;
+		}
+
+		.composer textarea {
+			border: 0;
+			resize: none;
+			padding: 10px;
+			background: transparent;
+			outline: none;
+			color: var(--text);
+		}
+
+		.composer-footer {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			border-top: 1px solid var(--line);
+			padding: 6px 8px;
+			color: var(--muted);
+			font-size: 12px;
+		}
+
+		.button {
+			border: 1px solid var(--line-strong);
+			background: var(--surface-2);
+			padding: 4px 10px;
+			font-weight: 600;
+		}
+
+		.inspector {
+			border-left: 1px solid var(--line);
+			background: var(--surface-2);
+			padding: 12px;
+			overflow: auto;
+		}
+
+		.card {
+			border: 1px solid var(--line);
+			background: var(--surface);
+			padding: 10px;
+			margin-bottom: 10px;
+		}
+
+		.card h3 {
+			margin: 0 0 8px;
+			font-size: 12px;
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+			color: var(--muted);
+		}
+
+		.step, .file-row, .approval-row {
+			display: flex;
+			justify-content: space-between;
+			gap: 10px;
+			padding: 6px 0;
+			border-top: 1px solid var(--line);
+		}
+
+		.step:first-of-type, .file-row:first-of-type, .approval-row:first-of-type { border-top: 0; }
+
+		.status {
+			font-size: 11px;
+			color: var(--muted);
+			white-space: nowrap;
+		}
+
+		.terminal-drawer {
+			border-top: 1px solid var(--line-strong);
+			background: #1f1f1f;
+			color: #d6d6d6;
+			display: grid;
+			grid-template-rows: 30px 1fr;
+		}
+
+		.terminal-header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 0 14px;
+			border-bottom: 1px solid #555;
+			font-size: 12px;
+		}
+
+		.terminal-body {
+			font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+			font-size: 12px;
+			padding: 8px 14px;
+			overflow: hidden;
+			color: #cfcfcf;
+			white-space: pre-wrap;
+		}
+
+		kbd {
+			border: 1px solid var(--line-strong);
+			background: var(--surface);
+			padding: 1px 4px;
+			font-size: 11px;
+		}
+	</style>
+</head>
+<body>
+	<div class="app-frame" aria-label="Daedalus grayscale GUI wireframe">
+		<header class="project-bar">
+			<div class="repo-title">
+				<div class="repo-mark">D</div>
+				<div>
+					<div>Daedalus repo</div>
+					<div class="repo-path">/home/likas/Research/Daedalus · worktree: feature/gui-architecture</div>
+				</div>
+			</div>
+			<nav class="mode-switcher" aria-label="Daedalus mode">
+				<span>Plan</span>
+				<span class="active">Build</span>
+				<span>Autopilot</span>
+			</nav>
+			<div class="bar-actions">
+				<span>Verification gate: waiting</span>
+				<span class="badge">approvals 2</span>
+			</div>
+		</header>
+
+		<main class="main-grid">
+			<nav class="left-rail" aria-label="Primary navigation">
+				<div class="rail-item active">Projects</div>
+				<div class="rail-item">Sessions</div>
+				<div class="rail-item">Worktrees</div>
+				<div class="rail-spacer"></div>
+				<div class="rail-item">Settings</div>
+			</nav>
+
+			<aside class="structure-pane" aria-label="Project structure">
+				<section class="tree-section">
+					<h2 class="pane-title">Projects</h2>
+					<div class="tree-row active"><span>Daedalus</span><span class="badge">open</span></div>
+					<div class="tree-row"><span>gui-inspiration</span><span class="badge">ref</span></div>
+				</section>
+				<section class="tree-section">
+					<h2 class="pane-title">Sessions</h2>
+					<div class="tree-row active"><span>GUI architecture wireframe</span><span>now</span></div>
+					<div class="tree-row"><span>CLI parity review</span><span>paused</span></div>
+					<div class="tree-row"><span>Provider cleanup</span><span>archived</span></div>
+				</section>
+				<section class="tree-section">
+					<h2 class="pane-title">Worktrees</h2>
+					<div class="tree-row active"><span>feature/gui-architecture</span><span>+3</span></div>
+					<div class="tree-row"><span>main</span><span>clean</span></div>
+				</section>
+				<div class="annotation">Jean influence: persistent project, session, worktree navigation stays visible without becoming the primary task.</div>
+			</aside>
+
+			<section class="chat-pane" aria-label="Session transcript and composer">
+				<header class="chat-header">
+					<div>
+						<div class="chat-title">Session: GUI architecture wireframe</div>
+						<div class="session-meta">chat-first working thread · Muse coordinating Worker and Sage</div>
+					</div>
+					<div class="session-meta">Model: default · Context: Daedalus docs</div>
+				</header>
+
+				<div class="transcript">
+					<article class="message user">
+						<div class="message-head"><span>User</span><span>scope request</span></div>
+						<div>Create a sober grayscale GUI wireframe for Daedalus: Jean depth, T3Code restraint, default emphasis on the active chat/session.</div>
+					</article>
+					<article class="message">
+						<div class="message-head"><span>Muse</span><span>plan</span></div>
+						<div>Frame one product screen: project bar, narrow navigation, session transcript, contextual inspector, and a collapsed terminal drawer. Avoid dashboard metrics and decorative styling.</div>
+						<div class="agent-strip">
+							<span class="agent-chip">Muse: plan owner</span>
+							<span class="agent-chip">Sage: reference check</span>
+							<span class="agent-chip">Worker: implementation</span>
+						</div>
+					</article>
+					<article class="message">
+						<div class="message-head"><span>Worker</span><span>build update</span></div>
+						<div>Writing <kbd>docs/architecture/gui-wireframe-jean-t3code.html</kbd>. Changed files remain documentation-only. Verification gate will check standalone HTML markers before handoff.</div>
+					</article>
+					<div class="annotation" style="max-width: 760px; margin-left: auto; margin-right: auto;">T3Code influence: the center transcript and composer remain the default focus; side panels support the conversation rather than competing with it.</div>
+				</div>
+
+				<footer class="composer">
+					<div class="composer-box">
+						<textarea aria-label="Composer">Ask Daedalus to refine the approval gate copy and keep this as a static architecture artifact...</textarea>
+						<div class="composer-footer">
+							<span>Build mode · docs only · approval required before source edits</span>
+							<button class="button">Send</button>
+						</div>
+					</div>
+				</footer>
+			</section>
+
+			<aside class="inspector" aria-label="Contextual inspector">
+				<section class="card">
+					<h3>Plan</h3>
+					<div class="step"><span>Confirm target artifact</span><span class="status">done</span></div>
+					<div class="step"><span>Compose grayscale wireframe</span><span class="status">active</span></div>
+					<div class="step"><span>Verify HTML markers</span><span class="status">next</span></div>
+				</section>
+				<section class="card">
+					<h3>Approvals</h3>
+					<div class="approval-row"><span>Source app edits</span><span class="status">blocked by policy</span></div>
+					<div class="approval-row"><span>Documentation artifact</span><span class="status">allowed</span></div>
+					<div class="approval-row"><span>Verification gate</span><span class="status">required</span></div>
+				</section>
+				<section class="card">
+					<h3>Diff summary</h3>
+					<div class="file-row"><span>docs/architecture/gui-wireframe-jean-t3code.html</span><span class="status">new</span></div>
+					<div class="file-row"><span>source app files</span><span class="status">unchanged</span></div>
+				</section>
+				<section class="card">
+					<h3>Subagents</h3>
+					<div class="file-row"><span>Muse</span><span class="status">coordination</span></div>
+					<div class="file-row"><span>Sage</span><span class="status">reference notes</span></div>
+					<div class="file-row"><span>Worker</span><span class="status">HTML artifact</span></div>
+				</section>
+			</aside>
+		</main>
+
+		<section class="terminal-drawer" aria-label="Collapsed terminal and log drawer">
+			<div class="terminal-header">
+				<span>Terminal / logs — partially visible</span>
+				<span>collapse height: 104px</span>
+			</div>
+			<div class="terminal-body">$ pwd
+/home/likas/Research/Daedalus
+$ test -f docs/architecture/gui-wireframe-jean-t3code.html
+$ grep -E "&lt;!doctype html&gt;|&lt;style&gt;|Jean|T3Code|Daedalus" docs/architecture/gui-wireframe-jean-t3code.html</div>
+		</section>
+	</div>
+</body>
+</html>

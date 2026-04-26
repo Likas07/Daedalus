@@ -1,6 +1,6 @@
 # GUI parity implementation roadmap closeout
 
-Status: Phase 1-4 GUI parity implementation closeout, 2026-04-24.
+Status: Phase 1-4 parity plus GUI mock wiring closeout, 2026-04-26.
 
 This document records what the parity roadmap implemented and what remains a product decision. It is a current capability map, not a new implementation plan.
 
@@ -36,6 +36,12 @@ This document records what the parity roadmap implemented and what remains a pro
 - Automation-rules panel with destructive-action confirmation requirements.
 - Extension manager/dialog/permission-card surfaces backed by renderer-safe extension metadata and command contributions.
 
+### GUI mock wiring closeout
+
+- The renderer now follows an explicit responsive policy: below 760px the inspector closes, and below 520px both side panes close so ProjectBar, the central session/composer, and TerminalTail remain reachable instead of compressing the desktop three-pane shell.
+- Runtime wiring is protocol-first: stable project hydration, replayed app-server events, real coding-agent session control, audited access policy, composer file/command/attachment flows, and PTY/xterm terminal contracts stay behind app-server protocol/client APIs.
+- Regression coverage includes fallback-renderer marking, responsive policy checks, command palette/focus behavior, composer popover keyboard handling through component tests, and approval shortcut coverage.
+
 ## Protocol and package boundaries
 
 - `@daedalus-pi/app-server-protocol` remains the typed contract boundary for requests, responses, events, workflow messages, diagnostics, integration messages, audit/orchestration projections, and extension UI metadata.
@@ -47,14 +53,14 @@ This document records what the parity roadmap implemented and what remains a pro
 ## Known tradeoffs
 
 - Several GUI surfaces are evidence/projection-first and intentionally conservative: Git, PR, extension, and automation views emphasize visibility and confirmation rather than broad mutation.
-- Provider/model and autonomy controls are present as UX surfaces, but product labels and default mappings still need final decisions.
+- Unrestricted is the implemented high-autonomy label: it is audited, auto-approves soft prompts, and does not bypass hard runtime blocks.
 - Worktree support is visible and modelled, but the default session-creation policy is not finalized.
 - Some integration surfaces are ready for metadata and context chips before full external mutation flows.
 - The renderer contains placeholder-safe states where server data or bridge capability is absent, preserving the protocol-first architecture.
 
 ## Intentionally deferred product decisions
 
-1. **Autonomy labels:** choose the public vocabulary and exact semantics for Ask/Plan/Build/Yolo-style modes, including whether “Yolo” is acceptable or should be renamed.
+1. **Autonomy defaults:** Unrestricted is the v1 high-autonomy label and audited semantics; final defaults and rollout copy remain product decisions.
 2. **Default worktree policy:** decide whether new build sessions run in the main checkout, prompt for isolation, or auto-create a worktree by default.
 3. **Git mutation depth:** choose the v1 boundary for stage/unstage/discard/commit/push/PR actions and the confirmation/audit rules for each.
 4. **Extension v1 visibility:** decide how much extension capability, permission, background-task, and command metadata is exposed in the first public GUI release.

@@ -24,7 +24,13 @@ JSONL is not the primary store. JSONL is reserved for import, export, transcript
 - `@daedalus-pi/gui` is the browser renderer application. It should depend on the client and protocol packages, not directly on server internals or Electron-only APIs.
 - `@daedalus-pi/desktop` is the Electron shell. It launches/connects to the Bun app-server, hosts the GUI, owns desktop integration, and uses the client/protocol packages for communication.
 
-Implemented protocol surfaces include session/project/worktree events, approval responses, terminal metadata, workflow state, diagnostics/reconnect status, integration messages, audit/orchestration projections, automation rule metadata, and renderer-safe extension UI metadata. Future protocol candidates include deeper Git mutation, PR creation/update, richer provider health/cost signals, and desktop trust-bar state once product policy is finalized.
+Implemented protocol surfaces include stable project/session/worktree hydration, event replay, approval responses, composer file search/slash command/attachment APIs, audited access policy (`supervised`, `auto-accept`, `unrestricted`), PTY/xterm terminal snapshots/events, workflow state, diagnostics/reconnect status, integration messages, audit/orchestration projections, automation rule metadata, and renderer-safe extension UI metadata. Future protocol candidates include deeper destructive Git mutation, PR creation/update, richer provider health/cost signals, marketplace mutation, and desktop trust-bar state once product policy is finalized.
+
+## GUI mock wiring scope
+
+The production GUI mock wiring scope is tracked in `docs/architecture/gui-mock-wiring-scope.md`. That document distinguishes v1 functional wiring from deferred product-policy tracks such as destructive Git mutation, PR mutation, marketplace installation, and remote/headless GUI clients.
+
+Task 12 closeout adds a documented responsive renderer policy and regression coverage: tablet widths close the inspector; phone widths close both side panes while preserving ProjectBar, central session/composer, and TerminalTail access. Browser QA should be run against `bun run dev:gui` with `agent-browser` for command palette, composer popovers, attachment controls, Unrestricted mode, settings, terminal drawer, and 390px viewport smoke coverage.
 
 ## Extension support requirements
 

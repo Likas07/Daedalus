@@ -1,0 +1,1527 @@
+<!doctype html>
+<!-- redesign of gui-wireframe-jean-t3code.html — drafting-sheet aesthetic, same product structure -->
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Daedalus</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..600,30..100&family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+	<style>
+		:root {
+			/* cold neutral — strict grayscale, matches v1 temperature */
+			--paper:        #ececec;
+			--paper-deep:   #e0e0e0;
+			--surface:      #f7f7f7;
+			--surface-clean:#ffffff;
+			--surface-deep: #ededed;
+
+			/* ink — neutral grays */
+			--ink:          #1a1a1a;
+			--ink-soft:     #2c2c2c;
+			--ink-mid:      #595959;
+			--ink-faint:    #8a8a8a;
+			--ink-ghost:    #b8b8b8;
+
+			/* construction lines */
+			--rule-strong:  #1a1a1a;
+			--rule:         #a8a8a8;
+			--rule-soft:    #cfcfcf;
+			--rule-faint:   #e6e6e6;
+
+			/* attention weights — still grayscale, distinguished by treatment not hue */
+			--ink-red:      #0a0a0a;
+			--ink-green:    #1a1a1a;
+
+			--shadow-page:  0 1px 0 #c4c4c4, 0 24px 60px -28px rgba(0,0,0,0.30);
+		}
+
+		* { box-sizing: border-box; }
+
+		html, body { margin: 0; padding: 0; }
+
+		body {
+			background: var(--paper);
+			color: var(--ink);
+			font-family: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+			font-size: 13px;
+			line-height: 1.55;
+			-webkit-font-smoothing: antialiased;
+			min-height: 100vh;
+		}
+
+		button, input, textarea { font: inherit; color: inherit; }
+
+		.mono {
+			font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+			font-feature-settings: 'ss02';
+			letter-spacing: 0.01em;
+		}
+
+		.serif {
+			font-family: 'Fraunces', Georgia, serif;
+			font-variation-settings: 'opsz' 96, 'SOFT' 30;
+		}
+
+		.cap {
+			font-family: 'IBM Plex Mono', monospace;
+			text-transform: uppercase;
+			letter-spacing: 0.14em;
+			font-size: 10px;
+			color: var(--ink-faint);
+		}
+
+		/* ─────────── App window ─────────── */
+
+		.sheet {
+			position: relative;
+			min-height: 100vh;
+			background: var(--surface);
+		}
+
+		/* ─────────── App frame inside the sheet ─────────── */
+
+		.app {
+			display: grid;
+			grid-template-rows: 46px 1fr 28px;
+			background: var(--surface);
+		}
+
+		/* ─── Project bar ─── */
+		.project-bar {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 32px;
+			padding: 0 18px;
+			border-bottom: 1px solid var(--rule-strong);
+			background: var(--paper-deep);
+		}
+		.repo {
+			display: grid;
+			grid-template-columns: 28px 1fr;
+			gap: 12px;
+			align-items: center;
+			min-width: 0;
+		}
+		.repo-mark {
+			width: 28px;
+			height: 28px;
+			border: 1px solid var(--ink);
+			background: var(--surface-clean);
+			display: grid;
+			place-items: center;
+			font-family: 'Fraunces', Georgia, serif;
+			font-variation-settings: 'opsz' 144, 'SOFT' 0;
+			font-weight: 600;
+			font-size: 16px;
+			letter-spacing: -0.02em;
+			color: var(--ink);
+		}
+		.repo-text { min-width: 0; }
+		.repo-text .name {
+			font-family: 'Fraunces', Georgia, serif;
+			font-variation-settings: 'opsz' 96, 'SOFT' 30;
+			font-weight: 500;
+			font-size: 15px;
+			line-height: 1.1;
+			color: var(--ink);
+		}
+		.repo-text .path {
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 10.5px;
+			color: var(--ink-mid);
+			margin-top: 3px;
+			text-overflow: ellipsis;
+			overflow: hidden;
+			white-space: nowrap;
+			letter-spacing: 0.005em;
+		}
+
+		/* mode switcher — ink stamps */
+		.modes {
+			display: inline-flex;
+			justify-self: center;
+			border: 1px solid var(--rule-strong);
+			background: var(--surface-clean);
+			padding: 0;
+			height: 28px;
+		}
+		.modes .mode {
+			padding: 0 14px;
+			display: grid;
+			place-items: center;
+			border-right: 1px solid var(--rule);
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 10.5px;
+			letter-spacing: 0.16em;
+			text-transform: uppercase;
+			color: var(--ink-mid);
+			position: relative;
+		}
+		.modes .mode:last-child { border-right: 0; }
+		.modes .mode.active {
+			background: var(--ink);
+			color: var(--surface-clean);
+			font-weight: 500;
+		}
+		.modes .mode.active::after {
+			/* stamp offset shadow */
+			content: '';
+			position: absolute;
+			inset: 0;
+			border: 1px solid var(--ink);
+			transform: translate(2px, 2px);
+			pointer-events: none;
+			opacity: 0.18;
+		}
+
+		.bar-meta {
+			display: flex;
+			align-items: center;
+			gap: 20px;
+			color: var(--ink-mid);
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 10.5px;
+			letter-spacing: 0.06em;
+			text-transform: uppercase;
+		}
+		.bar-meta .pip {
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+		}
+		.bar-meta .pip::before {
+			content: '';
+			width: 6px;
+			height: 6px;
+			background: var(--ink-faint);
+			border: 1px solid var(--ink-mid);
+		}
+		.bar-meta .pip.warn::before { background: var(--ink-red); border-color: var(--ink-red); }
+		.bar-meta .pip.ok::before   { background: var(--ink-green); border-color: var(--ink-green); }
+		.bar-meta .count {
+			border: 1px solid var(--ink);
+			background: var(--surface-clean);
+			padding: 2px 6px;
+			color: var(--ink);
+		}
+
+		/* ─── Main grid: nav | session | inspector ─── */
+		.main {
+			display: grid;
+			grid-template-columns: 280px 1fr 332px;
+			min-height: 0;
+			background: var(--surface);
+		}
+
+		.nav-pane {
+			border-right: 1px solid var(--rule-strong);
+			padding: 18px 0 0;
+			background: var(--surface);
+			overflow: auto;
+			display: flex;
+			flex-direction: column;
+		}
+		.nav-section { padding: 0 16px 18px; }
+		.nav-section + .nav-section { border-top: 1px solid var(--rule-soft); padding-top: 14px; }
+		.nav-head {
+			display: flex;
+			align-items: baseline;
+			justify-content: space-between;
+			margin: 0 0 9px;
+			gap: 8px;
+		}
+		.nav-head .label {
+			font-family: 'Fraunces', Georgia, serif;
+			font-variation-settings: 'opsz' 144, 'SOFT' 30;
+			font-weight: 500;
+			font-style: italic;
+			font-size: 14px;
+			color: var(--ink);
+			letter-spacing: -0.01em;
+		}
+		.nav-row {
+			display: grid;
+			grid-template-columns: 12px 1fr auto;
+			gap: 8px;
+			padding: 6px 0;
+			color: var(--ink-mid);
+			align-items: center;
+			border-bottom: 1px dotted var(--rule-soft);
+		}
+		.nav-row:last-child { border-bottom: 0; }
+		.nav-row .lead {
+			font-family: 'IBM Plex Mono', monospace;
+			color: var(--ink-ghost);
+			font-size: 11px;
+		}
+		.nav-row .label2 {
+			font-size: 12.5px;
+			color: var(--ink-soft);
+			text-overflow: ellipsis;
+			overflow: hidden;
+			white-space: nowrap;
+		}
+		.nav-row .tag {
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 9.5px;
+			letter-spacing: 0.08em;
+			text-transform: uppercase;
+			color: var(--ink-faint);
+		}
+		.nav-row.active {
+			background: var(--surface-deep);
+			margin: 0 -16px;
+			padding: 6px 16px;
+			color: var(--ink);
+		}
+		.nav-row.active .lead {
+			color: var(--ink);
+		}
+		.nav-row.active .label2 {
+			color: var(--ink);
+			font-weight: 500;
+		}
+		.nav-row.active .tag {
+			color: var(--ink);
+		}
+		.nav-row.active .lead::before { content: '▸'; }
+
+		.nav-sub {
+			display: grid;
+			grid-template-columns: 12px 1fr auto;
+			gap: 8px;
+			padding: 4px 0 4px 24px;
+			margin: 0 -16px;
+			padding-left: 40px;
+			padding-right: 16px;
+			background: var(--surface-deep);
+		}
+		.nav-sub .label2 {
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 11px;
+			color: var(--ink-mid);
+		}
+		.nav-sub .tag {
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 10px;
+			color: var(--ink-faint);
+		}
+		.nav-sub .lead {
+			color: var(--ink-ghost);
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 10px;
+		}
+
+		.nav-foot {
+			margin-top: auto;
+			padding: 12px 16px;
+			border-top: 1px solid var(--rule-soft);
+			display: flex;
+			justify-content: space-between;
+			color: var(--ink-faint);
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 10.5px;
+			letter-spacing: 0.06em;
+			text-transform: uppercase;
+		}
+
+		/* ─── Session pane (center) ─── */
+		.session {
+			display: grid;
+			grid-template-rows: 52px 1fr auto;
+			min-width: 0;
+			background: var(--surface-clean);
+			border-right: 1px solid var(--rule-strong);
+		}
+		.session-head {
+			display: grid;
+			grid-template-columns: 1fr auto;
+			align-items: end;
+			padding: 12px 28px 8px;
+			border-bottom: 1px solid var(--rule-soft);
+			background: var(--surface-clean);
+		}
+		.session-head .title {
+			font-family: 'Fraunces', Georgia, serif;
+			font-variation-settings: 'opsz' 144, 'SOFT' 30;
+			font-weight: 400;
+			font-size: 22px;
+			letter-spacing: -0.012em;
+			line-height: 1;
+			color: var(--ink);
+		}
+		.session-head .title em {
+			font-family: 'IBM Plex Mono', monospace;
+			font-style: normal;
+			font-size: 10px;
+			letter-spacing: 0.18em;
+			text-transform: uppercase;
+			color: var(--ink-faint);
+			margin-right: 12px;
+		}
+		.session-head .meta {
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 10px;
+			letter-spacing: 0.08em;
+			text-transform: uppercase;
+			color: var(--ink-mid);
+		}
+		.session-head .meta b { color: var(--ink); font-weight: 500; }
+
+		.transcript {
+			padding: 18px 28px 24px;
+			overflow: auto;
+			background: var(--surface-clean);
+		}
+
+		/* annotated-edition style: gutter for attribution, body to its right */
+		.entry {
+			display: grid;
+			grid-template-columns: 100px 1fr;
+			gap: 22px;
+			padding: 14px 0 16px;
+			border-bottom: 1px solid var(--rule-faint);
+		}
+		.entry:last-child { border-bottom: 0; }
+		.entry .gutter {
+			text-align: right;
+			padding-top: 2px;
+		}
+		.entry .gutter .who {
+			font-family: 'Fraunces', Georgia, serif;
+			font-variation-settings: 'opsz' 144, 'SOFT' 30;
+			font-weight: 500;
+			font-style: italic;
+			font-size: 14px;
+			color: var(--ink);
+			line-height: 1.1;
+		}
+		.entry.user .gutter .who { font-style: normal; }
+		.entry .gutter .when {
+			display: block;
+			margin-top: 4px;
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 9.5px;
+			letter-spacing: 0.08em;
+			text-transform: uppercase;
+			color: var(--ink-faint);
+		}
+		.entry .body {
+			color: var(--ink-soft);
+			max-width: 64ch;
+			font-size: 14px;
+			line-height: 1.55;
+		}
+		.entry.user .body {
+			color: var(--ink);
+		}
+		.entry .body kbd {
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 11.5px;
+			background: var(--surface-deep);
+			border: 1px solid var(--rule);
+			padding: 1px 6px;
+			color: var(--ink);
+		}
+		.entry .body code {
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 11.5px;
+			background: var(--surface-deep);
+			padding: 1px 5px;
+			color: var(--ink);
+		}
+
+		.agent-strip {
+			margin-top: 10px;
+			display: flex;
+			gap: 0;
+			border: 1px solid var(--rule);
+			width: max-content;
+		}
+		.agent-strip .ag {
+			padding: 4px 10px;
+			border-right: 1px solid var(--rule);
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 10px;
+			letter-spacing: 0.08em;
+			text-transform: uppercase;
+			color: var(--ink-mid);
+			background: var(--surface-clean);
+		}
+		.agent-strip .ag:last-child { border-right: 0; }
+		.agent-strip .ag b {
+			color: var(--ink);
+			font-weight: 500;
+			margin-right: 6px;
+		}
+
+		/* composer */
+		.composer {
+			border-top: 1px solid var(--rule-strong);
+			padding: 14px 28px;
+			background: var(--surface-deep);
+		}
+		.composer-frame {
+			position: relative;
+			border: 1px solid var(--ink);
+			background: var(--surface-clean);
+			display: grid;
+			grid-template-rows: auto 1fr auto;
+			min-height: 140px;
+		}
+		.composer-frame::before {
+			content: 'PROMPT';
+			position: absolute;
+			top: -9px;
+			left: 12px;
+			background: var(--surface-deep);
+			padding: 0 8px;
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 9.5px;
+			letter-spacing: 0.18em;
+			text-transform: uppercase;
+			color: var(--ink);
+		}
+		.composer-top {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 16px;
+			padding: 6px 8px 6px 12px;
+			border-bottom: 1px solid var(--rule-soft);
+			background: var(--surface-deep);
+		}
+		.composer-top .modes {
+			height: 26px;
+			background: var(--surface-clean);
+		}
+		.composer-top .modes .mode {
+			padding: 0 12px;
+			font-size: 10px;
+		}
+		.composer-ctx {
+			display: flex;
+			align-items: center;
+			gap: 14px;
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 9.5px;
+			letter-spacing: 0.1em;
+			text-transform: uppercase;
+			color: var(--ink-mid);
+		}
+		.composer-ctx .ctx-item {
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+		}
+		.composer-ctx .ctx-item::before {
+			content: '';
+			width: 5px;
+			height: 5px;
+			background: var(--ink);
+			border: 1px solid var(--ink);
+			display: inline-block;
+		}
+		.composer-ctx .ctx-item.dim::before {
+			background: transparent;
+			border-color: var(--ink-faint);
+		}
+		.composer-frame textarea {
+			border: 0;
+			resize: none;
+			padding: 14px 16px 6px;
+			background: transparent;
+			outline: none;
+			color: var(--ink-soft);
+			font-family: 'IBM Plex Sans', sans-serif;
+			font-size: 13px;
+			line-height: 1.5;
+		}
+		.composer-frame textarea::placeholder { color: var(--ink-faint); }
+		.composer-foot {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			padding: 6px 10px 6px 14px;
+			border-top: 1px solid var(--rule);
+			color: var(--ink-mid);
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 10px;
+			letter-spacing: 0.08em;
+			text-transform: uppercase;
+		}
+		.composer-foot .chips { display: flex; gap: 6px; }
+		.composer-foot .chip {
+			border: 1px solid var(--rule);
+			padding: 1px 6px;
+			color: var(--ink-mid);
+			background: var(--surface-clean);
+		}
+		.btn-send {
+			border: 1px solid var(--ink);
+			background: var(--ink);
+			color: var(--surface-clean);
+			padding: 4px 14px;
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 10px;
+			letter-spacing: 0.18em;
+			text-transform: uppercase;
+			cursor: pointer;
+			position: relative;
+		}
+		.btn-send::after {
+			content: '';
+			position: absolute;
+			inset: 0;
+			border: 1px solid var(--ink);
+			transform: translate(2px, 2px);
+			opacity: 0.22;
+			pointer-events: none;
+		}
+
+		/* ─── Inspector pane (right) ─── */
+		.inspector {
+			background: var(--paper-deep);
+			padding: 18px 18px 24px;
+			overflow: auto;
+			display: flex;
+			flex-direction: column;
+			gap: 18px;
+		}
+		.card {
+			background: var(--surface);
+			border: 1px solid var(--rule-strong);
+			padding: 14px 14px 12px;
+			position: relative;
+		}
+		.card-head {
+			display: flex;
+			align-items: baseline;
+			justify-content: space-between;
+			padding-bottom: 9px;
+			margin-bottom: 10px;
+			border-bottom: 1px solid var(--ink);
+		}
+		.card-head .ix {
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 9.5px;
+			letter-spacing: 0.18em;
+			text-transform: uppercase;
+			color: var(--ink-faint);
+		}
+		.card-head .ttl {
+			font-family: 'Fraunces', Georgia, serif;
+			font-variation-settings: 'opsz' 144, 'SOFT' 30;
+			font-weight: 500;
+			font-style: italic;
+			font-size: 16px;
+			color: var(--ink);
+		}
+
+		/* — Plan: timeline — */
+		.timeline { padding: 4px 0 0; }
+		.tl-step {
+			display: grid;
+			grid-template-columns: 22px 1fr auto;
+			gap: 10px;
+			padding: 8px 0;
+			align-items: start;
+			position: relative;
+		}
+		.tl-step::before {
+			content: '';
+			position: absolute;
+			left: 10px;
+			top: 14px;
+			bottom: -8px;
+			width: 1px;
+			background: var(--rule);
+		}
+		.tl-step:last-child::before { display: none; }
+		.tl-step .node {
+			width: 11px;
+			height: 11px;
+			border: 1px solid var(--ink);
+			background: var(--surface);
+			margin-top: 4px;
+			justify-self: center;
+			z-index: 1;
+		}
+		.tl-step.done .node { background: var(--ink); }
+		.tl-step.active .node {
+			background: var(--surface);
+			box-shadow: inset 0 0 0 2px var(--surface), inset 0 0 0 3px var(--ink);
+		}
+		.tl-step.active .node::after {
+			/* concentric ring */
+			content: '';
+			position: absolute;
+			width: 17px;
+			height: 17px;
+			margin-left: -3px;
+			margin-top: -3px;
+			border: 1px solid var(--ink);
+		}
+		.tl-step .label3 {
+			font-size: 13px;
+			color: var(--ink);
+			line-height: 1.35;
+		}
+		.tl-step.done .label3 { color: var(--ink-mid); }
+		.tl-step .sub {
+			display: block;
+			margin-top: 2px;
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 10px;
+			color: var(--ink-faint);
+			letter-spacing: 0.04em;
+		}
+		.tl-step .stat {
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 9.5px;
+			letter-spacing: 0.16em;
+			text-transform: uppercase;
+			color: var(--ink-mid);
+			margin-top: 5px;
+		}
+		.tl-step.active .stat { color: var(--ink); }
+		.tl-step.done .stat { color: var(--ink-faint); }
+
+		/* — Approvals: stamp ledger — */
+		.stamp-row {
+			display: grid;
+			grid-template-columns: 1fr auto;
+			gap: 12px;
+			padding: 9px 0;
+			border-top: 1px solid var(--rule-soft);
+			align-items: center;
+		}
+		.stamp-row:first-of-type { border-top: 0; }
+		.stamp-row .what {
+			font-size: 12.5px;
+			color: var(--ink);
+		}
+		.stamp-row .why {
+			display: block;
+			margin-top: 1px;
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 9.5px;
+			letter-spacing: 0.04em;
+			color: var(--ink-faint);
+		}
+		.stamp {
+			border: 1.5px solid var(--ink);
+			padding: 3px 7px;
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 9.5px;
+			letter-spacing: 0.18em;
+			text-transform: uppercase;
+			color: var(--ink);
+			background: var(--surface);
+			transform: rotate(-1deg);
+			position: relative;
+			white-space: nowrap;
+		}
+		.stamp.blocked {
+			color: var(--surface-clean);
+			background: var(--ink);
+			border-color: var(--ink);
+		}
+		.stamp.allow {
+			color: var(--ink-green);
+			border-color: var(--ink-green);
+		}
+		.stamp.req {
+			color: var(--ink);
+			border-style: double;
+			border-width: 3px;
+			padding: 1px 5px;
+		}
+
+		/* — Diff: file ledger — */
+		.ledger-head {
+			display: grid;
+			grid-template-columns: 1fr 38px 38px;
+			gap: 8px;
+			padding-bottom: 5px;
+			border-bottom: 1px solid var(--rule);
+			margin-bottom: 4px;
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 9.5px;
+			letter-spacing: 0.14em;
+			text-transform: uppercase;
+			color: var(--ink-faint);
+		}
+		.ledger-head span:not(:first-child) { text-align: right; }
+		.ledger-row {
+			display: grid;
+			grid-template-columns: 1fr 38px 38px;
+			gap: 8px;
+			padding: 7px 0;
+			border-bottom: 1px dotted var(--rule-soft);
+			align-items: baseline;
+		}
+		.ledger-row:last-child { border-bottom: 0; }
+		.ledger-row .path2 {
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 11px;
+			color: var(--ink);
+			line-height: 1.35;
+			word-break: break-all;
+		}
+		.ledger-row .path2 em {
+			font-family: 'IBM Plex Sans', sans-serif;
+			font-style: normal;
+			color: var(--ink-faint);
+			font-size: 10px;
+			display: block;
+			letter-spacing: 0.06em;
+			text-transform: uppercase;
+			margin-top: 1px;
+		}
+		.ledger-row .add, .ledger-row .rem {
+			text-align: right;
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 11px;
+		}
+		.ledger-row .add { color: var(--ink-green); }
+		.ledger-row .rem { color: var(--ink-red); }
+		.ledger-row.muted .path2  { color: var(--ink-faint); }
+		.ledger-row.muted .add,
+		.ledger-row.muted .rem    { color: var(--ink-ghost); }
+
+		/* — Subagents: roster — */
+		.roster-row {
+			display: grid;
+			grid-template-columns: 64px 1fr;
+			gap: 10px;
+			padding: 9px 0;
+			border-top: 1px solid var(--rule-soft);
+			align-items: start;
+		}
+		.roster-row:first-of-type { border-top: 0; }
+		.roster-row .role {
+			font-family: 'Fraunces', Georgia, serif;
+			font-variation-settings: 'opsz' 144, 'SOFT' 30;
+			font-style: italic;
+			font-weight: 500;
+			font-size: 15px;
+			color: var(--ink);
+			line-height: 1;
+		}
+		.roster-row .role em {
+			display: block;
+			margin-top: 4px;
+			font-family: 'IBM Plex Mono', monospace;
+			font-style: normal;
+			font-size: 9px;
+			letter-spacing: 0.18em;
+			text-transform: uppercase;
+			color: var(--ink-faint);
+			font-weight: 400;
+		}
+		.roster-row .duty {
+			color: var(--ink-mid);
+			font-size: 12px;
+			line-height: 1.4;
+		}
+		.roster-row .duty b {
+			display: block;
+			color: var(--ink);
+			font-weight: 500;
+			font-size: 12px;
+			margin-bottom: 1px;
+		}
+
+		/* ─── Terminal tail (collapsed default) ─── */
+		.tail {
+			display: grid;
+			grid-template-columns: auto auto 1fr auto auto;
+			gap: 14px;
+			align-items: center;
+			padding: 0 18px;
+			background: var(--ink);
+			color: #d8d4c4;
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 10.5px;
+			letter-spacing: 0.04em;
+			border-top: 1px solid var(--rule-strong);
+		}
+		.tail .pid {
+			color: #b3ad95;
+			letter-spacing: 0.16em;
+			text-transform: uppercase;
+			font-size: 9.5px;
+		}
+		.tail .dot {
+			width: 6px;
+			height: 6px;
+			background: #b8c399;
+			border: 1px solid #6e7a4d;
+			animation: blink 1.6s linear infinite;
+		}
+		@keyframes blink { 50% { opacity: 0.35; } }
+		.tail .stream {
+			color: #e8e2cf;
+			white-space: nowrap;
+			text-overflow: ellipsis;
+			overflow: hidden;
+		}
+		.tail .stream b { color: #f5efd9; font-weight: 500; }
+		.tail .right {
+			color: #b3ad95;
+			letter-spacing: 0.16em;
+			text-transform: uppercase;
+			font-size: 9.5px;
+		}
+		.tail .expand {
+			color: #d8d4c4;
+			border: 1px solid #5a5440;
+			padding: 1px 7px;
+			letter-spacing: 0.16em;
+			text-transform: uppercase;
+			font-size: 9.5px;
+			background: transparent;
+			cursor: pointer;
+		}
+
+		/* ─────────── On-load reveal — restrained ─────────── */
+		.reveal {
+			opacity: 0;
+			transform: translateY(4px);
+			animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.1, 1) forwards;
+		}
+		@keyframes rise {
+			to { opacity: 1; transform: none; }
+		}
+		.r1 { animation-delay: 0.05s; }
+		.r2 { animation-delay: 0.18s; }
+		.r3 { animation-delay: 0.26s; }
+		.r4 { animation-delay: 0.34s; }
+		.r5 { animation-delay: 0.46s; }
+
+		/* ─────── source-grounded additions ─────── */
+
+		/* session/worktree status dots (Jean SessionListRow / StatusIndicator) */
+		.dot {
+			width: 6px;
+			height: 6px;
+			border: 1px solid var(--ink);
+			background: var(--ink);
+			display: inline-block;
+			margin-top: 2px;
+		}
+		.dot.idle    { background: transparent; }
+		.dot.paused  { background: var(--surface); border-style: dashed; }
+		.dot.archived{ background: transparent; border-color: var(--ink-faint); }
+		.dot.live    { background: var(--ink); animation: blink 1.6s linear infinite; }
+		.dot.review  { background: var(--ink-red); border-color: var(--ink-red); }
+
+		.nav-row .dot,
+		.nav-sub .dot { margin-top: 0; align-self: center; }
+
+		/* blocked badge — Jean's permission-denial counter */
+		.blk {
+			border: 1px solid var(--ink-red);
+			color: var(--ink-red);
+			padding: 0 5px;
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 9px;
+			letter-spacing: 0.16em;
+			text-transform: uppercase;
+			background: var(--surface-clean);
+			margin-right: 4px;
+		}
+		.lbl {
+			border: 1px solid var(--ink);
+			color: var(--ink);
+			padding: 0 5px;
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 9px;
+			letter-spacing: 0.14em;
+			text-transform: uppercase;
+			background: var(--paper-deep);
+			margin-right: 4px;
+		}
+
+		/* base-session tag (Jean WorktreeList: base sessions always first) */
+		.base-tag {
+			border: 1px solid var(--ink);
+			padding: 0 4px;
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 9px;
+			letter-spacing: 0.16em;
+			text-transform: uppercase;
+			color: var(--ink);
+			background: var(--surface-clean);
+		}
+
+		/* nav footer — Jean ProjectsSidebar: New / Archived twin buttons */
+		.nav-foot-buttons {
+			margin-top: auto;
+			border-top: 1px solid var(--rule-soft);
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 1px;
+			background: var(--rule-soft);
+		}
+		.nav-foot-buttons button {
+			background: var(--surface);
+			border: 0;
+			padding: 9px 0;
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 10px;
+			letter-spacing: 0.16em;
+			text-transform: uppercase;
+			color: var(--ink-mid);
+			cursor: pointer;
+		}
+		.nav-foot-buttons button:hover { color: var(--ink); }
+
+		/* plan card — timestamp & full-plan disclosure (T3Code PlanSidebar) */
+		.tl-meta {
+			display: flex;
+			justify-content: space-between;
+			padding: 0 0 8px;
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 9.5px;
+			letter-spacing: 0.1em;
+			text-transform: uppercase;
+			color: var(--ink-faint);
+		}
+		.full-plan-toggle {
+			margin-top: 12px;
+			padding-top: 9px;
+			border-top: 1px solid var(--rule-soft);
+			display: flex;
+			justify-content: space-between;
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 9.5px;
+			letter-spacing: 0.16em;
+			text-transform: uppercase;
+			color: var(--ink-mid);
+			cursor: pointer;
+		}
+		.full-plan-toggle .chev { color: var(--ink-faint); }
+
+		/* edited-files chip row (Jean EditedFilesDisplay) */
+		.edited {
+			margin-top: 11px;
+			display: flex;
+			flex-wrap: wrap;
+			gap: 6px;
+			align-items: center;
+			color: var(--ink-faint);
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 10px;
+			letter-spacing: 0.06em;
+			text-transform: uppercase;
+		}
+		.edited .label-x { color: var(--ink-mid); }
+		.edited .file {
+			border: 1px solid var(--rule);
+			padding: 1px 7px;
+			background: var(--surface-deep);
+			color: var(--ink);
+			text-transform: none;
+			letter-spacing: 0.02em;
+			font-size: 10.5px;
+		}
+
+		/* inline approval card — Jean PermissionApproval, drafting hatching for "needs attention" */
+		.approval-card {
+			margin: 4px 0 0;
+			border: 1px solid var(--ink-red);
+			background:
+				repeating-linear-gradient(135deg,
+					transparent 0 6px,
+					rgba(110, 39, 24, 0.045) 6px 7px),
+				var(--surface);
+			padding: 14px 14px 12px;
+			position: relative;
+		}
+		.ac-head {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			padding-bottom: 10px;
+			margin-bottom: 11px;
+			border-bottom: 1px solid var(--ink-red);
+		}
+		.ac-emblem {
+			width: 22px;
+			height: 22px;
+			border: 1.5px solid var(--ink-red);
+			color: var(--ink-red);
+			display: grid;
+			place-items: center;
+			font-family: 'Fraunces', Georgia, serif;
+			font-variation-settings: 'opsz' 144;
+			font-weight: 600;
+			font-size: 16px;
+			line-height: 1;
+		}
+		.ac-title {
+			font-family: 'Fraunces', Georgia, serif;
+			font-variation-settings: 'opsz' 144, 'SOFT' 30;
+			font-style: italic;
+			font-weight: 500;
+			font-size: 15px;
+			color: var(--ink);
+			flex: 1;
+		}
+		.ac-count {
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 9.5px;
+			letter-spacing: 0.18em;
+			text-transform: uppercase;
+			color: var(--ink-red);
+			border: 1px solid var(--ink-red);
+			padding: 1px 6px;
+			background: var(--surface);
+		}
+		.ac-text {
+			margin: 0 0 11px;
+			font-size: 12.5px;
+			color: var(--ink-mid);
+			max-width: 60ch;
+		}
+		.ac-tools {
+			list-style: none;
+			margin: 0 0 12px;
+			padding: 0;
+		}
+		.ac-tools li {
+			display: grid;
+			grid-template-columns: 18px 1fr;
+			gap: 10px;
+			padding: 8px 10px;
+			border: 1px solid var(--rule);
+			background: var(--surface-clean);
+			align-items: start;
+		}
+		.ac-cb {
+			margin-top: 1px;
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 12px;
+			color: var(--ink);
+		}
+		.ac-cmd {
+			display: block;
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 11px;
+			background: var(--paper-deep);
+			padding: 4px 8px;
+			color: var(--ink);
+			margin-bottom: 4px;
+			word-break: break-all;
+			line-height: 1.4;
+		}
+		.ac-meta {
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 10px;
+			letter-spacing: 0.04em;
+			color: var(--ink-faint);
+		}
+		.ac-meta b { color: var(--ink); font-weight: 500; margin-right: 4px; }
+		.ac-actions {
+			display: flex;
+			gap: 8px;
+			flex-wrap: wrap;
+			align-items: center;
+		}
+		.ac-btn {
+			display: inline-flex;
+			align-items: center;
+			gap: 8px;
+			border: 1px solid var(--ink);
+			background: var(--surface);
+			padding: 5px 12px;
+			font-family: 'IBM Plex Mono', monospace;
+			font-size: 10px;
+			letter-spacing: 0.16em;
+			text-transform: uppercase;
+			color: var(--ink);
+			cursor: pointer;
+		}
+		.ac-btn kbd {
+			border: 1px solid var(--rule);
+			background: var(--paper-deep);
+			padding: 0 5px;
+			font-size: 10px;
+			letter-spacing: 0;
+			color: var(--ink-mid);
+			text-transform: none;
+		}
+		.ac-btn-primary {
+			background: var(--ink);
+			color: var(--surface-clean);
+		}
+		.ac-btn-primary kbd {
+			border-color: rgba(255,255,255,0.25);
+			background: rgba(255,255,255,0.08);
+			color: rgba(255,255,255,0.85);
+		}
+		.ac-btn-yolo {
+			background:
+				repeating-linear-gradient(135deg,
+					var(--ink) 0 5px,
+					#3a3a3a 5px 6px);
+			color: var(--surface-clean);
+			border: 1.5px solid var(--ink);
+		}
+		.ac-btn-yolo kbd {
+			border-color: rgba(255,255,255,0.3);
+			background: rgba(255,255,255,0.08);
+			color: rgba(255,255,255,0.85);
+		}
+		.ac-btn-ghost {
+			border-color: var(--rule);
+			color: var(--ink-mid);
+			background: transparent;
+		}
+</style>
+</head>
+<body>
+	<main class="sheet" aria-label="Daedalus GUI">
+
+			<div class="app">
+
+				<!-- ─ project bar ─ -->
+				<header class="project-bar reveal r1">
+					<div class="repo">
+						<div class="repo-mark">D</div>
+						<div class="repo-text">
+							<div class="name">Daedalus</div>
+							<div class="path">~/Research/Daedalus · feature/gui-architecture</div>
+						</div>
+					</div>
+					<div class="bar-meta">
+						<span class="pip warn">Verification gate · waiting</span>
+						<span class="pip">Approvals <span class="count">02</span></span>
+						<span class="pip">Model <span class="count">opus 4.7</span></span>
+					</div>
+				</header>
+
+				<!-- ─ main grid ─ -->
+				<div class="main">
+
+					<!-- ── left navigation ── -->
+					<nav class="nav-pane reveal r2" aria-label="Project navigation">
+						<section class="nav-section">
+							<header class="nav-head">
+								<span class="label">Projects</span>
+							</header>
+							<div class="nav-row active">
+								<span class="lead"></span>
+								<span class="label2">Daedalus</span>
+								<span class="tag">open</span>
+							</div>
+							<div class="nav-sub">
+								<span class="lead">└─</span>
+								<span class="label2">feature/gui-architecture</span>
+								<span class="tag">+3 ·  +118 / −42</span>
+							</div>
+							<div class="nav-sub">
+								<span class="lead">└─</span>
+								<span class="label2">main</span>
+								<span class="tag"><span class="base-tag">base</span> clean</span>
+							</div>
+							<div class="nav-row">
+								<span class="lead"></span>
+								<span class="label2">gui-inspiration</span>
+								<span class="tag">ref</span>
+							</div>
+						</section>
+
+						<section class="nav-section">
+							<header class="nav-head">
+								<span class="label">Sessions</span>
+							</header>
+							<div class="nav-row active">
+								<span class="lead"><span class="dot live" aria-label="streaming"></span></span>
+								<span class="label2">GUI architecture wireframe</span>
+								<span class="tag"><span class="blk">blk 1</span>now</span>
+							</div>
+							<div class="nav-row">
+								<span class="lead"><span class="dot paused" aria-label="paused"></span></span>
+								<span class="label2">CLI parity review</span>
+								<span class="tag"><span class="lbl">review</span>paused</span>
+							</div>
+							<div class="nav-row">
+								<span class="lead"><span class="dot archived" aria-label="archived"></span></span>
+								<span class="label2">Provider cleanup</span>
+								<span class="tag">archived</span>
+							</div>
+						</section>
+
+						<section class="nav-section">
+							<header class="nav-head">
+								<span class="label">Worktrees</span>
+							</header>
+							<div class="nav-row">
+								<span class="lead"><span class="dot" style="background:transparent;border-color:var(--ink);"></span></span>
+								<span class="label2">main</span>
+								<span class="tag"><span class="base-tag">base</span></span>
+							</div>
+							<div class="nav-row">
+								<span class="lead"><span class="dot live"></span></span>
+								<span class="label2">feature/gui-architecture</span>
+								<span class="tag">+3</span>
+							</div>
+						</section>
+
+						<div class="nav-foot-buttons">
+							<button type="button">+ New</button>
+							<button type="button">Archived</button>
+						</div>
+					</nav>
+
+					<!-- ── center session ── -->
+					<section class="session reveal r3" aria-label="Active session">
+						<header class="session-head">
+							<div class="title">ApprovalCard · narrow-width fix</div>
+							<div class="meta">build · feature/gui-architecture · opus 4.7</div>
+						</header>
+
+						<div class="transcript">
+
+							<article class="entry user">
+								<div class="gutter">
+									<span class="who">You</span>
+									<span class="when">10:31</span>
+								</div>
+								<div class="body">
+									The ApprovalCard buttons wrap to a second line on the narrow inspector. Tighten the layout so the primary action stays on the first row, and keep the hatched "yolo" button readable in dark mode.
+								</div>
+							</article>
+
+							<article class="entry">
+								<div class="gutter">
+									<span class="who">Daedalus</span>
+									<span class="when">10:32 · plan</span>
+								</div>
+								<div class="body">
+									Two changes in <code>ApprovalCard.svelte</code>: reduce the kbd hint to a tooltip when width &lt; 520px, and switch the button row to <code>flex-wrap: nowrap</code> with the ghost button collapsing to an icon. Hatch pattern already uses <code>currentColor</code>, but I'll bump the stripe contrast for dark mode.
+									<div class="agent-strip">
+										<span class="ag"><b>plan</b>3 steps</span>
+										<span class="ag"><b>edits</b>1 file</span>
+										<span class="ag"><b>tests</b>component snapshot</span>
+									</div>
+								</div>
+							</article>
+
+							<article class="entry">
+								<div class="gutter">
+									<span class="who">Daedalus</span>
+									<span class="when">10:34 · build</span>
+								</div>
+								<div class="body">
+									Applied the layout fix and verified the snapshot at three breakpoints. The grep below is the approval-policy linter — it blocks if any new <code>repeating-linear-gradient</code> token lands without a matching dark-mode rule.
+									<div class="edited">
+										<span class="label-x">Edited 1 file:</span>
+										<span class="file" title="packages/gui/src/components/ApprovalCard.svelte">ApprovalCard.svelte</span>
+									</div>
+								</div>
+							</article>
+
+							<article class="entry approval">
+								<div class="gutter">
+									<span class="who">System</span>
+									<span class="when">10:35 · gate</span>
+								</div>
+								<div class="body">
+									<div class="approval-card" role="region" aria-label="Permission required">
+										<header class="ac-head">
+											<span class="ac-emblem" aria-hidden="true">!</span>
+											<span class="ac-title">Permission required</span>
+											<span class="ac-count">1 tool blocked</span>
+										</header>
+										<p class="ac-text">Daedalus wants to run the dark-mode contrast check before committing. Select which tools to allow:</p>
+										<ul class="ac-tools">
+											<li>
+												<span class="ac-cb" aria-hidden="true">[×]</span>
+												<div>
+													<code class="ac-cmd">pnpm --filter gui test -- --update-snapshot ApprovalCard</code>
+													<div class="ac-meta"><b>Bash</b> · component snapshot · build mode · packages/gui</div>
+												</div>
+											</li>
+										</ul>
+										<div class="ac-actions">
+											<button type="button" class="ac-btn ac-btn-primary">Approve &amp; continue <kbd>⌘↵</kbd></button>
+											<button type="button" class="ac-btn ac-btn-yolo">Approve · yolo <kbd>⌘Y</kbd></button>
+											<button type="button" class="ac-btn ac-btn-ghost">Cancel</button>
+										</div>
+									</div>
+								</div>
+							</article>
+
+						</div>
+
+						<footer class="composer">
+							<div class="composer-frame">
+								<div class="composer-top">
+									<nav class="modes" aria-label="Daedalus runtime mode">
+										<span class="mode">Plan</span>
+										<span class="mode active">Build</span>
+										<span class="mode">Autopilot</span>
+									</nav>
+									<div class="composer-ctx">
+										<span class="ctx-item">local · feature/gui-architecture</span>
+										<span class="ctx-item dim">opus 4.7</span>
+									</div>
+								</div>
+								<textarea aria-label="Prompt composer" placeholder="Reply to Daedalus, attach context with @, run a slash command…"></textarea>
+								<div class="composer-foot">
+									<div class="chips">
+										<span class="chip">@ApprovalCard.svelte</span>
+										<span class="chip">/test</span>
+										<span class="chip">dark-mode</span>
+									</div>
+									<button class="btn-send">Send</button>
+								</div>
+							</div>
+						</footer>
+					</section>
+
+					<!-- ── right inspector ── -->
+					<aside class="inspector reveal r4" aria-label="Contextual inspector">
+
+						<section class="card">
+							<header class="card-head">
+								<span class="ttl">Plan</span>
+								<span class="ix">3 STEPS · ⋯</span>
+							</header>
+							<div class="tl-meta">
+								<span>issued 10:31</span>
+								<span>1 / 3 done</span>
+							</div>
+							<div class="timeline">
+								<div class="tl-step done">
+									<div class="node"></div>
+									<div>
+										<span class="label3"><s>Reproduce wrap at 480px</s></span>
+										<span class="sub">snapshot · ApprovalCard.test.ts</span>
+									</div>
+									<span class="stat">done</span>
+								</div>
+								<div class="tl-step active">
+									<div class="node"></div>
+									<div>
+										<span class="label3">Tighten button row layout</span>
+										<span class="sub">flex-wrap nowrap · ghost collapses to icon</span>
+									</div>
+									<span class="stat">active</span>
+								</div>
+								<div class="tl-step">
+									<div class="node"></div>
+									<div>
+										<span class="label3">Update snapshot &amp; commit</span>
+										<span class="sub">pnpm test --update-snapshot · gate</span>
+									</div>
+									<span class="stat">next</span>
+								</div>
+							</div>
+							<div class="full-plan-toggle" role="button" tabindex="0">
+								<span>Full plan · markdown</span>
+								<span class="chev">▸</span>
+							</div>
+						</section>
+
+						<section class="card">
+							<header class="card-head">
+								<span class="ttl">Approvals</span>
+								<span class="ix">QUEUE 02</span>
+							</header>
+							<div class="stamp-row">
+								<div>
+									<span class="what">Snapshot update</span>
+									<span class="why">pnpm test --update-snapshot</span>
+								</div>
+								<span class="stamp blocked">Blocked</span>
+							</div>
+							<div class="stamp-row">
+								<div>
+									<span class="what">Component edits</span>
+									<span class="why">packages/gui/src/components/**</span>
+								</div>
+								<span class="stamp allow">Allowed</span>
+							</div>
+							<div class="stamp-row">
+								<div>
+									<span class="what">Commit &amp; push</span>
+									<span class="why">requires explicit approval</span>
+								</div>
+								<span class="stamp req">Required</span>
+							</div>
+						</section>
+
+						<section class="card">
+							<header class="card-head">
+								<span class="ttl">Diff summary</span>
+								<span class="ix">1 NEW</span>
+							</header>
+							<div class="ledger-head">
+								<span>Path</span><span>+</span><span>−</span>
+							</div>
+							<div class="ledger-row">
+								<div class="path2">
+									packages/gui/src/components/ApprovalCard.svelte
+									<em>layout · dark-mode hatch</em>
+								</div>
+								<span class="add">+18</span>
+								<span class="rem">−6</span>
+							</div>
+							<div class="ledger-row muted">
+								<div class="path2">
+									packages/gui/test/__snapshots__/ApprovalCard.test.ts.snap
+									<em>pending update</em>
+								</div>
+								<span class="add">+0</span>
+								<span class="rem">−0</span>
+							</div>
+						</section>
+
+						<section class="card">
+							<header class="card-head">
+								<span class="ttl">Subagents</span>
+								<span class="ix">3 LIVE</span>
+							</header>
+							<div class="roster-row">
+								<div class="role">Planner<em>coord.</em></div>
+								<div class="duty"><b>Holds the thread</b>routes context, queues approvals.</div>
+							</div>
+							<div class="roster-row">
+								<div class="role">Linter<em>checks</em></div>
+								<div class="duty"><b>A11y &amp; tokens</b>watching for unmatched dark-mode rules.</div>
+							</div>
+							<div class="roster-row">
+								<div class="role">Builder<em>impl.</em></div>
+								<div class="duty"><b>Edits ApprovalCard</b>then runs the component snapshot.</div>
+							</div>
+						</section>
+
+					</aside>
+
+				</div>
+
+				<!-- ─ terminal tail (collapsed default) ─ -->
+				<footer class="tail reveal r5" aria-label="Terminal tail (collapsed)">
+					<span class="dot" aria-hidden="true"></span>
+					<span class="pid">tail · pid 04217</span>
+					<span class="stream">
+						$ pnpm --filter gui dev  <b>→ ready in 421 ms · http://localhost:5173</b>
+					</span>
+					<span class="right">cwd · ~/Research/Daedalus</span>
+					<button class="expand">Expand ▾</button>
+				</footer>
+
+			</div>
+
+	</main>
+
+</body>
+</html>

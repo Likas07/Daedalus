@@ -16,20 +16,28 @@ bun link --cwd packages/coding-agent
 ## Usage
 
 ```bash
-daedalus                    # Start interactive session
+daedalus                    # Start interactive terminal session
 dae                         # Short alias
 daedalus "your prompt"      # Non-interactive mode
+daedalus gui                # Start the local web GUI
 ```
 
 ## Packages
 
 | Package | Description |
 |---|---|
-| `@daedalus-pi/coding-agent` | Main CLI with tools, extensions, TUI |
+| `@daedalus-pi/coding-agent` | Main CLI with tools, extensions, TUI, and `daedalus gui` entrypoint |
 | `@daedalus-pi/ai` | Unified LLM API (Anthropic, OpenAI, Google, Bedrock, Mistral) |
 | `@daedalus-pi/agent-core` | Agent framework with transport abstraction |
 | `@daedalus-pi/tui` | Terminal UI library with differential rendering |
 | `@daedalus-pi/web-ui` | Web UI components for chat interfaces |
+| `@daedalus-pi/gui` | Svelte/Vite renderer for desktop and web GUI |
+
+## GUI
+
+The desktop app is the primary Daedalus GUI entrypoint. For browser-based local use, run `daedalus gui`; it starts or reuses the local app-server, stores GUI sessions in SQLite, and supports JSONL import/export compatibility with CLI/TUI sessions.
+
+GUI documentation: [packages/gui/README.md](packages/gui/README.md), [SQLite persistence](packages/gui/docs/sqlite-persistence.md), [security](packages/gui/docs/security.md), [protocol](packages/gui/docs/protocol.md), and [troubleshooting](packages/gui/docs/troubleshooting.md).
 
 ## Development
 

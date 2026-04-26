@@ -12,7 +12,7 @@ The GUI supports extension interaction through the app-server extension UI bridg
 | `ctx.ui.select` | Supported | Renders select options when provided by the bridge. |
 | `ctx.ui.custom` TUI component | Not supported | TUI-only; provide a simpler confirm/input/select fallback for GUI mode. |
 | Tool registration | Supported by runtime | Tool calls execute in the app-server session runtime; GUI renders session events. |
-| Command registration | Runtime supported | GUI command palette exposure is future work. |
+| Command registration | Supported for renderer-safe metadata | GUI command palette exposes extension command labels, descriptions, and extension IDs without executing renderer-unsafe code. |
 | Extension persistence APIs | Supported by runtime | Persisted session/app events can be replayed by the GUI. |
 
 ## Dialog contract
