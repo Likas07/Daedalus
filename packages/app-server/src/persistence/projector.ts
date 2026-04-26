@@ -206,10 +206,12 @@ function projectTerminal(database: AppServerDatabase, payload: PayloadRecord, cr
 	const id = requiredText(payload, "terminalId", "terminal_id", "id");
 	database
 		.query(
-			`INSERT INTO terminal_sessions (id, project_id, worktree_id, status, cwd, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?)
+			`INSERT INTO terminal_sessions (id, project_id, worktree_id, status, cwd, shell, cols, rows, history, pid, exit_code, exit_signal, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			 ON CONFLICT(id) DO UPDATE SET project_id = excluded.project_id, worktree_id = excluded.worktree_id,
-			 status = excluded.status, cwd = excluded.cwd, updated_at = excluded.updated_at`,
+			 status = excluded.status, cwd = excluded.cwd, shell = excluded.shell, cols = excluded.cols, rows = excluded.rows,
+			 history = excluded.history, pid = excluded.pid, exit_code = excluded.exit_code, exit_signal = excluded.exit_signal,
+			 updated_at = excluded.updated_at`,
 		)
 		.run(
 			id,
@@ -217,6 +219,13 @@ function projectTerminal(database: AppServerDatabase, payload: PayloadRecord, cr
 			text(payload, "worktreeId", "worktree_id") ?? null,
 			text(payload, "status") ?? "active",
 			text(payload, "cwd") ?? "",
+			text(payload, "shell") ?? "",
+			number(payload, "cols") ?? number(asRecord(payload.dimensions), "cols") ?? 80,
+			number(payload, "rows") ?? number(asRecord(payload.dimensions), "rows") ?? 24,
+			text(payload, "history") ?? "",
+			number(payload, "pid") ?? null,
+			number(payload, "exitCode", "exit_code") ?? null,
+			text(payload, "exitSignal", "exit_signal") ?? null,
 			createdAt,
 			createdAt,
 		);
@@ -224,6 +233,15 @@ function projectTerminal(database: AppServerDatabase, payload: PayloadRecord, cr
 
 function asRecord(payload: EventPayload): PayloadRecord {
 	return payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {};
+}
+
+function number(payload: PayloadRecord, ...keys: string[]): number | undefined {
+	for (const key of keys) {
+		const value = payload[key];
+		if (typeof value === "number") return value;
+		if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) return Number(value);
+	}
+	return undefined;
 }
 
 function text(payload: PayloadRecord, ...keys: string[]): string | undefined {

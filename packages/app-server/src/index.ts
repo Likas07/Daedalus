@@ -2,6 +2,10 @@ export interface AppServerOptions {
 	readonly databasePath: string;
 }
 
+export { AttachmentService, ALLOWED_IMAGE_MIME_TYPES, MAX_GUI_ATTACHMENT_BYTES } from "./composer/attachment-service";
+export { CommandService, type ComposerCommandSummary } from "./composer/command-service";
+export { FileSearchService, type ComposerFileSearchResult } from "./composer/file-search-service";
+export { PromptContextService } from "./composer/prompt-context-service";
 export { type ExtensionCommandDescriptor, ExtensionCommandRegistry } from "./extensions/extension-commands";
 export {
 	type ExtensionErrorRecord,
@@ -64,6 +68,31 @@ export {
 	type WorktreeReadModel,
 } from "./persistence/read-model";
 export {
+	projectGuiSessionReadModel,
+	toGuiSessionReadModelRow,
+	type GuiSessionReadModel,
+	type ProjectGuiSessionReadModelOptions,
+	type RuntimeSessionEvent,
+} from "./sessions/session-read-model";
+export {
+	GUI_SESSION_TABLES,
+	type GuiSessionAttachmentRow,
+	type GuiSessionApprovalRow,
+	type GuiSessionEntry,
+	type GuiSessionEntryRow,
+	type GuiSessionExportRow,
+	type GuiSessionHeader,
+	type GuiSessionReadModelRow,
+	type GuiSessionRow,
+	type GuiSessionStatus,
+} from "./sessions/session-schema";
+export {
+	createSqliteSessionStore,
+	type ImportSessionJsonlOptions,
+	SqliteSessionStore,
+	type SqliteSessionStoreOptions,
+} from "./sessions/sqlite-session-store";
+export {
 	type MapRuntimeEventOptions,
 	mapRuntimeEvent,
 	type RuntimeAgentEvent,
@@ -90,6 +119,8 @@ export {
 	type SessionControllerState,
 	type StartSessionInput,
 	type StartTurnInput,
+	type PromptContextInput,
+	type PromptContextResolver,
 } from "./runtime/session-controller";
 export { type AppServerInstance, type CreateAppServerOptions, startAppServer } from "./server/app-server";
 export {
@@ -109,12 +140,8 @@ export type {
 	TerminalSessionRecord,
 	TerminalStatus,
 } from "./terminal/terminal-protocol";
-export {
-	type TerminalProcess,
-	TerminalService,
-	type TerminalServiceOptions,
-	type TerminalSpawner,
-} from "./terminal/terminal-service";
+export { TerminalService, type TerminalServiceOptions } from "./terminal/terminal-service";
+export { type PtyAdapter, type PtyProcessHandle, NodePtyAdapter, createNodePtyAdapter } from "./terminal/pty-adapter";
 export {
 	type CheckpointRecord,
 	CheckpointService,
@@ -124,3 +151,8 @@ export {
 export { type DiffFileSummary, type DiffResult, DiffService, parseNameStatus } from "./workspaces/diff-service";
 export { type OpenProjectInput, ProjectService, type ProjectServiceOptions } from "./workspaces/project-service";
 export { type CreateWorktreeInput, WorktreeService, type WorktreeServiceOptions } from "./workspaces/worktree-service";
+export { createCodingAgentRuntimeFactory } from "./runtime/coding-agent-runtime";
+export { AccessPolicyService, toPolicy, type AccessPolicy } from "./runtime/access-policy-service";
+export { ApprovalService, type ApprovalRequestInput } from "./runtime/approval-service";
+export { classifyToolRisk, ToolApprovalGate, type ToolApprovalGateOptions, type ToolApprovalInput } from "./runtime/tool-approval-gate";
+export { GuiConfigService } from "./runtime/gui-config-service";

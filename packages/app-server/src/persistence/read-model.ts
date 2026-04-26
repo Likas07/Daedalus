@@ -53,6 +53,13 @@ export interface TerminalSessionReadModel {
 	readonly worktreeId: string | null;
 	readonly status: string;
 	readonly cwd: string;
+	readonly shell: string;
+	readonly cols: number;
+	readonly rows: number;
+	readonly history: string;
+	readonly pid: number | null;
+	readonly exitCode: number | null;
+	readonly exitSignal: string | null;
 	readonly createdAt: string;
 	readonly updatedAt: string;
 }
@@ -115,6 +122,13 @@ interface TerminalSessionRow {
 	readonly worktree_id: string | null;
 	readonly status: string;
 	readonly cwd: string;
+	readonly shell: string;
+	readonly cols: number;
+	readonly rows: number;
+	readonly history: string;
+	readonly pid: number | null;
+	readonly exit_code: number | null;
+	readonly exit_signal: string | null;
 	readonly created_at: string;
 	readonly updated_at: string;
 }
@@ -250,6 +264,13 @@ const mapTerminalSession = (row: TerminalSessionRow): TerminalSessionReadModel =
 	worktreeId: row.worktree_id,
 	status: row.status,
 	cwd: row.cwd,
+	shell: row.shell,
+	cols: row.cols,
+	rows: row.rows,
+	history: row.history,
+	pid: row.pid,
+	exitCode: row.exit_code,
+	exitSignal: row.exit_signal,
 	createdAt: row.created_at,
 	updatedAt: row.updated_at,
 });

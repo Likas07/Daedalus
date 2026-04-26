@@ -153,6 +153,114 @@ CREATE TABLE IF NOT EXISTS integration_states (
 );
 `,
 	},
+	{
+		version: 5,
+		name: "gui_config",
+		sql: `
+CREATE TABLE IF NOT EXISTS gui_config (
+	key TEXT PRIMARY KEY,
+	value TEXT NOT NULL,
+	created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+	updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+`,
+	},
+	{
+		version: 6,
+		name: "terminal_pty_replay_metadata",
+		sql: `
+ALTER TABLE terminal_sessions ADD COLUMN history TEXT NOT NULL DEFAULT '';
+ALTER TABLE terminal_sessions ADD COLUMN pid INTEGER;
+ALTER TABLE terminal_sessions ADD COLUMN exit_code INTEGER;
+ALTER TABLE terminal_sessions ADD COLUMN exit_signal TEXT;
+`,
+	},
+	{
+		version: 7,
+		name: "gui_session_persistence",
+		sql: `
+CREATE TABLE IF NOT EXISTS gui_sessions (
+	id TEXT PRIMARY KEY,
+	cwd TEXT NOT NULL,
+	parent_session_id TEXT,
+	header_json TEXT NOT NULL,
+	archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
+	created_at TEXT NOT NULL,
+	updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS gui_session_entries (
+	session_id TEXT NOT NULL REFERENCES gui_sessions(id) ON DELETE CASCADE,
+	seq INTEGER NOT NULL,
+	entry_id TEXT NOT NULL,
+	parent_id TEXT,
+	type TEXT NOT NULL,
+	entry_json TEXT NOT NULL,
+	created_at TEXT NOT NULL,
+	PRIMARY KEY (session_id, seq),
+	UNIQUE (session_id, entry_id)
+);
+
+CREATE TABLE IF NOT EXISTS gui_session_read_model (
+	session_id TEXT PRIMARY KEY REFERENCES gui_sessions(id) ON DELETE CASCADE,
+	cwd TEXT NOT NULL,
+	title TEXT,
+	last_message_preview TEXT,
+	model TEXT,
+	thinking_level TEXT,
+	message_count INTEGER NOT NULL DEFAULT 0,
+	pending_approval_count INTEGER NOT NULL DEFAULT 0,
+	status TEXT NOT NULL,
+	updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS gui_session_exports (
+	id TEXT PRIMARY KEY,
+	session_id TEXT NOT NULL REFERENCES gui_sessions(id) ON DELETE CASCADE,
+	format TEXT NOT NULL,
+	content TEXT NOT NULL,
+	created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS gui_session_attachments (
+	id TEXT PRIMARY KEY,
+	session_id TEXT NOT NULL REFERENCES gui_sessions(id) ON DELETE CASCADE,
+	entry_id TEXT,
+	path TEXT,
+	mime_type TEXT NOT NULL,
+	size_bytes INTEGER NOT NULL,
+	data BLOB,
+	created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS gui_session_approvals (
+	id TEXT PRIMARY KEY,
+	session_id TEXT NOT NULL REFERENCES gui_sessions(id) ON DELETE CASCADE,
+	entry_id TEXT,
+	status TEXT NOT NULL,
+	request_json TEXT NOT NULL,
+	response_json TEXT,
+	created_at TEXT NOT NULL,
+	updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS gui_sessions_cwd_idx ON gui_sessions(cwd);
+CREATE INDEX IF NOT EXISTS gui_sessions_updated_at_idx ON gui_sessions(updated_at);
+CREATE INDEX IF NOT EXISTS gui_session_entries_session_id_idx ON gui_session_entries(session_id);
+CREATE INDEX IF NOT EXISTS gui_session_entries_session_seq_idx ON gui_session_entries(session_id, seq);
+CREATE INDEX IF NOT EXISTS gui_session_entries_entry_id_idx ON gui_session_entries(entry_id);
+CREATE INDEX IF NOT EXISTS gui_session_entries_parent_id_idx ON gui_session_entries(parent_id);
+CREATE INDEX IF NOT EXISTS gui_session_entries_type_idx ON gui_session_entries(type);
+CREATE INDEX IF NOT EXISTS gui_session_read_model_cwd_idx ON gui_session_read_model(cwd);
+CREATE INDEX IF NOT EXISTS gui_session_read_model_updated_at_idx ON gui_session_read_model(updated_at);
+CREATE INDEX IF NOT EXISTS gui_session_exports_session_id_idx ON gui_session_exports(session_id);
+CREATE INDEX IF NOT EXISTS gui_session_attachments_session_id_idx ON gui_session_attachments(session_id);
+CREATE INDEX IF NOT EXISTS gui_session_attachments_entry_id_idx ON gui_session_attachments(entry_id);
+CREATE INDEX IF NOT EXISTS gui_session_approvals_session_id_idx ON gui_session_approvals(session_id);
+CREATE INDEX IF NOT EXISTS gui_session_approvals_entry_id_idx ON gui_session_approvals(entry_id);
+CREATE INDEX IF NOT EXISTS gui_session_approvals_status_idx ON gui_session_approvals(status);
+`,
+	},
 ];
 
 export function runMigrations(database: AppServerDatabase): void {
