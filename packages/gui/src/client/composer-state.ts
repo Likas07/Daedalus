@@ -12,6 +12,7 @@ export interface ComposerSubmitContext {
 	projectId?: string;
 	worktreeId?: string;
 	sessionId?: string;
+	draftState?: ComposerDraftState;
 }
 
 export type ComposerSubmitInput = ComposerSubmitContext & { path?: string };
@@ -29,6 +30,7 @@ export function createComposerSubmitContext(input: ComposerSubmitContext): Compo
 		projectId: input.projectId,
 		worktreeId: input.worktreeId,
 		sessionId: input.sessionId,
+		draftState: input.draftState ? createComposerDraftState(input.draftState) : undefined,
 	};
 }
 

@@ -1,13 +1,13 @@
 <script lang="ts">
 	import type { ComposerDraftAttachment, ComposerFileMention, ComposerSlashCommand, RendererModel } from "../../client/gui-state-types";
-	import { createComposerSubmitContext, type ComposerSubmitInput } from "../../client/composer-state";
+	import { createComposerDraftState, createComposerSubmitContext, type ComposerSubmitInput } from "../../client/composer-state";
 	import type { GuiRuntime, GuiState } from "../../client/runtime";
 	import type { UiState, PopoverKind } from "../../client/ui-state.svelte";
 	import { executeSlashCommand } from "../../client/slash-command-executor";
 	import AttachmentTray from "./AttachmentTray.svelte";
 	import ComposerPopovers from "./ComposerPopovers.svelte";
 	import ChipPopovers from "./ChipPopovers.svelte";
-	import { attachmentIds, commandReplacement, composerModeLabels, detectComposerTrigger, fileMentionPaths, mentionReplacement, replaceTextRange, validateAttachmentFile, type ComposerMode, type ComposerTrigger } from "./composer-logic";
+	import { attachmentIds, commandReplacement, composerModeLabels, detectComposerTrigger, fileMentionPaths, mentionReplacement, replaceTextRange, shouldSubmitComposerKey, validateAttachmentFile, type ComposerMode, type ComposerTrigger } from "./composer-logic";
 
 	const { guiState, runtime, ui, projectPath, sessionId, storageKey, requireProjectPath = false, disabled = false, disabledReason, submitLabel = "Start session", onSubmit } = $props<{
 		guiState: GuiState;
@@ -27,6 +27,7 @@
 	let path = $state("");
 	let error = $state("");
 	let submitting = $state(false);
+	let submitInFlight = false;
 	let trigger = $state<ComposerTrigger | null>(null);
 	let files = $state<ComposerFileMention[]>([]);
 	let commands = $state<ComposerSlashCommand[]>([]);
@@ -147,6 +148,7 @@
 	}
 
 	async function submit(): Promise<void> {
+		if (submitInFlight) return;
 		error = "";
 		if (disabled) { error = disabledReason ?? "Composer is unavailable."; return; }
 		const prompt = draft.trim();
@@ -154,6 +156,7 @@
 		if (!prompt) { error = "Enter a prompt before submitting."; return; }
 		if (requireProjectPath && !trimmedPath) { error = "Choose a project path before starting a session."; return; }
 		submitting = true;
+		submitInFlight = true;
 		try {
 			await onSubmit?.({
 				...createComposerSubmitContext({
@@ -168,6 +171,16 @@
 					projectId: guiState.lastProjectId,
 					worktreeId: guiState.worktrees.find((worktree: { id?: string; activeSessionIds: readonly string[] }) => sessionId && worktree.activeSessionIds.includes(sessionId))?.id,
 					sessionId,
+					draftState: createComposerDraftState({
+						prompt: draft,
+						mode: mode === "muse" ? "plan" : mode === "daedalus" ? "build" : "default",
+						effort: guiState.effort,
+						model: guiState.selectedModel,
+						accessMode: guiState.accessMode,
+						attachments,
+						fileMentions: mentions,
+						slashCommands: [],
+					}),
 				}),
 				path: trimmedPath || undefined,
 			});
@@ -178,6 +191,7 @@
 		} catch (cause) {
 			error = cause instanceof Error ? cause.message : "Submit failed.";
 		} finally {
+			submitInFlight = false;
 			submitting = false;
 		}
 	}
@@ -195,10 +209,9 @@
 			}
 			return;
 		}
-		if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-			event.preventDefault();
-			void submit();
-		}
+		if (!shouldSubmitComposerKey(event)) return;
+		event.preventDefault();
+		void submit();
 	}
 </script>
 

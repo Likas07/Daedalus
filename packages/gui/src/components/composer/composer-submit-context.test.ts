@@ -14,6 +14,16 @@ describe("composer submit context", () => {
 		projectId: "project-1",
 		worktreeId: "worktree-1",
 		sessionId: "session-1",
+		draftState: {
+			prompt: "implement composer context",
+			mode: "build",
+			effort: "high",
+			model: "claude-sonnet-4-5",
+			accessMode: "auto-accept",
+			attachments: [],
+			fileMentions: [],
+			slashCommands: [],
+		},
 	};
 
 	test("preserves full context for new session submission", () => {

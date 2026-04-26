@@ -130,6 +130,7 @@ export const PromptContextParamsSchema = {
 	accessMode: Type.Optional(AccessModeSchema),
 	mode: Type.Optional(Type.String()),
 	fastMode: Type.Optional(Type.Boolean()),
+	draftState: Type.Optional(JsonObjectSchema),
 } satisfies Record<string, TSchema>;
 
 export const SessionStartParamsSchema = StrictObject({

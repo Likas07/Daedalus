@@ -139,6 +139,19 @@ describe("web GUI E2E smoke", () => {
 		};
 		expect(sessionList.sessions).toBeDefined();
 
+		const composerStarted = (await request(server, "session/start", {
+			projectId: opened.projectId,
+			prompt: "Enter-to-send E2E prompt",
+			filePaths: ["file.txt"],
+			model: "smoke-model",
+			effort: "high",
+			accessMode: "supervised",
+			mode: "daedalus",
+			fastMode: false,
+			draftState: { prompt: "Enter-to-send E2E prompt", mode: "build" },
+		})) as { sessionId: string };
+		expect(composerStarted.sessionId).toBeTruthy();
+
 		expect(await request(server, "auth/status", {})).toHaveProperty("providers");
 		const terminal = (await request(server, "terminal/create", { cwd: tempDir, cols: 80, rows: 24 })) as {
 			terminal: { terminalId: string };

@@ -463,6 +463,7 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 				accessMode: input.accessMode ?? state.accessMode,
 				mode: input.mode ?? state.mode,
 				fastMode: input.fastMode ?? state.fastMode,
+				draftState: input.draftState,
 			});
 			state.sessionTokensUsed = 0;
 			const session = result as { sessionId?: unknown; id?: unknown };

@@ -73,8 +73,11 @@ describe("GUI composer context services", () => {
 			},
 		});
 		await controller.startSession({ cwd: dir });
-		await controller.startTurn({ sessionId: "session-1", prompt: "use this", context: { filePaths: ["note.txt"], attachmentIds: [image.id], model: "m", effort: "high", accessMode: "supervised" } });
+		await controller.startTurn({ sessionId: "session-1", prompt: "use this", context: { filePaths: ["note.txt"], attachmentIds: [image.id], model: "m", effort: "high", accessMode: "supervised", projectId: "project-1", worktreeId: "worktree-1", draftState: { prompt: "use this" } } });
 		expect(runtime?.prompts[0]).toContain("<gui-context>");
+		expect(runtime?.prompts[0]).toContain("projectId=project-1");
+		expect(runtime?.prompts[0]).toContain("worktreeId=worktree-1");
+		expect(runtime?.prompts[0]).toContain("draftState=");
 		expect(runtime?.prompts[0]).toContain("File context: note.txt");
 		expect(runtime?.prompts[0]).toContain("important context");
 		expect(runtime?.images).toBe(1);

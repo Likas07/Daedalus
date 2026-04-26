@@ -31,6 +31,16 @@ export class PromptContextService implements PromptContextResolver {
 				sections.push(`Attached file: ${metadata.filename} (${metadata.size} bytes)`);
 			}
 		}
+		const metadata: string[] = [];
+		if (input.projectId) metadata.push(`projectId=${input.projectId}`);
+		if (input.worktreeId) metadata.push(`worktreeId=${input.worktreeId}`);
+		if (input.sessionId) metadata.push(`sessionId=${input.sessionId}`);
+		if (input.model) metadata.push(`model=${input.model}`);
+		if (input.effort) metadata.push(`effort=${input.effort}`);
+		if (input.accessMode) metadata.push(`accessMode=${input.accessMode}`);
+		if (typeof input.fastMode === "boolean") metadata.push(`fastMode=${input.fastMode}`);
+		if (input.draftState) metadata.push(`draftState=${JSON.stringify(input.draftState)}`);
+		if (metadata.length) sections.unshift(`GUI submission context: ${metadata.join("; ")}`);
 		if (input.mode && input.mode !== "daedalus") {
 			const role = input.mode === "sage" ? "Sage (read-only investigator)" : input.mode === "muse" ? "Muse (markdown-only planner)" : input.mode;
 			sections.unshift(`Operating role: ${role}. Runtime tool restrictions are applied before the prompt.`);

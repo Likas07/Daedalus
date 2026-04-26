@@ -304,6 +304,32 @@ describe("GUI app", () => {
 		await app.close();
 	});
 
+	test("composer preserves draft context on submit", async () => {
+		const root = document.createElement("div");
+		document.body.replaceChildren(root);
+		const transport = new MemoryTransport();
+		const app = await createApp({ root, transport, bootstrap: { wsEndpoint: "ws://localhost/ws", projectRoot: "/repo" } });
+		await app.start();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		const prompt = root.querySelector<HTMLTextAreaElement>('[data-testid="composer-prompt"]');
+		if (!prompt) throw new Error("Missing composer prompt");
+		prompt.value = "Line one";
+		prompt.dispatchEvent(new Event("input", { bubbles: true }));
+		prompt.focus();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		root.querySelector<HTMLButtonElement>('[data-testid="composer-submit"]')?.click();
+		await new Promise((resolve) => setTimeout(resolve, 25));
+		const starts = transport.sent.filter((message) => (message as { method?: string }).method === "session/start");
+		expect(starts).toHaveLength(1);
+		expect(starts[0]).toEqual(expect.objectContaining({
+			params: expect.objectContaining({
+				prompt: "Line one",
+				mode: "daedalus",
+			}),
+		}));
+		await app.close();
+	});
+
 	test("central composer validates missing project and prompt", async () => {
 		const root = document.createElement("div");
 		document.body.replaceChildren(root);

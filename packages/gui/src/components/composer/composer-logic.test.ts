@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { attachmentIds, commandReplacement, detectComposerTrigger, fileMentionPaths, mentionReplacement, parseStandaloneSlashCommand, replaceTextRange, validateAttachmentFile } from "./composer-logic";
+import { attachmentIds, commandReplacement, detectComposerTrigger, fileMentionPaths, mentionReplacement, parseStandaloneSlashCommand, replaceTextRange, shouldSubmitComposerKey, validateAttachmentFile } from "./composer-logic";
 
 describe("composer logic", () => {
 	test("detects path and slash triggers", () => {
@@ -11,6 +11,12 @@ describe("composer logic", () => {
 		expect(replaceTextRange("ask @sr", 4, 7, "@src/index.ts ")).toEqual({ text: "ask @src/index.ts ", cursor: 18 });
 		expect(parseStandaloneSlashCommand("/plan build it")).toBe("plan");
 		expect(parseStandaloneSlashCommand("please /plan")).toBeUndefined();
+	});
+	test("maps keyboard parity for Enter-to-send and Shift+Enter newline", () => {
+		expect(shouldSubmitComposerKey({ key: "Enter", shiftKey: false, isComposing: false } as KeyboardEvent)).toBe(true);
+		expect(shouldSubmitComposerKey({ key: "Enter", shiftKey: true, isComposing: false } as KeyboardEvent)).toBe(false);
+		expect(shouldSubmitComposerKey({ key: "Enter", shiftKey: false, isComposing: true } as KeyboardEvent)).toBe(false);
+		expect(shouldSubmitComposerKey({ key: "Tab", shiftKey: false, isComposing: false } as KeyboardEvent)).toBe(false);
 	});
 	test("normalizes context", () => {
 		expect(mentionReplacement({ path: "src/App.svelte", label: "App", kind: "file" })).toBe("@src/App.svelte ");

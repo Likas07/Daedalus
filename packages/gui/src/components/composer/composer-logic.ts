@@ -76,6 +76,10 @@ export function fileMentionPaths(files: readonly ComposerFileMention[]): string[
 	return [...new Set(files.map((file) => file.path))];
 }
 
+export function shouldSubmitComposerKey(event: Pick<KeyboardEvent, "key" | "shiftKey" | "isComposing">): boolean {
+	return event.key === "Enter" && !event.shiftKey && !event.isComposing;
+}
+
 export function validateAttachmentFile(file: Pick<File, "size" | "type" | "name">, maxBytes = 10 * 1024 * 1024): string | undefined {
 	if (file.size > maxBytes) return `${file.name} is larger than ${Math.round(maxBytes / 1024 / 1024)}MB.`;
 	if (file.type && !file.type.startsWith("image/") && !file.type.startsWith("text/") && file.type !== "application/json") return `${file.name} is not a supported attachment type.`;

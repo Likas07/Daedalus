@@ -56,6 +56,10 @@ export interface PromptContextInput {
 	readonly accessMode?: string;
 	readonly mode?: string;
 	readonly fastMode?: boolean;
+	readonly projectId?: string;
+	readonly worktreeId?: string;
+	readonly sessionId?: string;
+	readonly draftState?: Record<string, unknown>;
 	readonly tools?: readonly string[];
 }
 
