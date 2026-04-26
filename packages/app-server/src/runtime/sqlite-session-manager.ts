@@ -30,6 +30,7 @@ export interface SqliteSessionManagerOptions {
 	store: SqliteSessionStore;
 	cwd: string;
 	sessionId?: string;
+	sessionPath?: string;
 	name?: string;
 	parentSession?: string;
 }
@@ -56,9 +57,9 @@ export class SqliteSessionManager {
 	}
 
 	private async load(): Promise<void> {
-		this.session = this.options.sessionId
-			? await this.options.store.open({ id: this.options.sessionId })
-			: await this.options.store.create({ cwd: this.options.cwd, parentSession: this.options.parentSession });
+		this.session = this.options.sessionPath
+			? await this.options.store.open({ id: this.options.sessionPath })
+			: await this.options.store.create({ cwd: this.options.cwd, id: this.options.sessionId, parentSession: this.options.parentSession });
 		if (this.options.name) this.appendSessionInfo(this.options.name);
 		this.rebuildIndex();
 	}

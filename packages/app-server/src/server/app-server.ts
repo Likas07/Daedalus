@@ -60,8 +60,8 @@ export async function startAppServer(options: CreateAppServerOptions): Promise<A
 			if ("id" in message && "type" in message) router.append(message);
 			else publish(message);
 		},
-		makeSessionManager: async ({ cwd, sessionId }) =>
-			SqliteSessionManager.create({ store: sessionStore, cwd, sessionId }).initialized(),
+		makeSessionManager: async ({ cwd, sessionId, sessionPath }) =>
+			SqliteSessionManager.create({ store: sessionStore, cwd, sessionId, sessionPath }).initialized(),
 		agentDir: options.agentDir ?? join(process.cwd(), ".daedalus", "agent"),
 		promptContextResolver: new PromptContextService(),
 	});

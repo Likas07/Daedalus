@@ -131,7 +131,7 @@ export class SessionController {
 	}
 
 	async resumeSession(input: ResumeSessionInput): Promise<{ sessionId: SessionId }> {
-		const sessionId = input.sessionId ?? this.nextSessionId();
+		const sessionId = input.sessionId ?? (input.sessionPath as SessionId);
 		const runtime = await this.options.runtimeFactory({
 			cwd: input.cwd,
 			agentDir: this.options.agentDir,

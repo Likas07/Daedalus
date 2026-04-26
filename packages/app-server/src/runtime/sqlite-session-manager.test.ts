@@ -37,6 +37,7 @@ describe("SqliteSessionManager", () => {
 		expect(manager.isPersisted()).toBe(true);
 		expect(manager.getCwd()).toBe("/repo");
 		expect(manager.getSessionFile()).toBe(`sqlite://${manager.getSessionId()}`);
+		expect((await sessionStore.read({ sessionId: manager.getSessionId() })).header.id).toBe(manager.getSessionId());
 
 		const first = manager.appendMessage({ role: "user", content: [{ type: "text", text: "hello" }], timestamp: 1 });
 		manager.appendMessage({
@@ -63,9 +64,17 @@ describe("SqliteSessionManager", () => {
 		expect(manager.buildSessionContext().messages.map((message) => message.role)).toEqual(["user", "assistant"]);
 		expect(manager.getTree()[0]?.entry.id).toBe(first);
 
-		const reopened = await SqliteSessionManager.create({ store: sessionStore, cwd: "/repo", sessionId: manager.getSessionId() }).initialized();
+		const reopened = await SqliteSessionManager.create({ store: sessionStore, cwd: "/repo", sessionPath: manager.getSessionId() }).initialized();
 		expect(reopened.getEntries()).toHaveLength(3);
 		expect(parseSessionJsonl(await reopened.exportJsonl()).header.id).toBe(manager.getSessionId());
+	});
+
+	test("creates a new SQLite session with a provided controller session id", async () => {
+		const sessionStore = store();
+		const manager = await SqliteSessionManager.create({ store: sessionStore, cwd: "/repo", sessionId: "session-controller-id" }).initialized();
+
+		expect(manager.getSessionId()).toBe("session-controller-id");
+		expect((await sessionStore.read({ sessionId: "session-controller-id" })).header.id).toBe("session-controller-id");
 	});
 
 	test("opens imported JSONL before resume", async () => {
@@ -77,7 +86,7 @@ describe("SqliteSessionManager", () => {
 			},
 		});
 
-		const manager = await SqliteSessionManager.create({ store: sessionStore, cwd: "/repo", sessionId: "imported" }).initialized();
+		const manager = await SqliteSessionManager.create({ store: sessionStore, cwd: "/repo", sessionPath: "imported" }).initialized();
 		expect(manager.getSessionId()).toBe("imported");
 		expect(manager.buildSessionContext().messages).toHaveLength(1);
 		expect(await manager.exportJsonl()).toContain('"id":"imported"');
