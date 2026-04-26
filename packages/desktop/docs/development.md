@@ -28,7 +28,7 @@ To produce a ready-to-use desktop app artifact from the repository root:
 bun run package:desktop
 ```
 
-`package:desktop` builds the GUI, Electron main/preload files, and app-server runtime, then runs electron-builder for the current OS. It prints the created artifact paths when complete. On Linux, expect an AppImage plus the unpacked executable at `release/desktop/linux-unpacked/daedalus`; `package:dir` remains available for unpacked-only packaging.
+`package:desktop` builds the GUI, Electron main/preload files, and app-server runtime, then runs electron-builder for the current OS. It prints the created artifact paths when complete. On Linux, expect an AppImage plus the unpacked executable at `release/desktop/linux-unpacked/daedalus`; `package:dir` remains available for unpacked-only packaging. Release packaging requires `bun build --compile` to produce `resources/app-server/daedalus-app-server` and fails rather than silently shipping a script fallback. For local dev/test packaging only, use `bun --cwd=packages/desktop run build:app-server:fallback` or set `DAEDALUS_APP_SERVER_ALLOW_FALLBACK=1` to explicitly stage the Bun entrypoint fallback.
 
 ## App-server bootstrap
 
@@ -58,4 +58,12 @@ Run it directly with:
 bun test packages/desktop/test/e2e/gui-smoke.test.ts
 ```
 
-Use a real Electron run locally for visual regressions, preload behavior, and window lifecycle issues.
+`packages/desktop/test/e2e/preload-smoke.test.ts` launches Electron under a hidden `BrowserWindow` with the real compiled preload and asserts that `window.daedalusNative.server.bootstrapEndpoint()` is exposed. On headless Linux it uses `xvfb-run` when no display is present, and the window is always created with `show: false`.
+
+Run the smoke suite directly with:
+
+```bash
+bun test packages/desktop/test/e2e/*.test.ts
+```
+
+Use a real visible Electron run locally for visual regressions and window lifecycle issues.

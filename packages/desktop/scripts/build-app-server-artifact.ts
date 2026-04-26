@@ -8,6 +8,7 @@ const binaryName = process.platform === "win32" ? "daedalus-app-server.exe" : "d
 const binaryPath = join(resourcesDir, binaryName);
 const sourceMain = join(repoRoot, "packages", "app-server", "src", "server", "main.ts");
 const fallbackMain = join(resourcesDir, "main.ts");
+const allowFallback = process.argv.includes("--allow-fallback") || process.env.DAEDALUS_APP_SERVER_ALLOW_FALLBACK === "1";
 
 async function buildCompiledServer(): Promise<boolean> {
 	const proc = Bun.spawn({
@@ -16,14 +17,23 @@ async function buildCompiledServer(): Promise<boolean> {
 		stdout: "pipe",
 		stderr: "pipe",
 	});
-	const [stdout, stderr, exitCode] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+	const [stdout, stderr, exitCode] = await Promise.all([
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+		proc.exited,
+	]);
 	if (exitCode === 0) {
 		if (process.platform !== "win32") await chmod(binaryPath, 0o755);
 		return true;
 	}
-	console.warn("Bun compile for app-server failed; staging Bun script fallback instead.");
-	if (stdout.trim()) console.warn(stdout.trim());
-	if (stderr.trim()) console.warn(stderr.trim());
+	const output = [stdout.trim(), stderr.trim()].filter(Boolean).join("\n");
+	const message = `Bun compile for app-server failed${output ? `:\n${output}` : "."}`;
+	if (!allowFallback) {
+		throw new Error(
+			`${message}\nRelease desktop packaging requires a compiled app-server binary. Re-run with --allow-fallback or DAEDALUS_APP_SERVER_ALLOW_FALLBACK=1 only for dev/test packaging.`,
+		);
+	}
+	console.warn(`${message}\nStaging Bun script fallback because fallback was explicitly allowed.`);
 	return false;
 }
 

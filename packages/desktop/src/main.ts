@@ -16,7 +16,12 @@ const projectRoot = process.env.DAEDALUS_PROJECT_ROOT
 
 let mainWindow: BrowserWindow | undefined;
 const nativeCommands = new NativeCommandRouter({ getMainWindow: () => mainWindow });
-const refreshMenu = (): void => installDaedalusMenu({ getMainWindow: () => mainWindow, router: nativeCommands, onRecentProjectsChanged: refreshMenu });
+const refreshMenu = (): void =>
+	installDaedalusMenu({
+		getMainWindow: () => mainWindow,
+		router: nativeCommands,
+		onRecentProjectsChanged: refreshMenu,
+	});
 
 function createMainWindow(): BrowserWindow {
 	const window = new BrowserWindow({
@@ -24,7 +29,7 @@ function createMainWindow(): BrowserWindow {
 		height: 840,
 		title: "Daedalus",
 		webPreferences: {
-			preload: join(moduleDir, "preload.js"),
+			preload: join(moduleDir, "preload.cjs"),
 			contextIsolation: true,
 			nodeIntegration: false,
 			sandbox: true,
@@ -33,7 +38,10 @@ function createMainWindow(): BrowserWindow {
 	mainWindow = window;
 	const devUrl = process.env.DAEDALUS_GUI_DEV_URL ?? process.env.VITE_DEV_SERVER_URL;
 	if (devUrl) window.loadURL(devUrl);
-	else window.loadFile(resolve(app.isPackaged ? process.resourcesPath : join(projectRoot, "packages"), "gui", "dist", "index.html"));
+	else
+		window.loadFile(
+			resolve(app.isPackaged ? process.resourcesPath : join(projectRoot, "packages"), "gui", "dist", "index.html"),
+		);
 	window.on("closed", () => {
 		if (mainWindow === window) mainWindow = undefined;
 	});
@@ -108,7 +116,10 @@ function registerIpc(): void {
 		refreshMenu();
 		return projects;
 	});
-	ipcMain.handle("daedalus:recent-projects:clear", () => { clearRecentProjects(); refreshMenu(); });
+	ipcMain.handle("daedalus:recent-projects:clear", () => {
+		clearRecentProjects();
+		refreshMenu();
+	});
 	ipcMain.handle(
 		"daedalus:deep-links:open",
 		(_event, input: { projectId?: string; sessionId?: string; worktreeId?: string }) => {

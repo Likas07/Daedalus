@@ -14,16 +14,17 @@
 	"scripts": {
 		"build": "bun run build:main && bun run build:gui && bun run build:app-server",
 		"build:app-server": "bun scripts/build-app-server-artifact.ts",
-		"build:dev": "bun build src/main.ts src/preload.ts --outdir .daedalus/desktop-dev --target node --format esm --external electron --sourcemap=external",
+		"build:app-server:fallback": "bun scripts/build-app-server-artifact.ts --allow-fallback",
+		"build:dev": "bun build src/main.ts --outdir .daedalus/desktop-dev --target node --format esm --external electron --sourcemap=external && bun build src/preload.ts --outdir .daedalus/desktop-dev --entry-naming [name].cjs --target node --format cjs --external electron --sourcemap=external",
 		"build:gui": "bun --cwd=../gui run build",
-		"build:main": "bun build src/main.ts src/preload.ts --outdir dist --target node --format esm --external electron --sourcemap=external",
+		"build:main": "bun build src/main.ts --outdir dist --target node --format esm --external electron --sourcemap=external && bun build src/preload.ts --outdir dist --entry-naming [name].cjs --target node --format cjs --external electron --sourcemap=external",
 		"check": "tsgo -p tsconfig.json",
 		"dev": "bun src/dev.ts",
 		"package": "bun run build && electron-builder --config electron-builder.config.ts && bun scripts/print-package-artifacts.ts",
 		"package:dir": "bun run build && electron-builder --config electron-builder.config.ts --dir && bun scripts/print-package-artifacts.ts",
 		"start": "bun run build:main && DAEDALUS_PROJECT_ROOT=../.. electron .",
 		"test": "bun test",
-		"test:e2e": "bun test test/e2e/desktop-gui-smoke.test.ts",
+		"test:e2e": "bun test test/e2e/*.test.ts",
 		"validate:packaged-runtime": "bun scripts/validate-packaged-runtime.ts"
 	},
 	"dependencies": {
