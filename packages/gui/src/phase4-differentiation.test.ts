@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { getGuiCapability, strictGuiParityViolations, type GuiCapability } from "./client/capability-registry";
 import type { AppEvent } from "@daedalus-pi/app-server-protocol";
 import { projectAuditTrail } from "../../app-server/src/runtime/audit-projection";
 import { defaultAutomationRules } from "../../app-server/src/runtime/automation-service";
@@ -47,7 +47,31 @@ describe("phase 4 differentiation projections", () => {
 
 	test("derives renderer orchestration and extension command surfaces", () => {
 		const projection = orchestrationFromEvents([
-			{ id: "e3", type: "approval/requested", ts: "now", sessionId: "s1", payload: {} },
+			{
+				id: "e3",
+				type: "orchestration/projected",
+				ts: "now",
+				sessionId: "s1",
+				payload: {
+					projection: {
+						mode: "build",
+						lanes: [
+							{
+								id: "lane-1",
+								sessionId: "s1",
+								kind: "worker",
+								title: "Waiting for approval",
+								status: "blocked",
+								dependencies: [],
+								blockedBy: ["approval-1"],
+								artifacts: [{ kind: "approval", id: "approval-1", label: "Approval" }],
+							},
+						],
+						checkpoints: [],
+						updatedAt: "now",
+					},
+				},
+			},
 		]);
 		expect(projection.lanes[0]?.status).toBe("blocked");
 		const extensions = [
@@ -65,27 +89,37 @@ describe("phase 4 differentiation projections", () => {
 		expect(extensionCommands(extensions)[0]?.title).toBe("Run");
 	});
 
-	test("phase 4 panels are wired into live GUI surfaces", () => {
-		const inspector = readFileSync(new URL("./components/InspectorPanel.svelte", import.meta.url), "utf8");
-		const workspace = readFileSync(new URL("./components/SessionWorkspace.svelte", import.meta.url), "utf8");
-		const settings = readFileSync(new URL("./components/SettingsPanel.svelte", import.meta.url), "utf8");
-		const palette = readFileSync(new URL("./components/CommandPalette.svelte", import.meta.url), "utf8");
-		const diffViewer = readFileSync(new URL("./components/DiffViewer.svelte", import.meta.url), "utf8");
-		const inspectorMock = readFileSync(new URL("./components/Inspector.svelte", import.meta.url), "utf8");
+	test("workflow and inspector surfaces are guarded by behavioral full-parity coverage", () => {
+		const workflowInspector = getGuiCapability("workflow-inspector");
+		expect(workflowInspector.requirement).toBe("required");
+		expect(workflowInspector.coverage?.behavioral).toContain(
+			"packages/app-server/src/runtime/daedalus-workflow-service.test.ts",
+		);
+		expect(workflowInspector.coverage?.behavioral).toContain(
+			"packages/gui/src/client/daedalus-workflow-view-model.test.ts",
+		);
+		expect(workflowInspector.coverage?.behavioral).toContain("packages/gui/src/phase4-differentiation.test.ts");
 
-		expect(inspector).toContain("OrchestrationPanel");
-		expect(inspector).toContain("AuditTrailPanel");
-		expect(inspector).toContain("AutomationRulesPanel");
-		expect(inspector).toContain("ExtensionsManager");
-		expect(workspace).toContain("PlanBuildModePanel");
-		expect(settings).toContain("AutomationRulesPanel");
-		expect(settings).toContain("ExtensionsManager");
-		expect(palette).toContain("extensionCommands(extensions)");
-		expect(inspectorMock).toContain("guiState.activeDiff?.files");
-		expect(diffViewer).toContain("@pierre/diffs/ssr");
-		expect(diffViewer).toContain("preloadPatchDiff");
-		expect(diffViewer).toContain("Requires Git mutation policy");
-		expect(diffViewer).toContain("Requires destructive-action policy");
-		expect(diffViewer).toContain("Requires commit/push policy");
+		const wiredWorkflowInspector: GuiCapability = {
+			...workflowInspector,
+			status: "wired",
+			disabledReason: undefined,
+		};
+		expect(
+			strictGuiParityViolations([wiredWorkflowInspector]).filter(
+				(violation) => violation.capabilityId === "workflow-inspector",
+			),
+		).toEqual([]);
+
+		const sourceOnlyWorkflowInspector: GuiCapability = {
+			...wiredWorkflowInspector,
+			coverage: { behavioral: ["packages/gui/src/components/InspectorPanel.svelte"] },
+		};
+		expect(strictGuiParityViolations([sourceOnlyWorkflowInspector])).toContainEqual(
+			expect.objectContaining({
+				capabilityId: "workflow-inspector",
+				kind: "non-behavioral-coverage",
+			}),
+		);
 	});
 });
