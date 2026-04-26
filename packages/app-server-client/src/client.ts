@@ -1,6 +1,9 @@
 import type {
+	AccessMode,
+	AccessPolicy,
 	ClientNotification,
 	ClientRequest,
+	ComposerAttachment,
 	EventReplayParams,
 	EventReplayResult,
 	ExtensionUiRequest,
@@ -11,7 +14,13 @@ import type {
 	ServerRequest,
 	ServerResponse,
 	SessionStartParams,
+	TerminalSnapshot,
+	WorkflowDiffSummary,
+	DaedalusWorkflowState,
+	RuntimeControlResultMap,
 } from "@daedalus-pi/app-server-protocol";
+import { SessionClient } from "./sessions";
+import { RuntimeControlClient } from "./runtime-control";
 
 export interface AppServerTransport {
 	send(message: unknown): void | Promise<void>;
@@ -24,11 +33,136 @@ type ParamsFor<Method extends ClientRequest["method"]> = RequestFor<Method>["par
 type NotificationFor<Method extends ServerNotification["method"]> = Extract<ServerNotification, { method: Method }>;
 type ServerRequestFor<Method extends ServerRequest["method"]> = Extract<ServerRequest, { method: Method }>;
 
+export interface ComposerFileSearchResult {
+	readonly path: string;
+	readonly label: string;
+	readonly kind: "file" | "directory";
+	readonly extension?: string;
+}
+
+export interface ComposerCommandSummary {
+	readonly name: string;
+	readonly label: string;
+	readonly description?: string;
+	readonly source: "extension" | "prompt-template" | "skill" | "built-in";
+}
+
+export interface TerminalOutputChunk {
+	readonly seq: number;
+	readonly data: string;
+}
+
+export interface TerminalReplayResult {
+	readonly chunks: readonly TerminalOutputChunk[];
+	readonly nextSeq: number;
+	readonly status: TerminalSnapshot["status"];
+	readonly replayCursor: number;
+}
+
+export interface ProviderAuthStatusResult {
+	readonly provider: string;
+	readonly authenticated: boolean;
+	readonly status: "ready" | "missing-auth" | "env-key" | "oauth" | "unavailable" | "error";
+	readonly authMethod?: "oauth" | "api-key" | "env" | "config";
+	readonly actionable?: boolean;
+	readonly canLogin?: boolean;
+	readonly canLogout?: boolean;
+	readonly canRelogin?: boolean;
+	readonly instruction?: string;
+	readonly message?: string;
+	readonly source?: string;
+	readonly version?: string;
+	readonly modelCount?: number;
+}
+
+export interface AuthStatusResult {
+	readonly providers: readonly ProviderAuthStatusResult[];
+}
+
+export interface SettingsSnapshotResult {
+	readonly global: Record<string, unknown>;
+	readonly project: Record<string, unknown>;
+	readonly effective: Record<string, unknown>;
+	readonly diagnostics: readonly string[];
+	readonly models: readonly unknown[];
+	readonly selectedProvider?: string;
+	readonly selectedModel?: string;
+	readonly enabledModels?: readonly string[];
+	readonly thinkingLevels: readonly string[];
+	readonly keybindings: readonly { id: string; description: string; defaultKeys: readonly string[]; keys: readonly string[]; overridden: boolean }[];
+}
+
+export interface ResourceListResult {
+  readonly resources: readonly unknown[];
+  readonly diagnostics: readonly string[];
+}
+
 export interface RequestResultMap {
 	initialize: InitializeResult;
 	"event/replay": EventReplayResult;
+	"daedalus/workflow/read": DaedalusWorkflowState;
 	"extension/ui/respond": Record<string, never>;
-	"session/start": unknown;
+	"session/start": { sessionId: string } | unknown;
+	"session/stop": Record<string, never>;
+	"turn/cancel": Record<string, never>;
+	"diff/get": { diff: WorkflowDiffSummary };
+	"git/stage": { ok: true; approvalId: string; diff: WorkflowDiffSummary };
+	"git/unstage": { ok: true; approvalId: string; diff: WorkflowDiffSummary };
+	"git/discard": { ok: true; approvalId: string; diff: WorkflowDiffSummary };
+	"git/commit": { ok: true; approvalId: string; diff: WorkflowDiffSummary };
+	"git/checkpoint-restore": { ok: true; approvalId: string; diff: WorkflowDiffSummary };
+	"composer/file-search": { files: readonly ComposerFileSearchResult[] };
+	"composer/command-list": { commands: readonly ComposerCommandSummary[] };
+	"composer/attachment/save": { attachment: ComposerAttachment };
+	"composer/attachment/get": { attachment: ComposerAttachment };
+	"access/get": { policy: AccessPolicy };
+	"access/set": { policy: AccessPolicy };
+	"terminal/create": { terminal: TerminalSnapshot };
+	"terminal/list": { terminals: readonly TerminalSnapshot[] };
+	"terminal/attach": { terminal: TerminalSnapshot };
+	"terminal/detach": { terminal: TerminalSnapshot };
+	"terminal/resize": { terminal: TerminalSnapshot };
+	"terminal/kill": { terminal: TerminalSnapshot };
+	"terminal/replay": TerminalReplayResult;
+	"session/list": import("@daedalus-pi/app-server-protocol").SessionListResult;
+	"session/import-jsonl": import("@daedalus-pi/app-server-protocol").SessionImportJsonlResult;
+	"session/export-jsonl": import("@daedalus-pi/app-server-protocol").SessionExportJsonlResult;
+	"session/export-html": import("@daedalus-pi/app-server-protocol").SessionExportHtmlResult;
+	"session/resume": import("@daedalus-pi/app-server-protocol").SessionResumeResult;
+	"session/fork": import("@daedalus-pi/app-server-protocol").SessionForkResult;
+	"session/rename": import("@daedalus-pi/app-server-protocol").SessionMutationResult;
+	"session/archive": import("@daedalus-pi/app-server-protocol").SessionMutationResult;
+	"session/delete": import("@daedalus-pi/app-server-protocol").SessionMutationResult;
+	"session/stats": import("@daedalus-pi/app-server-protocol").SessionStatsResult;
+	"session/tree": import("@daedalus-pi/app-server-protocol").SessionTreeResult;
+	"diagnostics/export": import("@daedalus-pi/app-server-protocol").DiagnosticExportResult;
+	"runtime/get-state": RuntimeControlResultMap["runtime/get-state"];
+	"runtime/set-model": RuntimeControlResultMap["runtime/set-model"];
+	"runtime/cycle-model": RuntimeControlResultMap["runtime/cycle-model"];
+	"runtime/set-thinking": RuntimeControlResultMap["runtime/set-thinking"];
+	"runtime/cycle-thinking": RuntimeControlResultMap["runtime/cycle-thinking"];
+	"runtime/set-tools": RuntimeControlResultMap["runtime/set-tools"];
+	"runtime/set-steering-mode": RuntimeControlResultMap["runtime/set-steering-mode"];
+	"runtime/set-follow-up-mode": RuntimeControlResultMap["runtime/set-follow-up-mode"];
+	"runtime/compact": RuntimeControlResultMap["runtime/compact"];
+	"runtime/abort": RuntimeControlResultMap["runtime/abort"];
+	"runtime/reload-resources": RuntimeControlResultMap["runtime/reload-resources"];
+	"runtime/get-commands": RuntimeControlResultMap["runtime/get-commands"];
+	"runtime/get-keybindings": RuntimeControlResultMap["runtime/get-keybindings"];
+	"settings/read": SettingsSnapshotResult;
+	"settings/set": SettingsSnapshotResult;
+	"settings/reset": SettingsSnapshotResult;
+	"settings/reload-resources": SettingsSnapshotResult;
+	"resources/list": ResourceListResult;
+	"resources/reload": ResourceListResult;
+	"resources/install": { resource: unknown };
+	"resources/remove": { ok: true };
+	"resources/update": { resource: unknown };
+	"resources/enable": { resource: unknown };
+	"resources/disable": { resource: unknown };
+	"auth/status": AuthStatusResult;
+	"auth/login": ProviderAuthStatusResult;
+	"auth/logout": ProviderAuthStatusResult;
 	[method: string]: unknown;
 }
 
@@ -66,6 +200,8 @@ export class AppServerClient {
 	private readonly serverRequestListeners = new Map<string, Set<(params: unknown, request: ServerRequest) => void>>();
 	private lastEventCursor: string | undefined;
 	private replaying = false;
+	readonly sessions = new SessionClient(this);
+	readonly runtime = new RuntimeControlClient(this);
 
 	constructor(options: AppServerClientOptions) {
 		this.transport = options.transport;
@@ -110,8 +246,100 @@ export class AppServerClient {
 		return this.request("event/replay", params);
 	}
 
+	getDiff(params: ParamsFor<"diff/get">): Promise<RequestResultMap["diff/get"]> {
+		return this.request("diff/get", params);
+	}
+
 	respondToExtensionUi(response: ExtensionUiResponse): Promise<Record<string, never>> {
 		return this.request("extension/ui/respond", response);
+	}
+
+	searchComposerFiles(params: ParamsFor<"composer/file-search">): Promise<RequestResultMap["composer/file-search"]> {
+		return this.request("composer/file-search", params);
+	}
+
+	listComposerCommands(params: ParamsFor<"composer/command-list"> = {}): Promise<RequestResultMap["composer/command-list"]> {
+		return this.request("composer/command-list", params);
+	}
+
+	saveComposerAttachment(
+		params: ParamsFor<"composer/attachment/save">,
+	): Promise<RequestResultMap["composer/attachment/save"]> {
+		return this.request("composer/attachment/save", params);
+	}
+
+	getComposerAttachment(
+		params: ParamsFor<"composer/attachment/get">,
+	): Promise<RequestResultMap["composer/attachment/get"]> {
+		return this.request("composer/attachment/get", params);
+	}
+
+	getAccessPolicy(): Promise<RequestResultMap["access/get"]> {
+		return this.request("access/get", {});
+	}
+
+	setAccessMode(mode: AccessMode): Promise<RequestResultMap["access/set"]> {
+		return this.request("access/set", { mode });
+	}
+
+
+	readSettings(): Promise<SettingsSnapshotResult> {
+		return this.request("settings/read", {});
+	}
+
+	setSetting(params: ParamsFor<"settings/set">): Promise<SettingsSnapshotResult> {
+		return this.request("settings/set", params);
+	}
+
+	resetSetting(params: ParamsFor<"settings/reset">): Promise<SettingsSnapshotResult> {
+		return this.request("settings/reset", params);
+	}
+
+	reloadSettingsResources(): Promise<SettingsSnapshotResult> {
+		return this.request("settings/reload-resources", {});
+	}
+
+listResources(): Promise<ResourceListResult> {
+	return this.request("resources/list", {});
+}
+
+reloadResources(): Promise<ResourceListResult> {
+	return this.request("resources/reload", {});
+}
+
+resourceOperation(method: "resources/install" | "resources/remove" | "resources/update" | "resources/enable" | "resources/disable", params: ParamsFor<typeof method>): Promise<unknown> {
+	return this.request(method, params);
+}
+	cancelTurn(params: ParamsFor<"turn/cancel">): Promise<Record<string, never>> {
+		return this.request("turn/cancel", params);
+	}
+
+	stopSession(params: ParamsFor<"session/stop">): Promise<Record<string, never>> {
+		return this.request("session/stop", params);
+	}
+
+	createTerminal(params: ParamsFor<"terminal/create">): Promise<RequestResultMap["terminal/create"]> {
+		return this.request("terminal/create", params);
+	}
+
+	listTerminals(params: ParamsFor<"terminal/list">): Promise<RequestResultMap["terminal/list"]> {
+		return this.request("terminal/list", params);
+	}
+
+	replayTerminal(params: ParamsFor<"terminal/replay">): Promise<TerminalReplayResult> {
+		return this.request("terminal/replay", params);
+	}
+
+	sendTerminalInput(params: ParamsFor<"terminal/input">): Promise<unknown> {
+		return this.request("terminal/input", params);
+	}
+
+	resizeTerminal(params: ParamsFor<"terminal/resize">): Promise<RequestResultMap["terminal/resize"]> {
+		return this.request("terminal/resize", params);
+	}
+
+	killTerminal(params: ParamsFor<"terminal/kill">): Promise<RequestResultMap["terminal/kill"]> {
+		return this.request("terminal/kill", params);
 	}
 
 	onNotification<Method extends ServerNotification["method"]>(

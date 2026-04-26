@@ -20,11 +20,16 @@ export interface DiagnosticProtocolEvent {
 	readonly createdAt?: string;
 }
 
+export type DiagnosticExportKind = "support-bundle" | "sqlite-session-bundle" | "jsonl-session" | "html-session";
+
 export interface DiagnosticExport {
 	readonly exportedAt: string;
+	readonly kind?: DiagnosticExportKind;
+	readonly sessionId?: string;
 	readonly transcript: readonly unknown[];
 	readonly toolLogs: readonly unknown[];
 	readonly appServerLogs: readonly string[];
+	readonly runtimeDiagnostics?: unknown;
 	readonly environment: DiagnosticEnvironmentSummary;
 	readonly versions: DiagnosticVersionInfo;
 	readonly integrationStatus: readonly unknown[];
@@ -32,6 +37,7 @@ export interface DiagnosticExport {
 }
 
 export interface DiagnosticExportParams {
+	readonly kind?: DiagnosticExportKind;
 	readonly sessionId?: string;
 	readonly includeTranscripts?: boolean;
 	readonly includeToolLogs?: boolean;
@@ -40,4 +46,7 @@ export interface DiagnosticExportParams {
 
 export interface DiagnosticExportResult {
 	readonly export: DiagnosticExport;
+	readonly content?: string;
+	readonly filename?: string;
+	readonly path?: string;
 }

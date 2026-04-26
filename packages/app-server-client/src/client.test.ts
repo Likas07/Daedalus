@@ -63,6 +63,112 @@ test("dispatches typed extension UI server requests and response helper", async 
 	await client.close();
 });
 
+test("provides typed GUI protocol helpers", async () => {
+	const seenMethods: string[] = [];
+	const client = new AppServerClient({
+		transport: createInProcessTransport((message, send) => {
+			const request = message as ClientRequest;
+			seenMethods.push(request.method);
+			if (request.method === "composer/file-search") {
+				send({
+					kind: "response",
+					id: request.id,
+					ok: true,
+					result: { files: [{ path: "src/index.ts", label: "index.ts", kind: "file", extension: ".ts" }] },
+				});
+				return;
+			}
+			if (request.method === "composer/command-list") {
+				send({
+					kind: "response",
+					id: request.id,
+					ok: true,
+					result: { commands: [{ name: "plan", label: "Plan", source: "built-in" }] },
+				});
+				return;
+			}
+			if (request.method === "composer/attachment/save") {
+				send({
+					kind: "response",
+					id: request.id,
+					ok: true,
+					result: { attachment: { id: "att-1", kind: "image", filename: request.params.filename, size: 4 } },
+				});
+				return;
+			}
+			if (request.method === "access/set") {
+				send({
+					kind: "response",
+					id: request.id,
+					ok: true,
+					result: {
+						policy: {
+							mode: request.params.mode,
+							autoApproveSoftPrompts: true,
+							bypassHardBlocks: false,
+							auditRequired: true,
+						},
+					},
+				});
+				return;
+			}
+			if (request.method === "terminal/create") {
+				send({
+					kind: "response",
+					id: request.id,
+					ok: true,
+					result: {
+						terminal: {
+							terminalId: "terminal-1",
+							cwd: request.params.cwd,
+							cols: request.params.cols ?? 80,
+							rows: request.params.rows ?? 24,
+							status: "running",
+							history: "",
+							updatedAt: "2026-04-25T00:00:00.000Z",
+						},
+					},
+				});
+				return;
+			}
+			if (request.method === "terminal/replay") {
+				send({
+					kind: "response",
+					id: request.id,
+					ok: true,
+					result: { chunks: [{ seq: 1, data: "ready" }], nextSeq: 2, status: "running", replayCursor: 0 },
+				});
+				return;
+			}
+			send({ kind: "response", id: request.id, ok: true, result: {} });
+		}),
+	});
+
+	await expect(client.searchComposerFiles({ projectId: "project-1", query: "src", limit: 5 })).resolves.toMatchObject({
+		files: [{ path: "src/index.ts" }],
+	});
+	await expect(client.listComposerCommands()).resolves.toMatchObject({ commands: [{ name: "plan" }] });
+	await expect(
+		client.saveComposerAttachment({ filename: "image.png", mimeType: "image/png", dataBase64: "AAAA" }),
+	).resolves.toMatchObject({ attachment: { id: "att-1", kind: "image" } });
+	await expect(client.setAccessMode("unrestricted")).resolves.toMatchObject({
+		policy: { mode: "unrestricted", bypassHardBlocks: false, auditRequired: true },
+	});
+	await expect(client.createTerminal({ cwd: "/tmp/project", cols: 80, rows: 24 })).resolves.toMatchObject({
+		terminal: { terminalId: "terminal-1", status: "running" },
+	});
+	await expect(client.replayTerminal({ terminalId: "terminal-1" })).resolves.toMatchObject({
+		chunks: [{ seq: 1, data: "ready" }],
+	});
+	await client.cancelTurn({ sessionId: "session-1", turnId: "turn-1" });
+	await client.stopSession({ sessionId: "session-1" });
+
+	expect(seenMethods).toContain("composer/file-search");
+	expect(seenMethods).toContain("access/set");
+	expect(seenMethods).toContain("terminal/create");
+	await client.close();
+});
+
 test("reconnect replays missed events once", async () => {
 	const server = new ReplayServer();
 	const firstTransport = createInProcessTransport(server.handle);

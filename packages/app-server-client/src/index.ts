@@ -4,6 +4,8 @@ export * from "./diagnostics";
 export * from "./in-process-transport";
 export * from "./integrations";
 export * from "./orchestration";
+export * from "./sessions";
+export * from "./runtime-control";
 export * from "./subscriptions";
 export * from "./workflow";
 export * from "./ws-transport";
