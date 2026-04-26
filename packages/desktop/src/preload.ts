@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { type DaedalusNativeBridge, nativeBridgeApiName } from "./native-bridge";
-import { nativeCommandChannel, type NativeCommandEnvelope } from "./native-command-router";
+import type { DaedalusNativeBridge } from "./native-bridge";
+import type { NativeCommandEnvelope } from "./native-command-router";
+
+const nativeBridgeApiName = "daedalusNative";
+const nativeCommandChannel = "daedalus:native-command";
 
 const bridge: DaedalusNativeBridge = {
 	app: {

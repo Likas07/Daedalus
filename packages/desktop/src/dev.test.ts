@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { $ } from "bun";
 import { describe, expect, test } from "bun:test";
 import { electronDevCommand, isUrlServing, waitForUrl } from "./dev";
 
@@ -42,5 +45,18 @@ describe("desktop dev launcher helpers", () => {
 			"electron",
 			"/repo/packages/desktop/.daedalus/desktop-dev/main.js",
 		]);
+	});
+
+	test("dev preload build exposes the native bridge without importing app-only modules", async () => {
+		const desktopRoot = resolve(import.meta.dir, "..");
+		await $`bun run build:dev`.cwd(desktopRoot).quiet();
+		const preload = await readFile(resolve(desktopRoot, ".daedalus/desktop-dev/preload.js"), "utf8");
+
+		expect(preload).toContain("contextBridge.exposeInMainWorld(nativeBridgeApiName, bridge)");
+		expect(preload).toContain('var nativeBridgeApiName = "daedalusNative"');
+		expect(preload).toContain('bootstrapEndpoint: () => ipcRenderer.invoke("daedalus:server:bootstrap-endpoint")');
+		expect(preload).not.toContain('from "node:');
+		expect(preload).not.toContain("readFileSync");
+		expect(preload).not.toContain("NativeCommandRouter");
 	});
 });
