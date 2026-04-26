@@ -340,25 +340,28 @@ describe("primary role runtime mode", () => {
 
 	it("hands validated Muse plans to Daedalus when implement is selected", async () => {
 		let toolResultHandler: ((event: any, ctx: any) => Promise<unknown>) | undefined;
+		let sessionTreeHandler: ((event: any, ctx: any) => Promise<unknown>) | undefined;
 		const commandHandlers: Record<string, (args: string, ctx: any) => Promise<void>> = {};
-		const entries: Array<{ customType: string; data: any }> = [];
+		const entries: Array<{ type: "custom"; customType: string; data: any }> = [];
 		const sentMessages: any[] = [];
 		const queuedUserMessages: any[] = [];
 		let activeTools = ["read", "write", "hashline_edit"];
 		primaryRoleMode({
 			on(event: string, handler: any) {
 				if (event === "tool_result") toolResultHandler = handler;
+				if (event === "session_tree") sessionTreeHandler = handler;
 			},
 			registerCommand(name: string, options: any) {
 				commandHandlers[name] = options.handler;
 			},
 			registerFlag() {},
+			getFlag: () => undefined,
 			getActiveTools: () => activeTools,
 			setActiveTools(tools: string[]) {
 				activeTools = tools;
 			},
 			appendEntry(customType: string, data: any) {
-				entries.push({ customType, data });
+				entries.push({ type: "custom", customType, data });
 			},
 			sendMessage(message: any) {
 				sentMessages.push(message);
@@ -367,7 +370,7 @@ describe("primary role runtime mode", () => {
 				queuedUserMessages.push({ content, options });
 			},
 		} as any);
-		if (!toolResultHandler || !commandHandlers.muse) throw new Error("primary-role did not register handlers");
+		if (!toolResultHandler || !sessionTreeHandler || !commandHandlers.muse) throw new Error("primary-role did not register handlers");
 
 		const ctx = {
 			cwd: tempDir,
@@ -381,6 +384,7 @@ describe("primary role runtime mode", () => {
 				},
 				theme: { fg: (_name: string, text: string) => text },
 			},
+			sessionManager: { getBranch: () => entries },
 		};
 		await commandHandlers.muse("", ctx);
 		await toolResultHandler(
@@ -407,6 +411,12 @@ describe("primary role runtime mode", () => {
 		expect(activeTools).toEqual(
 			expect.arrayContaining(["execute_plan", "plan_task_read", "subagent", "todo_read", "todo_write"]),
 		);
+		const persistedHandoff = entries.filter((entry) => entry.customType === "primary-role-mode").at(-1);
+		expect(persistedHandoff?.data.baselineTools).toEqual(expect.arrayContaining(["execute_plan", "plan_task_read"]));
+
+		activeTools = ["read", "write", "hashline_edit"];
+		await sessionTreeHandler({ type: "session_tree" }, ctx);
+		expect(activeTools).toEqual(expect.arrayContaining(["execute_plan", "plan_task_read"]));
 		expect(sentMessages).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({

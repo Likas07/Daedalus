@@ -70,6 +70,7 @@ I regularly publish my own `pi-mono` work sessions here:
   - [Daedalus Packages](#daedalus-packages)
 - [Programmatic Usage](#programmatic-usage)
 - [Philosophy](#philosophy)
+- [GUI](#gui)
 - [CLI Reference](#cli-reference)
 
 ---
@@ -530,6 +531,12 @@ Read the [blog post](https://mariozechner.at/posts/2025-11-30-pi-coding-agent/) 
 
 ---
 
+## GUI
+
+The desktop app is the primary GUI entrypoint. The CLI also provides `daedalus gui` for local browser use with SQLite-backed GUI sessions and JSONL import/export compatibility. See [docs/gui.md](docs/gui.md) and [../gui/README.md](../gui/README.md) for entrypoints, flags, security, persistence, protocol, troubleshooting, diagnostics, and agent-browser smoke testing.
+
+---
+
 ## CLI Reference
 
 ```bash
@@ -556,6 +563,7 @@ pi config                    # Enable/disable package resources
 | `--mode json` | Output all events as JSON lines (see [docs/json.md](docs/json.md)) |
 | `--mode rpc` | RPC mode for process integration (see [docs/rpc.md](docs/rpc.md)) |
 | `--export <in> [out]` | Export session to HTML |
+| `gui` | Start the local web GUI; supports `--host`, `--port`, `--project`, `--no-open`, `--headless`, `--reuse-server`, `--new-server`, and `--log-file` |
 
 In print mode, pi also reads piped stdin and merges it into the initial prompt:
 

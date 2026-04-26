@@ -10,6 +10,7 @@ import { BUILTIN_TOOL_ORDER, DEFAULT_ACTIVE_TOOL_NAMES, type ToolName } from "..
 import { allTools } from "../core/tools/index.js";
 
 export type Mode = "text" | "json" | "rpc";
+export type CliSubcommand = "gui";
 
 export interface Args {
 	provider?: string;

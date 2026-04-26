@@ -168,6 +168,7 @@ export default function primaryRoleMode(pi: ExtensionAPI): void {
 		currentRole = "daedalus";
 		applyRoleMode(ctx);
 		ensureImplementationTools(ctx);
+		baselineTools = pi.getActiveTools();
 		persistRoleMode();
 		pi.sendMessage(
 			{

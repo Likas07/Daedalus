@@ -43,6 +43,7 @@ import { runMigrations, showDeprecationWarnings } from "./migrations.js";
 import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.js";
 import { ExtensionSelectorComponent } from "./modes/interactive/components/extension-selector.js";
 import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme.js";
+import { isGuiCommand, runGuiCommand } from "./gui/gui-command.js";
 import { handleConfigCommand, handlePackageCommand } from "./package-manager-cli.js";
 import { isLocalPath } from "./utils/paths.js";
 
@@ -424,6 +425,10 @@ async function promptForMissingSessionCwd(
 
 export async function main(args: string[]) {
 	resetTimings();
+	if (isGuiCommand(args)) {
+		await runGuiCommand(args);
+		return;
+	}
 	const offlineMode = args.includes("--offline") || isTruthyEnvFlag(process.env.DAEDALUS_OFFLINE);
 	if (offlineMode) {
 		process.env.DAEDALUS_OFFLINE = "1";
