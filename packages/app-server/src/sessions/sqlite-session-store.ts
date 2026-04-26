@@ -76,8 +76,8 @@ export class SqliteSessionStore implements SessionStore {
 		const limit = typeof options.limit === "number" ? "LIMIT ?" : "";
 		if (typeof options.limit === "number") params.push(options.limit);
 		const rows = this.database
-			.query<GuiSessionRow & Partial<GuiSessionReadModelRow>, (string | number)[]>(
-				`SELECT s.*, rm.title, rm.last_message_preview, rm.message_count
+			.query<GuiSessionRow & Partial<GuiSessionReadModelRow> & { rm_updated_at?: string }, (string | number)[]>(
+				`SELECT s.*, rm.title, rm.last_message_preview, rm.message_count, rm.pending_approval_count, rm.status, rm.updated_at AS rm_updated_at
 				 FROM ${GUI_SESSION_TABLES.sessions} s
 				 LEFT JOIN ${GUI_SESSION_TABLES.readModel} rm ON rm.session_id = s.id
 				 ${where}
@@ -88,12 +88,18 @@ export class SqliteSessionStore implements SessionStore {
 			id: row.id,
 			cwd: row.cwd,
 			name: row.title ?? undefined,
+			title: row.title ?? undefined,
 			parentSessionPath: row.parent_session_id ?? undefined,
 			created: new Date(row.created_at),
 			modified: new Date(row.updated_at),
+			updatedAt: row.rm_updated_at ?? row.updated_at,
 			messageCount: row.message_count ?? 0,
 			firstMessage: row.last_message_preview ?? "",
+			latestMessage: row.last_message_preview ?? undefined,
 			allMessagesText: row.last_message_preview ?? "",
+			status: row.status ?? (row.archived === 1 ? "archived" : "idle"),
+			pendingApprovalCount: row.pending_approval_count ?? 0,
+			pendingUserInput: (row.pending_approval_count ?? 0) > 0,
 			archived: row.archived === 1,
 		}));
 	}

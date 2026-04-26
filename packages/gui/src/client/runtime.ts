@@ -132,6 +132,14 @@ export interface GuiRuntime {
 		includeToolLogs?: boolean;
 		recentEventLimit?: number;
 	}): Promise<import("@daedalus-pi/app-server-protocol").DiagnosticExportResult>;
+	resumeSession?(sessionId: string, prompt?: string): Promise<unknown>;
+	forkSession?(sessionId: string, input?: { cwd?: string; prompt?: string }): Promise<unknown>;
+	renameSession?(sessionId: string, name?: string): Promise<unknown>;
+	archiveSession?(sessionId: string, archived?: boolean): Promise<unknown>;
+	deleteSession?(sessionId: string): Promise<unknown>;
+	importSessionJsonl?(content: string, input?: { cwd?: string; overwrite?: boolean }): Promise<unknown>;
+	exportSessionJsonl?(sessionId: string): Promise<unknown>;
+	exportSessionHtml?(sessionId: string): Promise<unknown>;
 	close(): Promise<void>;
 	selectSession(sessionId?: string): void;
 	reconnect(): Promise<void>;
@@ -182,6 +190,22 @@ export interface SessionSummary {
 	id: string;
 	title: string;
 	status: string;
+	cwd?: string;
+	created?: string;
+	modified?: string;
+	latestMessage?: string;
+	messageCount?: number;
+	archived?: boolean;
+	pendingApprovalCount?: number;
+	pendingUserInput?: boolean;
+	activeTurnId?: string;
+	projectId?: string;
+	worktreeId?: string;
+	branch?: string;
+}
+interface SessionHydration extends Partial<SessionSummary> {
+	readonly sessionId?: string;
+	readonly name?: string;
 }
 export interface ProjectOpenResult {
 	projectId: string;
@@ -455,6 +479,52 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 		selectSession(sessionId) {
 			selectSession(state, sessionId);
 			notify();
+		},
+		async resumeSession(sessionId, prompt) {
+			const result = await client.request("session/resume", { sessionId, prompt });
+			upsertSession(state, { id: sessionId, title: state.sessions.find((item) => item.id === sessionId)?.title ?? sessionId, status: "active" });
+			selectSession(state, sessionId);
+			notify();
+			return result;
+		},
+		async forkSession(sessionId, input = {}) {
+			const result = (await client.request("session/fork", { sessionId, ...input })) as { sessionId?: string };
+			if (result.sessionId) {
+				upsertSession(state, { id: result.sessionId, title: `Fork of ${sessionId}`, status: "active" });
+				selectSession(state, result.sessionId);
+			}
+			notify();
+			return result;
+		},
+		async renameSession(sessionId, name) {
+			const result = await client.request("session/rename", { sessionId, name });
+			const existing = state.sessions.find((item) => item.id === sessionId);
+			if (existing) upsertSession(state, { ...existing, title: name ?? sessionId });
+			notify();
+			return result;
+		},
+		async archiveSession(sessionId, archived = true) {
+			const result = await client.request("session/archive", { sessionId, archived });
+			const existing = state.sessions.find((item) => item.id === sessionId);
+			if (existing) upsertSession(state, { ...existing, status: archived ? "archived" : "idle", archived });
+			notify();
+			return result;
+		},
+		async deleteSession(sessionId) {
+			const result = await client.request("session/delete", { sessionId });
+			state.sessions = state.sessions.filter((item) => item.id !== sessionId);
+			if (state.selectedSessionId === sessionId) selectSession(state, undefined);
+			notify();
+			return result;
+		},
+		importSessionJsonl(content, input = {}) {
+			return client.request("session/import-jsonl", { content, ...input });
+		},
+		async exportSessionJsonl(sessionId) {
+			return client.request("session/export-jsonl", { sessionId });
+		},
+		async exportSessionHtml(sessionId) {
+			return client.request("session/export-html", { sessionId });
 		},
 		reconnect() {
 			return reconnect();
@@ -824,16 +894,7 @@ async function hydrateGuiState(client: AppServerClient, state: GuiState): Promis
 		});
 	});
 	await safeHydrateStep(state, "sessions", async () => {
-		const result = (await client.request("session/list", {})) as {
-			sessions?: Array<{
-				id?: string;
-				sessionId?: string;
-				title?: string;
-				name?: string;
-				status?: string;
-				archived?: boolean;
-			}>;
-		};
+		const result = (await client.request("session/list", {})) as { sessions?: SessionHydration[] };
 		for (const session of result.sessions ?? []) {
 			const id =
 				typeof session.id === "string"
@@ -846,6 +907,18 @@ async function hydrateGuiState(client: AppServerClient, state: GuiState): Promis
 					id,
 					title: session.title ?? session.name ?? id,
 					status: session.status ?? (session.archived ? "archived" : "active"),
+					cwd: session.cwd,
+					created: session.created,
+					modified: session.modified,
+					latestMessage: session.latestMessage,
+					messageCount: session.messageCount,
+					archived: session.archived,
+					pendingApprovalCount: session.pendingApprovalCount,
+					pendingUserInput: session.pendingUserInput,
+					activeTurnId: session.activeTurnId,
+					projectId: session.projectId,
+					worktreeId: session.worktreeId,
+					branch: session.branch,
 				});
 		}
 	});
@@ -972,10 +1045,10 @@ function terminalFromSnapshot(snapshot: TerminalSnapshot): RendererTerminal {
 	return {
 		terminalId: snapshot.terminalId,
 		cwd: snapshot.cwd,
-		cols: snapshot.dimensions.cols,
-		rows: snapshot.dimensions.rows,
+		cols: snapshot.dimensions?.cols ?? 80,
+		rows: snapshot.dimensions?.rows ?? 24,
 		status: snapshot.status,
-		history: capTerminalHistory(snapshot.history),
+		history: capTerminalHistory(snapshot.history ?? ""),
 		updatedAt: snapshot.updatedAt,
 	};
 }

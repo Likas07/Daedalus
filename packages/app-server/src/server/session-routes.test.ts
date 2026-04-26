@@ -159,6 +159,19 @@ describe("session store routes", () => {
 		});
 		expect(listed).toMatchObject({ sessions: [{ id: "route-session", messageCount: 1 }] });
 		expectRouteResult("session/list", listed);
+		expect(listed).toMatchObject({
+			sessions: [
+				{
+					id: "route-session",
+					title: "hello sqlite route",
+					latestMessage: "hello sqlite route",
+					status: "idle",
+					pendingApprovalCount: 0,
+					pendingUserInput: false,
+					archived: false,
+				},
+			],
+		});
 
 		const exported = await appRouter.handle({
 			kind: "request",
