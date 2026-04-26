@@ -423,6 +423,8 @@ export class AppRouter {
 			case "extension/ui/respond":
 				this.options.extensionUiRouter?.respond(request.params);
 				return {};
+			case "approval/list":
+				return { approvals: this.approvalService.list(request.params.sessionId) };
 			case "approval/respond":
 				this.approvalService.resolve(request.params);
 				return {};
@@ -474,7 +476,9 @@ export class AppRouter {
 			}
 			case "integration/pr-open": {
 				const cwd = request.params.projectId ? this.projects.get(String(request.params.projectId)) : undefined;
-				return { ok: await this.integrationService.openPullRequest(request.params.provider, request.params.url, cwd) };
+				return {
+					ok: await this.integrationService.openPullRequest(request.params.provider, request.params.url, cwd),
+				};
 			}
 			case "diagnostics/export":
 				return new ExportService({
@@ -503,7 +507,9 @@ export class AppRouter {
 		}
 	}
 
-	private async validateTerminalCreate(params: import("../terminal/terminal-protocol").TerminalCreateParams): Promise<import("../terminal/terminal-protocol").TerminalCreateParams> {
+	private async validateTerminalCreate(
+		params: import("../terminal/terminal-protocol").TerminalCreateParams,
+	): Promise<import("../terminal/terminal-protocol").TerminalCreateParams> {
 		const cwd = resolve(params.cwd);
 		const stats = await stat(cwd).catch(() => undefined);
 		if (!stats?.isDirectory()) throw new Error(`Invalid terminal cwd: ${params.cwd}`);
@@ -516,10 +522,12 @@ export class AppRouter {
 		if (params.worktreeId) {
 			const worktree = this.worktreeService.open(params.worktreeId);
 			if (!worktree) throw new Error(`Unknown worktree: ${params.worktreeId}`);
-			if (params.projectId && worktree.projectId !== params.projectId) throw new Error(`Worktree ${params.worktreeId} does not belong to project ${params.projectId}`);
+			if (params.projectId && worktree.projectId !== params.projectId)
+				throw new Error(`Worktree ${params.worktreeId} does not belong to project ${params.projectId}`);
 			roots.push(worktree.path);
 		}
-		if (roots.length > 0 && !roots.some((root) => this.isWithin(cwd, root))) throw new Error(`Terminal cwd is outside requested project/worktree scope: ${cwd}`);
+		if (roots.length > 0 && !roots.some((root) => this.isWithin(cwd, root)))
+			throw new Error(`Terminal cwd is outside requested project/worktree scope: ${cwd}`);
 		return { ...params, cwd };
 	}
 
@@ -572,7 +580,10 @@ export class AppRouter {
 	private isWithin(path: string, root: string): boolean {
 		const normalizedRoot = resolve(root);
 		const relativePath = relative(normalizedRoot, path);
-		return relativePath === "" || (!relativePath.startsWith("..") && !relativePath.startsWith("/") && !relativePath.match(/^[A-Za-z]:/));
+		return (
+			relativePath === "" ||
+			(!relativePath.startsWith("..") && !relativePath.startsWith("/") && !relativePath.match(/^[A-Za-z]:/))
+		);
 	}
 
 	private resolveProjectOrWorktreeCwd(diffId: string): string {
@@ -595,7 +606,11 @@ export class AppRouter {
 			const authStorage = AuthStorage.create();
 			const registry = ModelRegistry.create(authStorage);
 			const providerStatuses = this.providerAuthService.status().providers;
-			const enabledProviders = new Set(providerStatuses.filter((provider) => provider.enabled || provider.authenticated).map((provider) => provider.provider));
+			const enabledProviders = new Set(
+				providerStatuses
+					.filter((provider) => provider.enabled || provider.authenticated)
+					.map((provider) => provider.provider),
+			);
 			type ModelLike = {
 				id?: string;
 				name?: string;
@@ -625,7 +640,7 @@ export class AppRouter {
 					supportsFastMode: supportsFastModeFor(id, provider),
 					capabilities: [
 						...(reasoning ? ["reasoning"] : []),
-						...((model.input ?? []).map((input) => `input:${input}`)),
+						...(model.input ?? []).map((input) => `input:${input}`),
 					],
 					diagnostics: [],
 				};

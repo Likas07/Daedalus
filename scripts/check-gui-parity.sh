@@ -12,6 +12,7 @@ REQUIRED_PARITY_TESTS=(
 	"packages/gui/src/phase4-differentiation.test.ts"
 	"packages/gui/test/e2e/web-gui-smoke.test.ts"
 	"packages/desktop/test/e2e/desktop-gui-smoke.test.ts"
+	"packages/desktop/test/e2e/gui-smoke.test.ts"
 	"packages/desktop/test/e2e/preload-smoke.test.ts"
 )
 
@@ -27,10 +28,11 @@ for test_file in "${REQUIRED_PARITY_TESTS[@]}"; do
 done
 
 bun run check:gui
-bun --cwd=packages/gui test --conditions browser src/client/no-visible-noop.test.ts src/client/capability-registry.test.ts src/client/command-registry.test.ts src/phase4-differentiation.test.ts src/app.test.ts
 bun --cwd=packages/app-server-protocol test
 bun --cwd=packages/app-server-client test
-bun --cwd=packages/app-server test src/server/parity-gate.test.ts
+bun --cwd=packages/app-server test src/server/parity-gate.test.ts src/server/session-routes.test.ts src/server/app-server.test.ts
 STRICT_GUI_FULL_PARITY=1 bun --cwd=packages/app-server test src/server/parity-gate.test.ts
-bun --cwd=packages/app-server test src/server/session-routes.test.ts
+bun --cwd=packages/gui test --conditions browser src/client/no-visible-noop.test.ts src/client/capability-registry.test.ts src/client/command-registry.test.ts src/phase4-differentiation.test.ts src/app.test.ts
+bun --cwd=packages/desktop test
+bun --cwd=packages/desktop run validate:packaged-runtime
 bun run test:gui:e2e

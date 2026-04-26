@@ -54,7 +54,7 @@ const GUI_CAPABILITY_DEFINITIONS = [
 	{
 		id: "composer",
 		label: "Composer",
-		status: "partial",
+		status: "wired",
 		requirement: "required",
 		coverage: {
 			behavioral: [
@@ -64,13 +64,11 @@ const GUI_CAPABILITY_DEFINITIONS = [
 			],
 			e2e: ["packages/gui/test/e2e/web-gui-smoke.test.ts"],
 		},
-		disabledReason:
-			"Enter-to-send, full prompt context, attachment delivery, and server-backed slash/file selection are not all proven end-to-end yet.",
 	},
 	{
 		id: "project-session",
 		label: "Project/session",
-		status: "partial",
+		status: "wired",
 		requirement: "required",
 		coverage: {
 			behavioral: [
@@ -81,13 +79,11 @@ const GUI_CAPABILITY_DEFINITIONS = [
 				"packages/gui/src/app.test.ts",
 			],
 		},
-		disabledReason:
-			"Start, select, resume, fork, rename, archive, delete, import/export, and durable hydration are not all complete yet.",
 	},
 	{
 		id: "provider-model-auth",
 		label: "Provider/model/auth",
-		status: "partial",
+		status: "wired",
 		requirement: "required",
 		coverage: {
 			behavioral: [
@@ -97,13 +93,11 @@ const GUI_CAPABILITY_DEFINITIONS = [
 				"packages/gui/src/app.test.ts",
 			],
 		},
-		disabledReason:
-			"Provider snapshots, auth actions, diagnostics, and persisted model selection are not all complete yet.",
 	},
 	{
 		id: "terminal",
 		label: "Terminal",
-		status: "partial",
+		status: "wired",
 		requirement: "required",
 		coverage: {
 			behavioral: [
@@ -115,13 +109,11 @@ const GUI_CAPABILITY_DEFINITIONS = [
 			],
 			e2e: ["packages/gui/test/e2e/web-gui-smoke.test.ts", "packages/desktop/test/e2e/desktop-gui-smoke.test.ts"],
 		},
-		disabledReason:
-			"Canonical terminal shape, scoped cwd validation, PTY replay, resize, input, kill, and history persistence are not all proven yet.",
 	},
 	{
 		id: "git-diff-checkpoint-pr",
 		label: "Git/diff/checkpoint/PR",
-		status: "partial",
+		status: "wired",
 		requirement: "required",
 		coverage: {
 			behavioral: [
@@ -133,8 +125,6 @@ const GUI_CAPABILITY_DEFINITIONS = [
 			],
 			e2e: ["packages/gui/test/e2e/web-gui-smoke.test.ts"],
 		},
-		disabledReason:
-			"Stage, unstage, discard, commit, checkpoint, push, pull-request, and refresh flows are not all complete yet.",
 	},
 	{
 		id: "settings",
@@ -149,12 +139,11 @@ const GUI_CAPABILITY_DEFINITIONS = [
 				"packages/gui/src/app.test.ts",
 			],
 		},
-
 	},
 	{
 		id: "persistence",
 		label: "Persistence",
-		status: "partial",
+		status: "wired",
 		requirement: "required",
 		coverage: {
 			behavioral: [
@@ -164,13 +153,11 @@ const GUI_CAPABILITY_DEFINITIONS = [
 				"packages/gui/src/client/reconnect-state.test.ts",
 			],
 		},
-		disabledReason:
-			"SQLite read models, replay cursors, reconnect hydration, and restart durability are not all complete yet.",
 	},
 	{
 		id: "workflow-inspector",
 		label: "Workflow/inspector",
-		status: "partial",
+		status: "wired",
 		requirement: "required",
 		coverage: {
 			behavioral: [
@@ -180,13 +167,11 @@ const GUI_CAPABILITY_DEFINITIONS = [
 				"packages/gui/src/app.test.ts",
 			],
 		},
-		disabledReason:
-			"Inspector, orchestration, audit, automation, and workflow panels are not all driven by live server projections yet.",
 	},
 	{
 		id: "desktop-native",
 		label: "Desktop-native behavior",
-		status: "partial",
+		status: "wired",
 		requirement: "required",
 		coverage: {
 			behavioral: [
@@ -198,13 +183,11 @@ const GUI_CAPABILITY_DEFINITIONS = [
 				"packages/desktop/test/e2e/preload-smoke.test.ts",
 			],
 		},
-		disabledReason:
-			"Folder picker, recent projects, native commands, notifications, preload bridge, and packaged runtime validation are not all complete yet.",
 	},
 	{
 		id: "e2e",
 		label: "E2E",
-		status: "partial",
+		status: "wired",
 		requirement: "required",
 		coverage: {
 			behavioral: [
@@ -213,8 +196,6 @@ const GUI_CAPABILITY_DEFINITIONS = [
 			],
 			e2e: ["packages/gui/test/e2e/web-gui-smoke.test.ts", "packages/desktop/test/e2e/desktop-gui-smoke.test.ts"],
 		},
-		disabledReason:
-			"The full web and desktop user journeys do not yet cover composer, provider/model/settings, terminal, git, approval, persistence, diagnostics, and restart hydration together.",
 	},
 	{ id: "entrypoints", label: "Entrypoints", status: "wired", requirement: "optional" },
 	{ id: "sessions", label: "Sessions", status: "wired", requirement: "optional" },

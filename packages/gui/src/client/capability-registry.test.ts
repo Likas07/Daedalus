@@ -110,7 +110,7 @@ describe("GUI capability registry", () => {
 	});
 
 	test("exposes helpers for no-visible-no-op UI wiring", () => {
-		expect(isGuiCapabilityEnabled("terminal")).toBe(false);
+		expect(isGuiCapabilityEnabled("terminal")).toBe(true);
 		expect(disabledReasonFor("keybindings")).toContain("rebinding");
 		expect(getGuiCapability("export").status).toBe("disabled");
 	});

@@ -11,6 +11,7 @@ import { SessionController } from "../runtime/session-controller";
 import { SqliteSessionManager } from "../runtime/sqlite-session-manager";
 import { SqliteSessionStore } from "../sessions/sqlite-session-store";
 import type { PtyAdapter } from "../terminal/pty-adapter";
+import type { CommandRunner } from "../integrations/integration-api";
 import { authenticateRequest, createCapabilityToken } from "./auth";
 import { AppRouter, type OutboundMessage } from "./router";
 import { createWebSocketHandlers, type WebSocketClient } from "./websocket";
@@ -25,6 +26,7 @@ export interface CreateAppServerOptions {
 	readonly runtimeFactory?: RuntimeFactory;
 	readonly agentDir?: string;
 	readonly terminalPty?: PtyAdapter;
+	readonly integrationRunner?: CommandRunner;
 	readonly serveGui?: boolean;
 	readonly guiDistDir?: string;
 	readonly projectRoot?: string;
@@ -55,7 +57,9 @@ export async function startAppServer(options: CreateAppServerOptions): Promise<A
 	const approvalService = new ApprovalService(database, accessPolicyService, (event) => publish(event));
 	const extensionUiRouter = new ExtensionUiRouter((message) => publish(message));
 	const controller = new SessionController({
-		runtimeFactory: options.runtimeFactory ?? createCodingAgentRuntimeFactory({ approvalService, accessPolicy: accessPolicyService, extensionUiRouter }),
+		runtimeFactory:
+			options.runtimeFactory ??
+			createCodingAgentRuntimeFactory({ approvalService, accessPolicy: accessPolicyService, extensionUiRouter }),
 		eventSink: (message) => {
 			if ("id" in message && "type" in message) router.append(message);
 			else publish(message);
@@ -65,7 +69,16 @@ export async function startAppServer(options: CreateAppServerOptions): Promise<A
 		agentDir: options.agentDir ?? join(process.cwd(), ".daedalus", "agent"),
 		promptContextResolver: new PromptContextService(),
 	});
-	router = new AppRouter({ database, controller, publish, terminalPty: options.terminalPty, accessPolicyService, approvalService, extensionUiRouter });
+	router = new AppRouter({
+		database,
+		controller,
+		publish,
+		terminalPty: options.terminalPty,
+		integrationRunner: options.integrationRunner,
+		accessPolicyService,
+		approvalService,
+		extensionUiRouter,
+	});
 	const websocket = createWebSocketHandlers(router, clients);
 	const server = Bun.serve({
 		hostname: host,

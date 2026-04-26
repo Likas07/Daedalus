@@ -235,7 +235,12 @@ export type SettingsKeybinding = Static<typeof SettingsKeybindingSchema>;
 export const SettingsSchemaEntrySchema = StrictObject({
 	key: Type.String({ minLength: 1 }),
 	label: Type.String({ minLength: 1 }),
-	type: Type.Union([Type.Literal("string"), Type.Literal("boolean"), Type.Literal("string[]"), Type.Literal("keybindings")]),
+	type: Type.Union([
+		Type.Literal("string"),
+		Type.Literal("boolean"),
+		Type.Literal("string[]"),
+		Type.Literal("keybindings"),
+	]),
 	scopes: Type.Array(SettingsScopeSchema),
 	values: Type.Optional(Type.Array(Type.String())),
 	resourceReload: Type.Optional(Type.Boolean()),
@@ -419,7 +424,11 @@ export const CheckpointCreateParamsSchema = StrictObject({
 });
 export type CheckpointCreateParams = Static<typeof CheckpointCreateParamsSchema>;
 export const CheckpointCreateResultSchema = StrictObject({
-	checkpoint: StrictObject({ checkpointId: CheckpointIdSchema, ref: Type.String({ minLength: 1 }), commit: Type.String({ minLength: 1 }) }),
+	checkpoint: StrictObject({
+		checkpointId: CheckpointIdSchema,
+		ref: Type.String({ minLength: 1 }),
+		commit: Type.String({ minLength: 1 }),
+	}),
 });
 export type CheckpointCreateResult = Static<typeof CheckpointCreateResultSchema>;
 export const CheckpointListParamsSchema = StrictObject({ sessionId: SessionIdSchema });
@@ -484,6 +493,7 @@ export const ClientRequestSchema = Type.Union([
 	request("resources/update", ResourceOperationParamsSchema),
 	request("resources/enable", ResourceOperationParamsSchema),
 	request("resources/disable", ResourceOperationParamsSchema),
+	request("approval/list", StrictObject({ sessionId: Type.Optional(SessionIdSchema) })),
 	request(
 		"approval/respond",
 		StrictObject({
@@ -572,6 +582,7 @@ export const ClientRequestResultSchemas = {
 	"resources/update": ResourceOperationResultSchema,
 	"resources/enable": ResourceOperationResultSchema,
 	"resources/disable": ResourceOperationResultSchema,
+	"approval/list": StrictObject({ approvals: Type.Array(Type.Any()) }),
 	"approval/respond": EmptyResultSchema,
 	"extension/ui/respond": EmptyResultSchema,
 	"checkpoint/list": CheckpointListResultSchema,

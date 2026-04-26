@@ -48,30 +48,41 @@ describe("desktop GUI E2E smoke", () => {
 		}
 	});
 
-	test("routes desktop-native menu commands and deep links into renderer envelopes", () => {
+	test("routes desktop-native menu commands, folder picker intents, recents, and deep links into renderer envelopes", () => {
 		const sent: unknown[] = [];
 		const router = new NativeCommandRouter({
 			getMainWindow: () => ({
 				webContents: { send: (_channel: string, payload: unknown) => sent.push(payload) } as never,
 			}),
 		});
+		const projectPath = join(tmpdir(), "daedalus-desktop-project");
 		const url = "daedalus://open?project=project-1&session=session-1&worktree=worktree-1";
+		router.send("open-project", { path: projectPath });
+		router.send("open-recent-project", { path: projectPath });
 		router.send("open-file", {});
 		router.send("open-folder", {});
-		router.send("open-external-editor", {});
+		router.send("open-folder", { path: projectPath });
+		router.send("open-external-editor", { path: join(projectPath, "file.txt") });
 		router.send("toggle-terminal", {});
 		router.send("export-diagnostics", {});
 		router.send("show-notification", { kind: "run-completed", body: "done" });
 		router.send("open-deep-link", { url });
 		expect(url).toBe("daedalus://open?project=project-1&session=session-1&worktree=worktree-1");
 		expect(sent).toEqual([
+			{ id: "open-project", payload: { path: projectPath } },
+			{ id: "open-recent-project", payload: { path: projectPath } },
 			{ id: "open-file", payload: {} },
 			{ id: "open-folder", payload: {} },
-			{ id: "open-external-editor", payload: {} },
+			{ id: "open-folder", payload: { path: projectPath } },
+			{ id: "open-external-editor", payload: { path: join(projectPath, "file.txt") } },
 			{ id: "toggle-terminal", payload: {} },
 			{ id: "export-diagnostics", payload: {} },
 			{ id: "show-notification", payload: { kind: "run-completed", body: "done" } },
 			{ id: "open-deep-link", payload: { url } },
 		]);
+		expect(() => router.send("open-folder", { path: "" })).toThrow("Native command path must not be empty");
+		expect(() => router.send("open-deep-link", { url: "javascript:alert(1)" })).toThrow(
+			"Unsupported native command URL",
+		);
 	});
 });
