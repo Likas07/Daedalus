@@ -195,6 +195,18 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 	});
 
 	describe("OpenAI Responses Provider", () => {
+		const stubOpenAIResponsesFetch = () => {
+			const originalFetch = globalThis.fetch;
+			globalThis.fetch = async () =>
+				new Response(JSON.stringify({ error: { message: "stubbed OpenAI Responses test response" } }), {
+					status: 401,
+					headers: { "content-type": "application/json" },
+				});
+			return () => {
+				globalThis.fetch = originalFetch;
+			};
+		};
+
 		it.skipIf(!process.env.OPENAI_API_KEY)(
 			"should not set prompt_cache_retention when PI_CACHE_RETENTION is not set",
 			async () => {
@@ -282,6 +294,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 
 			const { streamOpenAIResponses } = await import("../src/providers/openai-responses.js");
 
+			const restoreFetch = stubOpenAIResponsesFetch();
 			try {
 				const s = streamOpenAIResponses(model, context, {
 					apiKey: "fake-key",
@@ -295,8 +308,8 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 				for await (const event of s) {
 					if (event.type === "error") break;
 				}
-			} catch {
-				// Expected to fail
+			} finally {
+				restoreFetch();
 			}
 
 			expect(capturedPayload).not.toBeNull();
@@ -310,6 +323,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 
 			const { streamOpenAIResponses } = await import("../src/providers/openai-responses.js");
 
+			const restoreFetch = stubOpenAIResponsesFetch();
 			try {
 				const s = streamOpenAIResponses(model, context, {
 					apiKey: "fake-key",
@@ -323,8 +337,8 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 				for await (const event of s) {
 					if (event.type === "error") break;
 				}
-			} catch {
-				// Expected to fail
+			} finally {
+				restoreFetch();
 			}
 
 			expect(capturedPayload).not.toBeNull();
