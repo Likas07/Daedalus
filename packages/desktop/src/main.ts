@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import type { AppServerBootDiagnostics } from "./boot-diagnostics";
 import { deepLinkUrl, installDaedalusMenu, openFileDialog } from "./menu";
 import { isSafeExternalUrl, toRendererServerBootstrap } from "./native-bridge";
 import { NativeCommandRouter } from "./native-command-router";
@@ -15,7 +16,11 @@ const projectRoot = process.env.DAEDALUS_PROJECT_ROOT
 	: resolve(moduleDir, "..", "..", "..");
 
 let mainWindow: BrowserWindow | undefined;
-const nativeCommands = new NativeCommandRouter({ getMainWindow: () => mainWindow });
+let lastDesktopBootDiagnostics: AppServerBootDiagnostics | undefined;
+const nativeCommands = new NativeCommandRouter({
+	getMainWindow: () => mainWindow,
+	getDesktopBootDiagnostics: () => lastDesktopBootDiagnostics,
+});
 const refreshMenu = (): void =>
 	installDaedalusMenu({
 		getMainWindow: () => mainWindow,
@@ -152,7 +157,8 @@ function registerIpc(): void {
 	);
 	ipcMain.handle("daedalus:server:bootstrap-endpoint", async () => {
 		const endpoint = await ensureAppServer({ packaged: app.isPackaged });
-		return toRendererServerBootstrap(endpoint);
+		lastDesktopBootDiagnostics = endpoint.bootDiagnostics;
+		return { ...toRendererServerBootstrap(endpoint), desktopBoot: endpoint.bootDiagnostics };
 	});
 	ipcMain.handle("daedalus:updates:get-state", () => ({ status: "idle" as const }));
 }
