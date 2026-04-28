@@ -52,7 +52,7 @@ Likely files:
 Work:
 - support `merge`
 - support `replace`
-- enforce no duplicate ids and at most one `in_progress`
+- enforce no duplicate ids while allowing multiple `in_progress` items for parallel work
 
 Verification:
 - merge updates only targeted items

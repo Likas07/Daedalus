@@ -94,7 +94,7 @@ describe("todo_read/todo_write tools", () => {
 		session.dispose();
 	});
 
-	it("rejects invalid todo invariants", async () => {
+	it("allows multiple in-progress todos", async () => {
 		const settingsManager = SettingsManager.create(tempDir, agentDir);
 		const sessionManager = SessionManager.inMemory();
 		const { session } = await createAgentSession({
@@ -107,20 +107,24 @@ describe("todo_read/todo_write tools", () => {
 		await session.bindExtensions({});
 
 		const todoWrite = session.getToolDefinition("todo_write");
-		await expect(
-			todoWrite!.execute(
-				"todo-write-invalid",
-				{
-					todos: [
-						{ id: "a", content: "First", status: "in_progress" },
-						{ id: "b", content: "Second", status: "in_progress" },
-					],
-				},
-				undefined,
-				undefined,
-				undefined,
-			),
-		).rejects.toThrow(/at most one in_progress/i);
+		const result = await todoWrite!.execute(
+			"todo-write-multiple-in-progress",
+			{
+				todos: [
+					{ id: "a", content: "First", status: "in_progress" },
+					{ id: "b", content: "Second", status: "in_progress" },
+				],
+			},
+			undefined,
+			undefined,
+			undefined,
+		);
+
+		expect(result.details.summary).toMatchObject({ total: 2, in_progress: 2, active: 2 });
+		expect(result.details.todos).toEqual([
+			{ id: "a", content: "First", status: "in_progress" },
+			{ id: "b", content: "Second", status: "in_progress" },
+		]);
 
 		session.dispose();
 	});

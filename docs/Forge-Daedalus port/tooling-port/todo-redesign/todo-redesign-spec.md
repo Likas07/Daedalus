@@ -93,7 +93,7 @@ Observed Hermes model in this environment:
   - `status: pending | in_progress | completed | cancelled`
 - write behavior uses a `todos` array
 - supports full-list replace or merge-by-id update
-- enforces that only one item should be `in_progress` at a time
+- allows multiple items to be `in_progress` at a time to support parallel work
 - tool is explicitly positioned as session task planning/tracking for complex work
 
 What Hermes gets right:
@@ -184,7 +184,7 @@ Use:
 - `cancelled`
 
 Rules:
-- at most one `in_progress` item at a time by default
+- multiple `in_progress` items are allowed to support parallel work
 - `cancelled` items should not count as active work
 - `completed` and `cancelled` should not block completion checks
 - `pending` and `in_progress` should count as active work
