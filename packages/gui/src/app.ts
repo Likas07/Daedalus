@@ -1,6 +1,7 @@
 import { mount, unmount } from "svelte";
 import App from "./App.svelte";
 import { GUI_COMMANDS } from "./client/commands";
+import { buildDaedalusWorkflowViewModel, workflowFromTypedEvents } from "./client/daedalus-workflow-view-model";
 import { createGuiRuntime, type GuiRuntime, type GuiRuntimeOptions } from "./client/runtime";
 import "./styles.css";
 
@@ -61,14 +62,28 @@ function renderTestFallback(root: HTMLElement, runtime: GuiRuntime): void {
 	shell.dataset.testid = "gui-fallback-renderer";
 	const width = window.innerWidth;
 	const nav = document.createElement("aside");
+	nav.dataset.testid = "left-nav";
 	nav.textContent = `Project overview Projects ${runtime.state.sessions.length} ${runtime.state.approvalItems.length} approvals + New Archived Settings`;
+	const projectForm = document.createElement("form");
+	const projectInput = document.createElement("input");
+	projectInput.dataset.testid = "composer-project-path";
+	projectInput.placeholder = "/path/to/project";
+	const projectSubmit = document.createElement("button");
+	projectSubmit.type = "submit";
+	projectSubmit.textContent = "open";
+	projectForm.addEventListener("submit", (event) => {
+		event.preventDefault();
+		const path = projectInput.value.trim();
+		if (path) void runtime.openProject(path).then(() => runtime.notify());
+	});
+	projectForm.append(projectInput, projectSubmit);
 	const openProject = document.createElement("button");
 	openProject.type = "button";
 	openProject.dataset.testid = "sidebar-open-project";
 	openProject.textContent = "+";
 	openProject.setAttribute("aria-label", "Add or open project folder");
 	openProject.addEventListener("click", () => appendFallbackProjectPalette(root, runtime));
-	nav.append(openProject);
+	nav.append(projectForm, openProject);
 	const canvas = document.createElement("section");
 	canvas.textContent = runtime.state.selectedSessionId
 		? "Session workspace"
@@ -93,6 +108,7 @@ function renderTestFallback(root: HTMLElement, runtime: GuiRuntime): void {
 	if (width >= 520) shell.append(nav);
 	shell.append(canvas);
 	root.append(shell);
+	appendFallbackInspector(root, runtime);
 	appendFallbackApprovals(root, runtime);
 	appendFallbackTerminal(root, runtime);
 	appendFallbackCommandPalette(root, runtime);
@@ -251,6 +267,27 @@ function appendFallbackSettings(root: HTMLElement, runtime: GuiRuntime): void {
 	root.append(panel);
 }
 
+function appendFallbackInspector(root: HTMLElement, runtime: GuiRuntime): void {
+	const section = document.createElement("section");
+	section.dataset.testid = "inspector";
+	const eventWorkflow = workflowFromTypedEvents(runtime.state.events);
+	const workflow = eventWorkflow?.sessionId === runtime.state.selectedSessionId ? eventWorkflow : undefined;
+	if (!workflow) {
+		section.textContent = "No active plan selected.";
+		root.append(section);
+		return;
+	}
+	const view = buildDaedalusWorkflowViewModel(workflow);
+	section.textContent = [
+		workflow.plans.at(-1)?.title ?? "Plan",
+		workflow.plans.at(-1)?.status ?? "captured",
+		view.todoSummary,
+		...workflow.todos.flatMap((todo) => [todo.title, todo.status.replaceAll("_", " "), todo.summary ?? ""]),
+	]
+		.filter(Boolean)
+		.join(" ");
+	root.append(section);
+}
 function appendFallbackApprovals(root: HTMLElement, runtime: GuiRuntime): void {
 	const section = document.createElement("section");
 	section.dataset.testid = "approval-queue";
