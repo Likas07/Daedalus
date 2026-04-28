@@ -429,6 +429,74 @@ describe("GUI app", () => {
 		await app.close();
 	});
 
+	test("project path input lives in sidebar and opens typed project", async () => {
+		const root = document.createElement("div");
+		document.body.replaceChildren(root);
+		const transport = new MemoryTransport();
+		Object.defineProperty(window, "innerWidth", { configurable: true, value: 1200 });
+		const app = await createApp({ root, transport, bootstrap: { wsEndpoint: "ws://localhost/ws", projectRoot: "/repo" } });
+		await app.start();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		const sidebarInput = root.querySelector<HTMLInputElement>('[data-testid="left-nav"] [data-testid="composer-project-path"]');
+		if (!sidebarInput) throw new Error("Missing sidebar project path input");
+		expect(root.querySelector('[data-testid="task-composer"] [data-testid="composer-project-path"]')).toBeNull();
+		sidebarInput.value = "/tmp/sidebar-project";
+		sidebarInput.dispatchEvent(new Event("input", { bubbles: true }));
+		sidebarInput.form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+		await new Promise((resolve) => setTimeout(resolve, 25));
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({
+				kind: "request",
+				method: "project/open",
+				params: { path: "/tmp/sidebar-project" },
+			}),
+		);
+		expect(app.runtime.state.projectRoot).toBe("/tmp/sidebar-project");
+		await app.close();
+	});
+
+	test("inspector plan renders workflow todos from typed events", async () => {
+		const root = document.createElement("div");
+		document.body.replaceChildren(root);
+		const transport = new MemoryTransport();
+		Object.defineProperty(window, "innerWidth", { configurable: true, value: 1200 });
+		const app = await createApp({ root, transport, bootstrap: { wsEndpoint: "ws://localhost/ws", projectRoot: "/repo" } });
+		await app.start();
+		app.runtime.selectSession("session-1");
+		transport.listener?.({
+			kind: "notification",
+			method: "event/appended",
+			params: {
+				event: {
+					id: "workflow-1",
+					type: "daedalus/workflow/projected",
+					ts: "now",
+					sessionId: "session-1",
+					payload: {
+						workflow: {
+							sessionId: "session-1",
+							plans: [{ id: "plan-1", title: "Build GUI fix", status: "executing", taskIds: ["todo-1", "todo-2"] }],
+							todos: [
+								{ id: "todo-1", title: "Move project path", status: "completed", summary: "Sidebar owns project opening.", dependencies: [] },
+								{ id: "todo-2", title: "Expose todos", status: "in_progress", summary: "Render compact plan state.", dependencies: ["todo-1"] },
+							],
+							questions: [],
+							semanticWorkspace: { status: "idle" },
+							orchestration: { sessionId: "session-1", mode: "build", lanes: [], checkpoints: [] },
+						},
+					},
+				},
+			},
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(root.querySelector('[data-testid="inspector"]')?.textContent).toContain("Build GUI fix");
+		expect(root.querySelector('[data-testid="inspector"]')?.textContent).toContain("1/2 complete");
+		expect(root.querySelector('[data-testid="inspector"]')?.textContent).toContain("Move project path");
+		expect(root.querySelector('[data-testid="inspector"]')?.textContent).toContain("in progress");
+		expect(root.querySelector('[data-testid="inspector"]')?.textContent).toContain("Render compact plan state.");
+		await app.close();
+	});
+
 	test("command palette opens with ctrl+k and filters to settings", async () => {
 		const root = document.createElement("div");
 		document.body.replaceChildren(root);

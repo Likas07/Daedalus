@@ -12,6 +12,8 @@
 		onPaletteOpenChange?: (open: boolean, mode?: UiState["paletteMode"]) => void;
 	}>();
 	let open = $state({ projects: true, sessions: true });
+	let projectPath = $state("");
+	let openingProject = $state(false);
 	const projectRows = $derived.by((): RendererProject[] =>
 		guiState.projects.length > 0
 			? [...guiState.projects]
@@ -47,6 +49,19 @@
 		onPaletteOpenChange?.(true, "project");
 		if (!onPaletteOpenChange) window.dispatchEvent(new CustomEvent("daedalus:palette-open", { detail: { open: true, mode: "project" } }));
 	}
+
+	async function openTypedProject(): Promise<void> {
+		const path = projectPath.trim();
+		if (!path || openingProject) return;
+		openingProject = true;
+		try {
+			await runtime.openProject(path);
+			projectPath = "";
+			setView("empty");
+		} finally {
+			openingProject = false;
+		}
+	}
 </script>
 
 {#snippet sectionHeader(key: "projects" | "sessions", label: string, count: number)}
@@ -81,6 +96,22 @@
 					class="rounded-sm border border-ink-500 px-2 py-1 font-mono text-[12px] text-bone-300 transition hover:border-gold hover:text-bone-50"
 				>+</button>
 			</div>
+			<form class="mb-3 flex gap-1" onsubmit={(event) => { event.preventDefault(); void openTypedProject(); }}>
+				<input
+					data-testid="composer-project-path"
+					bind:value={projectPath}
+					placeholder="/path/to/project"
+					aria-label="Project path"
+					class="min-w-0 flex-1 border border-ink-500 bg-transparent px-2 py-1 font-mono text-[11px] text-bone-100 placeholder:text-bone-500 focus:border-gold focus:outline-none"
+				/>
+				<button
+					type="submit"
+					disabled={openingProject || !projectPath.trim()}
+					class="rounded-sm border border-ink-500 px-2 py-1 font-mono text-[10px] text-bone-300 transition hover:border-gold hover:text-bone-50 disabled:opacity-40"
+				>
+					open
+				</button>
+			</form>
 			{#if open.projects}
 				<ul class="space-y-0.5 pb-4">
 					{#each projectRows as project}
