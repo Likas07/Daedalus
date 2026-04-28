@@ -1,5 +1,6 @@
 import { type Static, Type } from "@sinclair/typebox";
 import { SessionIdSchema } from "./ids";
+import { WorkflowRunsInTargetSchema, WorkflowValidationStatusSchema } from "./workflow";
 
 export const SessionStoreSummarySchema = Type.Object({
 	id: SessionIdSchema,
@@ -11,6 +12,9 @@ export const SessionStoreSummarySchema = Type.Object({
 	worktreeId: Type.Optional(Type.String()),
 	worktreePath: Type.Optional(Type.String()),
 	branch: Type.Optional(Type.String()),
+	runsIn: Type.Optional(WorkflowRunsInTargetSchema),
+	validationStatus: Type.Optional(WorkflowValidationStatusSchema),
+	needsAttentionReason: Type.Optional(Type.String({ minLength: 1 })),
 	created: Type.String(),
 	modified: Type.String(),
 	updatedAt: Type.Optional(Type.String()),

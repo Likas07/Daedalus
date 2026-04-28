@@ -1,11 +1,24 @@
 import { type Static, Type } from "@sinclair/typebox";
 import { EventIdSchema, SessionIdSchema } from "./ids";
+import { WorkflowNeedsAttentionSchema, WorkflowRunsInTargetSchema } from "./workflow";
 
 export const EventCursorSchema = Type.Object({
 	after: Type.Optional(EventIdSchema),
 	limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 1000 })),
 });
 export type EventCursor = Static<typeof EventCursorSchema>;
+
+export const SessionStartedEventPayloadSchema = Type.Object({
+	sessionId: SessionIdSchema,
+	runsIn: Type.Optional(WorkflowRunsInTargetSchema),
+});
+export type SessionStartedEventPayload = Static<typeof SessionStartedEventPayloadSchema>;
+
+export const WorkflowNeedsAttentionEventPayloadSchema = Type.Object({
+	sessionId: Type.Optional(SessionIdSchema),
+	attention: WorkflowNeedsAttentionSchema,
+});
+export type WorkflowNeedsAttentionEventPayload = Static<typeof WorkflowNeedsAttentionEventPayloadSchema>;
 
 export const AppEventSchema = Type.Object({
 	id: EventIdSchema,

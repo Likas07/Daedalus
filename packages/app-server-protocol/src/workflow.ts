@@ -35,6 +35,39 @@ export const WorkflowTerminalStatusSchema = Type.Union([
 ]);
 export type WorkflowTerminalStatus = Static<typeof WorkflowTerminalStatusSchema>;
 
+export const WorkflowIsolationModeSchema = Type.Union([
+	Type.Literal("isolated-worktree"),
+	Type.Literal("base-checkout"),
+]);
+export type WorkflowIsolationMode = Static<typeof WorkflowIsolationModeSchema>;
+
+export const WorkflowValidationStatusSchema = Type.Union([
+	Type.Literal("valid"),
+	Type.Literal("needs-attention"),
+	Type.Literal("recovering"),
+	Type.Literal("recovery-failed"),
+]);
+export type WorkflowValidationStatus = Static<typeof WorkflowValidationStatusSchema>;
+
+export const WorkflowNeedsAttentionSchema = StrictObject({
+	kind: Type.Literal("needs-attention"),
+	reason: Type.String({ minLength: 1 }),
+	recovery: Type.Optional(Type.String({ minLength: 1 })),
+});
+export type WorkflowNeedsAttention = Static<typeof WorkflowNeedsAttentionSchema>;
+
+export const WorkflowRunsInTargetSchema = StrictObject({
+	projectId: ProjectIdSchema,
+	worktreeId: Type.Optional(WorktreeIdSchema),
+	path: Type.String({ minLength: 1 }),
+	canonicalPath: Type.String({ minLength: 1 }),
+	branch: NullableStringSchema,
+	isolationMode: WorkflowIsolationModeSchema,
+	validationStatus: WorkflowValidationStatusSchema,
+	reason: Type.Optional(Type.String({ minLength: 1 })),
+});
+export type WorkflowRunsInTarget = Static<typeof WorkflowRunsInTargetSchema>;
+
 export const WorkflowWorktreeMetadataSchema = StrictObject({
 	id: WorktreeIdSchema,
 	projectId: ProjectIdSchema,

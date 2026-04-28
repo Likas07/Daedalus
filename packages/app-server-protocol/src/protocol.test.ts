@@ -46,15 +46,14 @@ describe("app-server protocol schemas", () => {
 		).toBe(true);
 	});
 
-	test("validates session/start requests", () => {
+	test("validates Safe Worktree Loop session/start targets", () => {
 		expect(
 			Value.Check(ClientRequestSchema, {
 				kind: "request",
 				id: "req-2",
 				method: "session/start",
 				params: {
-					projectId: "project-1",
-					worktreeId: "worktree-1",
+					startTarget: { mode: "isolated-worktree", projectId: "project-1", worktreeId: "worktree-1" },
 					prompt: "implement the feature",
 					model: "claude-sonnet-4.5",
 				},
@@ -65,7 +64,62 @@ describe("app-server protocol schemas", () => {
 				kind: "request",
 				id: "req-3",
 				method: "session/start",
-				params: { projectId: "project-1" },
+				params: {
+					startTarget: {
+						mode: "base-checkout",
+						projectId: "project-1",
+						confirmation: { confirmed: true, evidence: "User chose Run on base checkout" },
+					},
+				},
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
+				id: "req-project-compat",
+				method: "session/start",
+				params: {
+					projectId: "project-1",
+					startTarget: { mode: "isolated-worktree", projectId: "project-1", worktreeId: "worktree-1" },
+				},
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
+				id: "req-legacy-worktree",
+				method: "session/start",
+				params: { projectId: "project-1", worktreeId: "worktree-1" },
+			}),
+		).toBe(false);
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
+				id: "req-base-missing-confirmation",
+				method: "session/start",
+				params: { startTarget: { mode: "base-checkout", projectId: "project-1" } },
+			}),
+		).toBe(false);
+	});
+
+	test("validates structured diff/get targets with transitional diffId compatibility", () => {
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
+				id: "req-diff",
+				method: "diff/get",
+				params: { target: { kind: "worktree", projectId: "project-1", worktreeId: "worktree-1" } },
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
+				id: "req-diff-compat",
+				method: "diff/get",
+				params: {
+					diffId: "diff-1",
+					target: { kind: "worktree", projectId: "project-1", worktreeId: "worktree-1" },
+				},
 			}),
 		).toBe(true);
 	});

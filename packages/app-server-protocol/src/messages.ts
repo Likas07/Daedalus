@@ -86,7 +86,7 @@ import {
 	TerminalResizeParamsSchema,
 	TerminalSnapshotResultSchema,
 } from "./terminal";
-import { WorkflowDiffSummarySchema, WorkflowWorktreeMetadataSchema } from "./workflow";
+import { WorkflowDiffSummarySchema, WorkflowRunsInTargetSchema, WorkflowWorktreeMetadataSchema } from "./workflow";
 
 const StrictObject = <Properties extends Record<string, TSchema>>(properties: Properties) =>
 	Type.Object(properties, { additionalProperties: false });
@@ -134,15 +134,44 @@ export const PromptContextParamsSchema = {
 	draftState: Type.Optional(JsonObjectSchema),
 } satisfies Record<string, TSchema>;
 
-export const SessionStartParamsSchema = StrictObject({
-	projectId: ProjectIdSchema,
-	worktreeId: Type.Optional(WorktreeIdSchema),
-	prompt: Type.Optional(Type.String({ minLength: 1 })),
-	...PromptContextParamsSchema,
-});
+export const SessionStartTargetSchema = Type.Union([
+	StrictObject({
+		mode: Type.Literal("isolated-worktree"),
+		projectId: ProjectIdSchema,
+		worktreeId: WorktreeIdSchema,
+	}),
+	StrictObject({
+		mode: Type.Literal("base-checkout"),
+		projectId: ProjectIdSchema,
+		confirmation: StrictObject({
+			confirmed: Type.Literal(true),
+			evidence: Type.String({ minLength: 1 }),
+		}),
+	}),
+]);
+export type SessionStartTarget = Static<typeof SessionStartTargetSchema>;
+
+export const SessionStartParamsSchema = Type.Union([
+	StrictObject({
+		startTarget: SessionStartTargetSchema,
+		prompt: Type.Optional(Type.String({ minLength: 1 })),
+		...PromptContextParamsSchema,
+	}),
+	StrictObject({
+		// Transitional compatibility for app-server before Safe Worktree Loop Task 3 moves routing to startTarget.
+		// Keep legacy top-level worktreeId rejected by intentionally allowing only projectId here.
+		projectId: ProjectIdSchema,
+		startTarget: Type.Optional(SessionStartTargetSchema),
+		prompt: Type.Optional(Type.String({ minLength: 1 })),
+		...PromptContextParamsSchema,
+	}),
+]);
 export type SessionStartParams = Static<typeof SessionStartParamsSchema>;
 
-export const SessionStartResultSchema = StrictObject({ sessionId: SessionIdSchema });
+export const SessionStartResultSchema = StrictObject({
+	sessionId: SessionIdSchema,
+	runsIn: Type.Optional(WorkflowRunsInTargetSchema),
+});
 export type SessionStartResult = Static<typeof SessionStartResultSchema>;
 
 export const TurnStartParamsSchema = StrictObject({
@@ -381,7 +410,20 @@ export type ResourceOperationResult = Static<typeof ResourceOperationResultSchem
 export const ResourceRemoveResultSchema = StrictObject({ ok: Type.Literal(true) });
 export type ResourceRemoveResult = Static<typeof ResourceRemoveResultSchema>;
 
-export const DiffGetParamsSchema = StrictObject({ diffId: DiffIdSchema });
+export const DiffTargetSchema = Type.Union([
+	StrictObject({ kind: Type.Literal("project"), projectId: ProjectIdSchema }),
+	StrictObject({ kind: Type.Literal("worktree"), projectId: ProjectIdSchema, worktreeId: WorktreeIdSchema }),
+	StrictObject({ kind: Type.Literal("session"), sessionId: SessionIdSchema }),
+]);
+export type DiffTarget = Static<typeof DiffTargetSchema>;
+export const DiffGetParamsSchema = Type.Union([
+	StrictObject({ target: DiffTargetSchema }),
+	StrictObject({
+		// Transitional compatibility for current app-server router; structured target remains the explicit contract.
+		diffId: DiffIdSchema,
+		target: Type.Optional(DiffTargetSchema),
+	}),
+]);
 export type DiffGetParams = Static<typeof DiffGetParamsSchema>;
 export const DiffGetResultSchema = StrictObject({ diff: WorkflowDiffSummarySchema });
 export type DiffGetResult = Static<typeof DiffGetResultSchema>;
