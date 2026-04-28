@@ -379,7 +379,10 @@ function collectAncestorAgentsSkillDirs(startDir: string): string[] {
 
 	let dir = resolvedStartDir;
 	while (true) {
-		skillDirs.push(join(dir, ".agents", "skills"));
+		const daedalusSkillsDir = join(dir, CONFIG_DIR_NAME, "skills");
+		if (!existsSync(daedalusSkillsDir)) {
+			skillDirs.push(join(dir, ".agents", "skills"));
+		}
 		if (gitRepoRoot && dir === gitRepoRoot) {
 			break;
 		}

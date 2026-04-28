@@ -227,6 +227,36 @@ Content`,
 			expect(result.skills.some((r) => r.path === aboveRepoSkill)).toBe(false);
 		});
 
+		it("should prefer project .daedalus/skills over sibling .agents/skills", async () => {
+			const repoRoot = join(tempDir, "repo");
+			const projectDir = join(repoRoot, "app");
+			mkdirSync(projectDir, { recursive: true });
+			mkdirSync(join(repoRoot, ".git"), { recursive: true });
+
+			const daedalusSkill = join(projectDir, CONFIG_DIR_NAME, "skills", "gstack-browse", "SKILL.md");
+			mkdirSync(join(projectDir, CONFIG_DIR_NAME, "skills", "gstack-browse"), { recursive: true });
+			writeFileSync(daedalusSkill, "---\nname: gstack-browse\ndescription: Daedalus browse\n---\n");
+
+			const siblingAgentsSkill = join(projectDir, ".agents", "skills", "gstack-browse", "SKILL.md");
+			mkdirSync(join(projectDir, ".agents", "skills", "gstack-browse"), { recursive: true });
+			writeFileSync(siblingAgentsSkill, "---\nname: browse\ndescription: Generic browse\n---\n");
+
+			const repoRootAgentsSkill = join(repoRoot, ".agents", "skills", "repo-root", "SKILL.md");
+			mkdirSync(join(repoRoot, ".agents", "skills", "repo-root"), { recursive: true });
+			writeFileSync(repoRootAgentsSkill, "---\nname: repo-root\ndescription: Repo root\n---\n");
+
+			const pm = new DefaultPackageManager({
+				cwd: projectDir,
+				agentDir,
+				settingsManager,
+			});
+
+			const result = await pm.resolve();
+			expect(result.skills.some((r) => r.path === daedalusSkill && r.enabled)).toBe(true);
+			expect(result.skills.some((r) => r.path === siblingAgentsSkill)).toBe(false);
+			expect(result.skills.some((r) => r.path === repoRootAgentsSkill && r.enabled)).toBe(true);
+		});
+
 		it("should scan .agents/skills up to filesystem root when not in a git repo", async () => {
 			const nonRepoRoot = join(tempDir, "non-repo");
 			const nestedCwd = join(nonRepoRoot, "a", "b");

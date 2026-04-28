@@ -79,6 +79,26 @@ Skill content here.`,
 			expect(diagnostics.some((d) => d.path?.endsWith("EFFICIENCY.md"))).toBe(false);
 		});
 
+		it("does not warn for auto-discovered skills in namespaced directories", async () => {
+			const skillDir = join(agentDir, "skills", "gstack-autoplan");
+			mkdirSync(skillDir, { recursive: true });
+			writeFileSync(
+				join(skillDir, "SKILL.md"),
+				`---
+name: autoplan
+description: Auto-discovered gstack skill
+---
+Skill content here.`,
+			);
+
+			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			await loader.reload();
+
+			const { skills, diagnostics } = loader.getSkills();
+			expect(skills.some((s) => s.name === "autoplan")).toBe(true);
+			expect(diagnostics.some((d) => d.message.includes("does not match parent directory"))).toBe(false);
+		});
+
 		it("should discover prompts from agentDir", async () => {
 			const promptsDir = join(agentDir, "prompts");
 			mkdirSync(promptsDir, { recursive: true });
