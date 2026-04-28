@@ -34,6 +34,29 @@ export interface OpenInEditorState {
 	readonly reason?: string;
 }
 
+function projectSessionTarget(session: SessionSummary): SessionSummary {
+	if (!session.runsIn) return session;
+	return {
+		...session,
+		projectId: session.runsIn.projectId,
+		worktreeId: session.runsIn.worktreeId,
+		branch: session.runsIn.branch,
+		cwd: session.runsIn.path,
+		isolationMode: session.runsIn.isolationMode,
+		validationStatus: session.runsIn.validationStatus,
+		needsAttentionReason: session.runsIn.reason ?? session.needsAttentionReason,
+		bestNextAction:
+			session.bestNextAction ??
+			(session.runsIn.validationStatus === "valid"
+				? { label: "Review diff" }
+				: {
+						label: "Resolve target",
+						disabled: true,
+						reason: session.runsIn.reason ?? "Build target needs attention.",
+					}),
+	};
+}
+
 export function createProjectDashboardViewModel(state: GuiState): ProjectDashboardViewModel {
 	const projectPath = state.projectRoot ?? state.projects[0]?.path;
 	const activeWorktree = selectActiveWorktree(state, projectPath);
@@ -41,7 +64,7 @@ export function createProjectDashboardViewModel(state: GuiState): ProjectDashboa
 	const files = activeDiff?.files ?? [];
 	const insertions = files.reduce((total, file) => total + file.insertions, 0);
 	const deletions = files.reduce((total, file) => total + file.deletions, 0);
-	const activeSessions = selectActiveSessions(state.sessions);
+	const activeSessions = selectActiveSessions(state.sessions).map(projectSessionTarget);
 	const editorPath = activeWorktree?.path ?? projectPath;
 	return {
 		projectPath,

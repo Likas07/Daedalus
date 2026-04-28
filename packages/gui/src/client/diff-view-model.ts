@@ -1,5 +1,6 @@
-import type { WorkflowChangedFile } from "@daedalus-pi/app-server-protocol";
+import type { DiffTarget, WorkflowChangedFile } from "@daedalus-pi/app-server-protocol";
 import type { RendererAccessPolicy, RendererDiffSummary } from "./gui-state-types";
+import type { SessionSummary } from "./runtime";
 
 export interface DiffFileNode {
 	readonly kind: "file";
@@ -30,6 +31,9 @@ export interface DiffReviewViewModel {
 	readonly checkpointDiffId?: string;
 	readonly canMutate: boolean;
 	readonly mutationDisabledReason?: string;
+	readonly target?: DiffTarget;
+	readonly targetStatus: "ready" | "blocked";
+	readonly targetWarning?: string;
 }
 
 export interface BuildDiffReviewInput {
@@ -39,6 +43,8 @@ export interface BuildDiffReviewInput {
 	readonly checkpointDiffId?: string;
 	readonly capabilities?: Record<string, boolean>;
 	readonly accessPolicy?: RendererAccessPolicy;
+	readonly selectedSession?: SessionSummary;
+	readonly target?: DiffTarget;
 }
 
 export function buildDiffReviewViewModel(input: BuildDiffReviewInput): DiffReviewViewModel {
@@ -47,9 +53,13 @@ export function buildDiffReviewViewModel(input: BuildDiffReviewInput): DiffRevie
 		input.selectedPath && files.some((file) => file.path === input.selectedPath)
 			? input.selectedPath
 			: (files[0]?.path ?? null);
-	const canMutate = input.capabilities?.gitMutations === true && input.accessPolicy?.mode === "unrestricted";
-	const mutationDisabledReason =
-		input.capabilities?.gitMutations !== true
+	const target = input.diff?.target ?? input.target ?? defaultDiffTargetForSession(input.selectedSession);
+	const targetWarning = diffTargetMismatch(input.selectedSession, target);
+	const canMutate =
+		!targetWarning && input.capabilities?.gitMutations === true && input.accessPolicy?.mode === "unrestricted";
+	const mutationDisabledReason = targetWarning
+		? targetWarning
+		: input.capabilities?.gitMutations !== true
 			? "Backend does not advertise Git mutation capability."
 			: input.accessPolicy?.mode !== "unrestricted"
 				? "Git mutations require unrestricted approval policy."
@@ -58,12 +68,39 @@ export function buildDiffReviewViewModel(input: BuildDiffReviewInput): DiffRevie
 		files,
 		tree: buildChangedFilesTree(files, selectedPath),
 		selectedPath,
-		selectedPatch: selectedPath ? extractFilePatch(input.diff?.patch ?? "", selectedPath) : (input.diff?.patch ?? ""),
+		selectedPatch: targetWarning
+			? ""
+			: selectedPath
+				? extractFilePatch(input.diff?.patch ?? "", selectedPath)
+				: (input.diff?.patch ?? ""),
 		workingTreeDiffId: input.workingTreeDiffId,
 		checkpointDiffId: input.checkpointDiffId,
 		canMutate,
 		mutationDisabledReason,
+		target,
+		targetStatus: targetWarning ? "blocked" : "ready",
+		targetWarning,
 	};
+}
+
+export function defaultDiffTargetForSession(session?: SessionSummary): DiffTarget | undefined {
+	if (!session) return undefined;
+	if (session.runsIn) return { kind: "session", sessionId: session.id };
+	if (session.projectId && session.worktreeId)
+		return { kind: "worktree", projectId: session.projectId, worktreeId: session.worktreeId };
+	return session.projectId ? { kind: "project", projectId: session.projectId } : undefined;
+}
+
+function diffTargetMismatch(session?: SessionSummary, target?: DiffTarget): string | undefined {
+	if (!session?.runsIn || !target) return undefined;
+	if (target.kind === "session")
+		return target.sessionId === session.id ? undefined : "Diff target does not match selected session.";
+	if (target.kind === "worktree") {
+		return target.worktreeId === session.runsIn.worktreeId
+			? undefined
+			: "Diff target does not match selected worktree.";
+	}
+	return "Diff target is project-wide; selected session runs in a scoped target.";
 }
 
 interface MutableDirectory {

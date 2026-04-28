@@ -4,6 +4,8 @@
 	import type { GuiRuntime, GuiState } from "../client/runtime";
 	import type { UiState } from "../client/ui-state.svelte";
 	import Composer from "./composer/Composer.svelte";
+	import NewBuildSetupSheet from "./NewBuildSetupSheet.svelte";
+	import NeedsAttentionRecovery from "./NeedsAttentionRecovery.svelte";
 
 	const {
 		guiState,
@@ -39,5 +41,9 @@
 		<span class="uppercase tracking-[0.14em] text-[color:var(--ember)]">question</span>
 		<span class="ml-2">{openQuestion.prompt}</span>
 	</div>
+{/if}
+{#if guiState.newBuild && guiState.newBuild.kind !== "draft" && guiState.newBuild.kind !== "running"}
+	<NewBuildSetupSheet state={guiState.newBuild} />
+	<NeedsAttentionRecovery state={guiState.newBuild} blocking={guiState.newBuild.kind === "needsAttention"} />
 {/if}
 <Composer {guiState} {runtime} {ui} {projectPath} {sessionId} {storageKey} {requireProjectPath} {disabled} {disabledReason} {submitLabel} {onSubmit} />

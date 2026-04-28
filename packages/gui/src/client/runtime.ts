@@ -11,10 +11,13 @@ import {
 	type AutomationProjection,
 	appServerProtocolVersion,
 	type DaedalusWorkflowState,
+	type DiffTarget,
 	type ExtensionUiRequest,
 	type ExtensionUiResponse,
 	type OrchestrationProjection,
 	type TerminalSnapshot,
+	type WorkflowRunsInTarget,
+	type WorkflowValidationStatus,
 	type WorkflowWorktreeMetadata,
 } from "@daedalus-pi/app-server-protocol";
 import {
@@ -36,6 +39,7 @@ import type {
 	RendererProject,
 	RendererTerminal,
 } from "./gui-state-types";
+import { createNewBuildStateMachine } from "./new-build-state-machine";
 import {
 	type ConnectionStatus,
 	createReconnectState,
@@ -207,6 +211,12 @@ export interface GuiState {
 	automation?: AutomationProjection;
 	_reconnectState?: ReconnectState;
 	recentProjects?: readonly RecentProject[];
+	newBuild?: import("./new-build-state-machine").NewBuildState;
+}
+export interface SessionBestNextAction {
+	label: string;
+	disabled?: boolean;
+	reason?: string;
 }
 export interface SessionSummary {
 	id: string;
@@ -223,7 +233,12 @@ export interface SessionSummary {
 	activeTurnId?: string;
 	projectId?: string;
 	worktreeId?: string;
-	branch?: string;
+	branch?: string | null;
+	runsIn?: WorkflowRunsInTarget;
+	isolationMode?: WorkflowRunsInTarget["isolationMode"];
+	validationStatus?: WorkflowValidationStatus;
+	needsAttentionReason?: string;
+	bestNextAction?: SessionBestNextAction;
 }
 interface SessionHydration extends Partial<SessionSummary> {
 	readonly sessionId?: string;
@@ -332,6 +347,7 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 		composerSlashCommands: [],
 		sessionTokensUsed: 0,
 		recentProjects: [],
+		newBuild: { kind: "draft", prompt: "" },
 		orchestration: undefined,
 		workflow: undefined,
 		audit: undefined,
@@ -478,9 +494,32 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 				state.projectRoot = input.path;
 				state.lastProjectId = input.projectId;
 			}
-			const result = await client.startSession({
+			const flow = createNewBuildStateMachine({
+				createWorktree: async (worktreeInput) => {
+					const created = (await client.request("worktree/create", worktreeInput)) as {
+						worktree: WorkflowWorktreeMetadata;
+					};
+					state.worktrees = [
+						...state.worktrees.filter((worktree) => worktree.id !== created.worktree.id),
+						created.worktree,
+					];
+					return created.worktree;
+				},
+				listWorktrees: async (projectId) => {
+					const listed = (await client.request("worktree/list", { projectId })) as {
+						worktrees?: WorkflowWorktreeMetadata[];
+					};
+					state.worktrees = [...(listed.worktrees ?? [])];
+					return state.worktrees;
+				},
+				startSession: (params) => client.startSession(params),
+				onState: (newBuild) => {
+					state.newBuild = newBuild;
+					notify();
+				},
+			});
+			const result = await flow.start({
 				projectId: project.projectId,
-				worktreeId: input.worktreeId,
 				prompt: input.prompt,
 				attachmentIds: input.attachmentIds ? [...input.attachmentIds] : undefined,
 				filePaths: input.filePaths ? [...input.filePaths] : undefined,
@@ -490,16 +529,30 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 				mode: input.mode ?? state.mode,
 				fastMode: input.fastMode ?? state.fastMode,
 				draftState: toJsonObject(input.draftState),
+				target: input.worktreeId ? { mode: "isolated-worktree", worktreeId: input.worktreeId } : undefined,
 			});
+			if (!result) return undefined;
 			state.sessionTokensUsed = 0;
-			const session = result as { sessionId?: unknown; id?: unknown };
+			const session = result as { sessionId?: unknown; id?: unknown; runsIn?: WorkflowRunsInTarget };
 			const sessionId =
 				typeof session.sessionId === "string"
 					? session.sessionId
 					: typeof session.id === "string"
 						? session.id
 						: `pending:${project.projectId}`;
-			upsertSession(state, { id: sessionId, title: input.prompt, status: "active" });
+			upsertSession(state, {
+				id: sessionId,
+				title: input.prompt,
+				status: "active",
+				runsIn: session.runsIn,
+				projectId: session.runsIn?.projectId,
+				worktreeId: session.runsIn?.worktreeId,
+				branch: session.runsIn?.branch,
+				isolationMode: session.runsIn?.isolationMode,
+				validationStatus: session.runsIn?.validationStatus,
+				needsAttentionReason: session.runsIn?.reason,
+				bestNextAction: bestNextActionForRunsIn(session.runsIn),
+			});
 			notify();
 			return result;
 		},
@@ -632,8 +685,11 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 			return result.commands;
 		},
 		async refreshDiff(diffId = state.lastProjectId ?? state.projectRoot) {
-			if (!diffId) return undefined;
-			const result = (await client.request("diff/get", { diffId })) as { diff?: RendererDiffSummary };
+			const target = defaultDiffTarget(state);
+			if (!diffId && !target) return undefined;
+			const result = (await client.request("diff/get", target ? { target } : { diffId: diffId as string })) as {
+				diff?: RendererDiffSummary;
+			};
 			state.activeDiff = result.diff;
 			notify();
 			return state.activeDiff;
@@ -838,8 +894,11 @@ async function refreshDiffForState(
 	notify: () => void,
 	diffId = state.lastProjectId ?? state.projectRoot,
 ): Promise<RendererDiffSummary | undefined> {
-	if (!diffId) return undefined;
-	const result = (await client.request("diff/get", { diffId })) as { diff?: RendererDiffSummary };
+	const target = defaultDiffTarget(state);
+	if (!diffId && !target) return undefined;
+	const result = (await client.request("diff/get", target ? { target } : { diffId: diffId as string })) as {
+		diff?: RendererDiffSummary;
+	};
 	state.activeDiff = result.diff;
 	notify();
 	return state.activeDiff;
@@ -951,14 +1010,49 @@ function upsertSessionFromEvent(state: GuiState, event: AppEvent): void {
 	if (!event.sessionId) return;
 	const payload =
 		event.payload && typeof event.payload === "object"
-			? (event.payload as { title?: unknown; status?: unknown })
+			? (event.payload as {
+					title?: unknown;
+					status?: unknown;
+					runsIn?: WorkflowRunsInTarget;
+					validationStatus?: WorkflowValidationStatus;
+					needsAttentionReason?: unknown;
+					bestNextAction?: SessionBestNextAction;
+				})
 			: {};
+	const existing = state.sessions.find((item) => item.id === event.sessionId);
+	const runsIn = payload.runsIn ?? existing?.runsIn;
 	upsertSession(state, {
+		...existing,
 		id: event.sessionId,
-		title: typeof payload.title === "string" ? payload.title : event.sessionId,
-		status:
-			typeof payload.status === "string" ? payload.status : event.type === "session/changed" ? "active" : "active",
+		title: typeof payload.title === "string" ? payload.title : (existing?.title ?? event.sessionId),
+		status: typeof payload.status === "string" ? payload.status : (existing?.status ?? "active"),
+		runsIn,
+		projectId: runsIn?.projectId ?? existing?.projectId,
+		worktreeId: runsIn?.worktreeId ?? existing?.worktreeId,
+		branch: runsIn?.branch ?? existing?.branch,
+		isolationMode: runsIn?.isolationMode ?? existing?.isolationMode,
+		validationStatus: payload.validationStatus ?? runsIn?.validationStatus ?? existing?.validationStatus,
+		needsAttentionReason:
+			typeof payload.needsAttentionReason === "string"
+				? payload.needsAttentionReason
+				: (runsIn?.reason ?? existing?.needsAttentionReason),
+		bestNextAction: payload.bestNextAction ?? existing?.bestNextAction ?? bestNextActionForRunsIn(runsIn),
 	});
+}
+
+function defaultDiffTarget(state: GuiState): DiffTarget | undefined {
+	const selected = state.sessions.find((session) => session.id === state.selectedSessionId);
+	if (selected?.runsIn) return { kind: "session", sessionId: selected.id };
+	if (selected?.worktreeId && selected.projectId) {
+		return { kind: "worktree", projectId: selected.projectId, worktreeId: selected.worktreeId };
+	}
+	return state.lastProjectId ? { kind: "project", projectId: state.lastProjectId } : undefined;
+}
+
+function bestNextActionForRunsIn(runsIn?: WorkflowRunsInTarget): SessionBestNextAction | undefined {
+	if (!runsIn) return undefined;
+	if (runsIn.validationStatus === "valid") return { label: "Review diff" };
+	return { label: "Resolve target", disabled: true, reason: runsIn.reason ?? "Build target needs attention." };
 }
 
 function selectSession(state: GuiState, sessionId?: string): void {
@@ -1053,6 +1147,11 @@ async function hydrateGuiState(client: AppServerClient, state: GuiState): Promis
 					projectId: session.projectId,
 					worktreeId: session.worktreeId,
 					branch: session.branch,
+					runsIn: session.runsIn,
+					isolationMode: session.runsIn?.isolationMode ?? session.isolationMode,
+					validationStatus: session.validationStatus ?? session.runsIn?.validationStatus,
+					needsAttentionReason: session.needsAttentionReason ?? session.runsIn?.reason,
+					bestNextAction: session.bestNextAction ?? bestNextActionForRunsIn(session.runsIn),
 				});
 		}
 	});
@@ -1065,8 +1164,11 @@ async function hydrateGuiState(client: AppServerClient, state: GuiState): Promis
 	});
 	await safeHydrateStep(state, "diff", async () => {
 		const diffId = state.lastProjectId ?? state.projectRoot;
-		if (!diffId) return;
-		const result = (await client.request("diff/get", { diffId })) as { diff?: RendererDiffSummary };
+		const target = defaultDiffTarget(state);
+		if (!diffId && !target) return;
+		const result = (await client.request("diff/get", target ? { target } : { diffId: diffId as string })) as {
+			diff?: RendererDiffSummary;
+		};
 		state.activeDiff = result.diff;
 	});
 	await safeHydrateStep(state, "terminals", async () => {
@@ -1228,6 +1330,9 @@ function terminalFromSnapshot(snapshot: TerminalSnapshot): RendererTerminal {
 		projectId: snapshot.projectId,
 		worktreeId: snapshot.worktreeId,
 		sessionId: snapshot.sessionId,
+		exitCode: snapshot.exitCode,
+		exitSignal: snapshot.exitSignal,
+		elapsedMs: snapshot.elapsedMs,
 		updatedAt: snapshot.updatedAt,
 	};
 }

@@ -6,6 +6,9 @@
 	import ChangesPanel from "./ChangesPanel.svelte";
 	import WorktreePanel from "./WorktreePanel.svelte";
 	import TaskComposer from "./TaskComposer.svelte";
+	import BuildTargetTrustBar from "./BuildTargetTrustBar.svelte";
+	import NeedsAttentionRecovery from "./NeedsAttentionRecovery.svelte";
+	import CloseoutReceipt from "./CloseoutReceipt.svelte";
 
 	const { guiState, runtime, ui } = $props<{ guiState: GuiState; runtime: GuiRuntime; ui: import("../client/ui-state.svelte").UiState }>();
 	let query = $state("");
@@ -19,6 +22,8 @@
 
 	const projectLabel = $derived(dashboard.projectPath ?? "Choose a workspace");
 	const projectShortName = $derived(dashboard.projectName);
+	const selectedSession = $derived(guiState.sessions.find((session: SessionSummary) => session.id === guiState.selectedSessionId) ?? dashboard.activeSessions[0]);
+	let showCloseout = $state(true);
 
 	async function startFromComposer(input: ComposerSubmitInput): Promise<void> {
 		await runtime.startSessionFromPrompt({
@@ -117,10 +122,22 @@
 	</div>
 
 	<div class="min-h-0 flex-1 overflow-auto px-8 py-6 pb-44 bg-grid">
+		{#if selectedSession?.runsIn}
+			<div class="mb-4 draft-rise draft-rise-1">
+				<BuildTargetTrustBar runsIn={selectedSession.runsIn} nextAction={selectedSession.bestNextAction} />
+				<NeedsAttentionRecovery session={selectedSession} blocking={selectedSession.validationStatus !== "valid"} />
+			</div>
+		{/if}
 		<div class="mb-6 grid gap-4 lg:grid-cols-[340px_minmax(0,1fr)] draft-rise draft-rise-2">
 			<WorktreePanel worktrees={dashboard.worktrees} selectedWorktreeId={dashboard.activeWorktree?.id ? String(dashboard.activeWorktree.id) : undefined} onCreate={createWorktree} onSelect={selectWorktree} />
 			<ChangesPanel git={dashboard.activeDiff ?? { branch: dashboard.branchLabel === "detached" ? null : dashboard.branchLabel, upstream: dashboard.upstreamLabel === "no upstream" ? null : dashboard.upstreamLabel, ahead: dashboard.git.ahead, behind: dashboard.git.behind, stagedCount: dashboard.git.stagedCount, unstagedCount: dashboard.git.unstagedCount, files: [] }} />
 		</div>
+
+		{#if showCloseout}
+			<div class="mb-6 draft-rise draft-rise-3">
+				<CloseoutReceipt files={dashboard.activeDiff?.files ?? []} terminals={guiState.terminals} approvals={guiState.approvalItems.length} errors={guiState.diagnostics.map((item: import("../client/gui-state-types").RendererDiagnostic) => item.message)} worktreePath={selectedSession?.runsIn?.path ?? dashboard.activeWorktree?.path ?? dashboard.projectPath} branch={selectedSession?.runsIn?.branch ?? dashboard.branchLabel} onOpenInEditor={openInEditor} onContinue={() => { showCloseout = false; }} onClose={() => { showCloseout = false; }} />
+			</div>
+		{/if}
 
 		<div class="mb-3 flex items-baseline justify-between">
 			<h2 class="flex items-baseline gap-3">

@@ -21,6 +21,7 @@ export type TimelineRowKind =
 	| "custom-message"
 	| "label"
 	| "skill"
+	| "target"
 	| "system"
 	| "debug";
 
@@ -81,6 +82,23 @@ export function projectSessionEntry(
 					],
 				},
 			];
+		case "runs_in": {
+			const runsIn = record(entry.runsIn);
+			const path = stringField(runsIn.path) || stringField(entry.path);
+			const branch = stringField(runsIn.branch) || stringField(entry.branch);
+			return [
+				{
+					...base,
+					kind: "target",
+					title: "Runs in",
+					summary: [path, branch].filter(Boolean).join(" · "),
+					details: [
+						stringField(runsIn.isolationMode) || stringField(entry.isolationMode),
+						stringField(runsIn.validationStatus) || stringField(entry.validationStatus),
+					].filter(Boolean),
+				},
+			];
+		}
 		case "branch_summary":
 			return [
 				{

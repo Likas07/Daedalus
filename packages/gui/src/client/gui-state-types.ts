@@ -1,6 +1,8 @@
 import type { AppEvent, WorkflowChangedFile, WorkflowRiskGroup } from "@daedalus-pi/app-server-protocol";
+import type { NewBuildState } from "./new-build-state-machine";
 
 export type AccessMode = "supervised" | "auto-accept" | "unrestricted";
+export type { NewBuildState };
 
 export interface RendererProject {
 	readonly id: string;
@@ -64,6 +66,9 @@ export interface RendererTerminal {
 	projectId?: string;
 	worktreeId?: string;
 	sessionId?: string;
+	exitCode?: number | null;
+	exitSignal?: string | null;
+	elapsedMs?: number;
 	updatedAt?: string;
 }
 
@@ -102,6 +107,7 @@ export interface RendererDiffSummary {
 	readonly files: readonly WorkflowChangedFile[];
 	readonly patch?: string;
 	readonly riskyGroups: readonly WorkflowRiskGroup[];
+	readonly target?: import("@daedalus-pi/app-server-protocol").DiffTarget;
 }
 
 export interface RendererDiagnostic {

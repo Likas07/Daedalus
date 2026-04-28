@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { GuiRuntime, GuiState } from "../client/runtime";
-	import { removeTerminal, selectExistingTerminal } from "./terminal/terminal-state";
+	import { removeTerminal, selectExistingTerminal, terminalEvidenceRow } from "./terminal/terminal-state";
 	import { disposeManagedXterm } from "./terminal/xterm-manager";
 	import XtermViewport from "./terminal/XtermViewport.svelte";
 	import TerminalHeader from "./TerminalHeader.svelte";
@@ -8,6 +8,7 @@
 
 	const { state: appState, runtime, onCollapse } = $props<{ state: GuiState; runtime: GuiRuntime; onCollapse?: () => void }>();
 	const activeTerminal = $derived(appState.terminals.find((terminal: import("../client/gui-state-types").RendererTerminal) => terminal.terminalId === appState.activeTerminalId) ?? appState.terminals[0]);
+	const evidenceRows = $derived(appState.terminals.map(terminalEvidenceRow));
 
 	async function createTerminal(): Promise<void> {
 		const selectedSession = appState.sessions.find((session: import("../client/runtime").SessionSummary) => session.id === appState.selectedSessionId);
@@ -49,5 +50,19 @@
 				<button class="btn-mini" type="button" onclick={() => void createTerminal()}>Create terminal</button>
 			</div>
 		{/if}
+	</div>
+	<div class="border-t border-ink-500 bg-black/30 px-4 py-2" data-testid="terminal-evidence">
+		<div class="mb-1 caps text-bone-500">terminal evidence</div>
+		<div class="grid gap-1">
+			{#each evidenceRows as row}
+				<div class="grid grid-cols-[minmax(0,1fr)_80px_64px_minmax(0,1fr)_110px] gap-2 font-mono text-[10.5px] text-bone-400" data-testid="terminal-evidence-row">
+					<span class="truncate" title={row.cwd}>{row.cwd}</span>
+					<span>{row.status}</span>
+					<span>{row.exit}</span>
+					<span class="truncate" title={row.outputTail}>{row.outputTail || "no output"}</span>
+					<span class="truncate">{row.link ?? row.id}</span>
+				</div>
+			{/each}
+		</div>
 	</div>
 </section>

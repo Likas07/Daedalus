@@ -155,3 +155,12 @@ describe("GUI responsive policy", () => {
 		await app.close();
 	});
 });
+
+describe("Safe worktree responsive policy", () => {
+	test("trust bar and setup sheet keep critical controls visible on narrow screens", () => {
+		const css = require("node:fs").readFileSync(require("node:path").join(import.meta.dir, "styles.css"), "utf8");
+		expect(css).toContain("@media (max-width: 720px)");
+		expect(css).toContain(".build-target-trust-bar { grid-template-columns: 1fr; }");
+		expect(css).toContain(".setup-preview-grid { grid-template-columns: 1fr; }");
+	});
+});

@@ -4,12 +4,13 @@
 	import type { WorkflowChangedFile } from "@daedalus-pi/app-server-protocol";
 	import type { RendererDiffSummary } from "../client/gui-state-types";
 
-	const { diff, patch = diff?.patch ?? "", path = null, readonly = true, disabledReason = "Requires Git mutation policy", onStage, onUnstage, onDiscard, onCommit } = $props<{
+	const { diff, patch = diff?.patch ?? "", path = null, readonly = true, disabledReason = "Requires Git mutation policy", warning, onStage, onUnstage, onDiscard, onCommit } = $props<{
 		diff?: RendererDiffSummary;
 		patch?: string;
 		path?: string | null;
 		readonly?: boolean;
 		disabledReason?: string;
+		warning?: string;
 		onStage?: (paths: readonly string[]) => void | Promise<void>;
 		onUnstage?: (paths: readonly string[]) => void | Promise<void>;
 		onDiscard?: (paths: readonly string[]) => void | Promise<void>;
@@ -111,7 +112,9 @@
 	</header>
 
 	<div class="min-h-0 flex-1 overflow-y-auto">
-		{#if renderError}
+		{#if warning}
+			<div class="m-4 rounded border border-amber-500/50 bg-amber-500/10 px-4 py-3 font-mono text-[11.5px] text-amber-200" data-testid="diff-target-warning">{warning}</div>
+		{:else if renderError}
 			<div class="px-5 py-4 font-mono text-[11.5px] text-bone-400">{renderError}</div>
 		{:else if renderedHTML}
 			<div class="diff-host px-2 py-3" data-diff-view-mode={viewMode}>{@html renderedHTML}</div>

@@ -96,3 +96,23 @@ describe("GUI accessibility and ownership hardening", () => {
 		expect(approvalCard).toContain("Deny approval");
 	});
 });
+
+describe("Safe worktree UI accessibility", () => {
+	test("trust bar and recovery expose labelled blocking semantics and disabled reasons", () => {
+		const trustBar = source("BuildTargetTrustBar.svelte");
+		const recovery = source("NeedsAttentionRecovery.svelte");
+
+		expect(trustBar).toContain('aria-label="Build target"');
+		expect(trustBar).toContain('aria-live="polite"');
+		expect(trustBar).toContain("aria-describedby");
+		expect(trustBar).toContain("Full path");
+
+		expect(recovery).toContain('role={blocking ? "alertdialog" : "alert"}');
+		expect(recovery).toContain('aria-modal={blocking ? "true" : undefined}');
+		expect(recovery).toContain("Repair");
+		expect(recovery).toContain("Locate worktree");
+		expect(recovery).toContain("Archive record");
+		expect(recovery).toContain("Continue is unavailable until validation passes");
+		expect(recovery).not.toContain(">Continue<");
+	});
+});

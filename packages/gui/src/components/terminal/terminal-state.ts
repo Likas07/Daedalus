@@ -20,6 +20,40 @@ export function terminalCloseLabel(terminal?: Pick<RendererTerminal, "terminalId
 	return `Close terminal ${terminalLabel(terminal)}`;
 }
 
+export interface TerminalEvidenceRow {
+	readonly id: string;
+	readonly cwd: string;
+	readonly status: RendererTerminal["status"];
+	readonly exit: string;
+	readonly outputTail: string;
+	readonly link?: string;
+}
+
+export function terminalOutputTail(history: string, maxLines = 3): string {
+	return history.trimEnd().split("\n").slice(-maxLines).join("\n");
+}
+
+export function terminalEvidenceRow(terminal: RendererTerminal): TerminalEvidenceRow {
+	const exit =
+		terminal.exitCode != null
+			? `exit ${terminal.exitCode}`
+			: terminal.exitSignal
+				? `signal ${terminal.exitSignal}`
+				: "—";
+	return {
+		id: terminal.terminalId,
+		cwd: terminal.cwd,
+		status: terminal.status,
+		exit,
+		outputTail: terminalOutputTail(terminal.history),
+		link: terminal.sessionId
+			? `session:${terminal.sessionId}`
+			: terminal.worktreeId
+				? `worktree:${terminal.worktreeId}`
+				: undefined,
+	};
+}
+
 export function capTerminalHistory(history: string, options: { maxBytes?: number; maxLines?: number } = {}): string {
 	const maxBytes = options.maxBytes ?? TERMINAL_HISTORY_MAX_BYTES;
 	const maxLines = options.maxLines ?? TERMINAL_HISTORY_MAX_LINES;
