@@ -13,6 +13,11 @@ import type {
 	ServerRequest,
 	ServerResponse,
 	SessionStartParams,
+	SessionStartResult,
+	WorktreeCreateParams,
+	WorktreeCreateResult,
+	WorktreeListParams,
+	WorktreeListResult,
 } from "@daedalus-pi/app-server-protocol";
 import { RuntimeControlClient } from "./runtime-control";
 import { SessionClient } from "./sessions";
@@ -110,8 +115,16 @@ export class AppServerClient {
 		return this.request("initialize", params);
 	}
 
-	startSession(params: SessionStartParams): Promise<unknown> {
+	startSession(params: SessionStartParams): Promise<SessionStartResult> {
 		return this.request("session/start", params);
+	}
+
+	listWorktrees(params: WorktreeListParams): Promise<WorktreeListResult> {
+		return this.request("worktree/list", params);
+	}
+
+	createWorktree(params: WorktreeCreateParams): Promise<WorktreeCreateResult> {
+		return this.request("worktree/create", params);
 	}
 
 	replayEvents(params: EventReplayParams = {}): Promise<EventReplayResult> {

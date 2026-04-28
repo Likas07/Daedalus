@@ -144,6 +144,68 @@ test("provides typed GUI protocol helpers", async () => {
 				});
 				return;
 			}
+			if (request.method === "worktree/list" || request.method === "worktree/create") {
+				send({
+					kind: "response",
+					id: request.id,
+					ok: true,
+					result: {
+						worktrees:
+							request.method === "worktree/list"
+								? [
+										{
+											id: "worktree-1",
+											projectId: "project-1",
+											branch: "safe",
+											path: "/repo-wt",
+											dirty: false,
+											dirtyCount: 0,
+											activeSessionCount: 0,
+											cleanupRequiresConfirmation: false,
+										},
+									]
+								: undefined,
+						worktree:
+							request.method === "worktree/create"
+								? {
+										id: "worktree-1",
+										projectId: "project-1",
+										branch: request.params.branch,
+										path: "/repo-wt",
+										dirty: false,
+										dirtyCount: 0,
+										activeSessionCount: 0,
+										cleanupRequiresConfirmation: false,
+									}
+								: undefined,
+					},
+				});
+				return;
+			}
+			if (request.method === "session/start") {
+				send({ kind: "response", id: request.id, ok: true, result: { sessionId: "session-1" } });
+				return;
+			}
+			if (request.method === "diff/get") {
+				send({
+					kind: "response",
+					id: request.id,
+					ok: true,
+					result: {
+						diff: {
+							branch: "feature",
+							upstream: "origin/main",
+							ahead: 1,
+							behind: 0,
+							stagedCount: 0,
+							unstagedCount: 1,
+							files: [],
+							riskyGroups: [],
+						},
+					},
+				});
+				return;
+			}
 			send({ kind: "response", id: request.id, ok: true, result: {} });
 		}),
 	});
@@ -151,6 +213,21 @@ test("provides typed GUI protocol helpers", async () => {
 	await expect(client.searchComposerFiles({ projectId: "project-1", query: "src", limit: 5 })).resolves.toMatchObject({
 		files: [{ path: "src/index.ts" }],
 	});
+	await expect(client.createWorktree({ projectId: "project-1", branch: "safe" })).resolves.toMatchObject({
+		worktree: { id: "worktree-1", branch: "safe" },
+	});
+	await expect(client.listWorktrees({ projectId: "project-1" })).resolves.toMatchObject({
+		worktrees: [{ id: "worktree-1" }],
+	});
+	await expect(
+		client.startSession({
+			startTarget: { mode: "isolated-worktree", projectId: "project-1", worktreeId: "worktree-1" },
+			prompt: "hello",
+		}),
+	).resolves.toMatchObject({ sessionId: "session-1" });
+	await expect(
+		client.getDiff({ target: { kind: "worktree", projectId: "project-1", worktreeId: "worktree-1" } }),
+	).resolves.toMatchObject({ diff: { branch: "feature" } });
 	await expect(client.listComposerCommands()).resolves.toMatchObject({ commands: [{ name: "plan" }] });
 	await expect(
 		client.saveComposerAttachment({ filename: "image.png", mimeType: "image/png", dataBase64: "AAAA" }),
@@ -174,6 +251,8 @@ test("provides typed GUI protocol helpers", async () => {
 	expect(seenMethods).toContain("composer/file-search");
 	expect(seenMethods).toContain("access/set");
 	expect(seenMethods).toContain("terminal/create");
+	expect(seenMethods).toContain("worktree/create");
+	expect(seenMethods).toContain("worktree/list");
 	await client.close();
 });
 
@@ -188,7 +267,10 @@ test("reconnect replays missed events once", async () => {
 	});
 
 	await client.initialize({ protocolVersion: "0.1.0", client: { name: "test" } });
-	await client.startSession({ projectId: "project-1", prompt: "hello" });
+	await client.startSession({
+		startTarget: { mode: "isolated-worktree", projectId: "project-1", worktreeId: "worktree-1" },
+		prompt: "hello",
+	});
 	expect(delivered).toEqual(["event-1"]);
 
 	firstTransport.close();
