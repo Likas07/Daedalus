@@ -24,7 +24,7 @@
 	}>();
 
 	let draft = $state("");
-	let path = $state("");
+
 	let error = $state("");
 	let submitting = $state(false);
 	let submitInFlight = false;
@@ -37,7 +37,7 @@
 	let loadedKey = "";
 	let textarea: HTMLTextAreaElement;
 
-	$effect(() => { path = projectPath ?? path; });
+
 	$effect(() => {
 		if (!storageKey || loadedKey === storageKey || typeof localStorage === "undefined") return;
 		draft = localStorage.getItem(storageKey) ?? "";
@@ -152,7 +152,7 @@
 		error = "";
 		if (disabled) { error = disabledReason ?? "Composer is unavailable."; return; }
 		const prompt = draft.trim();
-		const trimmedPath = (projectPath ?? path).trim();
+		const trimmedPath = (projectPath ?? guiState.projectRoot ?? "").trim();
 		if (!prompt) { error = "Enter a prompt before submitting."; return; }
 		if (requireProjectPath && !trimmedPath) { error = "Choose a project path before starting a session."; return; }
 		submitting = true;
@@ -231,14 +231,7 @@
 		<span class="ml-auto truncate font-mono text-[10px] text-bone-500" title={cwdLabel}>{cwdLabel}</span>
 	</div>
 
-	{#if requireProjectPath}
-		<input
-			data-testid="composer-project-path"
-			class="w-full border-b border-ink-500 bg-transparent px-4 py-2 font-mono text-[12.5px] text-bone-100 placeholder:text-bone-500 focus:outline-none"
-			bind:value={path}
-			placeholder="/path/to/project"
-		/>
-	{/if}
+
 
 	<div class="relative">
 		<textarea

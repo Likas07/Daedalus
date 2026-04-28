@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { WorkflowChangedFile } from "@daedalus-pi/app-server-protocol";
-	import type { GuiState, SessionSummary } from "../client/runtime";
+	import { buildDaedalusWorkflowViewModel, workflowFromTypedEvents } from "../client/daedalus-workflow-view-model";
+	import type { GuiState } from "../client/runtime";
 	import type { UiState } from "../client/ui-state.svelte";
 	import ApprovalQueue from "./ApprovalQueue.svelte";
 
@@ -21,9 +22,13 @@
 		diffExpanded ? diffFiles : diffFiles.slice(0, DIFF_COLLAPSED_LIMIT),
 	);
 	const diffOverflow = $derived(Math.max(0, diffFiles.length - DIFF_COLLAPSED_LIMIT));
+	const eventWorkflow = $derived(workflowFromTypedEvents(guiState.events));
+	const workflow = $derived(eventWorkflow?.sessionId === guiState.selectedSessionId ? eventWorkflow : undefined);
+	const workflowView = $derived(workflow ? buildDaedalusWorkflowViewModel(workflow) : undefined);
+	const activePlan = $derived(workflow?.plans.at(-1));
 
 	const counts = $derived<Record<Section, string>>({
-		plan: guiState.selectedSessionId ? "1" : "0",
+		plan: workflowView ? workflowView.workflow.todos.length.toString() : "0",
 		approvals: guiState.approvalItems.length.toString().padStart(2, "0"),
 		diff: `${diffFiles.length}`,
 	});
@@ -52,9 +57,31 @@
 	<section class="border-b border-ink-500">
 		{@render sectionHeader("plan", "plan")}
 		{#if open.plan}
-			<div class="pb-4 text-bone-200">
-				{guiState.sessions.find((session: SessionSummary) => session.id === guiState.selectedSessionId)?.title ?? "No active plan selected."}
-			</div>
+			{#if workflow && workflowView}
+				<div class="space-y-3 pb-4 text-bone-200">
+					<div>
+						<div class="truncate text-[13px] font-medium text-bone-50" title={activePlan?.title ?? "Plan"}>{activePlan?.title ?? "Plan"}</div>
+						<div class="mt-1 font-mono text-[10px] text-bone-400">{activePlan?.status ?? "captured"} · {workflowView.todoSummary}</div>
+					</div>
+					<ul class="space-y-2">
+						{#each workflow.todos as todo (todo.id)}
+							<li class="border-l border-ink-500 pl-2">
+								<div class="flex items-baseline justify-between gap-2">
+									<span class="truncate text-[12px] text-bone-100" title={todo.title}>{todo.title}</span>
+									<span class="shrink-0 font-mono text-[9px] uppercase tracking-[0.12em] text-bone-400">{todo.status.replaceAll("_", " ")}</span>
+								</div>
+								{#if todo.summary}
+									<div class="mt-0.5 line-clamp-2 text-[11px] leading-snug text-bone-400">{todo.summary}</div>
+								{/if}
+							</li>
+						{:else}
+							<li class="font-mono text-[10px] text-bone-400">No todos captured.</li>
+						{/each}
+					</ul>
+				</div>
+			{:else}
+				<div class="pb-4 text-bone-200">No active plan selected.</div>
+			{/if}
 		{/if}
 	</section>
 
