@@ -108,11 +108,23 @@ function registerIpc(): void {
 		}
 		return openFileDialog(mainWindow);
 	});
-	ipcMain.handle("daedalus:shell:open-external-editor", async (_event, input: { path?: string }) => {
-		const target = input.path;
-		if (!target) throw new Error("Missing path for external editor");
-		await shell.openPath(target);
-	});
+	ipcMain.handle(
+		"daedalus:shell:open-external-editor",
+		async (_event, input: { path?: string; projectId?: string; sessionId?: string; worktreeId?: string } = {}) => {
+			const target = input.path;
+			if (!target) throw new Error("Missing path for external editor");
+			// Desktop may open a server-projected path, but it must not reinterpret that path
+			// as the mutation target. Preserve IDs for renderer/app-server flows that need
+			// project/session/worktree identity rather than raw filesystem truth.
+			await shell.openPath(target);
+			return {
+				path: target,
+				projectId: input.projectId,
+				sessionId: input.sessionId,
+				worktreeId: input.worktreeId,
+			};
+		},
+	);
 	ipcMain.handle("daedalus:shell:open-external-url", async (_event, input: { url?: string }) => {
 		if (!input.url || !isSafeExternalUrl(input.url)) throw new Error("Unsupported external URL");
 		await shell.openExternal(input.url);

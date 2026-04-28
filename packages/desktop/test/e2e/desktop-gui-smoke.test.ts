@@ -43,6 +43,9 @@ describe("desktop GUI E2E smoke", () => {
 				dbPath: join(resources, "app.sqlite"),
 				appServerVersion: "smoke",
 			});
+			expect(bootstrap).not.toHaveProperty("projectRoot");
+			expect(bootstrap).not.toHaveProperty("worktreePath");
+			expect(bootstrap).not.toHaveProperty("startTarget");
 		} finally {
 			rmSync(resources, { recursive: true, force: true });
 		}
@@ -67,6 +70,13 @@ describe("desktop GUI E2E smoke", () => {
 		router.send("export-diagnostics", {});
 		router.send("show-notification", { kind: "run-completed", body: "done" });
 		router.send("open-deep-link", { url });
+		const editorContext = {
+			path: join(projectPath, "worktree-file.txt"),
+			projectId: "project-1",
+			sessionId: "session-1",
+			worktreeId: "worktree-1",
+		};
+		router.send("open-external-editor", editorContext as never);
 		expect(url).toBe("daedalus://open?project=project-1&session=session-1&worktree=worktree-1");
 		expect(sent).toEqual([
 			{ id: "open-project", payload: { path: projectPath } },
@@ -79,6 +89,7 @@ describe("desktop GUI E2E smoke", () => {
 			{ id: "export-diagnostics", payload: {} },
 			{ id: "show-notification", payload: { kind: "run-completed", body: "done" } },
 			{ id: "open-deep-link", payload: { url } },
+			{ id: "open-external-editor", payload: editorContext },
 		]);
 		expect(() => router.send("open-folder", { path: "" })).toThrow("Native command path must not be empty");
 		expect(() => router.send("open-deep-link", { url: "javascript:alert(1)" })).toThrow(

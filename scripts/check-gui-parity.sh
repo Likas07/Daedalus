@@ -27,6 +27,16 @@ for test_file in "${REQUIRED_PARITY_TESTS[@]}"; do
 	fi
 done
 
+if ! grep -q "session/start requires explicit startTarget" packages/desktop/test/e2e/gui-smoke.test.ts; then
+	echo "Desktop GUI smoke must verify app-server startTarget validation is not bypassed" >&2
+	exit 1
+fi
+
+if ! grep -q "worktreeId" packages/desktop/test/e2e/desktop-gui-smoke.test.ts; then
+	echo "Desktop GUI smoke must verify project/session/worktree context preservation" >&2
+	exit 1
+fi
+
 bun run check:gui
 bun --cwd=packages/app-server-protocol test
 bun --cwd=packages/app-server-client test

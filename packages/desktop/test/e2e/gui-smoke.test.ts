@@ -120,5 +120,14 @@ describe("desktop GUI smoke without Electron display", () => {
 			params: { types: ["extension.ui.completed"] },
 		});
 		expect(replay).toMatchObject({ events: [event] });
+
+		await expect(
+			server.router.handle({
+				kind: "request",
+				id: "unsafe-start",
+				method: "session/start",
+				params: { projectId: "project-smoke", prompt: "must not bypass validation" },
+			}),
+		).rejects.toThrow("session/start requires explicit startTarget");
 	});
 });
