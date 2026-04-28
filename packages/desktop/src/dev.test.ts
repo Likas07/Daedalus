@@ -2,7 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { $ } from "bun";
-import { defaultGuiDevPort, electronDevCommand, guiDevPort, guiDevUrl, isDaedalusGuiServing, isUrlServing, waitForUrl } from "./dev";
+import {
+	defaultGuiDevPort,
+	electronDevCommand,
+	guiDevPort,
+	guiDevUrl,
+	isDaedalusGuiServing,
+	isUrlServing,
+	waitForUrl,
+} from "./dev";
 
 describe("desktop dev launcher helpers", () => {
 	test("isUrlServing returns true only for successful responses", async () => {

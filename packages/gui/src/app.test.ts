@@ -434,10 +434,16 @@ describe("GUI app", () => {
 		document.body.replaceChildren(root);
 		const transport = new MemoryTransport();
 		Object.defineProperty(window, "innerWidth", { configurable: true, value: 1200 });
-		const app = await createApp({ root, transport, bootstrap: { wsEndpoint: "ws://localhost/ws", projectRoot: "/repo" } });
+		const app = await createApp({
+			root,
+			transport,
+			bootstrap: { wsEndpoint: "ws://localhost/ws", projectRoot: "/repo" },
+		});
 		await app.start();
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		const sidebarInput = root.querySelector<HTMLInputElement>('[data-testid="left-nav"] [data-testid="composer-project-path"]');
+		const sidebarInput = root.querySelector<HTMLInputElement>(
+			'[data-testid="left-nav"] [data-testid="composer-project-path"]',
+		);
 		if (!sidebarInput) throw new Error("Missing sidebar project path input");
 		expect(root.querySelector('[data-testid="task-composer"] [data-testid="composer-project-path"]')).toBeNull();
 		sidebarInput.value = "/tmp/sidebar-project";
@@ -460,7 +466,11 @@ describe("GUI app", () => {
 		document.body.replaceChildren(root);
 		const transport = new MemoryTransport();
 		Object.defineProperty(window, "innerWidth", { configurable: true, value: 1200 });
-		const app = await createApp({ root, transport, bootstrap: { wsEndpoint: "ws://localhost/ws", projectRoot: "/repo" } });
+		const app = await createApp({
+			root,
+			transport,
+			bootstrap: { wsEndpoint: "ws://localhost/ws", projectRoot: "/repo" },
+		});
 		await app.start();
 		app.runtime.selectSession("session-1");
 		transport.listener?.({
@@ -475,10 +485,24 @@ describe("GUI app", () => {
 					payload: {
 						workflow: {
 							sessionId: "session-1",
-							plans: [{ id: "plan-1", title: "Build GUI fix", status: "executing", taskIds: ["todo-1", "todo-2"] }],
+							plans: [
+								{ id: "plan-1", title: "Build GUI fix", status: "executing", taskIds: ["todo-1", "todo-2"] },
+							],
 							todos: [
-								{ id: "todo-1", title: "Move project path", status: "completed", summary: "Sidebar owns project opening.", dependencies: [] },
-								{ id: "todo-2", title: "Expose todos", status: "in_progress", summary: "Render compact plan state.", dependencies: ["todo-1"] },
+								{
+									id: "todo-1",
+									title: "Move project path",
+									status: "completed",
+									summary: "Sidebar owns project opening.",
+									dependencies: [],
+								},
+								{
+									id: "todo-2",
+									title: "Expose todos",
+									status: "in_progress",
+									summary: "Render compact plan state.",
+									dependencies: ["todo-1"],
+								},
 							],
 							questions: [],
 							semanticWorkspace: { status: "idle" },
@@ -729,5 +753,9 @@ describe("Safe worktree build setup UI", () => {
 		expect(setup).toContain("Base checkout can modify the current checkout");
 		expect(setup).toContain('role="alert"');
 		expect(setup).toContain("Dirty files");
+		expect(setup).toContain("Setup failed");
+		expect(setup).toContain("Retry by sending the prompt again");
+		expect(setup).toContain("Creating safe worktree");
+		expect(setup).toContain("Starting session");
 	});
 });

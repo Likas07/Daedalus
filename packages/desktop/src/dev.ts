@@ -12,7 +12,6 @@ const devMainEntry = join(desktopRoot, ".daedalus", "desktop-dev", "main.js");
 type DevSubprocess = ReturnType<typeof Bun.spawn>;
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
-
 const children = new Set<DevSubprocess>();
 
 export interface WaitForUrlOptions {
@@ -21,24 +20,22 @@ export interface WaitForUrlOptions {
 	fetcher?: Fetcher;
 }
 
-
-
 export function electronDevCommand(entry = devMainEntry): string[] {
 	return ["electron", entry];
 }
 
 export function guiDevPort(env: Pick<NodeJS.ProcessEnv, string> = Bun.env): number {
-const rawPort = env[guiPortEnvVar];
-if (rawPort === undefined || rawPort === "") return defaultGuiDevPort;
-const port = Number(rawPort);
-if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-throw new Error(`${guiPortEnvVar} must be a TCP port between 1 and 65535; got ${JSON.stringify(rawPort)}`);
-}
-return port;
+	const rawPort = env[guiPortEnvVar];
+	if (rawPort === undefined || rawPort === "") return defaultGuiDevPort;
+	const port = Number(rawPort);
+	if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+		throw new Error(`${guiPortEnvVar} must be a TCP port between 1 and 65535; got ${JSON.stringify(rawPort)}`);
+	}
+	return port;
 }
 
 export function guiDevUrl(env: Pick<NodeJS.ProcessEnv, string> = Bun.env): string {
-return `http://${host}:${guiDevPort(env)}/`;
+	return `http://${host}:${guiDevPort(env)}/`;
 }
 
 export async function isDaedalusGuiServing(url: string, fetcher: Fetcher = fetch): Promise<boolean> {
