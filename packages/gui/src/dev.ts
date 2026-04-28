@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 
 const host = "127.0.0.1";
 const appServerPort = 43117;
-const defaultGuiPort = 5174;
+const defaultGuiPort = 58_473;
 const guiPortEnvVar = "DAEDALUS_GUI_DEV_PORT";
 const devToken = "daedalus-gui-dev-token";
 
