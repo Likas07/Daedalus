@@ -15,7 +15,13 @@ const bridge: DaedalusNativeBridge = {
 		openFolder: (path) => ipcRenderer.invoke("daedalus:shell:open-folder", { path }),
 		openFile: (path) => ipcRenderer.invoke("daedalus:shell:open-file", { path }),
 		openExternalUrl: (url) => ipcRenderer.invoke("daedalus:shell:open-external-url", { url }),
-		openExternalEditor: (path) => ipcRenderer.invoke("daedalus:shell:open-external-editor", { path }),
+		openExternalEditor: (
+			input?: string | { path?: string; projectId?: string; sessionId?: string; worktreeId?: string },
+		) =>
+			ipcRenderer.invoke(
+				"daedalus:shell:open-external-editor",
+				typeof input === "string" || input === undefined ? { path: input } : input,
+			),
 	},
 	notifications: {
 		show: (kind, body) => ipcRenderer.invoke("daedalus:notifications:show", { kind, body }),
