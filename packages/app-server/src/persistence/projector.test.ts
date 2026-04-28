@@ -175,6 +175,64 @@ describe("runtime event projector", () => {
 			exitCode: 0,
 		});
 	});
+	test("replay reconstructs runsIn and NeedsAttention session state", () => {
+		const db = migratedInMemoryDatabase();
+		const validRunsIn = {
+			projectId: "project-safe",
+			worktreeId: "wt-safe",
+			path: "/repo-wt",
+			canonicalPath: "/repo-wt",
+			branch: "feature/safe",
+			isolationMode: "isolated-worktree",
+			validationStatus: "valid",
+		} as const;
+		appendEvent(db, {
+			streamId: "project:project-safe",
+			type: "project/registered",
+			payload: { projectId: "project-safe", name: "Safe", path: "/repo" },
+		});
+		appendEvent(db, {
+			streamId: "worktree:wt-safe",
+			type: "worktree/created",
+			payload: { worktreeId: "wt-safe", projectId: "project-safe", path: "/repo-wt", branch: "feature/safe" },
+		});
+		db.query("INSERT INTO runtime_events (stream_id, type, payload) VALUES (?, ?, ?)").run(
+			"session:s-safe",
+			"app/event",
+			JSON.stringify({
+				type: "session/started",
+				sessionId: "s-safe",
+				payload: { runsIn: validRunsIn, title: "Safe run" },
+			}),
+		);
+		appendEvent(db, {
+			streamId: "session:s-attention",
+			type: "session/started",
+			payload: {
+				sessionId: "s-attention",
+				runsIn: { ...validRunsIn, validationStatus: "needs-attention", reason: "worktree path is missing" },
+			},
+		});
+
+		expect(projectRuntimeEvents(db)).toMatchObject({ projected: 4, lastSeq: 4 });
+		expect(listProjectSessions(db, "project-safe")).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					id: "s-safe",
+					runsIn: expect.objectContaining({
+						worktreeId: "wt-safe",
+						branch: "feature/safe",
+						validationStatus: "valid",
+					}),
+				}),
+				expect.objectContaining({
+					id: "s-attention",
+					validationStatus: "needs-attention",
+					needsAttentionReason: "worktree path is missing",
+				}),
+			]),
+		);
+	});
 });
 
 function rowCount(database: AppServerDatabase, table: string): number {

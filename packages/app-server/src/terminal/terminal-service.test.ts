@@ -168,3 +168,16 @@ describe("TerminalService", () => {
 		expect(restored.replay(terminal.terminalId, 0).chunks).toEqual([{ seq: 1, data: "persisted\n" }]);
 	});
 });
+
+test("stopped terminal snapshots preserve the last output and exit evidence", async () => {
+	const pty = fakePty();
+	const service = new TerminalService({ pty: pty.adapter });
+	const terminal = await service.create({ cwd: "/tmp", shell: "/bin/sh" });
+	pty.emitData("last line\n");
+	pty.emitExit(7);
+	const snapshot = service.attach(terminal.terminalId);
+	expect(snapshot.status).toBe("exited");
+	expect(snapshot.exitCode).toBe(7);
+	expect(snapshot.history).toBe("last line\n");
+	expect(service.replay(terminal.terminalId, 0).chunks).toEqual([{ seq: 1, data: "last line\n" }]);
+});

@@ -1,5 +1,12 @@
 import type { ImageContent } from "@daedalus-pi/ai";
-import type { AppEvent, ServerNotification, ServerRequest, SessionId, TurnId } from "@daedalus-pi/app-server-protocol";
+import type {
+	AppEvent,
+	ServerNotification,
+	ServerRequest,
+	SessionId,
+	TurnId,
+	WorkflowRunsInTarget,
+} from "@daedalus-pi/app-server-protocol";
 export type RuntimeSessionManager = unknown;
 
 import { mapRuntimeEvent } from "./event-mapper";
@@ -74,6 +81,7 @@ export interface StartSessionInput {
 	readonly context?: PromptContextInput;
 	readonly projectId?: string;
 	readonly worktreeId?: string;
+	readonly runsIn?: WorkflowRunsInTarget;
 }
 
 export interface ResumeSessionInput {
@@ -114,7 +122,7 @@ export class SessionController {
 
 	constructor(private readonly options: SessionControllerOptions) {}
 
-	async startSession(input: StartSessionInput): Promise<{ sessionId: SessionId }> {
+	async startSession(input: StartSessionInput): Promise<{ sessionId: SessionId; runsIn?: WorkflowRunsInTarget }> {
 		const sessionId = input.sessionId ?? this.nextSessionId();
 		const runtime = await this.options.runtimeFactory({
 			cwd: input.cwd,
@@ -136,13 +144,14 @@ export class SessionController {
 				sessionFile: runtime.session.sessionFile,
 				projectId: input.projectId,
 				worktreeId: input.worktreeId,
+				runsIn: input.runsIn,
 			},
 		});
 		await this.emit({ kind: "notification", method: "session/changed", params: { sessionId, status: "active" } });
 		if (input.prompt) {
 			await this.startTurn({ sessionId, prompt: input.prompt, context: input.context });
 		}
-		return { sessionId };
+		return { sessionId, runsIn: input.runsIn };
 	}
 
 	async resumeSession(input: ResumeSessionInput): Promise<{ sessionId: SessionId }> {

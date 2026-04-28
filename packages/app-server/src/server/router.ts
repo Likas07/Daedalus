@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { stat } from "node:fs/promises";
+import { lstat, realpath, stat } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import type {
 	AppEvent,
 	AuditQuery,
 	ClientNotification,
 	ClientRequest,
+	DiffTarget,
 	ServerNotification,
 	ServerRequest,
+	WorkflowRunsInTarget,
 } from "@daedalus-pi/app-server-protocol";
 import { type AppServerDatabase, appendEvent, type EventPayload, readEventsAfter } from "..";
 import { AttachmentService } from "../composer/attachment-service";
@@ -34,8 +36,10 @@ import type { PtyAdapter } from "../terminal/pty-adapter";
 import { TerminalService } from "../terminal/terminal-service";
 import { CheckpointService } from "../workspaces/checkpoint-service";
 import { DiffService } from "../workspaces/diff-service";
+import { gitStatus } from "../workspaces/git";
 import { GitMutationService } from "../workspaces/git-mutation-service";
 import { ProjectService } from "../workspaces/project-service";
+import { validateWorktreeTarget } from "../workspaces/worktree-safety";
 import { WorktreeService } from "../workspaces/worktree-service";
 
 import { ExportService } from "./export-service";
@@ -215,13 +219,14 @@ export class AppRouter {
 				return { sessionId: result.sessionId, status: "active" };
 			}
 			case "session/start": {
-				const cwd = this.projects.get(request.params.projectId) ?? request.params.projectId;
+				const start = await this.resolveSessionStartTarget(request.params);
 				return this.options.controller.startSession({
-					cwd,
+					cwd: start.cwd,
 					prompt: request.params.prompt,
-					projectId: request.params.projectId,
-					worktreeId: request.params.worktreeId,
-					context: request.params,
+					projectId: start.runsIn.projectId,
+					worktreeId: start.runsIn.worktreeId,
+					runsIn: start.runsIn,
+					context: { ...request.params, projectId: start.runsIn.projectId, worktreeId: start.runsIn.worktreeId },
 				});
 			}
 			case "turn/start":
@@ -339,7 +344,7 @@ export class AppRouter {
 				return { ...result, checkpoint };
 			}
 			case "diff/get": {
-				const cwd = this.resolveProjectOrWorktreeCwd(request.params.diffId);
+				const cwd = await this.resolveDiffGetCwd(request.params);
 				return { diff: await this.diffService.get(cwd) };
 			}
 			case "git/stage": {
@@ -585,6 +590,37 @@ export class AppRouter {
 		);
 	}
 
+	private async resolveDiffGetCwd(params: { diffId?: string; target?: DiffTarget }): Promise<string> {
+		if (params.target) return this.resolveDiffTargetCwd(params.target);
+		if (!params.diffId) throw new Error("diff/get requires a structured target or legacy diffId");
+		return this.resolveProjectOrWorktreeCwd(params.diffId);
+	}
+
+	private async resolveDiffTargetCwd(target: DiffTarget): Promise<string> {
+		switch (target.kind) {
+			case "project": {
+				const project = this.projectService.get(target.projectId);
+				if (!project) throw new Error(`Unknown project: ${target.projectId}`);
+				return project.path;
+			}
+			case "worktree": {
+				const worktree = this.worktreeService.open(target.worktreeId);
+				if (!worktree) throw new Error(`Unknown worktree: ${target.worktreeId}`);
+				if (worktree.projectId !== target.projectId)
+					throw new Error(`Worktree ${target.worktreeId} does not belong to project ${target.projectId}`);
+				return worktree.path;
+			}
+			case "session": {
+				try {
+					return this.options.controller.getSessionRuntime(target.sessionId).cwd;
+				} catch {
+					const session = await this.sessionStore.read({ sessionId: target.sessionId });
+					return session.header.cwd;
+				}
+			}
+		}
+	}
+
 	private resolveProjectOrWorktreeCwd(diffId: string): string {
 		const projectPath = this.projects.get(diffId);
 		if (projectPath) return projectPath;
@@ -592,6 +628,45 @@ export class AppRouter {
 			if (worktree.id === diffId || worktree.path === diffId) return worktree.path;
 		}
 		return resolve(diffId);
+	}
+
+	private async resolveSessionStartTarget(params: {
+		projectId?: string;
+		startTarget?:
+			| { mode: "isolated-worktree"; projectId: string; worktreeId: string }
+			| { mode: "base-checkout"; projectId: string; confirmation: { confirmed: true; evidence: string } };
+	}): Promise<{ cwd: string; runsIn: WorkflowRunsInTarget }> {
+		const projectId = params.startTarget?.projectId ?? params.projectId;
+		if (!projectId) throw new Error("session/start requires projectId");
+		if (!params.startTarget) throw new Error("session/start requires explicit startTarget");
+		if (params.startTarget.mode === "isolated-worktree") {
+			const validation = await validateWorktreeTarget({
+				database: this.options.database,
+				projectId,
+				worktreeId: params.startTarget.worktreeId,
+			});
+			if (validation.status !== "valid") throw new Error(`Unsafe worktree target: ${validation.reason}`);
+			return { cwd: validation.runsIn.canonicalPath, runsIn: validation.runsIn };
+		}
+		if (params.startTarget.confirmation?.confirmed !== true)
+			throw new Error("base-checkout start requires explicit confirmation");
+		const project = this.projectService.get(projectId);
+		if (!project) throw new Error(`Unknown project: ${projectId}`);
+		const projectStat = await lstat(project.path);
+		if (projectStat.isSymbolicLink()) throw new Error(`Project path is a symlink: ${project.path}`);
+		const canonicalPath = await realpath(project.path);
+		const status = await gitStatus(canonicalPath);
+		return {
+			cwd: canonicalPath,
+			runsIn: {
+				projectId,
+				path: project.path,
+				canonicalPath,
+				branch: status.branch ?? "",
+				isolationMode: "base-checkout",
+				validationStatus: "valid",
+			},
+		};
 	}
 	private recentAppEvents(limit = 1000): AppEvent[] {
 		return readEventsAfter(this.options.database, 0, { limit })

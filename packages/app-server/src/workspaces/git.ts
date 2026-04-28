@@ -20,6 +20,12 @@ export interface GitStatusSummary {
 	readonly files: readonly WorkflowChangedFile[];
 }
 
+export interface GitWorktreeListEntry {
+	readonly path: string;
+	readonly branch: string | null;
+	readonly head: string | null;
+}
+
 export async function git(
 	cwd: string,
 	args: readonly string[],
@@ -48,6 +54,26 @@ export async function gitStatus(cwd: string): Promise<GitStatusSummary> {
 		git(cwd, ["status", "--porcelain=v1", "--renames"]),
 	]);
 	return { ...parseBranchStatus(branch.stdout), ...parsePorcelainStatus(porcelain.stdout) };
+}
+
+export async function listGitWorktrees(cwd: string): Promise<GitWorktreeListEntry[]> {
+	const { stdout } = await git(cwd, ["worktree", "list", "--porcelain"]);
+	return parseGitWorktreeList(stdout);
+}
+
+export function parseGitWorktreeList(output: string): GitWorktreeListEntry[] {
+	const entries: GitWorktreeListEntry[] = [];
+	let current: { path?: string; branch?: string | null; head?: string | null } = {};
+	for (const line of output.split("\n")) {
+		if (line.startsWith("worktree ")) {
+			if (current.path)
+				entries.push({ path: current.path, branch: current.branch ?? null, head: current.head ?? null });
+			current = { path: line.slice("worktree ".length) };
+		} else if (line.startsWith("HEAD ")) current.head = line.slice(5);
+		else if (line.startsWith("branch ")) current.branch = line.slice("branch refs/heads/".length);
+	}
+	if (current.path) entries.push({ path: current.path, branch: current.branch ?? null, head: current.head ?? null });
+	return entries;
 }
 
 export async function stageFiles(cwd: string, paths: readonly string[]): Promise<GitStatusSummary> {

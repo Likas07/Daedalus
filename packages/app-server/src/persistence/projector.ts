@@ -128,17 +128,27 @@ function projectSession(database: AppServerDatabase, payload: PayloadRecord, cre
 	const id = requiredText(payload, "sessionId", "session_id", "id");
 	database
 		.query(
-			`INSERT INTO sessions (id, project_id, worktree_id, status, title, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?)
+			`INSERT INTO sessions (id, project_id, worktree_id, status, title, runs_in_json, isolation_mode, validation_status, needs_attention_reason, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			 ON CONFLICT(id) DO UPDATE SET project_id = excluded.project_id, worktree_id = excluded.worktree_id,
-			 status = excluded.status, title = excluded.title, updated_at = excluded.updated_at`,
+			 status = excluded.status, title = excluded.title, runs_in_json = excluded.runs_in_json,
+			 isolation_mode = excluded.isolation_mode, validation_status = excluded.validation_status,
+			 needs_attention_reason = excluded.needs_attention_reason, updated_at = excluded.updated_at`,
 		)
 		.run(
 			id,
-			text(payload, "projectId", "project_id") ?? null,
-			text(payload, "worktreeId", "worktree_id") ?? null,
+			text(payload, "projectId", "project_id") ?? text(asRecord(payload.runsIn), "projectId") ?? null,
+			text(payload, "worktreeId", "worktree_id") ?? text(asRecord(payload.runsIn), "worktreeId") ?? null,
 			text(payload, "status") ?? "active",
 			text(payload, "title") ?? null,
+			runsInJson(payload),
+			text(payload, "isolationMode", "isolation_mode") ?? text(asRecord(payload.runsIn), "isolationMode") ?? null,
+			text(payload, "validationStatus", "validation_status") ??
+				text(asRecord(payload.runsIn), "validationStatus") ??
+				null,
+			text(payload, "needsAttentionReason", "needs_attention_reason", "reason") ??
+				text(asRecord(payload.runsIn), "reason") ??
+				null,
 			createdAt,
 			createdAt,
 		);
@@ -263,7 +273,12 @@ function projectTerminal(database: AppServerDatabase, payload: PayloadRecord, cr
 		);
 }
 
-function asRecord(payload: EventPayload): PayloadRecord {
+function runsInJson(payload: PayloadRecord): string | null {
+	const runsIn = asRecord(payload.runsIn);
+	return Object.keys(runsIn).length > 0 ? JSON.stringify(runsIn) : null;
+}
+
+function asRecord(payload: EventPayload | undefined): PayloadRecord {
 	return payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {};
 }
 

@@ -145,6 +145,36 @@ describe("SqliteSessionStore", () => {
 		expect(row?.status).toBe("archived");
 	});
 
+	test("lists server-projected runsIn recovery state from session header", async () => {
+		const sessionStore = store();
+		const header = {
+			type: "session",
+			version: 3,
+			id: "runs-in-session",
+			timestamp: "2026-04-26T00:00:00.000Z",
+			cwd: "/repo",
+			runsIn: {
+				projectId: "project-1",
+				worktreeId: "wt-1",
+				path: "/repo-wt",
+				canonicalPath: "/repo-wt",
+				branch: "feature/safe",
+				isolationMode: "isolated-worktree",
+				validationStatus: "needs-attention",
+				reason: "missing path",
+			},
+		} as unknown as SessionHeader;
+		await sessionStore.import({ session: { header, entries: [] }, overwrite: true });
+
+		expect((await sessionStore.list())[0]).toMatchObject({
+			id: "runs-in-session",
+			runsIn: expect.objectContaining({ worktreeId: "wt-1", validationStatus: "needs-attention" }),
+			isolationMode: "isolated-worktree",
+			validationStatus: "needs-attention",
+			needsAttentionReason: "missing path",
+		});
+	});
+
 	test("imports and exports JSONL through the shared codec", async () => {
 		const sessionStore = store();
 		const header: SessionHeader = {

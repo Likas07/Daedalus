@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ClientRequestResultSchemas } from "@daedalus-pi/app-server-protocol";
 import { type SessionEntry, type SessionMessageEntry, serializeSessionJsonl } from "@daedalus-pi/coding-agent";
 import { Value } from "@sinclair/typebox/value";
@@ -13,6 +16,7 @@ import {
 } from "../runtime/session-controller";
 import { SqliteSessionManager } from "../runtime/sqlite-session-manager";
 import { SqliteSessionStore } from "../sessions/sqlite-session-store";
+import { git } from "../workspaces/git";
 import { AppRouter } from "./router";
 
 let database: AppServerDatabase | undefined;
@@ -118,6 +122,19 @@ function appRouterWithRealController(): {
 	return { appRouter: new AppRouter({ database, publish: () => {}, controller }), sessionStore, runtimes, events };
 }
 
+async function initRepo(): Promise<string> {
+	const root = await mkdtemp(join(tmpdir(), "daedalus-session-routes-"));
+	const repo = join(root, "repo");
+	await mkdir(repo);
+	await git(repo, ["init"]);
+	await git(repo, ["config", "user.email", "test@example.com"]);
+	await git(repo, ["config", "user.name", "Test User"]);
+	await writeFile(join(repo, "README.md"), "hello\n");
+	await git(repo, ["add", "README.md"]);
+	await git(repo, ["commit", "-m", "initial"]);
+	return repo;
+}
+
 function controllerEvent(events: RuntimeControllerMessage[], type: string): RuntimeControllerMessage {
 	const event = events.find((message) => "type" in message && message.type === type);
 	expect(event).toBeTruthy();
@@ -185,15 +202,27 @@ describe("session store routes", () => {
 
 	test("starts a prompted session through AppRouter with an empty SQLite store", async () => {
 		const { appRouter, sessionStore, runtimes, events } = appRouterWithRealController();
+		const repo = await initRepo();
+		const { projectId } = (await appRouter.handle({
+			kind: "request",
+			id: "project-open",
+			method: "project/open",
+			params: { path: repo },
+		})) as { projectId: string };
 
 		const started = (await appRouter.handle({
 			kind: "request",
 			id: "start",
 			method: "session/start",
-			params: { projectId: "/repo", prompt: "hello from gui" },
-		})) as { sessionId: string };
+			params: {
+				projectId,
+				startTarget: { mode: "base-checkout", projectId, confirmation: { confirmed: true, evidence: "test" } },
+				prompt: "hello from gui",
+			},
+		})) as { sessionId: string; runsIn: { canonicalPath: string; isolationMode: string } };
 
-		expect(started).toEqual({ sessionId: "session-controller-id" });
+		expect(started.sessionId).toBe("session-controller-id");
+		expect(started.runsIn).toMatchObject({ canonicalPath: repo, isolationMode: "base-checkout" });
 		expectRouteResult("session/start", started);
 		expect(runtimes[0]?.sessionId).toBe(started.sessionId);
 		expect(runtimes[0]?.prompts).toEqual(["hello from gui"]);
@@ -219,12 +248,22 @@ describe("session store routes", () => {
 
 	test("starts an empty session then accepts the first turn using the returned id", async () => {
 		const { appRouter, sessionStore, runtimes, events } = appRouterWithRealController();
+		const repo = await initRepo();
+		const { projectId } = (await appRouter.handle({
+			kind: "request",
+			id: "project-open",
+			method: "project/open",
+			params: { path: repo },
+		})) as { projectId: string };
 
 		const started = (await appRouter.handle({
 			kind: "request",
 			id: "start",
 			method: "session/start",
-			params: { projectId: "/repo" },
+			params: {
+				projectId,
+				startTarget: { mode: "base-checkout", projectId, confirmation: { confirmed: true, evidence: "test" } },
+			},
 		})) as { sessionId: string };
 
 		expect(started.sessionId).toBe("session-controller-id");

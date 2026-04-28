@@ -268,6 +268,20 @@ CREATE INDEX IF NOT EXISTS gui_session_approvals_status_idx ON gui_session_appro
 ALTER TABLE terminal_sessions ADD COLUMN session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL;
 `,
 	},
+	{
+		version: 12,
+		name: "runs_in_read_models",
+		sql: `
+ALTER TABLE sessions ADD COLUMN runs_in_json TEXT;
+ALTER TABLE sessions ADD COLUMN isolation_mode TEXT;
+ALTER TABLE sessions ADD COLUMN validation_status TEXT;
+ALTER TABLE sessions ADD COLUMN needs_attention_reason TEXT;
+ALTER TABLE gui_session_read_model ADD COLUMN runs_in_json TEXT;
+ALTER TABLE gui_session_read_model ADD COLUMN isolation_mode TEXT;
+ALTER TABLE gui_session_read_model ADD COLUMN validation_status TEXT;
+ALTER TABLE gui_session_read_model ADD COLUMN needs_attention_reason TEXT;
+`,
+	},
 ];
 
 export function runMigrations(database: AppServerDatabase): void {

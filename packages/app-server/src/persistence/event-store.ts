@@ -109,11 +109,33 @@ export function readRecentEvents(database: AppServerDatabase, options: ReadEvent
 }
 
 function mapEventRow<TPayload extends EventPayload = EventPayload>(row: RuntimeEventRow): StoredEvent<TPayload> {
-	return {
-		seq: row.seq,
-		streamId: row.stream_id,
-		type: row.type,
-		payload: JSON.parse(row.payload) as TPayload,
-		createdAt: row.created_at,
-	};
+	const parsed = JSON.parse(row.payload) as EventPayload;
+	const normalized = normalizeStoredEvent(row, parsed);
+	return normalized as StoredEvent<TPayload>;
+}
+
+function normalizeStoredEvent(row: RuntimeEventRow, parsed: EventPayload): StoredEvent {
+	if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+		const record = parsed as { readonly [key: string]: EventPayload };
+		if (typeof record.type === "string" && record.payload !== undefined && record.type !== row.type) {
+			const payload = mergeEnvelopeFields(record, record.payload);
+			return {
+				seq: row.seq,
+				streamId: typeof record.streamId === "string" ? record.streamId : row.stream_id,
+				type: record.type,
+				payload,
+				createdAt: typeof record.createdAt === "string" ? record.createdAt : row.created_at,
+			};
+		}
+	}
+	return { seq: row.seq, streamId: row.stream_id, type: row.type, payload: parsed, createdAt: row.created_at };
+}
+
+function mergeEnvelopeFields(envelope: { readonly [key: string]: EventPayload }, payload: EventPayload): EventPayload {
+	if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+	const merged: Record<string, EventPayload> = { ...(payload as Record<string, EventPayload>) };
+	for (const key of ["sessionId", "projectId", "worktreeId", "terminalId", "approvalId", "checkpointId"] as const) {
+		if (merged[key] === undefined && envelope[key] !== undefined) merged[key] = envelope[key];
+	}
+	return merged;
 }
