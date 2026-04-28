@@ -1039,6 +1039,12 @@ export class TUI extends Container {
 			return;
 		}
 
+		if (this.fixedFrameMode && firstChanged !== lastChanged) {
+			logRedraw(`fixedFrameMode multi-line change (${firstChanged}..${lastChanged})`);
+			fullRender(true);
+			return;
+		}
+
 		// All changes are in deleted lines (nothing to render, just clear)
 		if (firstChanged >= newLines.length) {
 			if (this.previousLines.length > newLines.length) {
