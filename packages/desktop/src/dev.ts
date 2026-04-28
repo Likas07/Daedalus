@@ -1,7 +1,7 @@
 import { join, resolve } from "node:path";
 
 const host = "127.0.0.1";
-const defaultGuiPort = 5174;
+export const defaultGuiDevPort = 58_473;
 const guiPortEnvVar = "DAEDALUS_GUI_DEV_PORT";
 
 const repoRoot = resolve(import.meta.dir, "../../..");
@@ -12,6 +12,7 @@ const devMainEntry = join(desktopRoot, ".daedalus", "desktop-dev", "main.js");
 type DevSubprocess = ReturnType<typeof Bun.spawn>;
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
+
 const children = new Set<DevSubprocess>();
 
 export interface WaitForUrlOptions {
@@ -20,22 +21,24 @@ export interface WaitForUrlOptions {
 	fetcher?: Fetcher;
 }
 
+
+
 export function electronDevCommand(entry = devMainEntry): string[] {
 	return ["electron", entry];
 }
 
 export function guiDevPort(env: Pick<NodeJS.ProcessEnv, string> = Bun.env): number {
-	const rawPort = env[guiPortEnvVar];
-	if (rawPort === undefined || rawPort === "") return defaultGuiPort;
-	const port = Number(rawPort);
-	if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-		throw new Error(`${guiPortEnvVar} must be a TCP port between 1 and 65535; got ${JSON.stringify(rawPort)}`);
-	}
-	return port;
+const rawPort = env[guiPortEnvVar];
+if (rawPort === undefined || rawPort === "") return defaultGuiDevPort;
+const port = Number(rawPort);
+if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+throw new Error(`${guiPortEnvVar} must be a TCP port between 1 and 65535; got ${JSON.stringify(rawPort)}`);
+}
+return port;
 }
 
 export function guiDevUrl(env: Pick<NodeJS.ProcessEnv, string> = Bun.env): string {
-	return `http://${host}:${guiDevPort(env)}/`;
+return `http://${host}:${guiDevPort(env)}/`;
 }
 
 export async function isDaedalusGuiServing(url: string, fetcher: Fetcher = fetch): Promise<boolean> {
@@ -91,8 +94,8 @@ export async function waitForUrl(
 async function main(): Promise<void> {
 	await run("desktop build", ["bun", "run", "build:dev"], { cwd: desktopRoot });
 
-	const devUrl = guiDevUrl();
 	const port = guiDevPort();
+	const devUrl = guiDevUrl();
 	let spawnedVite = false;
 	if (await isDaedalusGuiServing(devUrl)) {
 		console.log(`Reusing Daedalus GUI Vite at ${devUrl}`);
