@@ -16,4 +16,13 @@ describe("Forge allowed extensions", () => {
 		expect(hasAllowedExtension("app.exe")).toBe(false);
 		expect(hasAllowedExtension("image.png")).toBe(false);
 	});
+
+	it("does not depend on runtime filesystem access to load the extension list", async () => {
+		const source = await Bun.file(
+			new URL("../../src/extensions/daedalus/tools/allowed-extensions.ts", import.meta.url),
+		).text();
+
+		expect(source).not.toContain("node:fs");
+		expect(source).not.toContain("readFileSync");
+	});
 });
