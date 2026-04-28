@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { AppServerClient, type AppServerTransport } from "@daedalus-pi/app-server-client";
+import { bootReadinessRows, withDesktopBootDiagnostics } from "./diagnostics-export";
 import { createGuiRuntime } from "./runtime";
 
 class MockTransport implements AppServerTransport {
@@ -85,5 +86,37 @@ describe("diagnostics export runtime", () => {
 				recentEventLimit: 5,
 			},
 		});
+	});
+});
+
+describe("desktop boot diagnostics projection", () => {
+	test("merges boot readiness details and renders support rows", () => {
+		const diagnostics = {
+			exportedAt: "now",
+			transcript: [],
+			toolLogs: [],
+			appServerLogs: [],
+			environment: { platform: "test", arch: "x64" },
+			versions: {},
+			integrationStatus: [],
+			recentProtocolEvents: [],
+		};
+		const merged = withDesktopBootDiagnostics(diagnostics, {
+			stage: "ready",
+			ready: true,
+			updatedAt: "now",
+			manifestReused: false,
+			pidHealthy: true,
+			tokenFilePath: "/state/<redacted>",
+			dbPath: "/state/app-server.sqlite",
+			spawnCommand: ["bun", "--token-file", "/state/<redacted>"],
+			readinessJson: { httpUrl: "http://127.0.0.1:1" },
+		});
+
+		expect(merged.desktopBoot?.ready).toBe(true);
+		expect(bootReadinessRows(merged.desktopBoot).map((row) => row.label)).toContain("spawn command");
+		expect(bootReadinessRows(merged.desktopBoot).find((row) => row.label === "token file")?.value).toBe(
+			"/state/<redacted>",
+		);
 	});
 });

@@ -37,6 +37,59 @@ export const DiagnosticExportKindSchema = Type.Union([
 ]);
 export type DiagnosticExportKind = Static<typeof DiagnosticExportKindSchema>;
 
+export const DesktopBootReadinessStageSchema = Type.Union([
+	Type.Literal("starting"),
+	Type.Literal("protocol-loading"),
+	Type.Literal("manifest-reuse"),
+	Type.Literal("pid-health"),
+	Type.Literal("token-file"),
+	Type.Literal("db-path"),
+	Type.Literal("runtime-resolution"),
+	Type.Literal("app-server-spawning"),
+	Type.Literal("spawn-command"),
+	Type.Literal("readiness-json"),
+	Type.Literal("app-server-ready"),
+	Type.Literal("stdout"),
+	Type.Literal("stderr"),
+	Type.Literal("exit"),
+	Type.Literal("timeout"),
+	Type.Literal("gui-loading"),
+	Type.Literal("ready"),
+	Type.Literal("failed"),
+]);
+export type DesktopBootReadinessStage = Static<typeof DesktopBootReadinessStageSchema>;
+
+export const DesktopBootDiagnosticStageSchema = StrictObject({
+	name: Type.String({ minLength: 1 }),
+	status: Type.Union([Type.Literal("ok"), Type.Literal("failed"), Type.Literal("pending")]),
+	message: Type.Optional(Type.String({ minLength: 1 })),
+	at: Type.String({ minLength: 1 }),
+	durationMs: Type.Optional(Type.Integer({ minimum: 0 })),
+});
+export type DesktopBootDiagnosticStage = Static<typeof DesktopBootDiagnosticStageSchema>;
+
+export const DesktopBootDiagnosticSchema = StrictObject({
+	stage: DesktopBootReadinessStageSchema,
+	ready: Type.Boolean(),
+	message: Type.Optional(Type.String({ minLength: 1 })),
+	updatedAt: Type.String({ minLength: 1 }),
+	durationMs: Type.Optional(Type.Integer({ minimum: 0 })),
+	error: Type.Optional(Type.String({ minLength: 1 })),
+	stages: Type.Optional(Type.Array(DesktopBootDiagnosticStageSchema)),
+	manifestReused: Type.Optional(Type.Boolean()),
+	pidHealthy: Type.Optional(Type.Boolean()),
+	tokenFilePath: Type.Optional(Type.String({ minLength: 1 })),
+	dbPath: Type.Optional(Type.String({ minLength: 1 })),
+	runtime: Type.Optional(Type.Unknown()),
+	spawnCommand: Type.Optional(Type.Array(Type.String())),
+	readinessJson: Type.Optional(Type.Unknown()),
+	stdoutExcerpt: Type.Optional(Type.String()),
+	stderrExcerpt: Type.Optional(Type.String()),
+	exitCode: Type.Optional(Type.Union([Type.Integer(), Type.Null()])),
+	timedOut: Type.Optional(Type.Boolean()),
+});
+export type DesktopBootDiagnostic = Static<typeof DesktopBootDiagnosticSchema>;
+
 export const DiagnosticExportSchema = StrictObject({
 	exportedAt: Type.String({ minLength: 1 }),
 	kind: Type.Optional(DiagnosticExportKindSchema),
@@ -49,6 +102,7 @@ export const DiagnosticExportSchema = StrictObject({
 	versions: DiagnosticVersionInfoSchema,
 	integrationStatus: Type.Array(Type.Unknown()),
 	recentProtocolEvents: Type.Array(DiagnosticProtocolEventSchema),
+	desktopBoot: Type.Optional(DesktopBootDiagnosticSchema),
 });
 export type DiagnosticExport = Static<typeof DiagnosticExportSchema>;
 

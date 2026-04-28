@@ -1,4 +1,5 @@
 import type { BrowserWindow } from "electron";
+import type { AppServerBootDiagnostics } from "./boot-diagnostics";
 import { isSafeExternalUrl } from "./native-bridge";
 
 export type NativeCommandId =
@@ -19,7 +20,7 @@ export interface NativeCommandPayloads {
 	readonly "open-folder": { readonly path?: string };
 	readonly "open-external-editor": { readonly path?: string };
 	readonly "toggle-terminal": Record<string, never>;
-	readonly "export-diagnostics": Record<string, never>;
+	readonly "export-diagnostics": { readonly desktopBoot?: AppServerBootDiagnostics };
 	readonly "open-deep-link": { readonly url: string };
 	readonly "show-notification": {
 		readonly kind: "approval" | "run-completed" | "run-failed" | "provider-error";
@@ -34,6 +35,7 @@ export type NativeCommandEnvelope<K extends NativeCommandId = NativeCommandId> =
 export interface NativeCommandRouterOptions {
 	readonly getMainWindow: () => Pick<BrowserWindow, "webContents"> | undefined;
 	readonly channel?: string;
+	readonly getDesktopBootDiagnostics?: () => AppServerBootDiagnostics | undefined;
 }
 
 export const nativeCommandChannel = "daedalus:native-command";
@@ -41,14 +43,23 @@ export const nativeCommandChannel = "daedalus:native-command";
 export class NativeCommandRouter {
 	readonly #getMainWindow: () => Pick<BrowserWindow, "webContents"> | undefined;
 	readonly #channel: string;
+	readonly #getDesktopBootDiagnostics?: () => AppServerBootDiagnostics | undefined;
 
 	constructor(options: NativeCommandRouterOptions) {
 		this.#getMainWindow = options.getMainWindow;
 		this.#channel = options.channel ?? nativeCommandChannel;
+		this.#getDesktopBootDiagnostics = options.getDesktopBootDiagnostics;
 	}
 
 	send<K extends NativeCommandId>(id: K, payload: NativeCommandPayloads[K]): NativeCommandEnvelope<K> {
-		const command = validateNativeCommand({ id, payload } as NativeCommandEnvelope) as NativeCommandEnvelope<K>;
+		const enrichedPayload =
+			id === "export-diagnostics" && !("desktopBoot" in payload)
+				? { ...payload, desktopBoot: this.#getDesktopBootDiagnostics?.() }
+				: payload;
+		const command = validateNativeCommand({
+			id,
+			payload: enrichedPayload,
+		} as NativeCommandEnvelope) as NativeCommandEnvelope<K>;
 		this.#getMainWindow()?.webContents.send(this.#channel, command);
 		return command;
 	}

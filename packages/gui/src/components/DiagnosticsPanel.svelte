@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { DiagnosticExport, DiagnosticExportKind, DiagnosticExportResult } from "@daedalus-pi/app-server-protocol";
+	import { bootReadinessRows } from "../client/diagnostics-export";
 	const { diagnostics, selectedSessionId, onExport, onRetryFailedTool } = $props<{
 		diagnostics?: DiagnosticExport;
 		selectedSessionId?: string;
@@ -60,6 +61,9 @@
 			<div class="flex justify-between gap-4"><dt class="uppercase tracking-[0.14em] text-[color:var(--bone-faint)]">kind</dt><dd class="text-[color:var(--bone)]">{diagnostics.kind ?? "support-bundle"}</dd></div>
 			<div class="flex justify-between gap-4"><dt class="uppercase tracking-[0.14em] text-[color:var(--bone-faint)]">platform</dt><dd class="text-[color:var(--bone)]">{diagnostics.environment.platform}/{diagnostics.environment.arch}</dd></div>
 			<div class="flex justify-between gap-4"><dt class="uppercase tracking-[0.14em] text-[color:var(--bone-faint)]">protocol events</dt><dd class="text-[color:var(--bone)] tabular-nums">{diagnostics.recentProtocolEvents.length}</dd></div>
+			{#each bootReadinessRows(diagnostics.desktopBoot) as row}
+				<div class="flex justify-between gap-4"><dt class="uppercase tracking-[0.14em] text-[color:var(--bone-faint)]">{row.label}</dt><dd class="max-w-[70%] whitespace-pre-wrap break-words text-right text-[color:var(--bone)]">{row.value}</dd></div>
+			{/each}
 		</dl>
 	{:else}
 		<p class="inspector-empty">No diagnostic export loaded.</p>
