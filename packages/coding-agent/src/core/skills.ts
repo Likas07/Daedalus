@@ -5,6 +5,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "pat
 import { CONFIG_DIR_NAME, getAgentDir } from "../config.js";
 import { parseFrontmatter, stripFrontmatter } from "../utils/frontmatter.js";
 import type { ResourceDiagnostic } from "./diagnostics.js";
+import type { PathMetadata } from "./package-manager.js";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.js";
 
 /** Max name length per spec */
@@ -103,10 +104,25 @@ export interface ResolvedSkillResource {
  * Validate skill name per Agent Skills spec.
  * Returns array of validation error messages (empty if valid).
  */
-function validateName(name: string, parentDirName: string): string[] {
+function isValidSkillNameToken(name: string): boolean {
+	return /^[a-z0-9-]+$/.test(name) && !name.startsWith("-") && !name.endsWith("-") && !name.includes("--");
+}
+
+function isNamespacedSkillDirectoryName(name: string, parentDirName: string): boolean {
+	return isValidSkillNameToken(name) && isValidSkillNameToken(parentDirName) && parentDirName.endsWith(`-${name}`);
+}
+
+function allowsNamespacedSkillDirectory(metadata: PathMetadata | undefined): boolean {
+	return metadata?.source === "auto" || metadata?.origin === "package";
+}
+
+function validateName(name: string, parentDirName: string, metadata?: PathMetadata): string[] {
 	const errors: string[] = [];
 
-	if (name !== parentDirName) {
+	if (
+		name !== parentDirName &&
+		!(allowsNamespacedSkillDirectory(metadata) && isNamespacedSkillDirectoryName(name, parentDirName))
+	) {
 		errors.push(`name "${name}" does not match parent directory "${parentDirName}"`);
 	}
 
@@ -194,6 +210,7 @@ function loadSkillsFromDirInternal(
 	includeRootFiles: boolean,
 	ignoreMatcher?: IgnoreMatcher,
 	rootDir?: string,
+	metadataByPath?: Map<string, PathMetadata>,
 ): LoadSkillsResult {
 	const skills: Skill[] = [];
 	const diagnostics: ResourceDiagnostic[] = [];
@@ -230,7 +247,7 @@ function loadSkillsFromDirInternal(
 				continue;
 			}
 
-			const result = loadSkillFromFile(fullPath, source);
+			const result = loadSkillFromFile(fullPath, source, getMetadataForPath(fullPath, metadataByPath));
 			if (result.skill) {
 				skills.push(result.skill);
 			}
@@ -271,7 +288,7 @@ function loadSkillsFromDirInternal(
 			}
 
 			if (isDirectory) {
-				const subResult = loadSkillsFromDirInternal(fullPath, source, false, ig, root);
+				const subResult = loadSkillsFromDirInternal(fullPath, source, false, ig, root, metadataByPath);
 				skills.push(...subResult.skills);
 				diagnostics.push(...subResult.diagnostics);
 				continue;
@@ -281,7 +298,7 @@ function loadSkillsFromDirInternal(
 				continue;
 			}
 
-			const result = loadSkillFromFile(fullPath, source);
+			const result = loadSkillFromFile(fullPath, source, getMetadataForPath(fullPath, metadataByPath));
 			if (result.skill) {
 				skills.push(result.skill);
 			}
@@ -292,9 +309,14 @@ function loadSkillsFromDirInternal(
 	return { skills, diagnostics };
 }
 
+function getMetadataForPath(path: string, metadataByPath?: Map<string, PathMetadata>): PathMetadata | undefined {
+	return metadataByPath?.get(path);
+}
+
 function loadSkillFromFile(
 	filePath: string,
 	source: string,
+	metadata?: PathMetadata,
 ): { skill: Skill | null; diagnostics: ResourceDiagnostic[] } {
 	const diagnostics: ResourceDiagnostic[] = [];
 
@@ -314,7 +336,7 @@ function loadSkillFromFile(
 		const name = frontmatter.name || parentDirName;
 
 		// Validate name
-		const nameErrors = validateName(name, parentDirName);
+		const nameErrors = validateName(name, parentDirName, metadata);
 		for (const error of nameErrors) {
 			diagnostics.push({ type: "warning", message: error, path: filePath });
 		}
@@ -448,6 +470,8 @@ export interface LoadSkillsOptions {
 	skillPaths?: string[];
 	/** Include default skills directories. Default: true */
 	includeDefaults?: boolean;
+	/** Package/resource metadata keyed by resolved resource path. Used for validation context. */
+	resourceMetadataByPath?: Map<string, PathMetadata>;
 }
 
 function normalizePath(input: string): string {
@@ -468,7 +492,7 @@ function resolveSkillPath(p: string, cwd: string): string {
  * Returns skills and any validation diagnostics.
  */
 export function loadSkills(options: LoadSkillsOptions = {}): LoadSkillsResult {
-	const { cwd = process.cwd(), agentDir, skillPaths = [], includeDefaults = true } = options;
+	const { cwd = process.cwd(), agentDir, skillPaths = [], includeDefaults = true, resourceMetadataByPath } = options;
 
 	// Resolve agentDir - if not provided, use default from config
 	const resolvedAgentDir = agentDir ?? getAgentDir();
@@ -515,8 +539,26 @@ export function loadSkills(options: LoadSkillsOptions = {}): LoadSkillsResult {
 	}
 
 	if (includeDefaults) {
-		addSkills(loadSkillsFromDirInternal(join(resolvedAgentDir, "skills"), "user", true));
-		addSkills(loadSkillsFromDirInternal(resolve(cwd, CONFIG_DIR_NAME, "skills"), "project", true));
+		addSkills(
+			loadSkillsFromDirInternal(
+				join(resolvedAgentDir, "skills"),
+				"user",
+				true,
+				undefined,
+				undefined,
+				resourceMetadataByPath,
+			),
+		);
+		addSkills(
+			loadSkillsFromDirInternal(
+				resolve(cwd, CONFIG_DIR_NAME, "skills"),
+				"project",
+				true,
+				undefined,
+				undefined,
+				resourceMetadataByPath,
+			),
+		);
 	}
 
 	const userSkillsDir = join(resolvedAgentDir, "skills");
@@ -550,9 +592,15 @@ export function loadSkills(options: LoadSkillsOptions = {}): LoadSkillsResult {
 			const stats = statSync(resolvedPath);
 			const source = getSource(resolvedPath);
 			if (stats.isDirectory()) {
-				addSkills(loadSkillsFromDirInternal(resolvedPath, source, true));
+				addSkills(
+					loadSkillsFromDirInternal(resolvedPath, source, true, undefined, undefined, resourceMetadataByPath),
+				);
 			} else if (stats.isFile() && resolvedPath.endsWith(".md")) {
-				const result = loadSkillFromFile(resolvedPath, source);
+				const result = loadSkillFromFile(
+					resolvedPath,
+					source,
+					getMetadataForPath(resolvedPath, resourceMetadataByPath),
+				);
 				if (result.skill) {
 					addSkills({ skills: [result.skill], diagnostics: result.diagnostics });
 				} else {

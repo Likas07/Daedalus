@@ -1,7 +1,9 @@
-import { homedir } from "os";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { homedir, tmpdir } from "os";
 import { join, resolve } from "path";
 import { describe, expect, it } from "vitest";
 import type { ResourceDiagnostic } from "../src/core/diagnostics.js";
+import type { PathMetadata } from "../src/core/package-manager.js";
 import {
 	formatSkillsForPrompt,
 	loadSkillDocument,
@@ -423,6 +425,57 @@ describe("skills", () => {
 			expect(skills).toHaveLength(1);
 			expect(skills[0].sourceInfo.scope).toBe("temporary");
 			expect(diagnostics).toHaveLength(0);
+		});
+
+		it("allows package-managed skills to use namespaced parent directories", () => {
+			const tempDir = mkdtempSync(join(tmpdir(), "daedalus-skill-test-"));
+			try {
+				const skillDir = join(tempDir, "gstack-autoplan");
+				mkdirSync(skillDir);
+				const skillFile = join(skillDir, "SKILL.md");
+				writeFileSync(skillFile, "---\nname: autoplan\ndescription: Package-managed skill.\n---\n# Autoplan\n");
+
+				const metadata: PathMetadata = { source: "gstack", scope: "user", origin: "package", baseDir: tempDir };
+				const { skills, diagnostics } = loadSkills({
+					agentDir: emptyAgentDir,
+					cwd: emptyCwd,
+					skillPaths: [skillFile],
+					includeDefaults: false,
+					resourceMetadataByPath: new Map([[skillFile, metadata]]),
+				});
+
+				expect(skills).toHaveLength(1);
+				expect(skills[0].name).toBe("autoplan");
+				expect(
+					diagnostics.some((d: ResourceDiagnostic) => d.message.includes("does not match parent directory")),
+				).toBe(false);
+			} finally {
+				rmSync(tempDir, { recursive: true, force: true });
+			}
+		});
+
+		it("keeps parent-directory mismatch warnings for ordinary skills", () => {
+			const tempDir = mkdtempSync(join(tmpdir(), "daedalus-skill-test-"));
+			try {
+				const skillDir = join(tempDir, "gstack-autoplan");
+				mkdirSync(skillDir);
+				const skillFile = join(skillDir, "SKILL.md");
+				writeFileSync(skillFile, "---\nname: autoplan\ndescription: User-managed skill.\n---\n# Autoplan\n");
+
+				const { skills, diagnostics } = loadSkills({
+					agentDir: emptyAgentDir,
+					cwd: emptyCwd,
+					skillPaths: [skillFile],
+					includeDefaults: false,
+				});
+
+				expect(skills).toHaveLength(1);
+				expect(
+					diagnostics.some((d: ResourceDiagnostic) => d.message.includes("does not match parent directory")),
+				).toBe(true);
+			} finally {
+				rmSync(tempDir, { recursive: true, force: true });
+			}
 		});
 
 		it("should warn when skill path does not exist", () => {
