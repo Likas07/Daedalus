@@ -59,7 +59,7 @@ Task is intentionally abandoned / superseded and should not count as active work
 ## Global invariants
 
 Recommended invariants for v1:
-- at most one `in_progress` item at a time
+- multiple `in_progress` items are allowed to support parallel work
 - `pending` and `in_progress` are active work
 - `completed` and `cancelled` are inactive work
 - list order is meaningful and should be preserved
@@ -210,7 +210,7 @@ Recommended v1 validation:
 - `content` must be non-empty
 - `id` must be non-empty
 - no duplicate IDs in a single write request
-- no more than one `in_progress` item after applying the write
+- multiple `in_progress` items are allowed after applying the write, to support parallel work
 - invalid statuses rejected
 
 Optional rule:

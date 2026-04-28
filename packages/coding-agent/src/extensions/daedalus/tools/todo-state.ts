@@ -83,18 +83,12 @@ export function validateTodoItem(item: TodoItem): TodoItem {
 export function validateTodoList(todos: TodoItem[]): TodoItem[] {
 	const normalized = todos.map(validateTodoItem);
 	const seen = new Set<string>();
-	let inProgressCount = 0;
+
 	for (const todo of normalized) {
 		if (seen.has(todo.id)) {
 			throw new Error(`Duplicate todo id: ${todo.id}`);
 		}
 		seen.add(todo.id);
-		if (todo.status === "in_progress") {
-			inProgressCount += 1;
-		}
-	}
-	if (inProgressCount > 1) {
-		throw new Error("Todo list can contain at most one in_progress item");
 	}
 	return normalized;
 }
