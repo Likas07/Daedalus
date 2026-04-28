@@ -1,9 +1,5 @@
-import { readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const dirname = path.dirname(fileURLToPath(import.meta.url));
-const extensionsText = readFileSync(path.join(dirname, "allowed_extensions.txt"), "utf8");
+import extensionsText from "./allowed_extensions.txt";
 
 export const ALLOWED_EXTENSIONS = new Set(
 	extensionsText
