@@ -20,6 +20,7 @@ afterEach(async () => {
 
 test("app server accepts websocket protocol requests and persists events", async () => {
 	const dir = mkdtempSync(join(tmpdir(), "daedalus-app-server-"));
+	await git(dir, ["init"]);
 	const db = join(dir, "app.sqlite");
 	const server = await startAppServer({
 		databasePath: db,
@@ -67,7 +68,15 @@ test("app server accepts websocket protocol requests and persists events", async
 			kind: "request",
 			id: "3",
 			method: "session/start",
-			params: { projectId: open.result.projectId, prompt: "hello" },
+			params: {
+				projectId: open.result.projectId,
+				startTarget: {
+					mode: "base-checkout",
+					projectId: open.result.projectId,
+					confirmation: { confirmed: true, evidence: "test explicitly uses base checkout" },
+				},
+				prompt: "hello",
+			},
 		}),
 	);
 	const started = await waitFor(() => messages.find((message) => isResponse(message, "3")));
@@ -251,6 +260,16 @@ function expectRouteResult(method: keyof typeof ClientRequestResultSchemas, resp
 
 function expectResultShape(method: keyof typeof ClientRequestResultSchemas, result: unknown): void {
 	expect(Value.Check(ClientRequestResultSchemas[method], result)).toBe(true);
+}
+
+async function git(cwd: string, args: readonly string[]): Promise<void> {
+	const proc = Bun.spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+	const [stdout, stderr, exitCode] = await Promise.all([
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+		proc.exited,
+	]);
+	if (exitCode !== 0) throw new Error(`git ${args.join(" ")} failed: ${stderr.trim() || stdout.trim()}`);
 }
 
 async function waitFor<T>(fn: () => T | undefined | false, timeoutMs = 2000): Promise<T> {

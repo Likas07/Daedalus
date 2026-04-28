@@ -1,3 +1,4 @@
+import type { WorkflowRunsInTarget } from "@daedalus-pi/app-server-protocol";
 import type { AppServerDatabase } from "./database";
 
 export interface ProjectReadModel {
@@ -27,6 +28,10 @@ export interface SessionReadModel {
 	readonly title: string | null;
 	readonly createdAt: string;
 	readonly updatedAt: string;
+	readonly runsIn: WorkflowRunsInTarget | null;
+	readonly isolationMode: string | null;
+	readonly validationStatus: string | null;
+	readonly needsAttentionReason: string | null;
 }
 
 export interface TurnReadModel {
@@ -99,6 +104,10 @@ interface SessionRow {
 	readonly title: string | null;
 	readonly created_at: string;
 	readonly updated_at: string;
+	readonly runs_in_json: string | null;
+	readonly isolation_mode: string | null;
+	readonly validation_status: string | null;
+	readonly needs_attention_reason: string | null;
 }
 interface TurnRow {
 	readonly id: string;
@@ -241,6 +250,10 @@ const mapSession = (row: SessionRow): SessionReadModel => ({
 	title: row.title,
 	createdAt: row.created_at,
 	updatedAt: row.updated_at,
+	runsIn: row.runs_in_json ? (JSON.parse(row.runs_in_json) as WorkflowRunsInTarget) : null,
+	isolationMode: row.isolation_mode,
+	validationStatus: row.validation_status,
+	needsAttentionReason: row.needs_attention_reason,
 });
 const mapTurn = (row: TurnRow): TurnReadModel => ({
 	id: row.id,

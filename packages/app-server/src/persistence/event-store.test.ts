@@ -55,6 +55,25 @@ describe("SQLite event store", () => {
 		]);
 	});
 
+	test("normalizes AppEvent-shaped stored rows when reading", () => {
+		const db = migratedInMemoryDatabase();
+		db.query("INSERT INTO runtime_events (stream_id, type, payload) VALUES (?, ?, ?)").run(
+			"session:s-normalized",
+			"legacy/envelope",
+			JSON.stringify({
+				type: "session/started",
+				sessionId: "s-normalized",
+				payload: { title: "Normalized" },
+			}),
+		);
+
+		expect(readEvents(db)[0]).toMatchObject({
+			type: "session/started",
+			streamId: "session:s-normalized",
+			payload: { sessionId: "s-normalized", title: "Normalized" },
+		});
+	});
+
 	test("phase 4 router requests return shaped projections", async () => {
 		const db = migratedInMemoryDatabase();
 		const router = new AppRouter({

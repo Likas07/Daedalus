@@ -1,7 +1,7 @@
 import { type AppServerDatabase, appendEvent, type EventPayload } from "..";
 import { projectRuntimeEvents } from "../persistence/projector";
 import { listWorktrees, type WorktreeReadModel } from "../persistence/read-model";
-import { git, gitStatus } from "./git";
+import { git, gitStatus, listGitWorktrees } from "./git";
 import { ProjectService } from "./project-service";
 
 export interface WorktreeServiceOptions {
@@ -61,20 +61,7 @@ export class WorktreeService {
 	): Promise<Array<{ readonly path: string; readonly branch: string | null; readonly head: string | null }>> {
 		const project = this.projects.get(projectId);
 		if (!project) throw new Error(`Unknown project: ${projectId}`);
-		const { stdout } = await git(project.path, ["worktree", "list", "--porcelain"]);
-		const entries: Array<{ path: string; branch: string | null; head: string | null }> = [];
-		let current: { path?: string; branch?: string | null; head?: string | null } = {};
-		for (const line of stdout.split("\n")) {
-			if (line.startsWith("worktree ")) {
-				if (current.path)
-					entries.push({ path: current.path, branch: current.branch ?? null, head: current.head ?? null });
-				current = { path: line.slice("worktree ".length) };
-			} else if (line.startsWith("HEAD ")) current.head = line.slice(5);
-			else if (line.startsWith("branch ")) current.branch = line.slice("branch refs/heads/".length);
-		}
-		if (current.path)
-			entries.push({ path: current.path, branch: current.branch ?? null, head: current.head ?? null });
-		return entries;
+		return listGitWorktrees(project.path);
 	}
 
 	open(worktreeId: string): WorktreeReadModel | undefined {
@@ -117,7 +104,11 @@ export class WorktreeService {
 	}
 
 	async listMetadata(projectId?: string): Promise<WorktreeLifecycleMetadata[]> {
-		return Promise.all(this.list(projectId).map((worktree) => this.withMetadata(worktree)));
+		const rows = this.list(projectId);
+		const settled = await Promise.allSettled(rows.map((worktree) => this.withMetadata(worktree)));
+		return settled.map((result, index) =>
+			result.status === "fulfilled" ? result.value : this.fallbackMetadata(rows[index] as WorktreeReadModel),
+		);
 	}
 
 	private async withMetadata(worktree: WorktreeReadModel): Promise<WorktreeLifecycleMetadata> {
@@ -130,6 +121,17 @@ export class WorktreeService {
 			dirtyCount: status.files.length,
 			activeSessionCount: 0,
 			cleanupRequiresConfirmation: status.files.length > 0,
+		};
+	}
+
+	private fallbackMetadata(worktree: WorktreeReadModel): WorktreeLifecycleMetadata {
+		return {
+			...worktree,
+			upstream: null,
+			dirty: false,
+			dirtyCount: 0,
+			activeSessionCount: 0,
+			cleanupRequiresConfirmation: false,
 		};
 	}
 }

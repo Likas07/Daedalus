@@ -80,7 +80,7 @@ export class SqliteSessionStore implements SessionStore {
 		if (typeof options.limit === "number") params.push(options.limit);
 		const rows = this.database
 			.query<GuiSessionRow & Partial<GuiSessionReadModelRow> & { rm_updated_at?: string }, (string | number)[]>(
-				`SELECT s.*, rm.title, rm.last_message_preview, rm.message_count, rm.pending_approval_count, rm.status, rm.updated_at AS rm_updated_at
+				`SELECT s.*, rm.title, rm.last_message_preview, rm.message_count, rm.pending_approval_count, rm.status, rm.runs_in_json, rm.isolation_mode, rm.validation_status, rm.needs_attention_reason, rm.updated_at AS rm_updated_at
 				 FROM ${GUI_SESSION_TABLES.sessions} s
 				 LEFT JOIN ${GUI_SESSION_TABLES.readModel} rm ON rm.session_id = s.id
 				 ${where}
@@ -104,6 +104,10 @@ export class SqliteSessionStore implements SessionStore {
 			pendingApprovalCount: row.pending_approval_count ?? 0,
 			pendingUserInput: (row.pending_approval_count ?? 0) > 0,
 			archived: row.archived === 1,
+			...(row.runs_in_json ? { runsIn: JSON.parse(row.runs_in_json) } : {}),
+			...(row.isolation_mode ? { isolationMode: row.isolation_mode } : {}),
+			...(row.validation_status ? { validationStatus: row.validation_status } : {}),
+			...(row.needs_attention_reason ? { needsAttentionReason: row.needs_attention_reason } : {}),
 		}));
 	}
 
@@ -277,8 +281,8 @@ export class SqliteSessionStore implements SessionStore {
 		this.database
 			.query(
 				`INSERT INTO ${GUI_SESSION_TABLES.readModel}
-				 (session_id, cwd, title, last_message_preview, model, thinking_level, message_count, pending_approval_count, status, updated_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				 (session_id, cwd, title, last_message_preview, model, thinking_level, message_count, pending_approval_count, status, runs_in_json, isolation_mode, validation_status, needs_attention_reason, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				 ON CONFLICT(session_id) DO UPDATE SET
 				 cwd = excluded.cwd,
 				 title = excluded.title,
@@ -288,6 +292,10 @@ export class SqliteSessionStore implements SessionStore {
 				 message_count = excluded.message_count,
 				 pending_approval_count = excluded.pending_approval_count,
 				 status = excluded.status,
+				 runs_in_json = excluded.runs_in_json,
+				 isolation_mode = excluded.isolation_mode,
+				 validation_status = excluded.validation_status,
+				 needs_attention_reason = excluded.needs_attention_reason,
 				 updated_at = excluded.updated_at`,
 			)
 			.run(
@@ -300,6 +308,10 @@ export class SqliteSessionStore implements SessionStore {
 				row.message_count,
 				row.pending_approval_count,
 				row.status,
+				row.runs_in_json,
+				row.isolation_mode,
+				row.validation_status,
+				row.needs_attention_reason,
 				row.updated_at,
 			);
 	}

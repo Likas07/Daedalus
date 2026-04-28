@@ -1,3 +1,4 @@
+import type { WorkflowRunsInTarget } from "@daedalus-pi/app-server-protocol";
 import type { SessionEntry, SessionHeader } from "@daedalus-pi/coding-agent";
 
 export const GUI_SESSION_TABLES = {
@@ -41,6 +42,10 @@ export interface GuiSessionReadModelRow {
 	readonly message_count: number;
 	readonly pending_approval_count: number;
 	readonly status: GuiSessionStatus;
+	readonly runs_in_json: string | null;
+	readonly isolation_mode: string | null;
+	readonly validation_status: string | null;
+	readonly needs_attention_reason: string | null;
 	readonly updated_at: string;
 }
 
@@ -74,5 +79,5 @@ export interface GuiSessionApprovalRow {
 	readonly updated_at: string;
 }
 
-export type GuiSessionHeader = SessionHeader;
+export type GuiSessionHeader = SessionHeader & { readonly runsIn?: WorkflowRunsInTarget };
 export type GuiSessionEntry = SessionEntry;

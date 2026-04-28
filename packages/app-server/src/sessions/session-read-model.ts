@@ -1,3 +1,4 @@
+import type { WorkflowRunsInTarget } from "@daedalus-pi/app-server-protocol";
 import type { SessionEntry, SessionHeader } from "@daedalus-pi/coding-agent";
 import type { GuiSessionReadModelRow, GuiSessionStatus } from "./session-schema";
 
@@ -25,6 +26,10 @@ export interface GuiSessionReadModel {
 	readonly pendingApprovalCount: number;
 	readonly status: GuiSessionStatus;
 	readonly updatedAt: string;
+	readonly runsIn: WorkflowRunsInTarget | null;
+	readonly isolationMode: string | null;
+	readonly validationStatus: string | null;
+	readonly needsAttentionReason: string | null;
 }
 
 function stringifyContent(content: unknown): string {
@@ -62,6 +67,7 @@ export function projectGuiSessionReadModel(options: ProjectGuiSessionReadModelOp
 	let pendingApprovalCount = 0;
 	let status: GuiSessionStatus = options.archived ? "archived" : "idle";
 	let updatedAt = options.updatedAt ?? options.header.timestamp;
+	let runsIn = (options.header as SessionHeader & { runsIn?: WorkflowRunsInTarget }).runsIn ?? null;
 
 	for (const entry of options.entries) {
 		updatedAt = entry.timestamp || updatedAt;
@@ -86,6 +92,7 @@ export function projectGuiSessionReadModel(options: ProjectGuiSessionReadModelOp
 	for (const event of options.events ?? []) {
 		const payload = eventPayload(event);
 		if (typeof payload.updatedAt === "string") updatedAt = payload.updatedAt;
+		if (payload.runsIn && typeof payload.runsIn === "object") runsIn = payload.runsIn as WorkflowRunsInTarget;
 		if (event.type.includes("approval") && (payload.status === "pending" || event.type.endsWith("requested"))) {
 			pendingApprovalCount += 1;
 		} else if (event.type.includes("approval") && pendingApprovalCount > 0) {
@@ -110,6 +117,10 @@ export function projectGuiSessionReadModel(options: ProjectGuiSessionReadModelOp
 		pendingApprovalCount,
 		status,
 		updatedAt,
+		runsIn,
+		isolationMode: runsIn?.isolationMode ?? null,
+		validationStatus: runsIn?.validationStatus ?? null,
+		needsAttentionReason: runsIn?.reason ?? null,
 	};
 }
 
@@ -124,6 +135,10 @@ export function toGuiSessionReadModelRow(readModel: GuiSessionReadModel): GuiSes
 		message_count: readModel.messageCount,
 		pending_approval_count: readModel.pendingApprovalCount,
 		status: readModel.status,
+		runs_in_json: readModel.runsIn ? JSON.stringify(readModel.runsIn) : null,
+		isolation_mode: readModel.isolationMode,
+		validation_status: readModel.validationStatus,
+		needs_attention_reason: readModel.needsAttentionReason,
 		updated_at: readModel.updatedAt,
 	};
 }
