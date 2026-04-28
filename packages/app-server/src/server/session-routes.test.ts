@@ -228,6 +228,18 @@ describe("session store routes", () => {
 		expect(runtimes[0]?.prompts).toEqual(["hello from gui"]);
 		expect(runtimes[0]?.session.sessionFile).toBe(`sqlite://${started.sessionId}`);
 
+		const workflow = await appRouter.handle({
+			kind: "request",
+			id: "workflow-read",
+			method: "daedalus/workflow/read",
+			params: { sessionId: started.sessionId },
+		});
+		expect(workflow).toMatchObject({
+			sessionId: started.sessionId,
+			orchestration: { sessionId: started.sessionId },
+		});
+		expectRouteResult("daedalus/workflow/read", workflow);
+
 		const sessionStarted = controllerEvent(events, "session/started") as {
 			sessionId: string;
 			payload: { sessionId: string };
@@ -323,36 +335,33 @@ describe("session store routes", () => {
 			params: { sessionId: "existing-session" },
 		})) as { sessionId: string; status: string };
 
-		expect(resumed).toEqual({ sessionId: "existing-session", status: "active" });
+		expect(resumed).toMatchObject({
+			sessionId: "existing-session",
+			status: "needs-attention",
+			identity: { status: "missing" },
+		});
 		expectRouteResult("session/resume", resumed);
-		expect(runtimes[0]?.sessionId).toBe(resumed.sessionId);
-		expect(runtimes[0]?.initialEntryCount).toBe(1);
+		expect(runtimes).toHaveLength(0);
 		expect((await sessionStore.read({ sessionId: resumed.sessionId })).entries).toHaveLength(1);
 
-		const turn = await appRouter.handle({
-			kind: "request",
-			id: "turn",
-			method: "turn/start",
-			params: { sessionId: resumed.sessionId, prompt: "turn after resume" },
-		});
+		await expect(
+			appRouter.handle({
+				kind: "request",
+				id: "turn",
+				method: "turn/start",
+				params: { sessionId: resumed.sessionId, prompt: "turn after resume" },
+			}),
+		).rejects.toThrow("Unknown session: existing-session");
 
-		expect(turn).toEqual({ turnId: "turn-1" });
-		expect(runtimes[0]?.prompts).toEqual(["turn after resume"]);
-		const sessionResumed = controllerEvent(events, "session/resumed") as {
+		const needsAttention = controllerEvent(events, "session/resume-identity-mismatched") as {
 			sessionId: string;
-			payload: { sessionId: string };
+			payload: { sessionId: string; identity: { status: string } };
 		};
-		const turnStarted = controllerEvent(events, "turn/started") as {
-			sessionId: string;
-			payload: { sessionId: string };
-		};
-		expect(sessionResumed.sessionId).toBe(resumed.sessionId);
-		expect(sessionResumed.payload.sessionId).toBe(resumed.sessionId);
-		expect(turnStarted.sessionId).toBe(resumed.sessionId);
-		expect(turnStarted.payload.sessionId).toBe(resumed.sessionId);
+		expect(needsAttention.sessionId).toBe(resumed.sessionId);
+		expect(needsAttention.payload.sessionId).toBe(resumed.sessionId);
+		expect(needsAttention.payload.identity.status).toBe("missing");
 		const persisted = await sessionStore.read({ sessionId: resumed.sessionId });
 		expect(persisted.header.id).toBe(resumed.sessionId);
-		expect(persisted.header.id).toBe(sessionResumed.sessionId);
-		expect(persisted.entries).toHaveLength(2);
+		expect(persisted.entries).toHaveLength(1);
 	});
 });

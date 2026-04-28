@@ -98,7 +98,19 @@ export function projectGuiSessionReadModel(options: ProjectGuiSessionReadModelOp
 		} else if (event.type.includes("approval") && pendingApprovalCount > 0) {
 			pendingApprovalCount -= 1;
 		}
-		if (event.type.includes("error")) status = "error";
+		if (event.type === "session/resume-identity-mismatched") {
+			status = "needs-attention";
+			const identity = eventPayload({ type: event.type, payload: payload.identity });
+			runsIn = runsIn
+				? {
+						...runsIn,
+						validationStatus: "needs-attention",
+						reason: String(
+							payload.needsAttentionReason ?? identity.message ?? "Session resume identity mismatch",
+						),
+					}
+				: runsIn;
+		} else if (event.type.includes("error")) status = "error";
 		else if (!options.archived && (event.type.includes("started") || event.type.includes("running")))
 			status = "active";
 	}

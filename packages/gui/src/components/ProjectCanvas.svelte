@@ -41,6 +41,17 @@
 		await runtime.createWorktree({ projectId: guiState.lastProjectId, branch });
 	}
 
+	async function scanWorktreeCleanup(id: string): Promise<string> {
+		const result = await runtime.scanWorktreeCleanup?.(id);
+		const reasons = result?.cleanupRisk.reasons.map((reason: { message: string }) => reason.message).join(" · ");
+		return reasons || (result?.cleanupRisk.risky ? "Cleanup confirmation required." : "No cleanup risks found.");
+	}
+
+	async function confirmWorktreeCleanup(id: string, confirmationToken?: string): Promise<string> {
+		await runtime.cleanupWorktree?.({ worktreeId: id, confirmationToken });
+		return "Worktree cleanup complete.";
+	}
+
 	async function openInEditor(): Promise<void> {
 		if (!dashboard.openInEditor.enabled) return;
 		await runtime.openInEditor(dashboard.openInEditor.path);
@@ -129,7 +140,7 @@
 			</div>
 		{/if}
 		<div class="mb-6 grid gap-4 lg:grid-cols-[340px_minmax(0,1fr)] draft-rise draft-rise-2">
-			<WorktreePanel worktrees={dashboard.worktrees} selectedWorktreeId={dashboard.activeWorktree?.id ? String(dashboard.activeWorktree.id) : undefined} onCreate={createWorktree} onSelect={selectWorktree} />
+			<WorktreePanel worktrees={dashboard.worktrees} selectedWorktreeId={dashboard.activeWorktree?.id ? String(dashboard.activeWorktree.id) : undefined} onCreate={createWorktree} onSelect={selectWorktree} onScanCleanup={runtime.scanWorktreeCleanup ? scanWorktreeCleanup : undefined} onConfirmCleanup={runtime.cleanupWorktree ? confirmWorktreeCleanup : undefined} />
 			<ChangesPanel git={dashboard.activeDiff ?? { branch: dashboard.branchLabel === "detached" ? null : dashboard.branchLabel, upstream: dashboard.upstreamLabel === "no upstream" ? null : dashboard.upstreamLabel, ahead: dashboard.git.ahead, behind: dashboard.git.behind, stagedCount: dashboard.git.stagedCount, unstagedCount: dashboard.git.unstagedCount, files: [] }} />
 		</div>
 

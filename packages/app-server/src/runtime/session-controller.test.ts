@@ -135,4 +135,51 @@ describe("SessionController", () => {
 			}),
 		);
 	});
+
+	test("marks resume identity mismatches needs-attention without starting runtime", async () => {
+		const messages: RuntimeControllerMessage[] = [];
+		let factoryCalls = 0;
+		const controller = new SessionController({
+			agentDir: "/agent",
+			eventSink: (message) => {
+				messages.push(message);
+			},
+			makeSessionManager: ({ cwd }) => ({ cwd }),
+			nextEventId: () => "event",
+			runtimeFactory: async (input) => {
+				factoryCalls += 1;
+				return new FakeRuntime(input.cwd);
+			},
+		});
+
+		const result = await controller.resumeSession({
+			cwd: "/tmp/moved",
+			sessionPath: "session-3",
+			sessionId: "session-3",
+			identity: {
+				status: "mismatched",
+				sessionId: "session-3",
+				storedCwd: "/tmp/original",
+				currentCwd: "/tmp/moved",
+				message: "Session cwd no longer matches",
+			},
+		});
+
+		expect(result.status).toBe("needs-attention");
+		expect(factoryCalls).toBe(0);
+		expect(controller.readState()).toEqual({ sessions: [] });
+		expect(messages).toContainEqual(
+			expect.objectContaining({
+				type: "session/resume-identity-mismatched",
+				sessionId: "session-3",
+			}),
+		);
+		expect(messages).toContainEqual(
+			expect.objectContaining({
+				kind: "notification",
+				method: "session/changed",
+				params: { sessionId: "session-3", status: "needs-attention" },
+			}),
+		);
+	});
 });

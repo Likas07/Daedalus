@@ -99,6 +99,27 @@ export function projectSessionEntry(
 				},
 			];
 		}
+		case "session_resume_identity": {
+			const identity = record(entry.identity);
+			const status = stringField(identity.status) || stringField(entry.status);
+			return [
+				{
+					...base,
+					kind: "target",
+					title: "Resume identity",
+					summary: [status, stringField(identity.message) || stringField(entry.message)]
+						.filter(Boolean)
+						.join(" · "),
+					status,
+					details: [
+						`Stored cwd: ${stringField(identity.storedCwd)}`,
+						`Current cwd: ${stringField(identity.currentCwd)}`,
+						`Stored worktree: ${stringField(identity.storedWorktreeId)}`,
+						`Current worktree: ${stringField(identity.currentWorktreeId)}`,
+					].filter((detail) => !detail.endsWith(": ")),
+				},
+			];
+		}
 		case "branch_summary":
 			return [
 				{

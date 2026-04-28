@@ -86,7 +86,14 @@ import {
 	TerminalResizeParamsSchema,
 	TerminalSnapshotResultSchema,
 } from "./terminal";
-import { WorkflowDiffSummarySchema, WorkflowRunsInTargetSchema, WorkflowWorktreeMetadataSchema } from "./workflow";
+import {
+	RootBoundaryViolationSchema,
+	WorkflowDiffSummarySchema,
+	WorkflowRunsInTargetSchema,
+	WorkflowWorktreeMetadataSchema,
+	WorktreeCleanupRiskScanSchema,
+	WorktreeConflictReasonSchema,
+} from "./workflow";
 
 const StrictObject = <Properties extends Record<string, TSchema>>(properties: Properties) =>
 	Type.Object(properties, { additionalProperties: false });
@@ -213,10 +220,71 @@ export const WorktreeCreateParamsSchema = StrictObject({
 });
 export type WorktreeCreateParams = Static<typeof WorktreeCreateParamsSchema>;
 
+export const WorktreeCleanupScanParamsSchema = StrictObject({
+	worktreeId: WorktreeIdSchema,
+	operationId: Type.Optional(Type.String({ minLength: 1 })),
+});
+export type WorktreeCleanupScanParams = Static<typeof WorktreeCleanupScanParamsSchema>;
+
+export const WorktreeCleanupScanResultSchema = StrictObject({ cleanupRisk: WorktreeCleanupRiskScanSchema });
+export type WorktreeCleanupScanResult = Static<typeof WorktreeCleanupScanResultSchema>;
+
+export const WorktreeCleanupParamsSchema = StrictObject({
+	worktreeId: WorktreeIdSchema,
+	operationId: Type.Optional(Type.String({ minLength: 1 })),
+	confirmationToken: Type.Optional(Type.String({ minLength: 1 })),
+	force: Type.Optional(Type.Boolean()),
+});
+export type WorktreeCleanupParams = Static<typeof WorktreeCleanupParamsSchema>;
+
+export const WorktreeCleanupResultSchema = StrictObject({ ok: Type.Literal(true) });
+export type WorktreeCleanupResult = Static<typeof WorktreeCleanupResultSchema>;
+
 export const WorktreeListResultSchema = StrictObject({ worktrees: Type.Array(WorkflowWorktreeMetadataSchema) });
 export type WorktreeListResult = Static<typeof WorktreeListResultSchema>;
 
-export const WorktreeCreateResultSchema = StrictObject({ worktree: WorkflowWorktreeMetadataSchema });
+export const WorktreeCreateOutcomeSchema = Type.Union([
+	StrictObject({
+		outcome: Type.Literal("created"),
+		worktree: WorkflowWorktreeMetadataSchema,
+		operationId: Type.Optional(Type.String({ minLength: 1 })),
+	}),
+	StrictObject({
+		outcome: Type.Literal("adopted-existing"),
+		worktree: WorkflowWorktreeMetadataSchema,
+		operationId: Type.Optional(Type.String({ minLength: 1 })),
+		reason: Type.Optional(Type.String({ minLength: 1 })),
+	}),
+	StrictObject({
+		outcome: Type.Literal("conflict"),
+		reason: WorktreeConflictReasonSchema,
+		message: Type.String({ minLength: 1 }),
+		operationId: Type.Optional(Type.String({ minLength: 1 })),
+		existingPath: Type.Optional(Type.String({ minLength: 1 })),
+		existingBranch: Type.Optional(Type.String({ minLength: 1 })),
+		boundaryViolation: Type.Optional(RootBoundaryViolationSchema),
+	}),
+	StrictObject({
+		outcome: Type.Literal("rolled-back"),
+		message: Type.String({ minLength: 1 }),
+		operationId: Type.String({ minLength: 1 }),
+		reason: Type.Optional(WorktreeConflictReasonSchema),
+		rollbackPath: Type.Optional(Type.String({ minLength: 1 })),
+	}),
+	StrictObject({
+		outcome: Type.Literal("failed"),
+		message: Type.String({ minLength: 1 }),
+		operationId: Type.Optional(Type.String({ minLength: 1 })),
+		reason: Type.Optional(WorktreeConflictReasonSchema),
+		recoverable: Type.Optional(Type.Boolean()),
+	}),
+]);
+export type WorktreeCreateOutcome = Static<typeof WorktreeCreateOutcomeSchema>;
+
+export const WorktreeCreateResultSchema = Type.Union([
+	StrictObject({ worktree: WorkflowWorktreeMetadataSchema }),
+	WorktreeCreateOutcomeSchema,
+]);
 export type WorktreeCreateResult = Static<typeof WorktreeCreateResultSchema>;
 
 export const SettingsScopeSchema = Type.Union([Type.Literal("global"), Type.Literal("project")]);
@@ -413,7 +481,11 @@ export type ResourceRemoveResult = Static<typeof ResourceRemoveResultSchema>;
 export const DiffTargetSchema = Type.Union([
 	StrictObject({ kind: Type.Literal("project"), projectId: ProjectIdSchema }),
 	StrictObject({ kind: Type.Literal("worktree"), projectId: ProjectIdSchema, worktreeId: WorktreeIdSchema }),
-	StrictObject({ kind: Type.Literal("session"), sessionId: SessionIdSchema }),
+	StrictObject({
+		kind: Type.Literal("session"),
+		sessionId: SessionIdSchema,
+		projectId: Type.Optional(ProjectIdSchema),
+	}),
 ]);
 export type DiffTarget = Static<typeof DiffTargetSchema>;
 export const DiffGetParamsSchema = Type.Union([
@@ -495,6 +567,8 @@ export const ClientRequestSchema = Type.Union([
 	request("project/open", ProjectOpenParamsSchema),
 	request("worktree/list", WorktreeListParamsSchema),
 	request("worktree/create", WorktreeCreateParamsSchema),
+	request("worktree/cleanup-scan", WorktreeCleanupScanParamsSchema),
+	request("worktree/cleanup", WorktreeCleanupParamsSchema),
 	request("session/start", SessionStartParamsSchema),
 	request("session/stop", StrictObject({ sessionId: SessionIdSchema })),
 	request("session/list", SessionListParamsSchema),
@@ -596,6 +670,8 @@ export const ClientRequestResultSchemas = {
 	"project/open": ProjectOpenResultSchema,
 	"worktree/list": WorktreeListResultSchema,
 	"worktree/create": WorktreeCreateResultSchema,
+	"worktree/cleanup-scan": WorktreeCleanupScanResultSchema,
+	"worktree/cleanup": WorktreeCleanupResultSchema,
 	"session/start": SessionStartResultSchema,
 	"session/stop": EmptyResultSchema,
 	"session/list": SessionListResultSchema,

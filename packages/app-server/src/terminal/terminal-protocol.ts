@@ -1,6 +1,14 @@
-import type { ProjectId, SessionId, TerminalId, WorktreeId } from "@daedalus-pi/app-server-protocol";
+import type {
+	ProjectId,
+	RootBoundaryViolation,
+	RootScopedTarget,
+	SessionId,
+	TerminalId,
+	WorktreeId,
+} from "@daedalus-pi/app-server-protocol";
 
 export type TerminalStatus = "starting" | "running" | "exited" | "killed" | "error";
+export type TerminalGuardStatus = "unchecked" | "valid" | "blocked" | "violated";
 
 export interface TerminalDimensions {
 	readonly cols: number;
@@ -34,6 +42,10 @@ export interface TerminalSessionRecord {
 		readonly replayCursor: number;
 	};
 	readonly elapsedMs: number;
+	readonly guardStatus?: TerminalGuardStatus;
+	readonly guardTarget?: RootScopedTarget;
+	readonly boundaryViolation?: RootBoundaryViolation;
+	readonly rejectedReason?: string;
 }
 
 export interface TerminalCreateParams {
@@ -45,6 +57,8 @@ export interface TerminalCreateParams {
 	readonly shell?: string;
 	readonly cols?: number;
 	readonly rows?: number;
+	readonly guardTarget?: RootScopedTarget;
+	readonly requireRootBoundary?: boolean;
 }
 
 export interface TerminalReplayParams {

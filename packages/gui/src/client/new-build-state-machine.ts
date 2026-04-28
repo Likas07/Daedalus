@@ -3,6 +3,8 @@ import type {
 	SessionStartResult,
 	WorkflowRunsInTarget,
 	WorkflowWorktreeMetadata,
+	WorktreeCreateOutcome,
+	WorktreeCreateResult,
 } from "@daedalus-pi/app-server-protocol";
 
 export type NewBuildRecoveryAction = "repair" | "locate" | "archive";
@@ -15,7 +17,13 @@ export type NewBuildState =
 	| { kind: "readyToStart"; prompt: string; worktree: WorkflowWorktreeMetadata }
 	| { kind: "startingSession"; prompt: string; startTarget: NonNullable<SessionStartParams["startTarget"]> }
 	| { kind: "running"; prompt: string; sessionId: string; runsIn?: WorkflowRunsInTarget }
-	| { kind: "setupFailed"; prompt: string; message: string; retryAction: "retry" | "edit-branch" | "cancel" }
+	| {
+			kind: "setupFailed";
+			prompt: string;
+			message: string;
+			retryAction: "retry" | "edit-branch" | "cancel";
+			outcome?: WorktreeCreateOutcome;
+	  }
 	| { kind: "needsAttention"; prompt: string; message: string; recoveryActions: NewBuildRecoveryAction[] }
 	| { kind: "baseCheckoutConfirming"; prompt: string; path: string; branch: string; dirtyCount: number }
 	| { kind: "cancelingSetup"; prompt: string }
@@ -54,7 +62,7 @@ export interface NewBuildStateMachineDependencies {
 		projectId: string;
 		branch: string;
 		path?: string;
-	}) => Promise<WorkflowWorktreeMetadata>;
+	}) => Promise<WorkflowWorktreeMetadata | WorktreeCreateResult>;
 	readonly listWorktrees?: (projectId: string) => Promise<readonly WorkflowWorktreeMetadata[]>;
 	readonly startSession: (params: SessionStartParams) => Promise<SessionStartResult>;
 	readonly onState?: (state: NewBuildState) => void;
@@ -124,7 +132,23 @@ export function createNewBuildStateMachine(deps: NewBuildStateMachineDependencie
 					branchPreview: branch,
 					pathPreview: isolatedTarget?.path,
 				});
-				worktree = await deps.createWorktree({ projectId: input.projectId, branch, path: isolatedTarget?.path });
+				const createResult = await deps.createWorktree({
+					projectId: input.projectId,
+					branch,
+					path: isolatedTarget?.path,
+				});
+				const outcome = normalizeWorktreeCreateOutcome(createResult);
+				if (outcome.outcome === "conflict" || outcome.outcome === "rolled-back" || outcome.outcome === "failed") {
+					setState({
+						kind: "setupFailed",
+						prompt: input.prompt,
+						message: worktreeOutcomeMessage(outcome),
+						retryAction: outcome.outcome === "conflict" ? "edit-branch" : "retry",
+						outcome,
+					});
+					return undefined;
+				}
+				worktree = outcome.worktree;
 			}
 
 			setState({ kind: "verifyingWorktree", prompt: input.prompt, worktree });
@@ -141,7 +165,7 @@ export function createNewBuildStateMachine(deps: NewBuildStateMachineDependencie
 				return undefined;
 			}
 			setState({ kind: "readyToStart", prompt: input.prompt, worktree: verified });
-			return start(input, { mode: "isolated-worktree", projectId: input.projectId, worktreeId: verified.id });
+			return await start(input, { mode: "isolated-worktree", projectId: input.projectId, worktreeId: verified.id });
 		} catch (error) {
 			setState({ kind: "setupFailed", prompt: input.prompt, message: errorMessage(error), retryAction: "retry" });
 			return undefined;
@@ -178,6 +202,27 @@ export function createNewBuildStateMachine(deps: NewBuildStateMachineDependencie
 	};
 }
 
+function normalizeWorktreeCreateOutcome(
+	result: WorkflowWorktreeMetadata | WorktreeCreateResult,
+): WorktreeCreateOutcome {
+	if ("outcome" in result) return result;
+	if ("worktree" in result) return { outcome: "created", worktree: result.worktree };
+	return { outcome: "created", worktree: result };
+}
+
+function worktreeOutcomeMessage(outcome: WorktreeCreateOutcome): string {
+	const suffix = [
+		outcome.operationId ? `operation ${outcome.operationId}` : undefined,
+		"reason" in outcome && outcome.reason ? `reason ${outcome.reason}` : undefined,
+	]
+		.filter(Boolean)
+		.join(" · ");
+	const detail = suffix ? ` (${suffix})` : "";
+	if (outcome.outcome === "conflict") return `${outcome.message}${detail}`;
+	if (outcome.outcome === "rolled-back") return `${outcome.message}${detail}`;
+	if (outcome.outcome === "failed") return `${outcome.message}${detail}`;
+	return "Worktree created.";
+}
 function deriveBranch(prompt: string): string {
 	const slug =
 		prompt

@@ -4,6 +4,8 @@ import { ProjectIdSchema, SessionIdSchema, TerminalIdSchema, WorktreeIdSchema } 
 const StrictObject = <Properties extends Record<string, TSchema>>(properties: Properties) =>
 	Type.Object(properties, { additionalProperties: false });
 const NullableStringSchema = Type.Union([Type.String(), Type.Null()]);
+export const OperationIdSchema = Type.String({ minLength: 1 });
+export type OperationId = Static<typeof OperationIdSchema>;
 
 export const WorkflowFileStatusSchema = Type.Union([
 	Type.Literal("added"),
@@ -56,6 +58,108 @@ export const WorkflowNeedsAttentionSchema = StrictObject({
 });
 export type WorkflowNeedsAttention = Static<typeof WorkflowNeedsAttentionSchema>;
 
+export const WorktreeConflictReasonSchema = Type.Union([
+	Type.Literal("path-exists"),
+	Type.Literal("branch-exists"),
+	Type.Literal("not-git-repository"),
+	Type.Literal("outside-project-root"),
+	Type.Literal("root-boundary-violation"),
+	Type.Literal("dirty-existing-worktree"),
+	Type.Literal("active-session"),
+	Type.Literal("operation-in-progress"),
+	Type.Literal("unknown"),
+]);
+export type WorktreeConflictReason = Static<typeof WorktreeConflictReasonSchema>;
+
+export const RootScopedTargetSchema = StrictObject({
+	projectId: Type.Optional(ProjectIdSchema),
+	rootPath: Type.String({ minLength: 1 }),
+	canonicalRootPath: Type.String({ minLength: 1 }),
+	targetPath: Type.String({ minLength: 1 }),
+	canonicalTargetPath: Type.String({ minLength: 1 }),
+});
+export type RootScopedTarget = Static<typeof RootScopedTargetSchema>;
+
+export const RootBoundaryViolationReasonSchema = Type.Union([
+	Type.Literal("target-outside-root"),
+	Type.Literal("symlink-escape"),
+	Type.Literal("root-missing"),
+	Type.Literal("target-missing"),
+	Type.Literal("permission-denied"),
+	Type.Literal("unknown"),
+]);
+export type RootBoundaryViolationReason = Static<typeof RootBoundaryViolationReasonSchema>;
+
+export const RootBoundaryViolationSchema = StrictObject({
+	reason: RootBoundaryViolationReasonSchema,
+	message: Type.String({ minLength: 1 }),
+	target: RootScopedTargetSchema,
+	resolvedPath: Type.Optional(Type.String({ minLength: 1 })),
+});
+export type RootBoundaryViolation = Static<typeof RootBoundaryViolationSchema>;
+
+export const OperationCleanupScanStatusSchema = Type.Union([
+	Type.Literal("pending"),
+	Type.Literal("running"),
+	Type.Literal("completed"),
+	Type.Literal("failed"),
+]);
+export type OperationCleanupScanStatus = Static<typeof OperationCleanupScanStatusSchema>;
+
+export const OperationCleanupCandidateSchema = StrictObject({
+	path: Type.String({ minLength: 1 }),
+	reason: Type.String({ minLength: 1 }),
+	operationId: Type.Optional(OperationIdSchema),
+	safeToRemove: Type.Boolean(),
+});
+export type OperationCleanupCandidate = Static<typeof OperationCleanupCandidateSchema>;
+
+export const OperationCleanupScanSchema = StrictObject({
+	operationId: OperationIdSchema,
+	root: RootScopedTargetSchema,
+	status: OperationCleanupScanStatusSchema,
+	candidates: Type.Array(OperationCleanupCandidateSchema),
+	startedAt: Type.String({ minLength: 1 }),
+	completedAt: Type.Optional(Type.String({ minLength: 1 })),
+	message: Type.Optional(Type.String({ minLength: 1 })),
+});
+export type OperationCleanupScan = Static<typeof OperationCleanupScanSchema>;
+
+export const WorktreeCleanupRiskReasonKindSchema = Type.Union([
+	Type.Literal("dirty-files"),
+	Type.Literal("unpushed-commits"),
+	Type.Literal("active-sessions"),
+	Type.Literal("active-terminals"),
+]);
+export type WorktreeCleanupRiskReasonKind = Static<typeof WorktreeCleanupRiskReasonKindSchema>;
+
+export const WorktreeCleanupRiskReasonSchema = StrictObject({
+	kind: WorktreeCleanupRiskReasonKindSchema,
+	severity: Type.Union([Type.Literal("warning"), Type.Literal("danger")]),
+	message: Type.String({ minLength: 1 }),
+	count: Type.Integer({ minimum: 0 }),
+	files: Type.Optional(Type.Array(Type.Any())),
+	sessionIds: Type.Optional(Type.Array(SessionIdSchema)),
+	terminalIds: Type.Optional(Type.Array(TerminalIdSchema)),
+});
+export type WorktreeCleanupRiskReason = Static<typeof WorktreeCleanupRiskReasonSchema>;
+
+export const WorktreeCleanupRiskScanSchema = StrictObject({
+	worktreeId: WorktreeIdSchema,
+	operationId: OperationIdSchema,
+	risky: Type.Boolean(),
+	riskHash: Type.String({ minLength: 1 }),
+	reasons: Type.Array(WorktreeCleanupRiskReasonSchema),
+	dirtyFiles: Type.Array(Type.Any()),
+	unpushedCommitCount: Type.Integer({ minimum: 0 }),
+	activeSessionIds: Type.Array(SessionIdSchema),
+	activeTerminalIds: Type.Array(TerminalIdSchema),
+	confirmationToken: Type.Optional(Type.String({ minLength: 1 })),
+	confirmationTokenExpiresAt: Type.Optional(Type.String({ minLength: 1 })),
+	scannedAt: Type.String({ minLength: 1 }),
+});
+export type WorktreeCleanupRiskScan = Static<typeof WorktreeCleanupRiskScanSchema>;
+
 export const WorkflowRunsInTargetSchema = StrictObject({
 	projectId: ProjectIdSchema,
 	worktreeId: Type.Optional(WorktreeIdSchema),
@@ -80,6 +184,7 @@ export const WorkflowWorktreeMetadataSchema = StrictObject({
 	dirtyCount: Type.Integer({ minimum: 0 }),
 	activeSessionCount: Type.Integer({ minimum: 0 }),
 	cleanupRequiresConfirmation: Type.Boolean(),
+	cleanupRisk: Type.Optional(WorktreeCleanupRiskScanSchema),
 	createdAt: Type.Optional(Type.String({ minLength: 1 })),
 	updatedAt: Type.Optional(Type.String({ minLength: 1 })),
 });
@@ -95,6 +200,7 @@ export interface WorkflowWorktreeMetadata {
 	readonly dirtyCount: number;
 	readonly activeSessionCount: number;
 	readonly cleanupRequiresConfirmation: boolean;
+	readonly cleanupRisk?: WorktreeCleanupRiskScan;
 	readonly createdAt?: string;
 	readonly updatedAt?: string;
 }

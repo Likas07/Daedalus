@@ -11,30 +11,35 @@ function fakePty() {
 	const writes: string[] = [];
 	const resizes: Array<[number, number]> = [];
 	const kills: Array<string | undefined> = [];
+	const spawns: Array<{ cwd: string; shell: string }> = [];
 	const adapter: PtyAdapter = {
-		spawn: () => ({
-			pid: 123,
-			write: (data) => writes.push(data),
-			resize: (cols, rows) => resizes.push([cols, rows]),
-			kill: (signal) => {
-				kills.push(signal);
-				onExit({ exitCode: null, signal: signal ?? null });
-			},
-			onData: (listener) => {
-				onData = listener;
-				return () => {};
-			},
-			onExit: (listener) => {
-				onExit = listener;
-				return () => {};
-			},
-		}),
+		spawn: (input) => {
+			spawns.push({ cwd: input.cwd, shell: input.shell });
+			return {
+				pid: 123,
+				write: (data) => writes.push(data),
+				resize: (cols, rows) => resizes.push([cols, rows]),
+				kill: (signal) => {
+					kills.push(signal);
+					onExit({ exitCode: null, signal: signal ?? null });
+				},
+				onData: (listener) => {
+					onData = listener;
+					return () => {};
+				},
+				onExit: (listener) => {
+					onExit = listener;
+					return () => {};
+				},
+			};
+		},
 	};
 	return {
 		adapter,
 		writes,
 		resizes,
 		kills,
+		spawns,
 		emitData: (data: string) => onData(data),
 		emitExit: (exitCode: number | null, signal: string | null = null) => onExit({ exitCode, signal }),
 	};
@@ -180,4 +185,51 @@ test("stopped terminal snapshots preserve the last output and exit evidence", as
 	expect(snapshot.exitCode).toBe(7);
 	expect(snapshot.history).toBe("last line\n");
 	expect(service.replay(terminal.terminalId, 0).chunks).toEqual([{ seq: 1, data: "last line\n" }]);
+});
+
+test("normalizes unsafe shells and records guard status on snapshots", async () => {
+	const pty = fakePty();
+	const service = new TerminalService({ pty: pty.adapter });
+	const terminal = await service.create({ cwd: "/tmp", shell: "/tmp/evil-shell" });
+	expect(terminal.shell).not.toBe("/tmp/evil-shell");
+	expect(terminal.guardStatus).toBe("unchecked");
+	expect(pty.spawns[0]).toEqual({ cwd: "/tmp", shell: terminal.shell });
+});
+
+test("rejects oversize input and writes to non-running terminals", async () => {
+	const pty = fakePty();
+	const service = new TerminalService({ pty: pty.adapter, maxInputBytes: 4 });
+	const terminal = await service.create({ cwd: "/tmp", shell: "/bin/sh" });
+	expect(() => service.input(terminal.terminalId, "12345")).toThrow("terminal-input-too-large");
+	expect(service.attach(terminal.terminalId).rejectedReason).toBe("terminal-input-too-large");
+	pty.emitExit(0);
+	expect(() => service.input(terminal.terminalId, "ok")).toThrow("not writable");
+	expect(service.attach(terminal.terminalId).rejectedReason).toBe("terminal-not-writable:exited");
+	expect(pty.writes).toEqual([]);
+});
+
+test("restores persisted running terminals as exited with orphan diagnostic evidence", () => {
+	const db = migratedInMemoryDatabase();
+	db.query(
+		"INSERT INTO terminal_sessions (id, status, cwd, shell, cols, rows, history, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+	).run(
+		"term-orphan",
+		"running",
+		"/tmp",
+		"/bin/sh",
+		80,
+		24,
+		"lost\n",
+		"2026-01-01T00:00:00.000Z",
+		"2026-01-01T00:00:00.000Z",
+	);
+	const service = new TerminalService({ database: db, pty: fakePty().adapter });
+	const [snapshot] = service.list();
+	expect(snapshot).toMatchObject({
+		terminalId: "term-orphan",
+		status: "exited",
+		exitSignal: "orphaned-no-live-process",
+		rejectedReason: "persisted-running-terminal-has-no-live-process",
+	});
+	expect(() => service.input("term-orphan", "ok")).toThrow("not writable");
 });

@@ -120,6 +120,8 @@ test("provides typed GUI protocol helpers", async () => {
 					result: {
 						terminal: {
 							terminalId: "terminal-1",
+							projectId: request.params.projectId,
+							worktreeId: request.params.worktreeId,
 							cwd: request.params.cwd,
 							shell: "/bin/sh",
 							dimensions: { cols: request.params.cols ?? 80, rows: request.params.rows ?? 24 },
@@ -130,6 +132,8 @@ test("provides typed GUI protocol helpers", async () => {
 							createdAt: "2026-04-25T00:00:00.000Z",
 							updatedAt: "2026-04-25T00:00:00.000Z",
 							elapsedMs: 0,
+							guardStatus: request.params.requireRootBoundary ? "valid" : undefined,
+							guardTarget: request.params.guardTarget,
 						},
 					},
 				});
@@ -145,45 +149,75 @@ test("provides typed GUI protocol helpers", async () => {
 				return;
 			}
 			if (request.method === "worktree/list" || request.method === "worktree/create") {
+				const worktree = {
+					id: "worktree-1",
+					projectId: "project-1",
+					branch: request.method === "worktree/create" ? request.params.branch : "safe",
+					path: "/repo-wt",
+					dirty: false,
+					dirtyCount: 0,
+					activeSessionCount: 0,
+					cleanupRequiresConfirmation: false,
+				};
+				send({
+					kind: "response",
+					id: request.id,
+					ok: true,
+					result:
+						request.method === "worktree/list"
+							? { worktrees: [worktree] }
+							: { outcome: "adopted-existing", operationId: "op-create", reason: "already exists", worktree },
+				});
+				return;
+			}
+			if (request.method === "worktree/cleanup-scan") {
 				send({
 					kind: "response",
 					id: request.id,
 					ok: true,
 					result: {
-						worktrees:
-							request.method === "worktree/list"
-								? [
-										{
-											id: "worktree-1",
-											projectId: "project-1",
-											branch: "safe",
-											path: "/repo-wt",
-											dirty: false,
-											dirtyCount: 0,
-											activeSessionCount: 0,
-											cleanupRequiresConfirmation: false,
-										},
-									]
-								: undefined,
-						worktree:
-							request.method === "worktree/create"
-								? {
-										id: "worktree-1",
-										projectId: "project-1",
-										branch: request.params.branch,
-										path: "/repo-wt",
-										dirty: false,
-										dirtyCount: 0,
-										activeSessionCount: 0,
-										cleanupRequiresConfirmation: false,
-									}
-								: undefined,
+						cleanupRisk: {
+							worktreeId: request.params.worktreeId,
+							operationId: request.params.operationId ?? "cleanup-op",
+							risky: true,
+							reasons: ["dirty-files"],
+							dirtyFiles: ["dirty.txt"],
+							unpushedCommitCount: 0,
+							activeSessionIds: [],
+							activeTerminalIds: [],
+							riskHash: "risk-hash",
+							confirmationToken: "cleanup-token",
+							confirmationTokenExpiresAt: "2026-04-25T00:05:00.000Z",
+						},
 					},
 				});
 				return;
 			}
+			if (request.method === "worktree/cleanup") {
+				send({ kind: "response", id: request.id, ok: true, result: { ok: true } });
+				return;
+			}
 			if (request.method === "session/start") {
 				send({ kind: "response", id: request.id, ok: true, result: { sessionId: "session-1" } });
+				return;
+			}
+			if (request.method === "session/resume") {
+				send({
+					kind: "response",
+					id: request.id,
+					ok: true,
+					result: {
+						sessionId: request.params.sessionId,
+						status: "needs-attention",
+						identity: {
+							status: "mismatched",
+							sessionId: request.params.sessionId,
+							storedCwd: "/repo-wt",
+							currentCwd: "/repo-moved",
+							message: "Session resume identity mismatch",
+						},
+					},
+				});
 				return;
 			}
 			if (request.method === "diff/get") {
@@ -214,6 +248,8 @@ test("provides typed GUI protocol helpers", async () => {
 		files: [{ path: "src/index.ts" }],
 	});
 	await expect(client.createWorktree({ projectId: "project-1", branch: "safe" })).resolves.toMatchObject({
+		outcome: "adopted-existing",
+		operationId: "op-create",
 		worktree: { id: "worktree-1", branch: "safe" },
 	});
 	await expect(client.listWorktrees({ projectId: "project-1" })).resolves.toMatchObject({
@@ -228,6 +264,22 @@ test("provides typed GUI protocol helpers", async () => {
 	await expect(
 		client.getDiff({ target: { kind: "worktree", projectId: "project-1", worktreeId: "worktree-1" } }),
 	).resolves.toMatchObject({ diff: { branch: "feature" } });
+	await expect(
+		client.scanWorktreeCleanup({ worktreeId: "worktree-1", operationId: "cleanup-op" }),
+	).resolves.toMatchObject({
+		cleanupRisk: { risky: true, confirmationToken: "cleanup-token" },
+	});
+	await expect(
+		client.cleanupWorktree({
+			worktreeId: "worktree-1",
+			operationId: "cleanup-op",
+			confirmationToken: "cleanup-token",
+		}),
+	).resolves.toEqual({ ok: true });
+	await expect(client.sessions.resume({ sessionId: "session-1", prompt: "continue" })).resolves.toMatchObject({
+		status: "needs-attention",
+		identity: { status: "mismatched" },
+	});
 	await expect(client.listComposerCommands()).resolves.toMatchObject({ commands: [{ name: "plan" }] });
 	await expect(
 		client.saveComposerAttachment({ filename: "image.png", mimeType: "image/png", dataBase64: "AAAA" }),
@@ -235,12 +287,28 @@ test("provides typed GUI protocol helpers", async () => {
 	await expect(client.setAccessMode("unrestricted")).resolves.toMatchObject({
 		policy: { mode: "unrestricted", bypassHardBlocks: false, auditRequired: true },
 	});
-	const createdTerminal = await client.createTerminal({ cwd: "/tmp/project", cols: 80, rows: 24 });
+	const guardTarget = {
+		projectId: "project-1",
+		rootPath: "/repo",
+		canonicalRootPath: "/repo",
+		targetPath: "/repo-wt",
+		canonicalTargetPath: "/repo-wt",
+	};
+	const createdTerminal = await client.createTerminal({
+		cwd: "/tmp/project",
+		projectId: "project-1",
+		worktreeId: "worktree-1",
+		guardTarget,
+		requireRootBoundary: true,
+		cols: 80,
+		rows: 24,
+	});
 	expect(createdTerminal.terminal).toMatchObject({
 		terminalId: "terminal-1",
 		status: "running",
 		dimensions: { cols: 80, rows: 24 },
 	});
+	expect(createdTerminal.terminal).toMatchObject({ guardStatus: "valid", guardTarget });
 	expect(createdTerminal.terminal).not.toHaveProperty("id");
 	await expect(client.replayTerminal({ terminalId: "terminal-1" })).resolves.toMatchObject({
 		chunks: [{ seq: 1, data: "ready" }],
@@ -253,6 +321,9 @@ test("provides typed GUI protocol helpers", async () => {
 	expect(seenMethods).toContain("terminal/create");
 	expect(seenMethods).toContain("worktree/create");
 	expect(seenMethods).toContain("worktree/list");
+	expect(seenMethods).toContain("worktree/cleanup-scan");
+	expect(seenMethods).toContain("worktree/cleanup");
+	expect(seenMethods).toContain("session/resume");
 	await client.close();
 });
 

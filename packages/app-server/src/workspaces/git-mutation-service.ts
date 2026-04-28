@@ -1,7 +1,9 @@
+import { resolve } from "node:path";
 import type { WorkflowDiffSummary } from "@daedalus-pi/app-server-protocol";
 import type { ApprovalService } from "../runtime/approval-service";
 import { DiffService } from "./diff-service";
 import { git } from "./git";
+import { assertPathWithinRoot } from "./root-boundary";
 
 export type GitMutationKind = "stage" | "unstage" | "discard" | "commit" | "checkpoint-restore";
 export type GitRunner = (cwd: string, args: readonly string[]) => Promise<unknown>;
@@ -43,16 +45,19 @@ export class GitMutationService {
 		this.runGit = options.git ?? git;
 	}
 
-	stage(input: GitMutationInput): Promise<GitMutationResult> {
-		return this.withApproval("stage", input, ["add", "--", ...this.requirePaths(input)]);
+	async stage(input: GitMutationInput): Promise<GitMutationResult> {
+		const paths = await this.validatedPaths("stage", input);
+		return this.withApproval("stage", { ...input, paths }, ["add", "--", ...paths]);
 	}
 
-	unstage(input: GitMutationInput): Promise<GitMutationResult> {
-		return this.withApproval("unstage", input, ["restore", "--staged", "--", ...this.requirePaths(input)]);
+	async unstage(input: GitMutationInput): Promise<GitMutationResult> {
+		const paths = await this.validatedPaths("unstage", input);
+		return this.withApproval("unstage", { ...input, paths }, ["restore", "--staged", "--", ...paths]);
 	}
 
-	discard(input: GitMutationInput): Promise<GitMutationResult> {
-		return this.withApproval("discard", input, ["restore", "--worktree", "--", ...this.requirePaths(input)], true);
+	async discard(input: GitMutationInput): Promise<GitMutationResult> {
+		const paths = await this.validatedPaths("discard", input);
+		return this.withApproval("discard", { ...input, paths }, ["restore", "--worktree", "--", ...paths], true);
 	}
 
 	async commit(input: GitMutationInput): Promise<GitMutationResult> {
@@ -74,6 +79,20 @@ export class GitMutationService {
 	private requirePaths(input: GitMutationInput): readonly string[] {
 		if (!input.paths?.length) throw new Error("At least one path is required.");
 		return input.paths;
+	}
+
+	private async validatedPaths(kind: GitMutationKind, input: GitMutationInput): Promise<readonly string[]> {
+		const paths = this.requirePaths(input);
+		await Promise.all(
+			paths.map((path) =>
+				assertPathWithinRoot({
+					root: input.cwd,
+					candidate: resolve(input.cwd, path),
+					purpose: `git/${kind}`,
+				}),
+			),
+		);
+		return paths;
 	}
 
 	private async withApproval(

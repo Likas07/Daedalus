@@ -1,9 +1,10 @@
-import { lstat, realpath } from "node:fs/promises";
+import { lstat } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { WorkflowRunsInTarget } from "@daedalus-pi/app-server-protocol";
 import type { AppServerDatabase } from "..";
 import { gitStatus, listGitWorktrees } from "./git";
 import { ProjectService } from "./project-service";
+import { assertPathWithinRoot } from "./root-boundary";
 import { WorktreeService } from "./worktree-service";
 
 export type WorktreeRecoveryAction = "repair" | "locate" | "archive";
@@ -39,7 +40,13 @@ export async function validateWorktreeTarget(input: ValidateWorktreeTargetInput)
 	let projectCanonical: string;
 	let worktreeCanonical: string;
 	try {
-		projectCanonical = await realpath(project.path);
+		const scopedProject = await assertPathWithinRoot({
+			root: project.path,
+			candidate: project.path,
+			purpose: "project",
+			projectId: input.projectId,
+		});
+		projectCanonical = scopedProject.canonicalRootPath;
 	} catch {
 		return needsAttention(`Project path is missing: ${project.path}`, ["locate", "archive"]);
 	}
@@ -47,7 +54,13 @@ export async function validateWorktreeTarget(input: ValidateWorktreeTargetInput)
 		const stat = await lstat(worktree.path);
 		if (stat.isSymbolicLink())
 			return needsAttention(`Worktree path is a symlink: ${worktree.path}`, ["locate", "archive"]);
-		worktreeCanonical = await realpath(worktree.path);
+		const scopedWorktree = await assertPathWithinRoot({
+			root: worktree.path,
+			candidate: worktree.path,
+			purpose: "worktree",
+			projectId: input.projectId,
+		});
+		worktreeCanonical = scopedWorktree.canonicalRootPath;
 	} catch {
 		return needsAttention(`Worktree path is missing: ${worktree.path}`, ["locate", "archive"]);
 	}

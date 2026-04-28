@@ -74,6 +74,8 @@ function responseFor(method: string | undefined): unknown {
 			return { protocolVersion: "test" };
 		case "project/list":
 			return { projects: [{ id: "project-1", path: "/repo", name: "repo" }] };
+		case "project/open":
+			return { projectId: "project-1", path: "/repo", name: "repo" };
 		case "session/list":
 			return { sessions: [{ sessionId: "session-1", title: "Existing", status: "running" }] };
 		case "terminal/list":
@@ -108,6 +110,53 @@ function responseFor(method: string | undefined): unknown {
 			return { commands: [{ name: "plan", label: "Plan", source: "built-in" }] };
 		case "composer/attachment/save":
 			return { attachment: { id: "att-1", kind: "text", filename: "note.txt", size: 4 } };
+		case "worktree/create":
+			return {
+				worktree: {
+					id: "wt-1",
+					projectId: "project-1",
+					branch: "task/hello",
+					path: "/repo-wt",
+					status: "ready",
+					dirty: false,
+					dirtyCount: 0,
+					activeSessionCount: 0,
+					cleanupRequiresConfirmation: false,
+					createdAt: "now",
+					updatedAt: "now",
+				},
+			};
+		case "worktree/list":
+			return {
+				worktrees: [
+					{
+						id: "wt-1",
+						projectId: "project-1",
+						branch: "task/hello",
+						path: "/repo-wt",
+						status: "ready",
+						dirty: false,
+						dirtyCount: 0,
+						activeSessionCount: 0,
+						cleanupRequiresConfirmation: false,
+						createdAt: "now",
+						updatedAt: "now",
+					},
+				],
+			};
+		case "session/start":
+			return {
+				sessionId: "session-new",
+				runsIn: {
+					mode: "isolated-worktree",
+					projectId: "project-1",
+					worktreeId: "wt-1",
+					branch: "task/hello",
+					path: "/repo-wt",
+					isolationMode: "isolated-worktree",
+					validationStatus: "ready",
+				},
+			};
 		case "terminal/create":
 		case "terminal/resize":
 		case "terminal/kill":
@@ -216,6 +265,24 @@ describe("GUI runtime state model", () => {
 
 		runtime.selectSession();
 		expect(runtime.state.selectedSessionId).toBeUndefined();
+	});
+
+	test("selects a newly started session from the first prompt", async () => {
+		const transport = new MockTransport();
+		const runtime = await createGuiRuntime({ client: new AppServerClient({ transport }) });
+		await runtime.initialize();
+
+		await runtime.startSessionFromPrompt({ path: "/repo", prompt: "hello" });
+
+		expect(runtime.state.sessions.find((session) => session.id === "session-new")).toMatchObject({
+			id: "session-new",
+			title: "hello",
+			status: "active",
+			projectId: "project-1",
+			worktreeId: "wt-1",
+		});
+		expect(runtime.state.selectedSessionId).toBe("session-new");
+		expect(runtime.state.newBuild).toMatchObject({ kind: "running", sessionId: "session-new" });
 	});
 
 	test("maps statuses to renderer tones", () => {

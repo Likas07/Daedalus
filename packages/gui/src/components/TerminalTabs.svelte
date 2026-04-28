@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { RendererTerminal } from "../client/gui-state-types";
-	import { terminalCloseLabel, terminalLabel } from "./terminal/terminal-state";
+	import { terminalCloseLabel, terminalLabel, terminalWritableState } from "./terminal/terminal-state";
 	const { terminals = [], selectedTerminalId, onSelect, onNew, onClose } = $props<{
 		terminals?: readonly RendererTerminal[];
 		selectedTerminalId?: string;
@@ -38,6 +38,9 @@
 		>
 			<span class="text-bone-400">{terminal.status}</span>
 			<span class="ml-1.5">{terminalLabel(terminal)}</span>
+			{#if terminalWritableState(terminal).blocked}
+				<span class="ml-1 text-amber-300" title={terminalWritableState(terminal).reason}>blocked</span>
+			{/if}
 		</button>
 		<button class="btn-mini mb-1" type="button" aria-label={terminalCloseLabel(terminal)} onclick={() => onClose?.(terminal.terminalId)}>×</button>
 	{:else}

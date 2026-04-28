@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { GitMutationDeniedError, GitMutationService, type GitRunner } from "./git-mutation-service";
 
 function service(decision: "approved" | "denied" = "approved") {
@@ -34,9 +37,10 @@ function service(decision: "approved" | "denied" = "approved") {
 describe("GitMutationService", () => {
 	test("stage, discard, and commit use argument-array git commands after approval", async () => {
 		const harness = service();
-		await harness.service.stage({ cwd: "/repo", paths: ["src/a.ts"] });
-		await harness.service.discard({ cwd: "/repo", paths: ["src/a.ts"] });
-		await harness.service.commit({ cwd: "/repo", message: "save work" });
+		const cwd = await repo();
+		await harness.service.stage({ cwd, paths: ["src/a.ts"] });
+		await harness.service.discard({ cwd, paths: ["src/a.ts"] });
+		await harness.service.commit({ cwd, message: "save work" });
 		expect(harness.commands).toEqual([
 			["add", "--", "src/a.ts"],
 			["restore", "--worktree", "--", "src/a.ts"],
@@ -46,9 +50,8 @@ describe("GitMutationService", () => {
 
 	test("deny prevents mutation", async () => {
 		const harness = service("denied");
-		await expect(harness.service.stage({ cwd: "/repo", paths: ["src/a.ts"] })).rejects.toBeInstanceOf(
-			GitMutationDeniedError,
-		);
+		const cwd = await repo();
+		await expect(harness.service.stage({ cwd, paths: ["src/a.ts"] })).rejects.toBeInstanceOf(GitMutationDeniedError);
 		expect(harness.commands).toEqual([]);
 	});
 
@@ -59,4 +62,19 @@ describe("GitMutationService", () => {
 		);
 		expect(harness.commands).toEqual([]);
 	});
+
+	test("rejects paths outside the git root before requesting approval", async () => {
+		const cwd = await repo();
+		const harness = service();
+		await expect(harness.service.stage({ cwd, paths: ["../outside.ts"] })).rejects.toThrow(
+			"git/stage target is outside root",
+		);
+		expect(harness.commands).toEqual([]);
+	});
 });
+
+async function repo(): Promise<string> {
+	const cwd = await mkdtemp(join(tmpdir(), "daedalus-git-mutation-"));
+	await mkdir(join(cwd, "src"), { recursive: true });
+	return cwd;
+}

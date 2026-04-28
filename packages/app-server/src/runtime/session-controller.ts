@@ -4,11 +4,13 @@ import type {
 	ServerNotification,
 	ServerRequest,
 	SessionId,
+	SessionResumeIdentity,
 	TurnId,
 	WorkflowRunsInTarget,
 } from "@daedalus-pi/app-server-protocol";
 export type RuntimeSessionManager = unknown;
 
+import { createSessionIdentitySnapshot } from "../sessions/session-identity";
 import { mapRuntimeEvent } from "./event-mapper";
 
 export type RuntimeControllerMessage = AppEvent | ServerNotification | ServerRequest;
@@ -88,6 +90,7 @@ export interface ResumeSessionInput {
 	readonly cwd: string;
 	readonly sessionPath: string;
 	readonly sessionId?: SessionId;
+	readonly identity?: SessionResumeIdentity;
 }
 
 export interface StartTurnInput {
@@ -145,6 +148,14 @@ export class SessionController {
 				projectId: input.projectId,
 				worktreeId: input.worktreeId,
 				runsIn: input.runsIn,
+				identity: await createSessionIdentitySnapshot({
+					sessionId,
+					cwd: runtime.cwd,
+					sessionFile: runtime.session.sessionFile,
+					projectId: input.projectId,
+					worktreeId: input.worktreeId,
+					runsIn: input.runsIn,
+				}),
 			},
 		});
 		await this.emit({ kind: "notification", method: "session/changed", params: { sessionId, status: "active" } });
@@ -154,8 +165,32 @@ export class SessionController {
 		return { sessionId, runsIn: input.runsIn };
 	}
 
-	async resumeSession(input: ResumeSessionInput): Promise<{ sessionId: SessionId }> {
+	async resumeSession(
+		input: ResumeSessionInput,
+	): Promise<{ sessionId: SessionId; status: "active" | "needs-attention"; identity?: SessionResumeIdentity }> {
 		const sessionId = input.sessionId ?? (input.sessionPath as SessionId);
+		if (input.identity && input.identity.status !== "matched" && input.identity.status !== "unknown") {
+			await this.emit({
+				id: this.nextEventId(),
+				type: "session/resume-identity-mismatched",
+				ts: this.nowIso(),
+				sessionId,
+				payload: {
+					sessionId,
+					cwd: input.cwd,
+					status: "needs-attention",
+					validationStatus: "needs-attention",
+					needsAttentionReason: input.identity.message ?? "Session resume identity mismatch",
+					identity: input.identity,
+				},
+			});
+			await this.emit({
+				kind: "notification",
+				method: "session/changed",
+				params: { sessionId, status: "needs-attention" },
+			});
+			return { sessionId, status: "needs-attention", identity: input.identity };
+		}
 		const runtime = await this.options.runtimeFactory({
 			cwd: input.cwd,
 			agentDir: this.options.agentDir,
@@ -173,10 +208,19 @@ export class SessionController {
 			type: "session/resumed",
 			ts: this.nowIso(),
 			sessionId,
-			payload: { sessionId, cwd: runtime.cwd, sessionFile: runtime.session.sessionFile },
+			payload: {
+				sessionId,
+				cwd: runtime.cwd,
+				sessionFile: runtime.session.sessionFile,
+				identity: await createSessionIdentitySnapshot({
+					sessionId,
+					cwd: runtime.cwd,
+					sessionFile: runtime.session.sessionFile,
+				}),
+			},
 		});
 		await this.emit({ kind: "notification", method: "session/changed", params: { sessionId, status: "active" } });
-		return { sessionId };
+		return { sessionId, status: "active", identity: input.identity };
 	}
 
 	async startTurn(input: StartTurnInput): Promise<{ turnId: TurnId }> {

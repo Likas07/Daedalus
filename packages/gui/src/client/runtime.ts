@@ -19,6 +19,9 @@ import {
 	type WorkflowRunsInTarget,
 	type WorkflowValidationStatus,
 	type WorkflowWorktreeMetadata,
+	type WorktreeCleanupResult,
+	type WorktreeCleanupScanResult,
+	type WorktreeCreateResult,
 } from "@daedalus-pi/app-server-protocol";
 import {
 	applyTerminalOutput,
@@ -139,6 +142,13 @@ export interface GuiRuntime {
 	}): Promise<unknown>;
 	openPullRequest?(url: string, input?: { provider?: string; projectId?: string }): Promise<boolean>;
 	createWorktree(input: CreateWorktreeInput): Promise<WorkflowWorktreeMetadata>;
+	scanWorktreeCleanup?(worktreeId: string, operationId?: string): Promise<WorktreeCleanupScanResult>;
+	cleanupWorktree?(input: {
+		worktreeId: string;
+		operationId?: string;
+		confirmationToken?: string;
+		force?: boolean;
+	}): Promise<WorktreeCleanupResult>;
 	openInEditor(path?: string): Promise<void>;
 	saveComposerAttachment(input: SaveComposerAttachmentInput): Promise<ComposerDraftAttachment>;
 	createTerminal(input: CreateTerminalInput): Promise<RendererTerminal>;
@@ -496,14 +506,12 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 			}
 			const flow = createNewBuildStateMachine({
 				createWorktree: async (worktreeInput) => {
-					const created = (await client.request("worktree/create", worktreeInput)) as {
-						worktree: WorkflowWorktreeMetadata;
-					};
-					state.worktrees = [
-						...state.worktrees.filter((worktree) => worktree.id !== created.worktree.id),
-						created.worktree,
-					];
-					return created.worktree;
+					const created = (await client.request("worktree/create", worktreeInput)) as WorktreeCreateResult;
+					const worktree = worktreeFromCreateResult(created);
+					if (worktree) {
+						state.worktrees = [...state.worktrees.filter((item) => item.id !== worktree.id), worktree];
+					}
+					return created;
 				},
 				listWorktrees: async (projectId) => {
 					const listed = (await client.request("worktree/list", { projectId })) as {
@@ -553,6 +561,7 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 				needsAttentionReason: session.runsIn?.reason,
 				bestNextAction: bestNextActionForRunsIn(session.runsIn),
 			});
+			selectSession(state, sessionId);
 			notify();
 			return result;
 		},
@@ -779,14 +788,30 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 			return result.ok === true;
 		},
 		async createWorktree(input) {
-			const result = (await client.request("worktree/create", input)) as { worktree: WorkflowWorktreeMetadata };
-			state.worktrees = [
-				...state.worktrees.filter((worktree) => worktree.id !== result.worktree.id),
-				result.worktree,
-			];
-			state.projectRoot = result.worktree.path;
+			const result = (await client.request("worktree/create", input)) as WorktreeCreateResult;
+			const worktree = worktreeFromCreateResult(result);
+			if (!worktree) throw new Error(worktreeCreateFailureMessage(result));
+			state.worktrees = [...state.worktrees.filter((item) => item.id !== worktree.id), worktree];
+			state.projectRoot = worktree.path;
 			notify();
-			return result.worktree;
+			return worktree;
+		},
+		async scanWorktreeCleanup(worktreeId, operationId) {
+			const result = await client.request("worktree/cleanup-scan", { worktreeId, operationId });
+			const cleanupRisk = result.cleanupRisk;
+			state.worktrees = state.worktrees.map((worktree) =>
+				worktree.id === worktreeId
+					? { ...worktree, cleanupRisk, cleanupRequiresConfirmation: Boolean(cleanupRisk.confirmationToken) }
+					: worktree,
+			);
+			notify();
+			return result;
+		},
+		async cleanupWorktree(input) {
+			const result = await client.request("worktree/cleanup", input);
+			state.worktrees = state.worktrees.filter((worktree) => worktree.id !== input.worktreeId);
+			notify();
+			return result;
 		},
 		async openInEditor(path = state.projectRoot) {
 			if (!path) throw new Error("Choose a project before opening an editor.");
@@ -1318,6 +1343,24 @@ async function safeHydrateStep(state: GuiState, label: string, step: () => Promi
 	}
 }
 
+function worktreeFromCreateResult(result: WorktreeCreateResult): WorkflowWorktreeMetadata | undefined {
+	if ("worktree" in result) return result.worktree;
+	return undefined;
+}
+
+function worktreeCreateFailureMessage(result: WorktreeCreateResult): string {
+	if (!("outcome" in result)) return "Worktree creation failed.";
+	if (result.outcome === "conflict" || result.outcome === "rolled-back" || result.outcome === "failed") {
+		const suffix = [
+			result.operationId ? `operation ${result.operationId}` : undefined,
+			"reason" in result && result.reason ? `reason ${result.reason}` : undefined,
+		]
+			.filter(Boolean)
+			.join(" · ");
+		return suffix ? `${result.message} (${suffix})` : result.message;
+	}
+	return "Worktree creation failed.";
+}
 function terminalFromSnapshot(snapshot: TerminalSnapshot): RendererTerminal {
 	return {
 		terminalId: snapshot.terminalId,

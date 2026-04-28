@@ -78,4 +78,25 @@ describe("session entry projection", () => {
 		expect(rows[0]?.summary).toContain("safe");
 		expect(rows[0]?.details).toContain("valid");
 	});
+
+	test("projects resume identity status rows", () => {
+		const rows = projectSessionEntries([
+			{
+				...base("session_resume_identity"),
+				identity: {
+					status: "mismatched",
+					storedCwd: "/repo/wt",
+					currentCwd: "/repo/moved",
+					storedWorktreeId: "wt-1",
+					message: "Session cwd no longer matches",
+				},
+			},
+		]);
+
+		expect(rows[0]?.kind).toBe("target");
+		expect(rows[0]?.title).toBe("Resume identity");
+		expect(rows[0]?.status).toBe("mismatched");
+		expect(rows[0]?.summary).toContain("mismatched");
+		expect(rows[0]?.details).toContain("Stored worktree: wt-1");
+	});
 });

@@ -1,5 +1,6 @@
 import { type Static, type TSchema, Type } from "@sinclair/typebox";
 import { ProjectIdSchema, SessionIdSchema, TerminalIdSchema, WorktreeIdSchema } from "./ids";
+import { RootBoundaryViolationSchema, RootScopedTargetSchema } from "./workflow";
 
 const StrictObject = <Properties extends Record<string, TSchema>>(properties: Properties) =>
 	Type.Object(properties, { additionalProperties: false });
@@ -31,6 +32,14 @@ export const TerminalOutputChunkSchema = StrictObject({
 });
 export type TerminalOutputChunk = Static<typeof TerminalOutputChunkSchema>;
 
+export const TerminalGuardStatusSchema = Type.Union([
+	Type.Literal("unchecked"),
+	Type.Literal("valid"),
+	Type.Literal("blocked"),
+	Type.Literal("violated"),
+]);
+export type TerminalGuardStatus = Static<typeof TerminalGuardStatusSchema>;
+
 export const TerminalSnapshotSchema = StrictObject({
 	terminalId: TerminalIdSchema,
 	projectId: Type.Optional(ProjectIdSchema),
@@ -49,6 +58,10 @@ export const TerminalSnapshotSchema = StrictObject({
 	createdAt: Type.String({ minLength: 1 }),
 	updatedAt: Type.String({ minLength: 1 }),
 	elapsedMs: Type.Integer({ minimum: 0 }),
+	guardStatus: Type.Optional(TerminalGuardStatusSchema),
+	guardTarget: Type.Optional(RootScopedTargetSchema),
+	boundaryViolation: Type.Optional(RootBoundaryViolationSchema),
+	rejectedReason: Type.Optional(Type.String()),
 });
 export type TerminalSnapshot = Static<typeof TerminalSnapshotSchema>;
 
@@ -60,6 +73,8 @@ export const TerminalCreateParamsSchema = StrictObject({
 	shell: Type.Optional(Type.String({ minLength: 1 })),
 	cols: Type.Optional(Type.Integer({ minimum: 20, maximum: 400 })),
 	rows: Type.Optional(Type.Integer({ minimum: 5, maximum: 200 })),
+	guardTarget: Type.Optional(RootScopedTargetSchema),
+	requireRootBoundary: Type.Optional(Type.Boolean()),
 });
 export type TerminalCreateParams = Static<typeof TerminalCreateParamsSchema>;
 

@@ -12,6 +12,7 @@ import type {
 	TerminalSessionRecord,
 	TerminalStatus,
 } from "./terminal-protocol";
+import { TerminalSafetyService } from "./terminal-safety";
 
 export interface TerminalServiceOptions {
 	readonly publish?: (
@@ -22,6 +23,7 @@ export interface TerminalServiceOptions {
 	readonly maxHistoryLines?: number;
 	readonly pty?: PtyAdapter;
 	readonly database?: AppServerDatabase;
+	readonly maxInputBytes?: number;
 }
 
 interface TerminalSessionState {
@@ -43,6 +45,7 @@ export class TerminalService {
 	private readonly publish?: TerminalServiceOptions["publish"];
 	private readonly pty?: PtyAdapter;
 	private readonly database?: AppServerDatabase;
+	private readonly safety: TerminalSafetyService;
 
 	constructor(options: TerminalServiceOptions = {}) {
 		this.maxScrollbackChunks = options.maxScrollbackChunks ?? 1000;
@@ -51,6 +54,7 @@ export class TerminalService {
 		this.publish = options.publish;
 		this.pty = options.pty;
 		this.database = options.database;
+		this.safety = new TerminalSafetyService({ maxInputBytes: options.maxInputBytes });
 		this.loadPersistedSessions();
 	}
 
@@ -58,7 +62,9 @@ export class TerminalService {
 		const terminalId = `term_${randomUUID()}`;
 		const now = new Date().toISOString();
 		const dimensions = { cols: params.cols ?? 80, rows: params.rows ?? 24 };
-		const shell = params.shell ?? process.env.SHELL ?? "/bin/sh";
+		const safety = await this.safety.validateCreate(params);
+		if (safety.rejectedReason) throw new Error(`Terminal create rejected: ${safety.rejectedReason}`);
+		const shell = safety.shell;
 		const state: TerminalSessionState = {
 			record: {
 				terminalId,
@@ -66,12 +72,15 @@ export class TerminalService {
 				worktreeId: params.worktreeId,
 				sessionId: params.sessionId,
 				owner: params.owner,
-				cwd: params.cwd,
+				cwd: safety.cwd,
 				shell,
 				status: "running",
 				dimensions,
 				createdAt: now,
 				updatedAt: now,
+				guardStatus: safety.guardStatus,
+				guardTarget: safety.guardTarget,
+				boundaryViolation: safety.boundaryViolation,
 			},
 			attached: true,
 			nextSeq: 1,
@@ -80,7 +89,7 @@ export class TerminalService {
 		};
 		this.sessions.set(terminalId, state);
 		const processHandle = (this.pty ?? (await createNodePtyAdapter())).spawn({
-			cwd: params.cwd,
+			cwd: safety.cwd,
 			shell,
 			cols: dimensions.cols,
 			rows: dimensions.rows,
@@ -123,7 +132,23 @@ export class TerminalService {
 
 	input(terminalId: TerminalId, data: string): void {
 		const state = this.mustGet(terminalId);
-		if (state.record.status !== "running" || !state.process) throw new Error(`Terminal ${terminalId} is not running`);
+		if (state.record.status !== "running" || !state.process) {
+			state.record = {
+				...state.record,
+				rejectedReason: `terminal-not-writable:${state.record.status}`,
+				updatedAt: new Date().toISOString(),
+			};
+			throw new Error(`Terminal ${terminalId} is not writable: ${state.record.status}`);
+		}
+		const validation = this.safety.validateInput(data);
+		if (!validation.ok) {
+			state.record = {
+				...state.record,
+				rejectedReason: validation.rejectedReason,
+				updatedAt: new Date().toISOString(),
+			};
+			throw new Error(`Terminal input rejected: ${validation.rejectedReason}`);
+		}
 		state.process.write(data);
 	}
 
@@ -284,6 +309,8 @@ export class TerminalService {
 			.all();
 		for (const row of rows) {
 			const history = capHistory(row.history ?? "", this.maxHistoryBytes, this.maxHistoryLines);
+			const wasRunningWithoutProcess = row.status === "running";
+			const status: TerminalStatus = row.status === "killed" ? "killed" : "exited";
 			this.sessions.set(row.id, {
 				record: {
 					terminalId: row.id,
@@ -292,13 +319,15 @@ export class TerminalService {
 					sessionId: row.session_id ?? undefined,
 					cwd: row.cwd,
 					shell: row.shell,
-					status: row.status === "killed" ? "killed" : "exited",
+					status,
 					dimensions: { cols: row.cols, rows: row.rows },
 					pid: row.pid ?? undefined,
 					exitCode: row.exit_code ?? undefined,
-					exitSignal: row.exit_signal ?? undefined,
+					exitSignal: row.exit_signal ?? (wasRunningWithoutProcess ? "orphaned-no-live-process" : undefined),
 					createdAt: row.created_at,
 					updatedAt: row.updated_at,
+					guardStatus: "unchecked",
+					rejectedReason: wasRunningWithoutProcess ? "persisted-running-terminal-has-no-live-process" : undefined,
 				},
 				attached: false,
 				nextSeq: history ? 2 : 1,
