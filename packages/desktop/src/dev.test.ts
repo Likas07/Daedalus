@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { $ } from "bun";
-import { electronDevCommand, isUrlServing, waitForUrl } from "./dev";
+import { electronDevCommand, guiDevPort, guiDevUrl, isDaedalusGuiServing, isUrlServing, waitForUrl } from "./dev";
 
 describe("desktop dev launcher helpers", () => {
 	test("isUrlServing returns true only for successful responses", async () => {
@@ -15,6 +15,25 @@ describe("desktop dev launcher helpers", () => {
 				throw new Error("connection refused");
 			}),
 		).toBe(false);
+	});
+
+	test("generic HTTP 200 is not detected as the Daedalus GUI", async () => {
+		expect(
+			await isDaedalusGuiServing("http://example.test", async () => new Response("<title>Other App</title>")),
+		).toBe(false);
+	});
+
+	test("Daedalus GUI index is detected", async () => {
+		const index = '<title>Daedalus — Mock Shell</title><script type="module" src="/src/main.ts"></script>';
+		expect(await isDaedalusGuiServing("http://example.test", async () => new Response(index))).toBe(true);
+	});
+
+	test("desktop dev URL uses the default GUI dev port and env override", () => {
+		expect(guiDevPort({})).toBe(5174);
+		expect(guiDevUrl({})).toBe("http://127.0.0.1:5174/");
+		expect(guiDevPort({ DAEDALUS_GUI_DEV_PORT: "61234" })).toBe(61234);
+		expect(guiDevUrl({ DAEDALUS_GUI_DEV_PORT: "61234" })).toBe("http://127.0.0.1:61234/");
+		expect(() => guiDevPort({ DAEDALUS_GUI_DEV_PORT: "nope" })).toThrow("DAEDALUS_GUI_DEV_PORT must be");
 	});
 
 	test("waitForUrl waits until a URL serves successfully", async () => {

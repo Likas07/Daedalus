@@ -3,7 +3,8 @@ import { dirname, resolve } from "node:path";
 
 const host = "127.0.0.1";
 const appServerPort = 43117;
-const guiPort = 5173;
+const defaultGuiPort = 5174;
+const guiPortEnvVar = "DAEDALUS_GUI_DEV_PORT";
 const devToken = "daedalus-gui-dev-token";
 
 const repoRoot = resolve(import.meta.dir, "../../..");
@@ -16,6 +17,16 @@ const appServerEntry = resolve(repoRoot, "packages/app-server/src/server/main.ts
 type DevSubprocess = ReturnType<typeof Bun.spawn>;
 
 const children = new Set<DevSubprocess>();
+
+function guiDevPort(env: Pick<NodeJS.ProcessEnv, string> = Bun.env): number {
+	const rawPort = env[guiPortEnvVar];
+	if (rawPort === undefined || rawPort === "") return defaultGuiPort;
+	const port = Number(rawPort);
+	if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+		throw new Error(`${guiPortEnvVar} must be a TCP port between 1 and 65535; got ${JSON.stringify(rawPort)}`);
+	}
+	return port;
+}
 
 async function main(): Promise<void> {
 	await mkdir(dirname(tokenFile), { recursive: true });
@@ -35,7 +46,7 @@ async function main(): Promise<void> {
 	]);
 	await waitForHealth(`http://${host}:${appServerPort}/health`);
 
-	spawn("vite", ["bun", "x", "vite", "--host", host, "--port", String(guiPort)], {
+	spawn("vite", ["bun", "x", "vite", "--host", host, "--port", String(guiDevPort()), "--strictPort"], {
 		VITE_DAEDALUS_APP_SERVER_WS: `ws://${host}:${appServerPort}/ws`,
 		VITE_DAEDALUS_APP_SERVER_ENDPOINT: `http://${host}:${appServerPort}`,
 		VITE_DAEDALUS_APP_SERVER_TOKEN: devToken,
