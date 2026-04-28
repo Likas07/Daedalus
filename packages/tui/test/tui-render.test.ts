@@ -1,7 +1,9 @@
 import { describe, it } from "bun:test";
 import assert from "node:assert";
 import type { Terminal as XtermTerminalType } from "@xterm/headless";
-import { type Component, TUI } from "../src/tui.js";
+import { Loader } from "../src/components/loader.js";
+import { Viewport } from "../src/components/viewport.js";
+import { type Component, Container, TUI } from "../src/tui.js";
 import { VirtualTerminal } from "./virtual-terminal.js";
 
 class TestComponent implements Component {
@@ -32,6 +34,71 @@ class FixedFrameComponent implements Component {
 	}
 
 	invalidate(): void {}
+}
+
+class FixedFrameDynamicBottomComponent implements Component {
+	spinner = "|";
+	bottomLines: string[] = ["Question A", "Question B", "Footer"];
+
+	constructor(private readonly frameHeight: number) {}
+
+	render(width: number): string[] {
+		const statusLines = [`Working ${this.spinner}`];
+		const historyRows = Math.max(0, this.frameHeight - statusLines.length - this.bottomLines.length);
+		const lines = [
+			...Array.from({ length: historyRows }, (_, i) => `History ${i}`),
+			...statusLines,
+			...this.bottomLines,
+		];
+		return lines.map((line) => line.padEnd(width, " ").slice(0, width));
+	}
+
+	invalidate(): void {}
+}
+
+class MutableLinesComponent implements Component {
+	constructor(public lines: string[]) {}
+
+	render(_width: number): string[] {
+		return this.lines;
+	}
+
+	invalidate(): void {}
+}
+
+class DetachedHistoryHighWaterLayoutComponent implements Component {
+	private detachedBottomHeight = 0;
+
+	constructor(
+		private readonly tui: TUI,
+		private readonly historyViewport: Viewport,
+		private readonly bottomContainer: Container,
+	) {}
+
+	render(width: number): string[] {
+		const bottomLines = this.bottomContainer.render(width);
+		const detached = !this.historyViewport.isFollowingBottom();
+		if (detached) {
+			this.detachedBottomHeight = Math.max(this.detachedBottomHeight, bottomLines.length);
+		} else {
+			this.detachedBottomHeight = 0;
+		}
+
+		const reservedBottomHeight = detached
+			? Math.max(this.detachedBottomHeight, bottomLines.length)
+			: bottomLines.length;
+		const availableHistoryHeight = Math.max(0, this.tui.terminal.rows - reservedBottomHeight);
+		this.historyViewport.setHeight(availableHistoryHeight);
+		const historyLines = this.historyViewport.render(width);
+		const topPadding = reservedBottomHeight - bottomLines.length;
+		const paddedBottomLines = topPadding > 0 ? [...Array(topPadding).fill(""), ...bottomLines] : bottomLines;
+		return [...historyLines, ...paddedBottomLines];
+	}
+
+	invalidate(): void {
+		this.historyViewport.invalidate();
+		this.bottomContainer.invalidate();
+	}
 }
 
 class LoggingVirtualTerminal extends VirtualTerminal {
@@ -339,6 +406,112 @@ describe("TUI differential rendering", () => {
 		}
 
 		tui.stop();
+	});
+
+	it("clears stale fixed-frame status rows when bottom content changes height below the loader", async () => {
+		const terminal = new LoggingVirtualTerminal(32, 8);
+		const tui = new TUI(terminal);
+		tui.setFixedFrameMode(true);
+		const component = new FixedFrameDynamicBottomComponent(terminal.rows);
+		tui.addChild(component);
+		tui.start();
+		await flushRender(terminal);
+
+		const redrawsBeforeShrink = tui.fullRedraws;
+		component.spinner = "/";
+		component.bottomLines = ["Question A", "Footer"];
+		terminal.clearWrites();
+		tui.requestRender();
+		await flushRender(terminal);
+
+		const afterShrink = terminal.getViewport();
+		assert.strictEqual(
+			afterShrink.filter((line) => line.includes("Working")).length,
+			1,
+			`Expected one Working row after bottom shrink, got:\n${afterShrink.join("\n")}`,
+		);
+		assert.ok(
+			afterShrink[terminal.rows - 3]?.includes("Working /"),
+			`Loader should move down: ${afterShrink.join("\n")}`,
+		);
+		assert.ok(tui.fullRedraws > redrawsBeforeShrink, "Bottom-height shrink should trigger a fixed-frame full redraw");
+
+		const redrawsBeforeGrow = tui.fullRedraws;
+		component.spinner = "-";
+		component.bottomLines = ["Question A", "Question B", "Question C", "Footer"];
+		terminal.clearWrites();
+		tui.requestRender();
+		await flushRender(terminal);
+
+		const afterGrow = terminal.getViewport();
+		assert.strictEqual(
+			afterGrow.filter((line) => line.includes("Working")).length,
+			1,
+			`Expected one Working row after bottom grow, got:\n${afterGrow.join("\n")}`,
+		);
+		assert.ok(afterGrow[terminal.rows - 5]?.includes("Working -"), `Loader should move up: ${afterGrow.join("\n")}`);
+		assert.ok(tui.fullRedraws > redrawsBeforeGrow, "Bottom-height growth should trigger a fixed-frame full redraw");
+
+		tui.stop();
+	});
+
+	it("keeps one Working row in fixed-frame detached history when question height changes", async () => {
+		const terminal = new LoggingVirtualTerminal(40, 9);
+		const tui = new TUI(terminal);
+		tui.setFixedFrameMode(true);
+
+		const historyContent = new MutableLinesComponent(
+			Array.from({ length: 20 }, (_, index) => `History line ${index}`),
+		);
+		const historyViewport = new Viewport(historyContent);
+		historyViewport.scrollToTop();
+
+		const bottomContainer = new Container();
+		const loader = new Loader(
+			tui,
+			(text) => text,
+			(text) => text,
+			"Working...",
+		);
+		const question = new MutableLinesComponent(["Question: continue?", "Custom action", "Footer"]);
+		bottomContainer.addChild(loader);
+		bottomContainer.addChild(question);
+
+		const layout = new DetachedHistoryHighWaterLayoutComponent(tui, historyViewport, bottomContainer);
+		tui.addChild(layout);
+
+		const assertSingleWorkingRow = (label: string): void => {
+			const viewport = terminal.getViewport();
+			assert.strictEqual(
+				viewport.filter((line) => line.includes("Working")).length,
+				1,
+				`Expected one Working row ${label}, got:\n${viewport.join("\n")}`,
+			);
+		};
+
+		try {
+			tui.start();
+			await flushRender(terminal);
+			assertSingleWorkingRow("on initial detached render");
+
+			question.lines = ["Question: continue?"];
+			tui.requestRender();
+			await flushRender(terminal);
+			assertSingleWorkingRow("after detached bottom shrink");
+
+			question.lines = ["Question: continue?", "Custom action", "Explain", "Footer"];
+			tui.requestRender();
+			await flushRender(terminal);
+			assertSingleWorkingRow("after detached bottom grow");
+
+			question.lines = ["Question: continue?", "Footer"];
+			tui.requestRender();
+			await flushRender(terminal);
+			assertSingleWorkingRow("after second detached bottom shrink");
+		} finally {
+			loader.stop();
+			tui.stop();
+		}
 	});
 
 	it("tracks cursor correctly when content shrinks with unchanged remaining lines", async () => {

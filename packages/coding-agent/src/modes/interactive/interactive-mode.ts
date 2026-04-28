@@ -244,8 +244,11 @@ export class InteractiveMode {
 	private isInitialized = false;
 	private onInputCallback?: (text: string) => void;
 	private loadingAnimation: Loader | undefined = undefined;
+	private loadingAnimationVisible = false;
 	private pendingWorkingMessage: string | undefined = undefined;
 	private readonly defaultWorkingMessage = "Working...";
+	private currentWorkingMessage = this.defaultWorkingMessage;
+	private blockingCustomUiDepth = 0;
 	private readonly defaultHiddenThinkingLabel = "Thinking...";
 	private hiddenThinkingLabel = this.defaultHiddenThinkingLabel;
 
@@ -1385,18 +1388,12 @@ export class InteractiveMode {
 	private static readonly MOUSE_WHEEL_SCROLL_LINES = 3;
 
 	private handleScrollInput(data: string): { consume?: boolean } | undefined {
-		if (this.ui.hasOverlay()) {
-			return undefined;
-		}
-		const activeEditorComponent = this.editor as Component;
-		const editorVisible =
-			this.editorContainer.children.length === 1 && this.editorContainer.children[0] === activeEditorComponent;
-		if (!editorVisible) {
+		const delta = this.getMouseWheelScrollDelta(data);
+		if (delta === undefined) {
 			return undefined;
 		}
 
-		const delta = this.getMouseWheelScrollDelta(data);
-		if (delta === undefined) {
+		if (this.ui.hasOverlay()) {
 			return undefined;
 		}
 
@@ -1608,7 +1605,7 @@ export class InteractiveMode {
 		this.defaultEditor.onExtensionShortcut = undefined;
 		this.updateTerminalTitle();
 		if (this.loadingAnimation) {
-			this.loadingAnimation.setMessage(`${this.defaultWorkingMessage} (${keyText("app.interrupt")} to interrupt)`);
+			this.setWorkingLoaderMessage(`${this.defaultWorkingMessage} (${keyText("app.interrupt")} to interrupt)`);
 		}
 		this.setHiddenThinkingLabel();
 	}
@@ -1750,14 +1747,9 @@ export class InteractiveMode {
 			onTerminalInput: (handler) => this.addExtensionTerminalInputListener(handler),
 			setStatus: (key, text) => this.setExtensionStatus(key, text),
 			setWorkingMessage: (message) => {
+				const nextMessage = message || `${this.defaultWorkingMessage} (${keyText("app.interrupt")} to interrupt)`;
 				if (this.loadingAnimation) {
-					if (message) {
-						this.loadingAnimation.setMessage(message);
-					} else {
-						this.loadingAnimation.setMessage(
-							`${this.defaultWorkingMessage} (${keyText("app.interrupt")} to interrupt)`,
-						);
-					}
+					this.setWorkingLoaderMessage(nextMessage);
 				} else {
 					// Queue message for when loadingAnimation is created (handles agent_start race)
 					this.pendingWorkingMessage = message;
@@ -2050,6 +2042,29 @@ export class InteractiveMode {
 		}
 	}
 
+	private setWorkingLoaderMessage(message: string): void {
+		this.currentWorkingMessage = message;
+		this.loadingAnimation?.setMessage(message);
+	}
+
+	private suspendWorkingLoaderForBlockingCustomUi(): void {
+		this.blockingCustomUiDepth++;
+		if (!this.loadingAnimation || !this.loadingAnimationVisible) return;
+		this.loadingAnimation.stop();
+		this.statusContainer.removeChild(this.loadingAnimation);
+		this.loadingAnimationVisible = false;
+		this.ui.requestRender();
+	}
+
+	private restoreWorkingLoaderAfterBlockingCustomUi(): void {
+		this.blockingCustomUiDepth = Math.max(0, this.blockingCustomUiDepth - 1);
+		if (this.blockingCustomUiDepth > 0 || !this.loadingAnimation || this.loadingAnimationVisible) return;
+		this.statusContainer.addChild(this.loadingAnimation);
+		this.loadingAnimation.start();
+		this.loadingAnimationVisible = true;
+		this.ui.requestRender();
+	}
+
 	/** Show a custom component with keyboard focus. Overlay mode renders on top of existing content. */
 	private async showExtensionCustom<T>(
 		factory: (
@@ -2078,13 +2093,18 @@ export class InteractiveMode {
 		return new Promise((resolve, reject) => {
 			let component: Component & { dispose?(): void };
 			let closed = false;
+			if (!isOverlay) {
+				this.suspendWorkingLoaderForBlockingCustomUi();
+			}
 
 			const close = (result: T) => {
 				if (closed) return;
 				closed = true;
 				if (isOverlay) this.ui.hideOverlay();
-				else restoreEditor();
-				// Note: both branches above already call requestRender
+				else {
+					restoreEditor();
+					this.restoreWorkingLoaderAfterBlockingCustomUi();
+				}
 				resolve(result);
 				try {
 					component?.dispose?.();
@@ -2123,7 +2143,11 @@ export class InteractiveMode {
 				})
 				.catch((err) => {
 					if (closed) return;
-					if (!isOverlay) restoreEditor();
+					closed = true;
+					if (!isOverlay) {
+						restoreEditor();
+						this.restoreWorkingLoaderAfterBlockingCustomUi();
+					}
 					reject(err);
 				});
 		});
@@ -2451,19 +2475,27 @@ export class InteractiveMode {
 					this.loadingAnimation.stop();
 				}
 				this.statusContainer.clear();
+				this.loadingAnimationVisible = false;
+				this.currentWorkingMessage = this.defaultWorkingMessage;
 				this.loadingAnimation = new Loader(
 					this.ui,
 					(spinner) => theme.fg("accent", spinner),
 					(text) => theme.fg("muted", text),
-					this.defaultWorkingMessage,
+					this.currentWorkingMessage,
 				);
 				this.statusContainer.addChild(this.loadingAnimation);
+				this.loadingAnimationVisible = true;
 				// Apply any pending working message queued before loader existed
 				if (this.pendingWorkingMessage !== undefined) {
 					if (this.pendingWorkingMessage) {
-						this.loadingAnimation.setMessage(this.pendingWorkingMessage);
+						this.setWorkingLoaderMessage(this.pendingWorkingMessage);
 					}
 					this.pendingWorkingMessage = undefined;
+				}
+				if (this.blockingCustomUiDepth > 0) {
+					this.loadingAnimation.stop();
+					this.statusContainer.removeChild(this.loadingAnimation);
+					this.loadingAnimationVisible = false;
 				}
 				this.ui.requestRender();
 				break;
@@ -2596,6 +2628,7 @@ export class InteractiveMode {
 				if (this.loadingAnimation) {
 					this.loadingAnimation.stop();
 					this.loadingAnimation = undefined;
+					this.loadingAnimationVisible = false;
 					this.statusContainer.clear();
 				}
 				if (this.streamingComponent) {
