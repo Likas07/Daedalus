@@ -1,11 +1,11 @@
 <script lang="ts">
-	import type { GuiState } from "../client/runtime";
+	import type { GuiRuntime, GuiState, SessionSummary } from "../client/runtime";
 	import type { UiState } from "../client/ui-state.svelte";
 	import { buildDiffReviewViewModel } from "../client/diff-view-model";
 	import DiffViewer from "./DiffViewer.svelte";
 
-	const { guiState, ui, runtime } = $props<{ guiState: GuiState; ui: UiState; runtime?: import("../client/runtime").GuiRuntime }>();
-	const model = $derived(buildDiffReviewViewModel({ diff: guiState.activeDiff, selectedPath: ui.diffPath, workingTreeDiffId: guiState.lastProjectId ?? guiState.projectRoot, capabilities: guiState.capabilities, accessPolicy: guiState.accessPolicy }));
+	const { guiState, ui, runtime } = $props<{ guiState: GuiState; ui: UiState; runtime?: GuiRuntime }>();
+	const model = $derived(buildDiffReviewViewModel({ diff: guiState.activeDiff, selectedPath: ui.diffPath, workingTreeDiffId: guiState.lastProjectId ?? guiState.projectRoot, capabilities: guiState.capabilities, accessPolicy: guiState.accessPolicy, selectedSession: guiState.sessions.find((session: SessionSummary) => session.id === guiState.selectedSessionId) }));
 	let previousFocus: Element | null = null;
 	let closeButton = $state<HTMLButtonElement>();
 
@@ -59,7 +59,7 @@
 				>esc · close</button>
 			</div>
 			<div class="min-h-0 flex-1">
-				<DiffViewer diff={guiState.activeDiff} patch={model.selectedPatch} path={model.selectedPath} readonly={!model.canMutate} disabledReason={model.mutationDisabledReason} onStage={(paths) => runtime?.stageFiles?.(paths)} onUnstage={(paths) => runtime?.unstageFiles?.(paths)} onDiscard={(paths) => runtime?.discardFiles?.(paths)} onCommit={(message) => runtime?.commitChanges?.(message)} />
+				<DiffViewer diff={guiState.activeDiff} patch={model.selectedPatch} path={model.selectedPath} readonly={!model.canMutate} disabledReason={model.mutationDisabledReason} warning={model.targetWarning} onStage={(paths) => runtime?.stageFiles?.(paths)} onUnstage={(paths) => runtime?.unstageFiles?.(paths)} onDiscard={(paths) => runtime?.discardFiles?.(paths)} onCommit={(message) => runtime?.commitChanges?.(message)} />
 			</div>
 		</aside>
 	</div>

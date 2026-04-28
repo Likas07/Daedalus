@@ -1,11 +1,12 @@
 <script lang="ts">
 	import type { WorkflowWorktreeMetadata } from "@daedalus-pi/app-server-protocol";
 	import WorktreeRow from "./WorktreeRow.svelte";
-	const { worktrees = [], selectedWorktreeId, onSelect, onCreate } = $props<{
+	const { worktrees = [], selectedWorktreeId, onSelect, onCreate, recoveryMode = false } = $props<{
 		worktrees?: readonly WorkflowWorktreeMetadata[];
 		selectedWorktreeId?: string;
 		onSelect?: (id: string) => void;
 		onCreate?: () => void;
+		recoveryMode?: boolean;
 	}>();
 </script>
 
@@ -25,7 +26,7 @@
 	</header>
 	<div class="space-y-1.5">
 		{#each worktrees as worktree}
-			<WorktreeRow {worktree} active={String(worktree.id) === selectedWorktreeId} {onSelect} />
+			<WorktreeRow {worktree} active={String(worktree.id) === selectedWorktreeId} {onSelect} needsAttention={recoveryMode && worktree.validationStatus !== "valid"} />
 		{:else}
 			<p class="inspector-empty">No worktrees yet.</p>
 		{/each}

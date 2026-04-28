@@ -182,6 +182,11 @@ describe("web GUI E2E smoke", () => {
 
 		const composerStarted = (await request(server, "session/start", {
 			projectId: opened.projectId,
+			startTarget: {
+				mode: "base-checkout",
+				projectId: opened.projectId,
+				confirmation: { confirmed: true, evidence: "web GUI smoke uses the temp project checkout" },
+			},
 			prompt: "Enter-to-send E2E prompt",
 			filePaths: ["file.txt"],
 			model: "smoke-model",

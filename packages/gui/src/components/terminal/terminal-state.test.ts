@@ -6,6 +6,7 @@ import {
 	removeTerminal,
 	selectExistingTerminal,
 	terminalCloseLabel,
+	terminalEvidenceRow,
 	terminalLabel,
 	upsertTerminal,
 } from "./terminal-state";
@@ -54,4 +55,18 @@ describe("terminal-state", () => {
 		expect(applyTerminalOutput(state, { terminalId: "a", seq: 2, data: "two\n" })).toBe(true);
 		expect(state.terminals[0]?.history).toBe("one\ntwo\n");
 	});
+});
+
+test("builds terminal evidence rows with cwd status exit output tail and link", () => {
+	const row = terminalEvidenceRow({
+		...terminal("a", "one\ntwo\nthree\nfour\n"),
+		status: "exited",
+		exitCode: 0,
+		sessionId: "session-1",
+	});
+	expect(row.cwd).toBe("/tmp/a");
+	expect(row.status).toBe("exited");
+	expect(row.exit).toBe("exit 0");
+	expect(row.outputTail).toBe("two\nthree\nfour");
+	expect(row.link).toBe("session:session-1");
 });

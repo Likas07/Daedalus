@@ -92,4 +92,81 @@ describe("buildDiffReviewViewModel", () => {
 			}).canMutate,
 		).toBe(true);
 	});
+
+	test("defaults diff review to selected session target when runsIn is present", () => {
+		const model = buildDiffReviewViewModel({
+			diff,
+			selectedSession: {
+				id: "s1",
+				title: "safe",
+				status: "running",
+				runsIn: {
+					projectId: "project-1",
+					worktreeId: "wt-1",
+					path: "/repo/wt-1",
+					canonicalPath: "/repo/wt-1",
+					branch: "safe",
+					isolationMode: "isolated-worktree",
+					validationStatus: "valid",
+				},
+			},
+		});
+		expect(model.target).toEqual({ kind: "session", sessionId: "s1" });
+		expect(model.targetStatus).toBe("ready");
+	});
+
+	test("blocks diff review when explicit target mismatches selected runsIn", () => {
+		const model = buildDiffReviewViewModel({
+			diff,
+			selectedSession: {
+				id: "s1",
+				title: "safe",
+				status: "running",
+				runsIn: {
+					projectId: "project-1",
+					worktreeId: "wt-1",
+					path: "/repo/wt-1",
+					canonicalPath: "/repo/wt-1",
+					branch: "safe",
+					isolationMode: "isolated-worktree",
+					validationStatus: "valid",
+				},
+			},
+			target: { kind: "worktree", projectId: "project-1", worktreeId: "wt-2" },
+			capabilities: { gitMutations: true },
+			accessPolicy: {
+				mode: "unrestricted",
+				autoApproveSoftPrompts: true,
+				bypassHardBlocks: false,
+				auditRequired: true,
+			},
+		});
+		expect(model.targetStatus).toBe("blocked");
+		expect(model.canMutate).toBe(false);
+		expect(model.targetWarning).toContain("worktree");
+	});
+});
+
+test("blocks patch content when returned diff target differs from selected runsIn", () => {
+	const model = buildDiffReviewViewModel({
+		diff: { ...diff, target: { kind: "worktree", projectId: "project-1", worktreeId: "wt-other" } },
+		selectedPath: "src/a.ts",
+		selectedSession: {
+			id: "s1",
+			title: "safe",
+			status: "running",
+			runsIn: {
+				projectId: "project-1",
+				worktreeId: "wt-1",
+				path: "/repo/wt-1",
+				canonicalPath: "/repo/wt-1",
+				branch: "safe",
+				isolationMode: "isolated-worktree",
+				validationStatus: "valid",
+			},
+		},
+	});
+	expect(model.targetStatus).toBe("blocked");
+	expect(model.selectedPatch).toBe("");
+	expect(model.targetWarning).toContain("worktree");
 });

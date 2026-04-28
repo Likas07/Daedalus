@@ -60,4 +60,22 @@ describe("session entry projection", () => {
 			projectSessionEntries([{ ...base("custom_message"), customType: "hidden", content: "no", display: false }]),
 		).toHaveLength(0);
 	});
+
+	test("projects server runsIn entries as target rows", () => {
+		const rows = projectSessionEntries([
+			{
+				...base("runs_in"),
+				runsIn: {
+					path: "/repo/wt",
+					branch: "safe",
+					isolationMode: "isolated-worktree",
+					validationStatus: "valid",
+				},
+			},
+		]);
+		expect(rows[0]?.kind).toBe("target");
+		expect(rows[0]?.summary).toContain("/repo/wt");
+		expect(rows[0]?.summary).toContain("safe");
+		expect(rows[0]?.details).toContain("valid");
+	});
 });

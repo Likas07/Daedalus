@@ -1,8 +1,9 @@
 <script lang="ts">
 	import type { WorkflowWorktreeMetadata } from "@daedalus-pi/app-server-protocol";
-	const { worktree, active = false, onSelect } = $props<{
+	const { worktree, active = false, needsAttention = false, onSelect } = $props<{
 		worktree: WorkflowWorktreeMetadata;
 		active?: boolean;
+		needsAttention?: boolean;
 		onSelect?: (id: string) => void;
 	}>();
 </script>
@@ -14,6 +15,7 @@
 	class:border-[color:var(--rule)]={!active}
 	class:bg-[color:var(--ink-3)]={!active}
 	class:hover:border-[color:var(--rule-strong)]={!active}
+	aria-label={`${worktree.branch ?? "detached"} worktree at ${worktree.path}${needsAttention ? ": needs attention" : ""}`}
 	onclick={() => onSelect?.(String(worktree.id))}
 >
 	<div class="flex items-center justify-between gap-3">
@@ -37,6 +39,10 @@
 		<span>{worktree.upstream ?? "no upstream"}</span>
 		<span aria-hidden="true">·</span>
 		<span>{worktree.activeSessionCount} sessions</span>
+		{#if needsAttention}
+			<span aria-hidden="true">·</span>
+			<span class="text-[color:var(--ember)]">Needs attention</span>
+		{/if}
 		{#if worktree.cleanupRequiresConfirmation}
 			<span aria-hidden="true">·</span>
 			<span class="text-[color:var(--ember)]">confirm cleanup</span>

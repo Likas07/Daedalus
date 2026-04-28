@@ -36,6 +36,32 @@ function responseFor(method: string | undefined, request?: { params?: unknown })
 			return { projectId: "project-1" };
 		case "session/start":
 			return { sessionId: "session-1" };
+		case "worktree/create":
+			return {
+				worktree: {
+					id: "wt-1",
+					projectId: "project-1",
+					path: "/repo-wt",
+					branch: "build/saved-task",
+					dirtyCount: 0,
+					activeSessionCount: 0,
+					validationStatus: "valid",
+				},
+			};
+		case "worktree/list":
+			return {
+				worktrees: [
+					{
+						id: "wt-1",
+						projectId: "project-1",
+						path: "/repo-wt",
+						branch: "build/saved-task",
+						dirtyCount: 0,
+						activeSessionCount: 0,
+						validationStatus: "valid",
+					},
+				],
+			};
 		case "project/list":
 			return { projects: [] };
 		case "session/list":
@@ -616,5 +642,24 @@ describe("GUI app", () => {
 			}),
 		);
 		await app.close();
+	});
+});
+
+describe("Safe worktree build setup UI", () => {
+	test("components are wired for safe defaults, base warning, and target trust", () => {
+		const fs = require("node:fs");
+		const path = require("node:path");
+		const root = path.join(import.meta.dir, "components");
+		const projectCanvas = fs.readFileSync(path.join(root, "ProjectCanvas.svelte"), "utf8");
+		const taskComposer = fs.readFileSync(path.join(root, "TaskComposer.svelte"), "utf8");
+		const setup = fs.readFileSync(path.join(root, "NewBuildSetupSheet.svelte"), "utf8");
+
+		expect(projectCanvas).toContain("BuildTargetTrustBar");
+		expect(projectCanvas).toContain("selectedSession.runsIn");
+		expect(taskComposer).toContain("NewBuildSetupSheet");
+		expect(setup).toContain("Safe worktree is locked on by default");
+		expect(setup).toContain("Base checkout can modify the current checkout");
+		expect(setup).toContain('role="alert"');
+		expect(setup).toContain("Dirty files");
 	});
 });

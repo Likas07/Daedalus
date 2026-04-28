@@ -105,6 +105,38 @@ describe("createProjectDashboardViewModel", () => {
 		expect(model.worktrees).toHaveLength(1);
 	});
 
+	test("session rows expose server-projected runsIn without falling back to dashboard branch", () => {
+		const runsIn = {
+			projectId: "project-1",
+			worktreeId: "wt-safe",
+			path: "/repo/.worktrees/safe",
+			canonicalPath: "/repo/.worktrees/safe",
+			branch: "safe-branch",
+			isolationMode: "isolated-worktree" as const,
+			validationStatus: "valid" as const,
+		};
+		const model = createProjectDashboardViewModel(
+			state({
+				projectRoot: "/repo/base",
+				activeDiff: {
+					branch: "global-branch",
+					upstream: null,
+					ahead: 0,
+					behind: 0,
+					stagedCount: 0,
+					unstagedCount: 0,
+					files: [],
+					riskyGroups: [],
+				},
+				sessions: [{ id: "s1", title: "safe", status: "running", runsIn, branch: "legacy-branch" }],
+			}),
+		);
+
+		expect(model.activeSessions[0]?.runsIn?.path).toBe(runsIn.path);
+		expect(model.activeSessions[0]?.runsIn?.branch).toBe("safe-branch");
+		expect(model.activeSessions[0]?.isolationMode).toBe("isolated-worktree");
+	});
+
 	test("derives sessions, approvals, terminals, and web editor disabled reason", () => {
 		const model = createProjectDashboardViewModel(
 			state({
