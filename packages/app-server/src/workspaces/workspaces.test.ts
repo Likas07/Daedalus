@@ -63,6 +63,39 @@ describe("worktree service", () => {
 		await service.remove(worktree.id, { force: true });
 		expect((await service.gitList(project.projectId)).some((entry) => entry.path === path)).toBe(false);
 	});
+
+	test("allocates unique branches and default paths for repeated creates", async () => {
+		const repo = await initRepo();
+		const project = new ProjectService({ database: db }).open({ path: repo });
+		const service = new WorktreeService({ database: db });
+
+		const first = await service.create({ projectId: project.projectId, branch: "build/hello" });
+		const second = await service.create({ projectId: project.projectId, branch: "build/hello" });
+
+		expect(first.branch).toBe("build/hello");
+		expect(second.branch).toBe("build/hello-2");
+		expect(first.path).toBe(`${repo}-build-hello`);
+		expect(second.path).toBe(`${repo}-build-hello-2`);
+		expect(first.path).not.toBe(second.path);
+		expect((await service.gitList(project.projectId)).map((entry) => entry.branch)).toContain("build/hello-2");
+	});
+
+	test("allocates unique branches and explicit paths for repeated creates", async () => {
+		const repo = await initRepo();
+		const project = new ProjectService({ database: db }).open({ path: repo });
+		const service = new WorktreeService({ database: db });
+		const path = join(root, "explicit-worktree");
+
+		const first = await service.create({ projectId: project.projectId, branch: "build/hello", path });
+		const second = await service.create({ projectId: project.projectId, branch: "build/hello", path });
+
+		expect(first.branch).toBe("build/hello");
+		expect(second.branch).toBe("build/hello-2");
+		expect(first.path).toBe(path);
+		expect(second.path).toBe(`${path}-2`);
+		expect(first.path).not.toBe(second.path);
+		expect((await service.gitList(project.projectId)).map((entry) => entry.path)).toContain(`${path}-2`);
+	});
 });
 
 describe("checkpoint and diff services", () => {

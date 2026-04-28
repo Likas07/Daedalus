@@ -10,7 +10,7 @@ export const GUI_SESSION_TABLES = {
 	approvals: "gui_session_approvals",
 } as const;
 
-export type GuiSessionStatus = "active" | "idle" | "waiting_for_approval" | "archived" | "error";
+export type GuiSessionStatus = "active" | "idle" | "waiting_for_approval" | "archived" | "error" | "needs-attention";
 
 export interface GuiSessionRow {
 	readonly id: string;

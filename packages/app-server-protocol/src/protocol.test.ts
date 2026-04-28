@@ -4,10 +4,16 @@ import {
 	appServerProtocolVersion,
 	ClientRequestResultSchemas,
 	ClientRequestSchema,
+	DesktopBootDiagnosticSchema,
 	EventReplayResponseSchema,
+	OperationCleanupScanSchema,
+	RootBoundaryViolationSchema,
 	ServerNotificationSchema,
 	ServerRequestSchema,
+	SessionResumeResultSchema,
+	TerminalCreateParamsSchema,
 	TerminalSnapshotSchema,
+	WorktreeCreateOutcomeSchema,
 } from "./index";
 
 function terminalSnapshot(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -245,6 +251,170 @@ describe("app-server protocol schemas", () => {
 				method: "terminal/event",
 				params: { terminalId: "terminal-1", event: { type: "data", data: "ready\n" } },
 			}),
+		).toBe(true);
+	});
+
+	test("validates safeguard protocol contracts", () => {
+		const rootTarget = {
+			projectId: "project-1",
+			rootPath: "/repo",
+			canonicalRootPath: "/repo",
+			targetPath: "/repo/.worktrees/feature",
+			canonicalTargetPath: "/repo/.worktrees/feature",
+		};
+		const worktree = {
+			id: "worktree-1",
+			projectId: "project-1",
+			branch: "feature",
+			path: "/repo/.worktrees/feature",
+			dirty: false,
+			dirtyCount: 0,
+			activeSessionCount: 0,
+			cleanupRequiresConfirmation: false,
+		};
+
+		expect(Value.Check(WorktreeCreateOutcomeSchema, { outcome: "created", worktree, operationId: "op-1" })).toBe(
+			true,
+		);
+		expect(Value.Check(WorktreeCreateOutcomeSchema, { outcome: "adopted-existing", worktree })).toBe(true);
+		expect(
+			Value.Check(WorktreeCreateOutcomeSchema, {
+				outcome: "conflict",
+				reason: "root-boundary-violation",
+				message: "target escapes project root",
+				operationId: "op-2",
+				boundaryViolation: {
+					reason: "target-outside-root",
+					message: "resolved path is outside root",
+					target: rootTarget,
+				},
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(WorktreeCreateOutcomeSchema, {
+				outcome: "rolled-back",
+				message: "removed partial worktree",
+				operationId: "op-3",
+				reason: "operation-in-progress",
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(WorktreeCreateOutcomeSchema, {
+				outcome: "failed",
+				message: "git worktree add failed",
+				reason: "unknown",
+				recoverable: true,
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestResultSchemas["worktree/create"], {
+				outcome: "created",
+				worktree,
+				operationId: "op-4",
+			}),
+		).toBe(true);
+		expect(Value.Check(ClientRequestResultSchemas["worktree/create"], { worktree })).toBe(true);
+
+		expect(
+			Value.Check(OperationCleanupScanSchema, {
+				operationId: "op-1",
+				root: rootTarget,
+				status: "completed",
+				candidates: [{ path: "/repo/.worktrees/tmp", reason: "stale operation", safeToRemove: true }],
+				startedAt: "2026-04-26T00:00:00.000Z",
+				completedAt: "2026-04-26T00:00:01.000Z",
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(RootBoundaryViolationSchema, {
+				reason: "symlink-escape",
+				message: "cwd escapes root",
+				target: rootTarget,
+				resolvedPath: "/tmp/outside",
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(SessionResumeResultSchema, {
+				sessionId: "session-1",
+				status: "resumed",
+				identity: { status: "matched", sessionId: "session-1", storedCwd: "/repo", currentCwd: "/repo" },
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(TerminalCreateParamsSchema, {
+				cwd: "/repo",
+				guardTarget: rootTarget,
+				requireRootBoundary: true,
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
+				id: "req-cleanup-scan",
+				method: "worktree/cleanup-scan",
+				params: { worktreeId: "worktree-1", operationId: "cleanup-op" },
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
+				id: "req-cleanup-confirm",
+				method: "worktree/cleanup",
+				params: { worktreeId: "worktree-1", operationId: "cleanup-op", confirmationToken: "token" },
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestResultSchemas["worktree/cleanup-scan"], {
+				cleanupRisk: {
+					worktreeId: "worktree-1",
+					operationId: "cleanup-op",
+					risky: true,
+					riskHash: "risk-hash",
+					reasons: [{ kind: "dirty-files", severity: "danger", message: "Dirty files", count: 1 }],
+					dirtyFiles: ["dirty.txt"],
+					unpushedCommitCount: 0,
+					activeSessionIds: [],
+					activeTerminalIds: [],
+					confirmationToken: "token",
+					scannedAt: "2026-04-26T00:00:00.000Z",
+				},
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(TerminalSnapshotSchema, terminalSnapshot({ guardStatus: "valid", guardTarget: rootTarget })),
+		).toBe(true);
+		expect(
+			Value.Check(DesktopBootDiagnosticSchema, {
+				stage: "app-server-ready",
+				ready: false,
+				message: "waiting for GUI",
+				updatedAt: "2026-04-26T00:00:00.000Z",
+				durationMs: 123,
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(DesktopBootDiagnosticSchema, {
+				stage: "db-path",
+				ready: false,
+				message: "migration failed",
+				updatedAt: "2026-04-26T00:00:00.000Z",
+				stages: [
+					{
+						name: "db-path",
+						status: "failed",
+						message: "migration failed",
+						at: "2026-04-26T00:00:00.000Z",
+						durationMs: 10,
+					},
+				],
+			}),
+		).toBe(true);
+		expect(Value.Check(TerminalCreateParamsSchema, { cwd: "/repo", requireRootBoundary: true })).toBe(true);
+		expect(
+			Value.Check(
+				TerminalSnapshotSchema,
+				terminalSnapshot({ guardStatus: "blocked", rejectedReason: "outside root" }),
+			),
 		).toBe(true);
 	});
 

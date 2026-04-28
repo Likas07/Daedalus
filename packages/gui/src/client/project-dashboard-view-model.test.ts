@@ -93,6 +93,26 @@ describe("createProjectDashboardViewModel", () => {
 						dirtyCount: 4,
 						activeSessionCount: 2,
 						cleanupRequiresConfirmation: true,
+						cleanupRisk: {
+							worktreeId: "wt-backend",
+							operationId: "cleanup-op",
+							risky: true,
+							riskHash: "risk-hash",
+							reasons: [
+								{
+									kind: "dirty-files",
+									severity: "danger",
+									message: "4 dirty file(s) would be deleted.",
+									count: 4,
+								},
+							],
+							dirtyFiles: [],
+							unpushedCommitCount: 0,
+							activeSessionIds: [],
+							activeTerminalIds: [],
+							confirmationToken: "token",
+							scannedAt: "2026-01-01T00:00:00.000Z",
+						},
 					},
 				],
 				projectRoot: "/repo/wt",
@@ -103,6 +123,13 @@ describe("createProjectDashboardViewModel", () => {
 		expect(model.activeWorktree?.path).toBe("/repo/wt");
 		expect(model.branchLabel).toBe("real-branch");
 		expect(model.worktrees).toHaveLength(1);
+		expect(model.cleanupRisks[0]).toMatchObject({
+			worktreeId: "wt-backend",
+			risky: true,
+			confirmationRequired: true,
+			confirmationToken: "token",
+		});
+		expect(model.cleanupRisks[0]?.reasonLabels).toEqual(["4 dirty file(s) would be deleted."]);
 	});
 
 	test("session rows expose server-projected runsIn without falling back to dashboard branch", () => {

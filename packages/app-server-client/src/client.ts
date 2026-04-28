@@ -14,6 +14,10 @@ import type {
 	ServerResponse,
 	SessionStartParams,
 	SessionStartResult,
+	WorktreeCleanupParams,
+	WorktreeCleanupResult,
+	WorktreeCleanupScanParams,
+	WorktreeCleanupScanResult,
 	WorktreeCreateParams,
 	WorktreeCreateResult,
 	WorktreeListParams,
@@ -125,6 +129,14 @@ export class AppServerClient {
 
 	createWorktree(params: WorktreeCreateParams): Promise<WorktreeCreateResult> {
 		return this.request("worktree/create", params);
+	}
+
+	scanWorktreeCleanup(params: WorktreeCleanupScanParams): Promise<WorktreeCleanupScanResult> {
+		return this.request("worktree/cleanup-scan", params);
+	}
+
+	cleanupWorktree(params: WorktreeCleanupParams): Promise<WorktreeCleanupResult> {
+		return this.request("worktree/cleanup", params);
 	}
 
 	replayEvents(params: EventReplayParams = {}): Promise<EventReplayResult> {

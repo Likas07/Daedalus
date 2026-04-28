@@ -19,6 +19,7 @@ import type { ExtensionUiRouter } from "../extensions/extension-ui-router";
 import type { CommandRunner } from "../integrations/integration-api";
 import { IntegrationService } from "../integrations/integration-service";
 import { projectRuntimeEvents } from "../persistence/projector";
+import { listProjectSessions } from "../persistence/read-model";
 import { AccessPolicyService } from "../runtime/access-policy-service";
 import { ApprovalService } from "../runtime/approval-service";
 import { projectAuditTrail } from "../runtime/audit-projection";
@@ -31,6 +32,7 @@ import { ResourceManagementService } from "../runtime/resource-management-servic
 import { RuntimeControlService } from "../runtime/runtime-control-service";
 import type { SessionController } from "../runtime/session-controller";
 import { type SettingsKey, SettingsService } from "../runtime/settings-service";
+import { verifySessionResumeIdentity } from "../sessions/session-identity";
 import { SqliteSessionStore } from "../sessions/sqlite-session-store";
 import type { PtyAdapter } from "../terminal/pty-adapter";
 import { TerminalService } from "../terminal/terminal-service";
@@ -39,6 +41,7 @@ import { DiffService } from "../workspaces/diff-service";
 import { gitStatus } from "../workspaces/git";
 import { GitMutationService } from "../workspaces/git-mutation-service";
 import { ProjectService } from "../workspaces/project-service";
+import { resolveRootScopedTarget } from "../workspaces/root-boundary";
 import { validateWorktreeTarget } from "../workspaces/worktree-safety";
 import { WorktreeService } from "../workspaces/worktree-service";
 
@@ -99,8 +102,12 @@ export class AppRouter {
 	private readonly daedalusWorkflowService: DaedalusWorkflowService;
 	constructor(private readonly options: AppRouterOptions) {
 		this.projectService = new ProjectService({ database: options.database });
-		this.worktreeService = new WorktreeService({ database: options.database });
 		this.sessionStore = new SqliteSessionStore({ database: options.database });
+		this.worktreeService = new WorktreeService({
+			database: options.database,
+			listActiveSessionIds: (worktreeId) => this.listActiveSessionIds(worktreeId),
+			listActiveTerminalIds: (worktreeId) => this.listActiveTerminalIds(worktreeId),
+		});
 		this.daedalusWorkflowService = new DaedalusWorkflowService({ sessionStore: this.sessionStore });
 
 		this.runtimeControlService = new RuntimeControlService(options.controller);
@@ -155,8 +162,22 @@ export class AppRouter {
 				return { projects: this.projectService.list() };
 			case "worktree/list":
 				return { worktrees: await this.worktreeService.listMetadata(request.params.projectId) };
-			case "worktree/create":
-				return { worktree: await this.worktreeService.create(request.params) };
+			case "worktree/create": {
+				const outcome = await this.worktreeService.createOrAdoptWorktree(request.params);
+				return outcome.outcome === "created" || outcome.outcome === "adopted-existing"
+					? { ...outcome, worktree: outcome.worktree }
+					: outcome;
+			}
+			case "worktree/cleanup-scan":
+				return {
+					cleanupRisk: await this.worktreeService.cleanupRiskScan(
+						request.params.worktreeId,
+						request.params.operationId,
+					),
+				};
+			case "worktree/cleanup":
+				await this.worktreeService.cleanup(request.params.worktreeId, request.params);
+				return { ok: true };
 			case "session/list":
 				return { sessions: (await this.sessionStore.list(request.params)).map(toSessionSummaryDto) };
 			case "session/import-jsonl": {
@@ -188,14 +209,21 @@ export class AppRouter {
 				return { roots: await this.sessionTree(request.params) };
 			case "session/resume": {
 				const session = await this.sessionStore.read({ sessionId: request.params.sessionId });
+				const identity = await verifySessionResumeIdentity({
+					database: this.options.database,
+					sessionId: request.params.sessionId,
+					cwd: session.header.cwd,
+					sessionFile: `sqlite://${request.params.sessionId}`,
+				});
 				const result = await this.options.controller.resumeSession({
 					cwd: session.header.cwd,
 					sessionPath: request.params.sessionId,
 					sessionId: request.params.sessionId,
+					identity,
 				});
-				if (request.params.prompt)
+				if (result.status === "active" && request.params.prompt)
 					await this.options.controller.startTurn({ sessionId: result.sessionId, prompt: request.params.prompt });
-				return { sessionId: result.sessionId, status: "active" };
+				return { sessionId: result.sessionId, status: result.status, identity: result.identity };
 			}
 			case "session/fork": {
 				const source = await this.sessionStore.read({ sessionId: request.params.sessionId });
@@ -214,9 +242,9 @@ export class AppRouter {
 					},
 				});
 				const result = await this.options.controller.resumeSession({ cwd, sessionPath: forkId, sessionId: forkId });
-				if (request.params.prompt)
+				if (result.status === "active" && request.params.prompt)
 					await this.options.controller.startTurn({ sessionId: result.sessionId, prompt: request.params.prompt });
-				return { sessionId: result.sessionId, status: "active" };
+				return { sessionId: result.sessionId, status: result.status };
 			}
 			case "session/start": {
 				const start = await this.resolveSessionStartTarget(request.params);
@@ -348,30 +376,30 @@ export class AppRouter {
 				return { diff: await this.diffService.get(cwd) };
 			}
 			case "git/stage": {
-				const cwd = this.resolveProjectOrWorktreeCwd(request.params.diffId);
+				const cwd = await this.resolveProjectOrWorktreeCwd(request.params.diffId);
 				return this.gitMutationService.stage({ cwd, paths: request.params.paths });
 			}
 			case "git/unstage": {
-				const cwd = this.resolveProjectOrWorktreeCwd(request.params.diffId);
+				const cwd = await this.resolveProjectOrWorktreeCwd(request.params.diffId);
 				return this.gitMutationService.unstage({ cwd, paths: request.params.paths });
 			}
 			case "git/discard": {
-				const cwd = this.resolveProjectOrWorktreeCwd(request.params.diffId);
+				const cwd = await this.resolveProjectOrWorktreeCwd(request.params.diffId);
 				return this.gitMutationService.discard({ cwd, paths: request.params.paths });
 			}
 			case "git/commit": {
-				const cwd = this.resolveProjectOrWorktreeCwd(request.params.diffId);
+				const cwd = await this.resolveProjectOrWorktreeCwd(request.params.diffId);
 				return this.gitMutationService.commit({ cwd, message: request.params.message });
 			}
 			case "git/checkpoint-restore": {
-				const cwd = this.resolveProjectOrWorktreeCwd(request.params.diffId);
+				const cwd = await this.resolveProjectOrWorktreeCwd(request.params.diffId);
 				return this.gitMutationService.restoreCheckpoint({ cwd, checkpointRef: request.params.checkpointRef });
 			}
 			case "composer/file-search": {
-				const cwd = this.projects.get(request.params.projectId) ?? request.params.projectId;
+				const target = await this.resolveFileSearchTarget(request.params);
 				return {
 					files: await this.fileSearchService.search({
-						cwd,
+						cwd: target.canonicalTargetPath,
 						query: request.params.query,
 						limit: request.params.limit ?? 20,
 					}),
@@ -514,6 +542,9 @@ export class AppRouter {
 	private async validateTerminalCreate(
 		params: import("../terminal/terminal-protocol").TerminalCreateParams,
 	): Promise<import("../terminal/terminal-protocol").TerminalCreateParams> {
+		const guardTarget = params.guardTarget
+			? await resolveRootScopedTarget({ database: this.options.database, target: params.guardTarget })
+			: undefined;
 		const cwd = resolve(params.cwd);
 		const stats = await stat(cwd).catch(() => undefined);
 		if (!stats?.isDirectory()) throw new Error(`Invalid terminal cwd: ${params.cwd}`);
@@ -532,7 +563,7 @@ export class AppRouter {
 		}
 		if (roots.length > 0 && !roots.some((root) => this.isWithin(cwd, root)))
 			throw new Error(`Terminal cwd is outside requested project/worktree scope: ${cwd}`);
-		return { ...params, cwd };
+		return { ...params, cwd, guardTarget };
 	}
 
 	private listCheckpoints(sessionId: string): Array<{
@@ -597,37 +628,64 @@ export class AppRouter {
 	}
 
 	private async resolveDiffTargetCwd(target: DiffTarget): Promise<string> {
-		switch (target.kind) {
-			case "project": {
-				const project = this.projectService.get(target.projectId);
-				if (!project) throw new Error(`Unknown project: ${target.projectId}`);
-				return project.path;
-			}
-			case "worktree": {
-				const worktree = this.worktreeService.open(target.worktreeId);
-				if (!worktree) throw new Error(`Unknown worktree: ${target.worktreeId}`);
-				if (worktree.projectId !== target.projectId)
-					throw new Error(`Worktree ${target.worktreeId} does not belong to project ${target.projectId}`);
-				return worktree.path;
-			}
-			case "session": {
-				try {
-					return this.options.controller.getSessionRuntime(target.sessionId).cwd;
-				} catch {
-					const session = await this.sessionStore.read({ sessionId: target.sessionId });
-					return session.header.cwd;
-				}
-			}
+		if (target.kind === "session") {
+			const projectId = target.projectId ?? this.projectIdForSession(target.sessionId);
+			return (
+				await resolveRootScopedTarget({
+					database: this.options.database,
+					target: { kind: "session", projectId, sessionId: target.sessionId },
+				})
+			).canonicalTargetPath;
 		}
+		return (
+			await resolveRootScopedTarget({
+				database: this.options.database,
+				target,
+			})
+		).canonicalTargetPath;
 	}
 
-	private resolveProjectOrWorktreeCwd(diffId: string): string {
-		const projectPath = this.projects.get(diffId);
-		if (projectPath) return projectPath;
-		for (const worktree of this.worktreeService.list()) {
-			if (worktree.id === diffId || worktree.path === diffId) return worktree.path;
+	private async resolveProjectOrWorktreeCwd(diffId: string): Promise<string> {
+		const project = this.projectService.get(diffId);
+		if (project) {
+			return (
+				await resolveRootScopedTarget({
+					database: this.options.database,
+					target: { kind: "project", projectId: project.id },
+				})
+			).canonicalTargetPath;
 		}
-		return resolve(diffId);
+		const worktree = this.worktreeService.open(diffId);
+		if (worktree) {
+			return (
+				await resolveRootScopedTarget({
+					database: this.options.database,
+					target: { kind: "worktree", projectId: worktree.projectId, worktreeId: worktree.id },
+				})
+			).canonicalTargetPath;
+		}
+		throw new Error(`Unknown diff target: ${diffId}`);
+	}
+
+	private async resolveFileSearchTarget(params: { projectId: string; worktreeId?: string }) {
+		if (params.worktreeId) {
+			return resolveRootScopedTarget({
+				database: this.options.database,
+				target: { kind: "worktree", projectId: params.projectId, worktreeId: params.worktreeId },
+			});
+		}
+		return resolveRootScopedTarget({
+			database: this.options.database,
+			target: { kind: "project", projectId: params.projectId },
+		});
+	}
+
+	private projectIdForSession(sessionId: string): string {
+		for (const project of this.projectService.list()) {
+			const session = listProjectSessions(this.options.database, project.id).find((row) => row.id === sessionId);
+			if (session?.projectId) return session.projectId;
+		}
+		throw new Error(`Unknown session: ${sessionId}`);
 	}
 
 	private async resolveSessionStartTarget(params: {
@@ -781,6 +839,27 @@ export class AppRouter {
 		}
 		return build("");
 	}
+	private async listActiveSessionIds(worktreeId: string): Promise<string[]> {
+		const activeStatuses = new Set(["active", "running", "waiting_for_approval"]);
+		const summaries = await this.sessionStore.list({ includeArchived: false });
+		return summaries
+			.filter((session) => {
+				const projected = session as typeof session & {
+					readonly runsIn?: { readonly worktreeId?: string };
+					readonly status?: string;
+				};
+				return projected.runsIn?.worktreeId === worktreeId && activeStatuses.has(String(projected.status));
+			})
+			.map((session) => session.id);
+	}
+
+	private listActiveTerminalIds(worktreeId: string): string[] {
+		return this.terminalService
+			.list({ worktreeId })
+			.filter((terminal) => terminal.status === "running")
+			.map((terminal) => terminal.terminalId);
+	}
+
 	append(event: AppEvent): void {
 		const stored = appendEvent(this.options.database, {
 			streamId: event.sessionId ?? "app",

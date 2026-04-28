@@ -19,6 +19,33 @@ export function terminalLabel(terminal?: Pick<RendererTerminal, "terminalId" | "
 export function terminalCloseLabel(terminal?: Pick<RendererTerminal, "terminalId" | "cwd">): string {
 	return `Close terminal ${terminalLabel(terminal)}`;
 }
+export type TerminalWritableStatus = "writable" | "blocked";
+
+export interface TerminalWritableState {
+	readonly status: TerminalWritableStatus;
+	readonly writable: boolean;
+	readonly blocked: boolean;
+	readonly reason?: string;
+}
+
+type GuardedTerminal = Pick<RendererTerminal, "status"> & {
+	readonly guardStatus?: "unchecked" | "valid" | "blocked" | "violated";
+	readonly rejectedReason?: string;
+};
+
+export function terminalWritableState(terminal?: GuardedTerminal): TerminalWritableState {
+	if (!terminal) return { status: "blocked", writable: false, blocked: true, reason: "no-terminal" };
+	if (terminal.status !== "running")
+		return { status: "blocked", writable: false, blocked: true, reason: `terminal-${terminal.status}` };
+	if (terminal.guardStatus === "blocked" || terminal.guardStatus === "violated")
+		return {
+			status: "blocked",
+			writable: false,
+			blocked: true,
+			reason: terminal.rejectedReason ?? `guard-${terminal.guardStatus}`,
+		};
+	return { status: "writable", writable: true, blocked: false };
+}
 
 export interface TerminalEvidenceRow {
 	readonly id: string;

@@ -1,6 +1,7 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import type { ComposerAttachment } from "@daedalus-pi/app-server-protocol";
+import { assertPathWithinRoot } from "../workspaces/root-boundary";
 
 export const MAX_GUI_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 export const ALLOWED_IMAGE_MIME_TYPES = new Set([
@@ -29,10 +30,11 @@ export class AttachmentService {
 		const id = `attachment-${crypto.randomUUID()}`;
 		const safeName = basename(input.filename).replaceAll(/[^\w. -]/g, "_") || "attachment";
 		await mkdir(this.rootDir, { recursive: true });
-		const storagePath = join(this.rootDir, `${id}-${safeName}`);
+		const storagePath = await this.resolveStoragePath(`${id}-${safeName}`);
 		await writeFile(storagePath, data);
 		const attachment = { id, kind, filename: safeName, mimeType, size: data.byteLength } satisfies ComposerAttachment;
-		await writeFile(`${storagePath}.json`, JSON.stringify(attachment));
+		const metadataPath = await this.resolveStoragePath(`${id}-${safeName}.json`);
+		await writeFile(metadataPath, JSON.stringify(attachment));
 		return attachment;
 	}
 
@@ -40,9 +42,10 @@ export class AttachmentService {
 		const dir = await readdirSafe(this.rootDir);
 		const filename = dir.find((entry) => entry.startsWith(`${attachmentId}-`) && !entry.endsWith(".json"));
 		if (!filename) throw new Error(`Unknown attachment: ${attachmentId}`);
-		const storagePath = join(this.rootDir, filename);
+		const storagePath = await this.resolveStoragePath(filename);
+		const metadataPath = await this.resolveStoragePath(`${filename}.json`);
 		const size = (await stat(storagePath)).size;
-		const metadata = await readFile(`${storagePath}.json`, "utf8")
+		const metadata = await readFile(metadataPath, "utf8")
 			.then((text) => JSON.parse(text) as ComposerAttachment)
 			.catch(() => undefined);
 		const original = filename.slice(attachmentId.length + 1);
@@ -57,9 +60,23 @@ export class AttachmentService {
 	}
 
 	async read(attachmentId: string): Promise<Buffer> {
-		return readFile((await this.get(attachmentId)).storagePath);
+		const attachment = await this.get(attachmentId);
+		const scoped = await assertPathWithinRoot({
+			root: this.rootDir,
+			candidate: attachment.storagePath,
+			purpose: "attachment/read",
+		});
+		return readFile(scoped.canonicalTargetPath);
 	}
 
+	private async resolveStoragePath(filename: string): Promise<string> {
+		const scoped = await assertPathWithinRoot({
+			root: this.rootDir,
+			candidate: join(this.rootDir, filename),
+			purpose: "attachment/storage",
+		});
+		return scoped.targetPath;
+	}
 	private kindFor(mimeType: string): "image" | "text" | "file" {
 		if (ALLOWED_IMAGE_MIME_TYPES.has(mimeType)) return "image";
 		if (mimeType.startsWith("text/") || ALLOWED_TEXT_MIME_TYPES.has(mimeType)) return "text";

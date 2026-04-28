@@ -8,6 +8,7 @@ import {
 	terminalCloseLabel,
 	terminalEvidenceRow,
 	terminalLabel,
+	terminalWritableState,
 	upsertTerminal,
 } from "./terminal-state";
 
@@ -54,6 +55,21 @@ describe("terminal-state", () => {
 		expect(applyTerminalOutput(state, { terminalId: "a", seq: 1, data: "one\n" })).toBe(false);
 		expect(applyTerminalOutput(state, { terminalId: "a", seq: 2, data: "two\n" })).toBe(true);
 		expect(state.terminals[0]?.history).toBe("one\ntwo\n");
+	});
+
+	test("computes writable and blocked terminal input state", () => {
+		expect(terminalWritableState(terminal("run"))).toEqual({ status: "writable", writable: true, blocked: false });
+		expect(terminalWritableState({ ...terminal("done"), status: "exited" })).toMatchObject({
+			status: "blocked",
+			reason: "terminal-exited",
+		});
+		expect(
+			terminalWritableState({
+				...terminal("guard"),
+				guardStatus: "violated",
+				rejectedReason: "target-outside-root",
+			}),
+		).toMatchObject({ status: "blocked", reason: "target-outside-root" });
 	});
 });
 

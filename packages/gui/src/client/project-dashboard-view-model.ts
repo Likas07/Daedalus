@@ -15,6 +15,7 @@ export interface ProjectDashboardViewModel {
 	readonly approvalCount: number;
 	readonly terminalCount: number;
 	readonly worktrees: readonly WorkflowWorktreeMetadata[];
+	readonly cleanupRisks: readonly WorktreeCleanupRiskState[];
 	readonly openInEditor: OpenInEditorState;
 }
 
@@ -32,6 +33,14 @@ export interface OpenInEditorState {
 	readonly enabled: boolean;
 	readonly path?: string;
 	readonly reason?: string;
+}
+
+export interface WorktreeCleanupRiskState {
+	readonly worktreeId: string;
+	readonly risky: boolean;
+	readonly confirmationRequired: boolean;
+	readonly confirmationToken?: string;
+	readonly reasonLabels: readonly string[];
 }
 
 function projectSessionTarget(session: SessionSummary): SessionSummary {
@@ -89,6 +98,15 @@ export function createProjectDashboardViewModel(state: GuiState): ProjectDashboa
 			(terminal) => terminal.status === "running" || terminal.status === "starting",
 		).length,
 		worktrees: state.worktrees,
+		cleanupRisks: state.worktrees.map((worktree) => ({
+			worktreeId: String(worktree.id),
+			risky: worktree.cleanupRisk?.risky ?? worktree.cleanupRequiresConfirmation,
+			confirmationRequired: worktree.cleanupRequiresConfirmation,
+			confirmationToken: worktree.cleanupRisk?.confirmationToken,
+			reasonLabels:
+				worktree.cleanupRisk?.reasons.map((reason) => reason.message) ??
+				(worktree.cleanupRequiresConfirmation ? ["Cleanup requires confirmation."] : []),
+		})),
 		openInEditor: editorPath
 			? {
 					enabled: hasDesktopEditorBridge(),

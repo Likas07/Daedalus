@@ -1,9 +1,10 @@
 <script lang="ts">
 	import type { WorkflowWorktreeMetadata } from "@daedalus-pi/app-server-protocol";
-	const { worktree, active = false, needsAttention = false, onSelect } = $props<{
+	const { worktree, active = false, needsAttention = false, cleanupMessage, onSelect } = $props<{
 		worktree: WorkflowWorktreeMetadata;
 		active?: boolean;
 		needsAttention?: boolean;
+		cleanupMessage?: string;
 		onSelect?: (id: string) => void;
 	}>();
 </script>
@@ -48,4 +49,17 @@
 			<span class="text-[color:var(--ember)]">confirm cleanup</span>
 		{/if}
 	</div>
+	{#if worktree.cleanupRisk?.reasons.length}
+		<ul class="mt-2 space-y-1 font-mono text-[10px] text-[color:var(--ember)]">
+			{#each worktree.cleanupRisk.reasons.slice(0, 3) as reason}
+				<li>Cleanup: {reason.message}</li>
+			{/each}
+			{#if worktree.cleanupRisk.confirmationToken}
+				<li class="text-[color:var(--bone-faint)]">Confirmation ready until {worktree.cleanupRisk.confirmationTokenExpiresAt ?? "soon"}</li>
+			{/if}
+		</ul>
+	{/if}
+	{#if cleanupMessage}
+		<p class="mt-2 font-mono text-[10px] text-[color:var(--bone-soft)]" role="status">{cleanupMessage}</p>
+	{/if}
 </button>

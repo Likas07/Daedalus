@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { GuiRuntime, GuiState } from "../client/runtime";
-	import { removeTerminal, selectExistingTerminal, terminalEvidenceRow } from "./terminal/terminal-state";
+	import { removeTerminal, selectExistingTerminal, terminalEvidenceRow, terminalWritableState } from "./terminal/terminal-state";
 	import { disposeManagedXterm } from "./terminal/xterm-manager";
 	import XtermViewport from "./terminal/XtermViewport.svelte";
 	import TerminalHeader from "./TerminalHeader.svelte";
@@ -9,6 +9,15 @@
 	const { state: appState, runtime, onCollapse } = $props<{ state: GuiState; runtime: GuiRuntime; onCollapse?: () => void }>();
 	const activeTerminal = $derived(appState.terminals.find((terminal: import("../client/gui-state-types").RendererTerminal) => terminal.terminalId === appState.activeTerminalId) ?? appState.terminals[0]);
 	const evidenceRows = $derived(appState.terminals.map(terminalEvidenceRow));
+	const activeWritable = $derived(terminalWritableState(activeTerminal));
+	const guardedRuntime = $derived({
+		...runtime,
+		sendTerminalInput: async (terminalId: string, data: string) => {
+			const terminal = appState.terminals.find((item: import("../client/gui-state-types").RendererTerminal) => item.terminalId === terminalId);
+			if (terminalWritableState(terminal).blocked) return;
+			return runtime.sendTerminalInput(terminalId, data);
+		},
+	});
 
 	async function createTerminal(): Promise<void> {
 		const selectedSession = appState.sessions.find((session: import("../client/runtime").SessionSummary) => session.id === appState.selectedSessionId);
@@ -44,7 +53,13 @@
 	<TerminalHeader terminal={activeTerminal} onKill={() => activeTerminal && void closeTerminal(activeTerminal.terminalId)} {onCollapse} />
 	<div class="min-h-0 flex-1">
 		{#if activeTerminal}
-			<XtermViewport terminalId={activeTerminal.terminalId} history={activeTerminal.history} {runtime} />
+			{#if activeWritable.blocked}
+
+				<div class="border-b border-amber-500/30 bg-amber-950/30 px-3 py-1 font-mono text-[11px] text-amber-100" data-testid="terminal-input-blocked">Input blocked: {activeWritable.reason}</div>
+
+			{/if}
+
+			<XtermViewport terminalId={activeTerminal.terminalId} history={activeTerminal.history} runtime={guardedRuntime} />
 		{:else}
 			<div class="flex h-full items-center justify-center bg-black/60 font-mono text-xs text-bone-400">
 				<button class="btn-mini" type="button" onclick={() => void createTerminal()}>Create terminal</button>

@@ -66,6 +66,9 @@ function projectEvent(database: AppServerDatabase, event: StoredEvent): void {
 		case "session/started":
 			projectSession(database, payload, occurredAt);
 			break;
+		case "session/resume-identity-mismatched":
+			projectSessionResumeMismatch(database, payload, occurredAt);
+			break;
 		case "turn/started":
 		case "turn/completed":
 			projectTurn(database, payload, occurredAt);
@@ -151,6 +154,26 @@ function projectSession(database: AppServerDatabase, payload: PayloadRecord, cre
 				null,
 			createdAt,
 			createdAt,
+		);
+}
+
+function projectSessionResumeMismatch(database: AppServerDatabase, payload: PayloadRecord, updatedAt: string): void {
+	const id = requiredText(payload, "sessionId", "session_id", "id");
+	const identity = asRecord(payload.identity);
+	database
+		.query(
+			`UPDATE sessions
+			 SET status = ?, validation_status = ?, needs_attention_reason = ?, updated_at = ?
+			 WHERE id = ?`,
+		)
+		.run(
+			"needs-attention",
+			"needs-attention",
+			text(payload, "needsAttentionReason", "needs_attention_reason", "reason") ??
+				text(identity, "message") ??
+				"Session resume identity mismatch",
+			updatedAt,
+			id,
 		);
 }
 

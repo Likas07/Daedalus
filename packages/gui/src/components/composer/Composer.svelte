@@ -4,6 +4,7 @@
 	import type { GuiRuntime, GuiState } from "../../client/runtime";
 	import type { UiState, PopoverKind } from "../../client/ui-state.svelte";
 	import { executeSlashCommand } from "../../client/slash-command-executor";
+	import { computeStartGate } from "../../client/start-gate";
 	import AttachmentTray from "./AttachmentTray.svelte";
 	import ComposerPopovers from "./ComposerPopovers.svelte";
 	import ChipPopovers from "./ChipPopovers.svelte";
@@ -33,6 +34,7 @@
 	let commands = $state<ComposerSlashCommand[]>([]);
 	let mentions = $state<ComposerFileMention[]>([]);
 	let attachments = $state<ComposerDraftAttachment[]>([]);
+	let uploadsInFlight = $state(0);
 	let activeIndex = $state(0);
 	let loadedKey = "";
 	let textarea: HTMLTextAreaElement;
@@ -82,10 +84,26 @@
 	const windowFmt = $derived(fmtTokens(contextWindow));
 
 	const branchLabel = $derived.by((): string => {
-		const worktree = guiState.worktrees.find((w: { branch?: string; activeSessionIds: readonly string[] }) => sessionId && w.activeSessionIds.includes(sessionId));
+		const worktree = guiState.worktrees.find((w: { branch?: string | null; activeSessionIds?: readonly string[] }) => sessionId && w.activeSessionIds?.includes(sessionId));
 		return worktree?.branch ?? "main";
 	});
 	const cwdLabel = $derived(projectPath ?? guiState.projectRoot ?? "~");
+	const activeWorktreeId = $derived(guiState.worktrees.find((worktree: { id?: string; activeSessionIds?: readonly string[] }) => sessionId && worktree.activeSessionIds?.includes(sessionId))?.id);
+	const startGate = $derived(computeStartGate({
+		prompt: draft,
+		projectPath: projectPath ?? guiState.projectRoot,
+		projectId: guiState.lastProjectId,
+		requireProject: requireProjectPath,
+		uploading: uploadsInFlight > 0,
+		disabled,
+		disabledReason,
+		providerStatuses: guiState.providerStatuses,
+		selectedModel: guiState.selectedModel,
+		models: guiState.models,
+		worktrees: guiState.worktrees,
+		activeWorktreeId,
+		newBuildKind: guiState.newBuild?.kind,
+	}));
 
 	function openChip(kind: PopoverKind, event: MouseEvent): void {
 		const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
@@ -138,23 +156,41 @@
 	async function attachFile(file: File): Promise<void> {
 		const invalid = validateAttachmentFile(file);
 		if (invalid) { error = invalid; return; }
-		const dataBase64 = await new Promise<string>((resolve, reject) => {
-			const reader = new FileReader();
-			reader.onerror = () => reject(reader.error);
-			reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
-			reader.readAsDataURL(file);
-		});
-		attachments = [...attachments, await runtime.saveComposerAttachment({ sessionId, filename: file.name, mimeType: file.type, dataBase64 })];
+		uploadsInFlight += 1;
+		try {
+			const dataBase64 = await new Promise<string>((resolve, reject) => {
+				const reader = new FileReader();
+				reader.onerror = () => reject(reader.error);
+				reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+				reader.readAsDataURL(file);
+			});
+			attachments = [...attachments, await runtime.saveComposerAttachment({ sessionId, filename: file.name, mimeType: file.type, dataBase64 })];
+		} finally {
+			uploadsInFlight = Math.max(0, uploadsInFlight - 1);
+		}
 	}
 
 	async function submit(): Promise<void> {
 		if (submitInFlight) return;
 		error = "";
-		if (disabled) { error = disabledReason ?? "Composer is unavailable."; return; }
+		const gate = computeStartGate({
+			prompt: draft,
+			projectPath: projectPath ?? guiState.projectRoot,
+			projectId: guiState.lastProjectId,
+			requireProject: requireProjectPath,
+			uploading: uploadsInFlight > 0,
+			disabled,
+			disabledReason,
+			providerStatuses: guiState.providerStatuses,
+			selectedModel: guiState.selectedModel,
+			models: guiState.models,
+			worktrees: guiState.worktrees,
+			activeWorktreeId,
+			newBuildKind: guiState.newBuild?.kind,
+		});
+		if (!gate.canSend) { error = gate.disabledReason ?? "Composer is unavailable."; return; }
 		const prompt = draft.trim();
 		const trimmedPath = (projectPath ?? guiState.projectRoot ?? "").trim();
-		if (!prompt) { error = "Enter a prompt before submitting."; return; }
-		if (requireProjectPath && !trimmedPath) { error = "Choose a project path before starting a session."; return; }
 		submitting = true;
 		submitInFlight = true;
 		try {
@@ -350,9 +386,9 @@
 		<button
 			type="submit"
 			data-testid="composer-submit"
-			disabled={submitting}
+			disabled={submitting || startGate.requiredAction === "wait-for-upload" || startGate.requiredAction === "wait-for-start"}
 			aria-label={submitLabel}
-			title={submitLabel}
+			title={startGate.disabledReason ?? submitLabel}
 			class="ml-1 flex h-7 w-7 items-center justify-center rounded-full bg-gold text-ink-950 transition hover:bg-bone-50 disabled:opacity-50"
 		>
 			<svg viewBox="0 0 16 16" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -362,8 +398,8 @@
 		</button>
 	</div>
 
-	{#if error || disabledReason}
-		<p data-testid="composer-error" class="border-t border-ink-500 px-4 py-2 font-mono text-[10.5px] text-amber-300" role="alert">{error || disabledReason}</p>
+	{#if error || startGate.disabledReason}
+		<p data-testid="composer-error" class="border-t border-ink-500 px-4 py-2 font-mono text-[10.5px] text-amber-300" role="alert">{error || startGate.disabledReason}</p>
 	{/if}
 </form>
 

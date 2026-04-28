@@ -8,6 +8,8 @@
 		endpoint,
 		attempt = 0,
 		lastEventCursor,
+		resumeIdentityStatus,
+		resumeIdentityMessage,
 		onReconnect,
 		onExportDiagnostics,
 	} = $props<{
@@ -16,10 +18,12 @@
 		endpoint?: string;
 		attempt?: number;
 		lastEventCursor?: string;
+		resumeIdentityStatus?: string;
+		resumeIdentityMessage?: string;
 		onReconnect?: () => void;
 		onExportDiagnostics?: () => void;
 	}>();
-	const message = $derived(statusMessage(status, endpoint, attempt, lastEventCursor) ?? reconnectMessage(connected, endpoint));
+	const message = $derived(resumeIdentityMessage ?? statusMessage(status, endpoint, attempt, lastEventCursor) ?? reconnectMessage(connected, endpoint));
 
 	function statusMessage(status: ConnectionStatus, endpoint?: string, attempt?: number, cursor?: string): string | undefined {
 		if (status === "connected") return undefined;
@@ -44,7 +48,7 @@
 				!
 			</span>
 			<div class="flex-1">
-				<p class="font-display text-[15px] italic text-[color:var(--bone)]">Connection {status}</p>
+				<p class="font-display text-[15px] italic text-[color:var(--bone)]">{resumeIdentityStatus ? `Resume identity ${resumeIdentityStatus}` : `Connection ${status}`}</p>
 				<p class="mt-1 font-mono text-[11.5px] text-[color:var(--bone-soft)]">{message}</p>
 				<div class="mt-3 flex gap-2">
 					<button class="btn-brass" type="button" onclick={() => onReconnect?.()}>Reconnect</button>
