@@ -151,7 +151,7 @@
 						{@const branch = guiState.worktrees.find((worktree: import("../client/view-model").WorktreeSummary) => (worktree.activeSessionIds ?? []).includes(session.id))?.branch ?? session.id}
 						<li>
 							<button
-								onclick={() => { runtime.selectSession(session.id); setView('session'); }}
+								onclick={() => { void runtime.selectSession(session.id).then(() => setView('session')); }}
 								class="group grid w-full grid-cols-[10px_1fr_auto] items-baseline gap-x-3 py-1 text-left {isActive ? 'text-bone-50' : m === 'archived' ? 'text-bone-400 hover:text-bone-200' : 'text-bone-200 hover:text-bone-50'}"
 								title={m}
 							>
@@ -196,7 +196,7 @@
 		<div class="flex">
 			<button
 				type="button"
-				onclick={() => { runtime.selectSession(undefined); setView('empty'); }}
+				onclick={() => { void runtime.selectSession(undefined).then(() => setView('empty')); }}
 				class="flex-1 px-5 py-2.5 text-left caps text-bone-400 transition hover:text-bone-100"
 			>
 				+ new

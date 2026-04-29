@@ -65,7 +65,7 @@ function runtime(guiState: GuiState): GuiRuntime {
 		},
 		async initialize() {},
 		async reconnect() {},
-		selectSession(sessionId) {
+		async selectSession(sessionId) {
 			guiState.selectedSessionId = sessionId;
 		},
 		async openProject() {

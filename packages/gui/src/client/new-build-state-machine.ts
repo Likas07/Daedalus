@@ -62,9 +62,11 @@ export interface NewBuildStateMachineDependencies {
 		projectId: string;
 		branch: string;
 		path?: string;
+		operationId?: string;
 	}) => Promise<WorkflowWorktreeMetadata | WorktreeCreateResult>;
 	readonly listWorktrees?: (projectId: string) => Promise<readonly WorkflowWorktreeMetadata[]>;
 	readonly startSession: (params: SessionStartParams) => Promise<SessionStartResult>;
+	readonly nextOperationId?: () => string;
 	readonly onState?: (state: NewBuildState) => void;
 }
 
@@ -85,6 +87,7 @@ export function createNewBuildStateMachine(deps: NewBuildStateMachineDependencie
 		state = next;
 		deps.onState?.(state);
 	};
+	const nextOperationId = () => deps.nextOperationId?.() ?? `new-build-${crypto.randomUUID()}`;
 	const run = async (input: NewBuildStartInput): Promise<SessionStartResult | undefined> => {
 		setState({ kind: "derivingTarget", prompt: input.prompt });
 		if (input.target?.mode === "base-checkout") {
@@ -136,6 +139,7 @@ export function createNewBuildStateMachine(deps: NewBuildStateMachineDependencie
 					projectId: input.projectId,
 					branch,
 					path: isolatedTarget?.path,
+					operationId: nextOperationId(),
 				});
 				const outcome = normalizeWorktreeCreateOutcome(createResult);
 				if (outcome.outcome === "conflict" || outcome.outcome === "rolled-back" || outcome.outcome === "failed") {
@@ -185,6 +189,7 @@ export function createNewBuildStateMachine(deps: NewBuildStateMachineDependencie
 			fastMode: input.fastMode,
 			draftState: input.draftState,
 			startTarget,
+			operationId: nextOperationId(),
 		});
 		setState({ kind: "running", prompt: input.prompt, sessionId: result.sessionId, runsIn: result.runsIn });
 		return result;

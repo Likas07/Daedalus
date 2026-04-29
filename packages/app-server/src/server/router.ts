@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { lstat, realpath, stat } from "node:fs/promises";
+import { lstat, realpath } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import type {
 	AppEvent,
@@ -26,12 +26,14 @@ import { projectAuditTrail } from "../runtime/audit-projection";
 import { AutomationService } from "../runtime/automation-service";
 import { DaedalusWorkflowService } from "../runtime/daedalus-workflow-service";
 import { GuiConfigService } from "../runtime/gui-config-service";
+import { OperationIdempotencyService } from "../runtime/operation-idempotency-service";
 import { projectOrchestration } from "../runtime/orchestration-projection";
 import { ProviderAuthService } from "../runtime/provider-auth-service";
 import { ResourceManagementService } from "../runtime/resource-management-service";
 import { RuntimeControlService } from "../runtime/runtime-control-service";
 import type { SessionController } from "../runtime/session-controller";
 import { type SettingsKey, SettingsService } from "../runtime/settings-service";
+import { WorkspaceSelectionService } from "../runtime/workspace-selection-service";
 import { verifySessionResumeIdentity } from "../sessions/session-identity";
 import { SqliteSessionStore } from "../sessions/sqlite-session-store";
 import type { PtyAdapter } from "../terminal/pty-adapter";
@@ -41,7 +43,7 @@ import { DiffService } from "../workspaces/diff-service";
 import { gitStatus } from "../workspaces/git";
 import { GitMutationService } from "../workspaces/git-mutation-service";
 import { ProjectService } from "../workspaces/project-service";
-import { resolveRootScopedTarget } from "../workspaces/root-boundary";
+import { assertPathWithinRoot, resolveRootScopedTarget } from "../workspaces/root-boundary";
 import { validateWorktreeTarget } from "../workspaces/worktree-safety";
 import { WorktreeService } from "../workspaces/worktree-service";
 
@@ -100,6 +102,8 @@ export class AppRouter {
 	private readonly settingsService: SettingsService;
 	private readonly resourceManagementService = new ResourceManagementService();
 	private readonly daedalusWorkflowService: DaedalusWorkflowService;
+	private readonly workspaceSelectionService: WorkspaceSelectionService;
+	private readonly operationIdempotencyService: OperationIdempotencyService;
 	constructor(private readonly options: AppRouterOptions) {
 		this.projectService = new ProjectService({ database: options.database });
 		this.sessionStore = new SqliteSessionStore({ database: options.database });
@@ -109,6 +113,8 @@ export class AppRouter {
 			listActiveTerminalIds: (worktreeId) => this.listActiveTerminalIds(worktreeId),
 		});
 		this.daedalusWorkflowService = new DaedalusWorkflowService({ sessionStore: this.sessionStore });
+		this.workspaceSelectionService = new WorkspaceSelectionService({ database: options.database });
+		this.operationIdempotencyService = new OperationIdempotencyService({ database: options.database });
 
 		this.runtimeControlService = new RuntimeControlService(options.controller);
 		this.settingsService = new SettingsService({
@@ -162,12 +168,16 @@ export class AppRouter {
 				return { projects: this.projectService.list() };
 			case "worktree/list":
 				return { worktrees: await this.worktreeService.listMetadata(request.params.projectId) };
-			case "worktree/create": {
-				const outcome = await this.worktreeService.createOrAdoptWorktree(request.params);
-				return outcome.outcome === "created" || outcome.outcome === "adopted-existing"
-					? { ...outcome, worktree: outcome.worktree }
-					: outcome;
-			}
+			case "worktree/create":
+				return this.operationIdempotencyService.run(
+					{ operationId: request.params.operationId, method: request.method, payload: request.params },
+					async () => {
+						const outcome = await this.worktreeService.createOrAdoptWorktree(request.params);
+						return outcome.outcome === "created" || outcome.outcome === "adopted-existing"
+							? { ...outcome, worktree: outcome.worktree }
+							: outcome;
+					},
+				);
 			case "worktree/cleanup-scan":
 				return {
 					cleanupRisk: await this.worktreeService.cleanupRiskScan(
@@ -178,6 +188,12 @@ export class AppRouter {
 			case "worktree/cleanup":
 				await this.worktreeService.cleanup(request.params.worktreeId, request.params);
 				return { ok: true };
+			case "workspace/selection/get":
+				return this.workspaceSelectionService.get(request.params.projectId);
+			case "workspace/selection/set":
+				return this.workspaceSelectionService.set(request.params);
+			case "workflow/target/validate":
+				return this.validateWorkflowTarget(request.params.target);
 			case "session/list":
 				return { sessions: (await this.sessionStore.list(request.params)).map(toSessionSummaryDto) };
 			case "session/import-jsonl": {
@@ -246,19 +262,43 @@ export class AppRouter {
 					await this.options.controller.startTurn({ sessionId: result.sessionId, prompt: request.params.prompt });
 				return { sessionId: result.sessionId, status: result.status };
 			}
-			case "session/start": {
-				const start = await this.resolveSessionStartTarget(request.params);
-				return this.options.controller.startSession({
-					cwd: start.cwd,
-					prompt: request.params.prompt,
-					projectId: start.runsIn.projectId,
-					worktreeId: start.runsIn.worktreeId,
-					runsIn: start.runsIn,
-					context: { ...request.params, projectId: start.runsIn.projectId, worktreeId: start.runsIn.worktreeId },
-				});
-			}
+			case "session/start":
+				return this.operationIdempotencyService.run(
+					{ operationId: request.params.operationId, method: request.method, payload: request.params },
+					async () => {
+						const start = await this.resolveSessionStartTarget(request.params);
+						const result = await this.options.controller.startSession({
+							cwd: start.cwd,
+							prompt: request.params.prompt,
+							projectId: start.runsIn.projectId,
+							worktreeId: start.runsIn.worktreeId,
+							runsIn: start.runsIn,
+							context: {
+								...request.params,
+								projectId: start.runsIn.projectId,
+								worktreeId: start.runsIn.worktreeId,
+							},
+						});
+						this.workspaceSelectionService.setValidated({
+							projectId: start.runsIn.projectId,
+							sessionId: result.sessionId,
+						});
+						return withOperationId(result, request.params.operationId);
+					},
+				);
 			case "turn/start":
-				return this.options.controller.startTurn(request.params);
+				return this.operationIdempotencyService.run(
+					{ operationId: request.params.operationId, method: request.method, payload: request.params },
+					async () => {
+						const runsIn = await this.validateStoredTurnTarget(request.params.sessionId);
+						const result = await this.options.controller.startTurn(request.params);
+						this.workspaceSelectionService.setValidated({
+							projectId: runsIn.projectId,
+							sessionId: request.params.sessionId,
+						});
+						return withOperationId(result, request.params.operationId);
+					},
+				);
 			case "turn/cancel":
 				await this.options.controller.interruptTurn(request.params);
 				return {};
@@ -545,24 +585,37 @@ export class AppRouter {
 		const guardTarget = params.guardTarget
 			? await resolveRootScopedTarget({ database: this.options.database, target: params.guardTarget })
 			: undefined;
-		const cwd = resolve(params.cwd);
-		const stats = await stat(cwd).catch(() => undefined);
-		if (!stats?.isDirectory()) throw new Error(`Invalid terminal cwd: ${params.cwd}`);
-		const roots: string[] = [];
+		const requestedCwd = resolve(params.cwd);
+		const scopedTargets: Array<{ root: string; candidate: string; projectId?: string }> = [];
+		if (guardTarget) {
+			scopedTargets.push({
+				root: guardTarget.canonicalRootPath,
+				candidate: requestedCwd,
+				projectId: guardTarget.projectId,
+			});
+		}
 		if (params.projectId) {
 			const project = this.projectService.get(params.projectId);
 			if (!project) throw new Error(`Unknown project: ${params.projectId}`);
-			roots.push(project.path);
+			scopedTargets.push({ root: project.path, candidate: requestedCwd, projectId: project.id });
 		}
 		if (params.worktreeId) {
 			const worktree = this.worktreeService.open(params.worktreeId);
 			if (!worktree) throw new Error(`Unknown worktree: ${params.worktreeId}`);
 			if (params.projectId && worktree.projectId !== params.projectId)
 				throw new Error(`Worktree ${params.worktreeId} does not belong to project ${params.projectId}`);
-			roots.push(worktree.path);
+			scopedTargets.push({ root: worktree.path, candidate: requestedCwd, projectId: worktree.projectId });
 		}
-		if (roots.length > 0 && !roots.some((root) => this.isWithin(cwd, root)))
-			throw new Error(`Terminal cwd is outside requested project/worktree scope: ${cwd}`);
+		let cwd = requestedCwd;
+		for (const target of scopedTargets) {
+			const scoped = await assertPathWithinRoot({
+				root: target.root,
+				candidate: target.candidate,
+				purpose: "terminal",
+				projectId: target.projectId,
+			});
+			cwd = scoped.canonicalTargetPath;
+		}
 		return { ...params, cwd, guardTarget };
 	}
 
@@ -685,7 +738,75 @@ export class AppRouter {
 			const session = listProjectSessions(this.options.database, project.id).find((row) => row.id === sessionId);
 			if (session?.projectId) return session.projectId;
 		}
+		const selected = this.options.database
+			.query<{ project_id: string }, [string]>(
+				"SELECT project_id FROM workspace_active_selection WHERE session_id = ? ORDER BY updated_at DESC LIMIT 1",
+			)
+			.get(sessionId);
+		if (selected?.project_id) return selected.project_id;
 		throw new Error(`Unknown session: ${sessionId}`);
+	}
+
+	private async validateStoredTurnTarget(sessionId: string): Promise<WorkflowRunsInTarget> {
+		const row = this.options.database
+			.query<{ project_id: string | null; worktree_id: string | null; runs_in_json: string | null }, [string]>(
+				"SELECT project_id, worktree_id, runs_in_json FROM sessions WHERE id = ? LIMIT 1",
+			)
+			.get(sessionId);
+		if (!row) throw new Error(`Unknown session: ${sessionId}`);
+		if (!row.runs_in_json)
+			throw new Error(
+				`Session ${sessionId} has no stored workspace target; repair session target before starting a turn`,
+			);
+		const runsIn = JSON.parse(row.runs_in_json) as WorkflowRunsInTarget;
+		const projectId = runsIn.projectId ?? row.project_id;
+		if (!projectId)
+			throw new Error(
+				`Session ${sessionId} has no stored project target; repair session target before starting a turn`,
+			);
+
+		if (runsIn.isolationMode === "isolated-worktree") {
+			const worktreeId = runsIn.worktreeId ?? row.worktree_id;
+			if (!worktreeId)
+				throw new Error(
+					`Session ${sessionId} has no stored worktree target; repair session target before starting a turn`,
+				);
+			const validation = await validateWorktreeTarget({ database: this.options.database, projectId, worktreeId });
+			if (validation.status !== "valid") throw new Error(`Unsafe worktree target: ${validation.reason}`);
+			return validation.runsIn;
+		}
+
+		if (runsIn.isolationMode === "base-checkout") {
+			const project = this.projectService.get(projectId);
+			if (!project) throw new Error(`Unknown project: ${projectId}`);
+			const projectStat = await lstat(project.path);
+			if (projectStat.isSymbolicLink()) throw new Error(`Project path is a symlink: ${project.path}`);
+			const canonicalPath = await realpath(project.path);
+			const status = await gitStatus(canonicalPath);
+			return {
+				projectId,
+				path: project.path,
+				canonicalPath,
+				branch: status.branch ?? "",
+				isolationMode: "base-checkout",
+				validationStatus: "valid",
+			};
+		}
+
+		throw new Error(`Unsupported stored workspace target for session ${sessionId}`);
+	}
+
+	private async validateWorkflowTarget(
+		params:
+			| { mode: "isolated-worktree"; projectId: string; worktreeId: string }
+			| { mode: "base-checkout"; projectId: string; confirmation: { confirmed: true; evidence: string } },
+	): Promise<{ valid: boolean; runsIn?: WorkflowRunsInTarget; reason?: string }> {
+		try {
+			const resolved = await this.resolveSessionStartTarget({ projectId: params.projectId, startTarget: params });
+			return { valid: true, runsIn: resolved.runsIn };
+		} catch (error) {
+			return { valid: false, reason: error instanceof Error ? error.message : String(error) };
+		}
 	}
 
 	private async resolveSessionStartTarget(params: {
@@ -875,6 +996,12 @@ export class AppRouter {
 	}
 }
 
+function withOperationId<T extends Record<string, unknown>>(
+	result: T,
+	operationId?: string,
+): T & { operationId?: string } {
+	return operationId ? { ...result, operationId } : result;
+}
 function toSessionSummaryDto(summary: {
 	id: string;
 	cwd: string;

@@ -45,7 +45,7 @@
 
 	<button
 		type="button"
-		onclick={() => { runtime.selectSession(undefined); setView("empty"); }}
+		onclick={() => { void runtime.selectSession(undefined).then(() => setView("empty")); }}
 		class="font-wordmark text-[12px] font-medium tracking-[0.32em] text-bone-50 transition hover:text-gold"
 	>
 		DAEDALUS

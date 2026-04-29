@@ -95,7 +95,7 @@ function renderTestFallback(root: HTMLElement, runtime: GuiRuntime): void {
 		button.className = "group";
 		const waiting = runtime.state.approvalItems.some((approval) => approval.sessionId === session.id);
 		button.textContent = `${session.title} ${waiting ? "waiting approval" : session.status} branch main diff 0`;
-		button.addEventListener("click", () => runtime.selectSession(session.id));
+		button.addEventListener("click", () => void runtime.selectSession(session.id));
 		canvas.append(button);
 	}
 	if (!runtime.state.selectedSessionId) appendFallbackComposer(canvas, runtime);

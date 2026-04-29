@@ -77,6 +77,8 @@ export {
 	type RuntimeEventEnvelope,
 } from "./runtime/event-mapper";
 export { GuiConfigService } from "./runtime/gui-config-service";
+export { type OperationBeginResult, OperationIdempotencyService } from "./runtime/operation-idempotency-service";
+
 export {
 	createSessionRuntimeFactory,
 	type SessionRuntime,
@@ -101,12 +103,17 @@ export {
 	type StartSessionInput,
 	type StartTurnInput,
 } from "./runtime/session-controller";
+
 export {
 	classifyToolRisk,
 	ToolApprovalGate,
 	type ToolApprovalGateOptions,
 	type ToolApprovalInput,
 } from "./runtime/tool-approval-gate";
+export {
+	WorkspaceSelectionService,
+	type WorkspaceSelectionServiceOptions,
+} from "./runtime/workspace-selection-service";
 export { type AppServerInstance, type CreateAppServerOptions, startAppServer } from "./server/app-server";
 export {
 	type AuthOptions,

@@ -101,11 +101,89 @@ describe("app-server protocol schemas", () => {
 		expect(
 			Value.Check(ClientRequestSchema, {
 				kind: "request",
+				id: "req-project-missing-target",
+				method: "session/start",
+				params: { projectId: "project-1" },
+			}),
+		).toBe(false);
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
 				id: "req-base-missing-confirmation",
 				method: "session/start",
 				params: { startTarget: { mode: "base-checkout", projectId: "project-1" } },
 			}),
 		).toBe(false);
+	});
+
+	test("validates M1 thread-first workspace contracts", () => {
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
+				id: "req-operation-start",
+				method: "session/start",
+				params: {
+					operationId: "op-session-1",
+					startTarget: { mode: "isolated-worktree", projectId: "project-1", worktreeId: "worktree-1" },
+					prompt: "implement",
+				},
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
+				id: "req-worktree-operation",
+				method: "worktree/create",
+				params: { projectId: "project-1", branch: "build/test", operationId: "op-worktree-1" },
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
+				id: "req-turn-operation",
+				method: "turn/start",
+				params: { sessionId: "session-1", prompt: "continue", operationId: "op-turn-1" },
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
+				id: "req-selection-get",
+				method: "workspace/selection/get",
+				params: { projectId: "project-1" },
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
+				id: "req-selection-set",
+				method: "workspace/selection/set",
+				params: { projectId: "project-1", sessionId: "session-1" },
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
+				id: "req-target-validate",
+				method: "workflow/target/validate",
+				params: { target: { mode: "isolated-worktree", projectId: "project-1", worktreeId: "worktree-1" } },
+			}),
+		).toBe(true);
+		expect(Value.Check(ClientRequestResultSchemas["workspace/selection/get"], { degraded: false })).toBe(true);
+		expect(
+			Value.Check(ClientRequestResultSchemas["workflow/target/validate"], {
+				valid: true,
+				runsIn: {
+					projectId: "project-1",
+					worktreeId: "worktree-1",
+					path: "/repo-wt",
+					canonicalPath: "/repo-wt",
+					branch: "build/test",
+					isolationMode: "isolated-worktree",
+					validationStatus: "valid",
+				},
+			}),
+		).toBe(true);
 	});
 
 	test("validates structured diff/get targets with transitional diffId compatibility", () => {

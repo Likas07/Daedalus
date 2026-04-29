@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ClientRequestResultSchemas } from "@daedalus-pi/app-server-protocol";
@@ -7,7 +7,9 @@ import { type SessionEntry, type SessionMessageEntry, serializeSessionJsonl } fr
 import { Value } from "@sinclair/typebox/value";
 import type { AppServerDatabase } from "../persistence/database";
 import { openAppServerDatabase } from "../persistence/database";
+import { appendEvent } from "../persistence/event-store";
 import { runMigrations } from "../persistence/migrations";
+import { projectRuntimeEvents } from "../persistence/projector";
 import {
 	type ControlledSessionRuntime,
 	type RuntimeControllerMessage,
@@ -107,6 +109,14 @@ function appRouterWithRealController(): {
 		agentDir: "/agent",
 		eventSink: (event) => {
 			events.push(event);
+			if ("type" in event && "payload" in event) {
+				appendEvent(database!, {
+					streamId: event.sessionId ?? event.type,
+					type: event.type,
+					payload: event.payload as never,
+				});
+				projectRuntimeEvents(database!);
+			}
 		},
 		makeSessionManager: async ({ cwd, sessionId, sessionPath }) =>
 			SqliteSessionManager.create({ store: sessionStore, cwd, sessionId, sessionPath }).initialized(),
@@ -256,6 +266,48 @@ describe("session store routes", () => {
 		expect(persisted.header.id).toBe(started.sessionId);
 		expect(persisted.header.id).toBe(sessionStarted.sessionId);
 		expect(persisted.entries).toHaveLength(1);
+
+		const selection = await appRouter.handle({
+			kind: "request",
+			id: "selection-get",
+			method: "workspace/selection/get",
+			params: { projectId },
+		});
+		expect(selection).toMatchObject({ degraded: false, selection: { projectId, sessionId: started.sessionId } });
+		expectRouteResult("workspace/selection/get", selection);
+	});
+
+	test("replays idempotent session/start results without creating a duplicate runtime", async () => {
+		const { appRouter, runtimes } = appRouterWithRealController();
+		const repo = await initRepo();
+		const { projectId } = (await appRouter.handle({
+			kind: "request",
+			id: "project-open-idempotent",
+			method: "project/open",
+			params: { path: repo },
+		})) as { projectId: string };
+		const request = {
+			kind: "request" as const,
+			id: "start-idempotent",
+			method: "session/start" as const,
+			params: {
+				operationId: "op-session-start-1",
+				projectId,
+				startTarget: {
+					mode: "base-checkout" as const,
+					projectId,
+					confirmation: { confirmed: true as const, evidence: "test" },
+				},
+			},
+		};
+
+		const first = await appRouter.handle(request);
+		const second = await appRouter.handle({ ...request, id: "start-idempotent-replay" });
+
+		expect(first).toEqual(second);
+		expect(first).toMatchObject({ sessionId: "session-controller-id", operationId: "op-session-start-1" });
+		expect(runtimes).toHaveLength(1);
+		expectRouteResult("session/start", first);
 	});
 
 	test("starts an empty session then accepts the first turn using the returned id", async () => {
@@ -311,6 +363,131 @@ describe("session store routes", () => {
 		expect(persisted.header.id).toBe(started.sessionId);
 		expect(persisted.header.id).toBe(sessionStarted.sessionId);
 		expect(persisted.entries).toHaveLength(1);
+	});
+
+	test("turn/start rejects sessions without stored runsIn before controller start", async () => {
+		const appRouter = router();
+		let startTurnCalls = 0;
+		(
+			appRouter as unknown as { options: { controller: { startTurn: () => Promise<{ turnId: string }> } } }
+		).options.controller.startTurn = async () => {
+			startTurnCalls++;
+			return { turnId: "turn-should-not-start" };
+		};
+		const repo = await initRepo();
+		const { projectId } = (await appRouter.handle({
+			kind: "request",
+			id: "project-open-legacy",
+			method: "project/open",
+			params: { path: repo },
+		})) as { projectId: string };
+		appendEvent(database!, {
+			streamId: "legacy-session",
+			type: "session/started",
+			payload: { sessionId: "legacy-session", projectId, status: "active" },
+		});
+		projectRuntimeEvents(database!);
+
+		await expect(
+			appRouter.handle({
+				kind: "request",
+				id: "turn-legacy",
+				method: "turn/start",
+				params: { sessionId: "legacy-session", prompt: "nope" },
+			}),
+		).rejects.toThrow("has no stored workspace target");
+		expect(startTurnCalls).toBe(0);
+	});
+
+	test("turn/start rejects stale isolated worktree before controller start", async () => {
+		let startTurnCalls = 0;
+		const appRouter = router();
+		(
+			appRouter as unknown as { options: { controller: { startTurn: () => Promise<{ turnId: string }> } } }
+		).options.controller.startTurn = async () => {
+			startTurnCalls++;
+			return { turnId: "turn-should-not-start" };
+		};
+		const repo = await initRepo();
+		const { projectId } = (await appRouter.handle({
+			kind: "request",
+			id: "project-open-stale",
+			method: "project/open",
+			params: { path: repo },
+		})) as { projectId: string };
+		const created = (await appRouter.handle({
+			kind: "request",
+			id: "create-stale",
+			method: "worktree/create",
+			params: { projectId, branch: "feature/stale", path: join(repo, "..", "stale-wt") },
+		})) as { worktree: { id: string; path: string; branch: string } };
+		await rm(created.worktree.path, { recursive: true, force: true });
+		appendEvent(database!, {
+			streamId: "stale-worktree-session",
+			type: "session/started",
+			payload: {
+				sessionId: "stale-worktree-session",
+				projectId,
+				worktreeId: created.worktree.id,
+				runsIn: {
+					projectId,
+					worktreeId: created.worktree.id,
+					path: created.worktree.path,
+					canonicalPath: created.worktree.path,
+					branch: created.worktree.branch,
+					isolationMode: "isolated-worktree",
+					validationStatus: "valid",
+				},
+			},
+		});
+		projectRuntimeEvents(database!);
+
+		await expect(
+			appRouter.handle({
+				kind: "request",
+				id: "turn-stale-worktree",
+				method: "turn/start",
+				params: { sessionId: "stale-worktree-session", prompt: "nope" },
+			}),
+		).rejects.toThrow("Unsafe worktree target");
+		expect(startTurnCalls).toBe(0);
+	});
+
+	test("turn/start with valid stored runsIn starts controller and persists active selection", async () => {
+		const { appRouter, runtimes } = appRouterWithRealController();
+		const repo = await initRepo();
+		const { projectId } = (await appRouter.handle({
+			kind: "request",
+			id: "project-open-valid-turn",
+			method: "project/open",
+			params: { path: repo },
+		})) as { projectId: string };
+		const started = (await appRouter.handle({
+			kind: "request",
+			id: "start-valid-turn",
+			method: "session/start",
+			params: {
+				projectId,
+				startTarget: { mode: "base-checkout", projectId, confirmation: { confirmed: true, evidence: "test" } },
+			},
+		})) as { sessionId: string };
+
+		const turn = await appRouter.handle({
+			kind: "request",
+			id: "turn-valid",
+			method: "turn/start",
+			params: { sessionId: started.sessionId, prompt: "validated turn" },
+		});
+
+		expect(turn).toEqual({ turnId: "turn-1" });
+		expect(runtimes[0]?.prompts).toEqual(["validated turn"]);
+		const selection = await appRouter.handle({
+			kind: "request",
+			id: "selection-get-valid-turn",
+			method: "workspace/selection/get",
+			params: { projectId },
+		});
+		expect(selection).toMatchObject({ degraded: false, selection: { projectId, sessionId: started.sessionId } });
 	});
 
 	test("resumes an existing SQLite session then accepts a turn using the resumed id", async () => {

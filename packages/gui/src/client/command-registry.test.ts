@@ -64,7 +64,7 @@ function runtime(guiState: GuiState, calls: string[] = []): GuiRuntime {
 		},
 		async initialize() {},
 		async reconnect() {},
-		selectSession(sessionId) {
+		async selectSession(sessionId) {
 			guiState.selectedSessionId = sessionId;
 			calls.push(`select:${sessionId ?? "none"}`);
 		},

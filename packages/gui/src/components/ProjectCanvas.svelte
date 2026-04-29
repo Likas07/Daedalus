@@ -185,7 +185,7 @@
 				{#each filteredSessions as session, idx}
 					<button
 						class="group grid w-full grid-cols-[auto_minmax(0,1fr)_180px_160px_auto] items-center gap-5 rounded-md border border-[color:var(--rule)] bg-[color:var(--ink-2)] px-5 py-3.5 text-left transition hover:border-[color:var(--brass-rule)] hover:bg-[color:var(--ink-3)]"
-						onclick={() => runtime.selectSession(session.id)}
+						onclick={() => void runtime.selectSession(session.id)}
 					>
 						<span class="font-mono text-[10px] tabular-nums text-[color:var(--bone-faint)] tracking-wider">
 							{(idx + 1).toString().padStart(3, "0")}

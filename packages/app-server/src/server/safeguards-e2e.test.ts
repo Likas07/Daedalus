@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { SessionResumeIdentity } from "@daedalus-pi/app-server-protocol";
@@ -260,6 +260,24 @@ describe("safeguard end-to-end regressions", () => {
 				method: "terminal/create",
 				params: { projectId, cwd: outside, cols: 80, rows: 24 },
 			}),
-		).rejects.toThrow("outside requested project/worktree scope");
+		).rejects.toThrow("terminal target is outside root");
+	});
+
+	test("guarded terminal create rejects symlink cwd escaping the requested project root", async () => {
+		const appRouter = router(db());
+		const repo = await initRepo("daedalus-safeguards-terminal-symlink-");
+		const projectId = await openProject(appRouter, repo);
+		const outside = await mkdtemp(join(tmpdir(), "daedalus-terminal-symlink-outside-"));
+		const link = join(repo, "outside-link");
+		await symlink(outside, link, "dir");
+
+		await expect(
+			appRouter.handle({
+				kind: "request",
+				id: "terminal-symlink",
+				method: "terminal/create",
+				params: { projectId, cwd: link, cols: 80, rows: 24 },
+			}),
+		).rejects.toThrow("symlink escapes root");
 	});
 });

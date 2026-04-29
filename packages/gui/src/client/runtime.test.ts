@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { AppServerClient, type AppServerTransport } from "@daedalus-pi/app-server-client";
 import type { AppEvent } from "@daedalus-pi/app-server-protocol";
-import { buildWsUrl, createGuiRuntime, getViteBootstrapEnv } from "./runtime";
+import { buildWsUrl, createGuiRuntime, getThreadFirstRouteFlag, getViteBootstrapEnv } from "./runtime";
 import { statusTone } from "./view-model";
 
 class MockTransport implements AppServerTransport {
@@ -13,13 +13,16 @@ class MockTransport implements AppServerTransport {
 	send(message: unknown): void {
 		this.sent.push(message);
 		if (!message || typeof message !== "object") return;
-		const request = message as { kind?: string; id?: string; method?: string };
+		const request = message as { kind?: string; id?: string; method?: string; params?: unknown };
 		if (request.kind !== "request" || !request.id) return;
 		this.listener?.({
 			kind: "response",
 			id: request.id,
 			ok: true,
-			result: request.method === "event/replay" ? { events: this.replayEvents } : responseFor(request.method),
+			result:
+				request.method === "event/replay"
+					? { events: this.replayEvents }
+					: responseFor(request.method, request.params),
 		});
 	}
 
@@ -68,7 +71,7 @@ function terminalSnapshot(
 	};
 }
 
-function responseFor(method: string | undefined): unknown {
+function responseFor(method: string | undefined, params?: unknown): unknown {
 	switch (method) {
 		case "initialize":
 			return { protocolVersion: "test" };
@@ -77,7 +80,35 @@ function responseFor(method: string | undefined): unknown {
 		case "project/open":
 			return { projectId: "project-1", path: "/repo", name: "repo" };
 		case "session/list":
-			return { sessions: [{ sessionId: "session-1", title: "Existing", status: "running" }] };
+			return {
+				sessions: [
+					{
+						sessionId: "session-1",
+						title: "Existing",
+						status: "running",
+						runsIn: {
+							mode: "isolated-worktree",
+							projectId: "project-1",
+							worktreeId: "wt-1",
+							branch: "task/hello",
+							path: "/repo-wt",
+							isolationMode: "isolated-worktree",
+							validationStatus: "valid",
+						},
+					},
+				],
+			};
+		case "workspace/selection/get":
+			return { degraded: false, selection: { projectId: "project-1", sessionId: "session-1", updatedAt: "now" } };
+		case "workspace/selection/set": {
+			const selection = params as { projectId?: string; sessionId?: string };
+			return {
+				degraded: false,
+				selection: selection.sessionId
+					? { projectId: selection.projectId ?? "project-1", sessionId: selection.sessionId, updatedAt: "now" }
+					: undefined,
+			};
+		}
 		case "terminal/list":
 			return { terminals: [terminalSnapshot("term-1", { history: "hello" })] };
 		case "model/list":
@@ -104,6 +135,8 @@ function responseFor(method: string | undefined): unknown {
 			};
 		case "event/replay":
 			return { events: [] };
+		case "diff/get":
+			return { diff: { id: ((params as { diffId?: string })?.diffId ?? "target-diff") as string, files: [] } };
 		case "composer/file-search":
 			return { files: [{ path: "src/index.ts", label: "src/index.ts", kind: "file", extension: ".ts" }] };
 		case "composer/command-list":
@@ -154,7 +187,7 @@ function responseFor(method: string | undefined): unknown {
 					branch: "task/hello",
 					path: "/repo-wt",
 					isolationMode: "isolated-worktree",
-					validationStatus: "ready",
+					validationStatus: "valid",
 				},
 			};
 		case "terminal/create":
@@ -189,6 +222,12 @@ describe("GUI runtime bootstrap", () => {
 			projectRoot: "/repo",
 		});
 	});
+
+	test("reads thread-first route feature flag", () => {
+		expect(getThreadFirstRouteFlag({})).toBe(false);
+		expect(getThreadFirstRouteFlag({ VITE_DAEDALUS_THREAD_FIRST_ROUTE: "true" })).toBe(true);
+		expect(getThreadFirstRouteFlag({ VITE_DAEDALUS_THREAD_FIRST_ROUTE: "1" })).toBe(true);
+	});
 });
 
 describe("GUI runtime state model", () => {
@@ -207,7 +246,7 @@ describe("GUI runtime state model", () => {
 		transport.emit({ kind: "notification", method: "event/appended", params: { event } });
 
 		expect(runtime.state.events).toEqual([event]);
-		expect(runtime.state.sessions).toEqual([{ id: "session-1", title: "Implement GUI", status: "running" }]);
+		expect(runtime.state.sessions[0]).toMatchObject({ id: "session-1", title: "Implement GUI", status: "running" });
 	});
 
 	test("captures approvals from notifications and events", async () => {
@@ -260,11 +299,35 @@ describe("GUI runtime state model", () => {
 			transport: new MockTransport(),
 		});
 
-		runtime.selectSession("session-1");
+		await runtime.selectSession("session-1");
 		expect(runtime.state.selectedSessionId).toBe("session-1");
 
-		runtime.selectSession();
+		await runtime.selectSession();
 		expect(runtime.state.selectedSessionId).toBeUndefined();
+	});
+
+	test("hydrates and persists selection only behind the thread-first route flag", async () => {
+		const transport = new MockTransport();
+		const runtime = await createGuiRuntime({
+			client: new AppServerClient({ transport }),
+			bootstrap: { projectRoot: "/repo" },
+			threadFirstRoute: true,
+		});
+		await runtime.initialize();
+
+		expect(runtime.state.selectedSessionId).toBe("session-1");
+		await runtime.selectSession(undefined);
+
+		expect(runtime.state.selectedSessionId).toBeUndefined();
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({ method: "workspace/selection/get", params: { projectId: "project-1" } }),
+		);
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({
+				method: "workspace/selection/set",
+				params: { projectId: "project-1", sessionId: undefined },
+			}),
+		);
 	});
 
 	test("selects a newly started session from the first prompt", async () => {
@@ -283,6 +346,18 @@ describe("GUI runtime state model", () => {
 		});
 		expect(runtime.state.selectedSessionId).toBe("session-new");
 		expect(runtime.state.newBuild).toMatchObject({ kind: "running", sessionId: "session-new" });
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({
+				method: "worktree/create",
+				params: expect.objectContaining({ operationId: expect.stringMatching(/^new-build-/) }),
+			}),
+		);
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({
+				method: "session/start",
+				params: expect.objectContaining({ operationId: expect.stringMatching(/^new-build-/) }),
+			}),
+		);
 	});
 
 	test("maps statuses to renderer tones", () => {
@@ -349,6 +424,27 @@ describe("GUI runtime expanded APIs", () => {
 		});
 		expect(runtime.state.terminals.find((terminal) => terminal.terminalId === "term-2")?.history).toContain("chunk");
 	});
+
+	test("backfills hydrated session target fields from runsIn", async () => {
+		const transport = new MockTransport();
+		const runtime = await createGuiRuntime({ client: new AppServerClient({ transport }) });
+		await runtime.initialize();
+		expect(runtime.state.sessions.find((session) => session.id === "session-1")).toMatchObject({
+			projectId: "project-1",
+			worktreeId: "wt-1",
+		});
+	});
+
+	test("uses an explicit diffId instead of the selected session target", async () => {
+		const transport = new MockTransport();
+		const runtime = await createGuiRuntime({ client: new AppServerClient({ transport }) });
+		await runtime.initialize();
+		await runtime.selectSession("session-1");
+		await runtime.refreshDiff("explicit-diff");
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({ method: "diff/get", params: { diffId: "explicit-diff" } }),
+		);
+	});
 });
 
 describe("GUI runtime reconnect", () => {
@@ -390,7 +486,9 @@ describe("GUI runtime reconnect", () => {
 		expect(runtime.state.connectionStatus).toBe("connected");
 		expect(runtime.state.lastEventCursor).toBe("event-2");
 		expect(runtime.state.sessions.some((session) => session.id === "session-2")).toBe(true);
-		expect(second.sent).toContainEqual(expect.objectContaining({ method: "event/replay" }));
+		expect(second.sent).toContainEqual(
+			expect.objectContaining({ method: "event/replay", params: { cursor: { after: "event-1" } } }),
+		);
 	});
 
 	test("suppresses duplicate replayed events", async () => {
