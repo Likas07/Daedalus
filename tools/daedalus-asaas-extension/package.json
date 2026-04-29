@@ -1,0 +1,25 @@
+{
+	"name": "daedalus-asaas-extension",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Standalone Daedalus extension for guarded Asaas docs and API access.",
+	"type": "module",
+	"main": "./index.ts",
+	"scripts": {
+		"test": "bun test",
+		"check": "bun test --dry-run",
+		"setup": "bun ./scripts/setup.ts"
+	},
+	"peerDependencies": {
+		"@daedalus-pi/coding-agent": "*",
+		"@daedalus-pi/ai": "*"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.3"
+	},
+	"keywords": [
+		"daedalus",
+		"extension",
+		"asaas"
+	]
+}
