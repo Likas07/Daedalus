@@ -8,6 +8,7 @@ export const SessionStoreSummarySchema = Type.Object({
 	name: Type.Optional(Type.String()),
 	title: Type.Optional(Type.String()),
 	parentSessionPath: Type.Optional(Type.String()),
+	parentSessionId: Type.Optional(SessionIdSchema),
 	projectId: Type.Optional(Type.String()),
 	worktreeId: Type.Optional(Type.String()),
 	worktreePath: Type.Optional(Type.String()),

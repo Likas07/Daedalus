@@ -306,6 +306,17 @@ CREATE TABLE IF NOT EXISTS operation_idempotency_records (
 CREATE INDEX IF NOT EXISTS operation_idempotency_method_idx ON operation_idempotency_records(method);
 `,
 	},
+	{
+		version: 14,
+		name: "m3_lineage_and_idempotency_leases",
+		sql: `
+ALTER TABLE sessions ADD COLUMN parent_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL;
+ALTER TABLE gui_session_read_model ADD COLUMN parent_session_id TEXT;
+ALTER TABLE operation_idempotency_records ADD COLUMN lease_owner TEXT;
+ALTER TABLE operation_idempotency_records ADD COLUMN lease_expires_at TEXT;
+ALTER TABLE operation_idempotency_records ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0;
+`,
+	},
 ];
 
 export function runMigrations(database: AppServerDatabase): void {

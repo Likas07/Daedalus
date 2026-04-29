@@ -5,6 +5,7 @@ import {
 	ClientRequestResultSchemas,
 	ClientRequestSchema,
 	DesktopBootDiagnosticSchema,
+	DiagnosticExportSchema,
 	EventReplayResponseSchema,
 	OperationCleanupScanSchema,
 	RootBoundaryViolationSchema,
@@ -182,6 +183,54 @@ describe("app-server protocol schemas", () => {
 					isolationMode: "isolated-worktree",
 					validationStatus: "valid",
 				},
+			}),
+		).toBe(true);
+	});
+
+	test("validates M3 continue-in-worktree protocol contract", () => {
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
+				id: "req-continue-worktree",
+				method: "session/continue-in-worktree",
+				params: {
+					sourceSessionId: "session-source",
+					projectId: "project-1",
+					branch: "build/continue",
+					path: "/repo-worktree",
+					baseBranch: "main",
+					prompt: "continue here",
+					operationId: "op-continue-1",
+				},
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestResultSchemas["session/continue-in-worktree"], {
+				sessionId: "session-child",
+				parentSessionId: "session-source",
+				worktree: {
+					id: "worktree-1",
+					projectId: "project-1",
+					path: "/repo-worktree",
+					branch: "build/continue",
+					status: "ready",
+					dirty: false,
+					dirtyCount: 0,
+					activeSessionCount: 0,
+					cleanupRequiresConfirmation: false,
+					createdAt: "2026-04-29T00:00:00.000Z",
+					updatedAt: "2026-04-29T00:00:00.000Z",
+				},
+				runsIn: {
+					projectId: "project-1",
+					worktreeId: "worktree-1",
+					path: "/repo-worktree",
+					canonicalPath: "/repo-worktree",
+					branch: "build/continue",
+					isolationMode: "isolated-worktree",
+					validationStatus: "valid",
+				},
+				operationId: "op-continue-1",
 			}),
 		).toBe(true);
 	});
@@ -485,6 +534,26 @@ describe("app-server protocol schemas", () => {
 						durationMs: 10,
 					},
 				],
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(DiagnosticExportSchema, {
+				exportedAt: "2026-04-29T00:00:00.000Z",
+				transcript: [],
+				toolLogs: [],
+				appServerLogs: [],
+				environment: { platform: "linux", arch: "x64" },
+				versions: {},
+				integrationStatus: [],
+				recentProtocolEvents: [],
+				restorationTrace: {
+					projectId: "project-1",
+					requestedSelection: { sessionId: "session-1" },
+					resolvedSession: "session-1",
+					status: "restored",
+					reason: "active selection restored",
+					checkedAt: "2026-04-29T00:00:00.000Z",
+				},
 			}),
 		).toBe(true);
 		expect(Value.Check(TerminalCreateParamsSchema, { cwd: "/repo", requireRootBoundary: true })).toBe(true);

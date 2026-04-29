@@ -24,6 +24,7 @@ export interface SessionReadModel {
 	readonly id: string;
 	readonly projectId: string | null;
 	readonly worktreeId: string | null;
+	readonly parentSessionId: string | null;
 	readonly status: string;
 	readonly title: string | null;
 	readonly createdAt: string;
@@ -100,6 +101,7 @@ interface SessionRow {
 	readonly id: string;
 	readonly project_id: string | null;
 	readonly worktree_id: string | null;
+	readonly parent_session_id: string | null;
 	readonly status: string;
 	readonly title: string | null;
 	readonly created_at: string;
@@ -246,6 +248,7 @@ const mapSession = (row: SessionRow): SessionReadModel => ({
 	id: row.id,
 	projectId: row.project_id,
 	worktreeId: row.worktree_id,
+	parentSessionId: row.parent_session_id,
 	status: row.status,
 	title: row.title,
 	createdAt: row.created_at,
