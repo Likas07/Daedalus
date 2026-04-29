@@ -197,16 +197,25 @@ function projectMessageEntry(
 			.filter(Boolean)
 			.join("\n");
 		const calls = content.map((part) => record(part)).filter((part) => part.type === "toolCall");
+		const stopReason = stringField(message.stopReason);
+		const errorMessage = stringField(message.errorMessage);
+		const displayText = errorMessage && (stopReason === "error" || !text) ? errorMessage : text;
+		const assistantRows = displayText || calls.length > 0
+			? [
+				{
+					...base,
+					kind: "assistant" as const,
+					title: "Assistant",
+					summary: displayText,
+					content: displayText,
+					status: stopReason || (errorMessage ? "error" : undefined),
+					messageId: stringField(message.responseId) || entry.id,
+					details: [stringField(message.model)].filter(Boolean),
+				},
+			]
+			: [];
 		return [
-			{
-				...base,
-				kind: "assistant",
-				title: "Assistant",
-				summary: text,
-				content: text,
-				messageId: stringField(message.responseId) || entry.id,
-				details: [stringField(message.model)].filter(Boolean),
-			},
+			...assistantRows,
 			...calls.map((call) => ({
 				...base,
 				id: `entry:${entry.id}:tool:${stringField(call.id)}`,
@@ -215,7 +224,7 @@ function projectMessageEntry(
 				summary: summarizeUnknown(call.arguments),
 				messageId: stringField(call.id) || undefined,
 				raw: call,
-			})),
+			}))
 		];
 	}
 	return [
@@ -263,14 +272,21 @@ function stringField(value: unknown): string {
 function numberField(value: unknown): number | string {
 	return typeof value === "number" ? value : "unknown";
 }
+function stripGuiContextBlocks(value: string): string {
+	return value.replace(/<gui-context>[\s\S]*?<\/gui-context>/gi, " ").replace(/<gui-context>[\s\S]*$/gi, " ");
+}
+
 function contentText(value: unknown): string {
-	if (typeof value === "string") return value;
-	if (Array.isArray(value))
-		return value
-			.map((part) => stringField(record(part).text) || (record(part).type === "image" ? "[image]" : ""))
-			.filter(Boolean)
-			.join("\n");
-	return summarizeUnknown(value);
+	const text =
+		typeof value === "string"
+			? value
+			: Array.isArray(value)
+				? value
+						.map((part) => stringField(record(part).text) || (record(part).type === "image" ? "[image]" : ""))
+						.filter(Boolean)
+						.join("\n")
+				: summarizeUnknown(value);
+	return stripGuiContextBlocks(text).trim();
 }
 function summarizeUnknown(value: unknown): string {
 	if (value == null) return "";

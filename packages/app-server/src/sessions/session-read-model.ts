@@ -48,8 +48,12 @@ function stringifyContent(content: unknown): string {
 	return "";
 }
 
+function stripGuiContextBlocks(value: string): string {
+	return value.replace(/<gui-context>[\s\S]*?<\/gui-context>/gi, " ").replace(/<gui-context>[\s\S]*$/gi, " ");
+}
+
 function compactPreview(value: string, maxLength = 120): string | null {
-	const compacted = value.replace(/\s+/g, " ").trim();
+	const compacted = stripGuiContextBlocks(value).replace(/\s+/g, " ").trim();
 	if (!compacted) return null;
 	return compacted.length > maxLength ? `${compacted.slice(0, maxLength - 1)}…` : compacted;
 }
