@@ -10,6 +10,7 @@
 	const activeTerminal = $derived(appState.terminals.find((terminal: import("../client/gui-state-types").RendererTerminal) => terminal.terminalId === appState.activeTerminalId) ?? appState.terminals[0]);
 	const evidenceRows = $derived(appState.terminals.map(terminalEvidenceRow));
 	const activeWritable = $derived(terminalWritableState(activeTerminal));
+	const terminalCreateTarget = $derived(selectedTerminalCreateInput(appState, { cols: 100, rows: 24 }));
 	const guardedRuntime = $derived({
 		...runtime,
 		sendTerminalInput: async (terminalId: string, data: string) => {
@@ -20,9 +21,8 @@
 	});
 
 	async function createTerminal(): Promise<void> {
-		const target = selectedTerminalCreateInput(appState, { cols: 100, rows: 24 });
-		if (!target) throw new Error("Select a valid Thread target before creating a terminal.");
-		await runtime.createTerminal(target);
+		if (!terminalCreateTarget) return;
+		await runtime.createTerminal(terminalCreateTarget);
 	}
 	function selectTerminal(id: string): void {
 		appState.activeTerminalId = id;
@@ -47,7 +47,7 @@
 		</div>
 		<span class="font-display text-[12px] italic text-bone-400">furnace</span>
 	</div>
-	<TerminalTabs terminals={appState.terminals} selectedTerminalId={activeTerminal?.terminalId} onSelect={selectTerminal} onNew={() => void createTerminal()} onClose={(id) => void closeTerminal(id)} />
+	<TerminalTabs terminals={appState.terminals} selectedTerminalId={activeTerminal?.terminalId} onSelect={selectTerminal} onNew={() => void createTerminal()} onClose={(id) => void closeTerminal(id)} canCreate={Boolean(terminalCreateTarget)} />
 	<TerminalHeader terminal={activeTerminal} onKill={() => activeTerminal && void closeTerminal(activeTerminal.terminalId)} {onCollapse} />
 	<div class="min-h-0 flex-1">
 		{#if activeTerminal}
@@ -60,7 +60,7 @@
 			<XtermViewport terminalId={activeTerminal.terminalId} history={activeTerminal.history} runtime={guardedRuntime} />
 		{:else}
 			<div class="flex h-full items-center justify-center bg-black/60 font-mono text-xs text-bone-400">
-				<button class="btn-mini" type="button" onclick={() => void createTerminal()}>Create terminal</button>
+				<button class="btn-mini" type="button" onclick={() => void createTerminal()} disabled={!terminalCreateTarget} title={!terminalCreateTarget ? "Select a valid Thread target before creating a terminal." : undefined}>Create terminal</button>
 			</div>
 		{/if}
 	</div>
