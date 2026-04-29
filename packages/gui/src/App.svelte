@@ -1,9 +1,9 @@
 <script lang="ts">
 	import type { ExtensionUiRequest } from "@daedalus-pi/app-server-protocol";
+	import { untrack } from "svelte";
 	import { createCommandRegistry, type RegisteredCommand } from "./client/command-registry";
-	import { createGuiStateStore } from "./client/state.svelte";
 	import { createUiState } from "./client/ui-state.svelte";
-	import type { GuiRuntime } from "./client/runtime";
+	import type { GuiRuntime, GuiState } from "./client/runtime";
 	import type { ApprovalItem } from "./client/view-model";
 	import CommandPalette from "./components/CommandPalette.svelte";
 	import DiffOverlay from "./components/DiffOverlay.svelte";
@@ -19,8 +19,7 @@
 	import TerminalTail from "./components/TerminalTail.svelte";
 
 	let { runtime } = $props<{ runtime: GuiRuntime }>();
-	const store = $derived(createGuiStateStore(runtime));
-	const guiState = $derived(store.current);
+	let guiState = $state<GuiState>(untrack(() => cloneGuiState(runtime.state)));
 	const ui = createUiState();
 	const extensions = $derived(guiState.extensionRequests.map((request) => ({
 		id: request.extensionId,
@@ -45,6 +44,11 @@
 		exportDiagnostics: copyDiagnostics,
 	}));
 	applyViewportPolicy();
+	$effect(() =>
+		runtime.subscribe((state: GuiState) => {
+			guiState = cloneGuiState(state);
+		}),
+	);
 	$effect(() => {
 		ui.view = guiState.selectedSessionId ? "session" : ui.view === "session" ? "empty" : ui.view;
 	});
@@ -66,6 +70,18 @@
 		window.addEventListener("keydown", onKeydown);
 		return () => window.removeEventListener("keydown", onKeydown);
 	});
+
+	function cloneGuiState(state: GuiState): GuiState {
+		return {
+			...state,
+			diagnostics: [...state.diagnostics],
+			events: [...state.events],
+			sessions: [...state.sessions],
+			worktrees: [...state.worktrees],
+			terminals: [...state.terminals],
+			models: [...state.models],
+		};
+	}
 
 	function applyViewportPolicy(width = window.innerWidth): void {
 		ui.compact = width < 760;
