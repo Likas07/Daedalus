@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { lstat, realpath } from "node:fs/promises";
-import { relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import type {
 	AppEvent,
 	AuditQuery,
@@ -11,6 +11,7 @@ import type {
 	ServerRequest,
 	WorkflowRunsInTarget,
 } from "@daedalus-pi/app-server-protocol";
+import { AuthStorage, ModelRegistry } from "@daedalus-pi/coding-agent";
 import { type AppServerDatabase, appendEvent, type EventPayload, readEventsAfter } from "..";
 import { AttachmentService } from "../composer/attachment-service";
 import { CommandService } from "../composer/command-service";
@@ -77,6 +78,7 @@ export interface AppRouterOptions {
 	readonly accessPolicyService?: AccessPolicyService;
 	readonly approvalService?: ApprovalService;
 	readonly extensionUiRouter?: ExtensionUiRouter;
+	readonly agentDir?: string;
 }
 
 export class AppRouter {
@@ -98,7 +100,8 @@ export class AppRouter {
 
 	private readonly sessionStore: SqliteSessionStore;
 	private readonly runtimeControlService: RuntimeControlService;
-	private readonly providerAuthService = new ProviderAuthService();
+	private readonly providerAuthService: ProviderAuthService;
+	private readonly modelRegistry: ModelRegistry;
 	private readonly settingsService: SettingsService;
 	private readonly resourceManagementService = new ResourceManagementService();
 	private readonly daedalusWorkflowService: DaedalusWorkflowService;
@@ -115,6 +118,11 @@ export class AppRouter {
 		this.daedalusWorkflowService = new DaedalusWorkflowService({ sessionStore: this.sessionStore });
 		this.workspaceSelectionService = new WorkspaceSelectionService({ database: options.database });
 		this.operationIdempotencyService = new OperationIdempotencyService({ database: options.database });
+		const authStorage = options.agentDir ? AuthStorage.create(join(options.agentDir, "auth.json")) : AuthStorage.create();
+		this.modelRegistry = options.agentDir
+			? ModelRegistry.create(authStorage, join(options.agentDir, "models.json"))
+			: ModelRegistry.create(authStorage);
+		this.providerAuthService = new ProviderAuthService({ authStorage, modelRegistry: this.modelRegistry });
 
 		this.runtimeControlService = new RuntimeControlService(options.controller);
 		this.settingsService = new SettingsService({
@@ -956,9 +964,7 @@ export class AppRouter {
 
 	private async listModels(): Promise<unknown[]> {
 		try {
-			const { AuthStorage, ModelRegistry } = await import("@daedalus-pi/coding-agent");
-			const authStorage = AuthStorage.create();
-			const registry = ModelRegistry.create(authStorage);
+			const registry = this.modelRegistry;
 			const providerStatuses = this.providerAuthService.status().providers;
 			const enabledProviders = new Set(
 				providerStatuses
