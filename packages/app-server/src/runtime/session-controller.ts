@@ -84,6 +84,7 @@ export interface StartSessionInput {
 	readonly projectId?: string;
 	readonly worktreeId?: string;
 	readonly runsIn?: WorkflowRunsInTarget;
+	readonly parentSessionId?: SessionId;
 }
 
 export interface ResumeSessionInput {
@@ -130,7 +131,11 @@ export class SessionController {
 		const runtime = await this.options.runtimeFactory({
 			cwd: input.cwd,
 			agentDir: this.options.agentDir,
-			sessionManager: await this.options.makeSessionManager({ cwd: input.cwd, sessionId }),
+			sessionManager: await this.options.makeSessionManager({
+				cwd: input.cwd,
+				sessionId,
+				parentSession: input.parentSessionId,
+			}),
 			sessionId,
 			applyProcessCwd: false,
 			context: input.context,
@@ -148,6 +153,8 @@ export class SessionController {
 				projectId: input.projectId,
 				worktreeId: input.worktreeId,
 				runsIn: input.runsIn,
+				parentSessionId: input.parentSessionId,
+				sourceSessionId: input.parentSessionId,
 				identity: await createSessionIdentitySnapshot({
 					sessionId,
 					cwd: runtime.cwd,

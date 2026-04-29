@@ -286,6 +286,57 @@ export class AppRouter {
 						return withOperationId(result, request.params.operationId);
 					},
 				);
+			case "session/continue-in-worktree":
+				return this.operationIdempotencyService.run(
+					{ operationId: request.params.operationId, method: request.method, payload: request.params },
+					async () => {
+						const source = await this.resolveContinueSourceSession(
+							request.params.sourceSessionId,
+							request.params.projectId,
+						);
+						const operationId = request.params.operationId;
+						const worktreeOperationId = operationId
+							? `${operationId}:worktree`
+							: `session-continue-${request.params.sourceSessionId}-${randomUUID()}:worktree`;
+						const worktreeOutcome = await this.worktreeService.createOrAdoptWorktree({
+							projectId: source.projectId,
+							branch: request.params.branch ?? `continue-${request.params.sourceSessionId}`,
+							path: request.params.path,
+							baseBranch: request.params.baseBranch,
+							operationId: worktreeOperationId,
+						});
+						if (worktreeOutcome.outcome !== "created" && worktreeOutcome.outcome !== "adopted-existing") {
+							throw new Error(`Unable to create worktree for continuation: ${worktreeOutcome.outcome}`);
+						}
+						const validation = await validateWorktreeTarget({
+							database: this.options.database,
+							projectId: source.projectId,
+							worktreeId: worktreeOutcome.worktree.id,
+						});
+						if (validation.status !== "valid") throw new Error(`Unsafe worktree target: ${validation.reason}`);
+						const result = await this.options.controller.startSession({
+							cwd: validation.runsIn.canonicalPath,
+							prompt: request.params.prompt,
+							projectId: validation.runsIn.projectId,
+							worktreeId: validation.runsIn.worktreeId,
+							runsIn: validation.runsIn,
+							parentSessionId: request.params.sourceSessionId,
+							context: {
+								...request.params,
+								projectId: validation.runsIn.projectId,
+								worktreeId: validation.runsIn.worktreeId,
+							},
+						});
+						this.persistActiveSelectionAfterDurableSession(validation.runsIn.projectId, result.sessionId);
+						return {
+							sessionId: result.sessionId,
+							parentSessionId: request.params.sourceSessionId,
+							worktree: worktreeOutcome.worktree,
+							runsIn: validation.runsIn,
+							...(operationId ? { operationId } : {}),
+						};
+					},
+				);
 			case "turn/start":
 				return this.operationIdempotencyService.run(
 					{ operationId: request.params.operationId, method: request.method, payload: request.params },
@@ -747,6 +798,37 @@ export class AppRouter {
 		throw new Error(`Unknown session: ${sessionId}`);
 	}
 
+	private async resolveContinueSourceSession(
+		sessionId: string,
+		requestedProjectId?: string,
+	): Promise<{ projectId: string; runsIn: WorkflowRunsInTarget }> {
+		projectRuntimeEvents(this.options.database);
+		const row = this.options.database
+			.query<{ project_id: string | null; runs_in_json: string | null }, [string]>(
+				"SELECT project_id, runs_in_json FROM sessions WHERE id = ? LIMIT 1",
+			)
+			.get(sessionId);
+		if (!row) throw new Error(`Unknown source session: ${sessionId}`);
+		if (!row.runs_in_json) throw new Error(`Source session ${sessionId} has no stored workspace target`);
+		const runsIn = JSON.parse(row.runs_in_json) as WorkflowRunsInTarget;
+		const projectId = runsIn.projectId ?? row.project_id;
+		if (!projectId) throw new Error(`Source session ${sessionId} has no stored project target`);
+		if (requestedProjectId && requestedProjectId !== projectId)
+			throw new Error(`Source session ${sessionId} belongs to project ${projectId}, not ${requestedProjectId}`);
+		if (runsIn.isolationMode !== "isolated-worktree" && runsIn.isolationMode !== "base-checkout")
+			throw new Error(`Unsupported source session target for ${sessionId}`);
+		return { projectId, runsIn };
+	}
+
+	private persistActiveSelectionAfterDurableSession(projectId: string, sessionId: string): void {
+		projectRuntimeEvents(this.options.database);
+		const row = this.options.database
+			.query<{ project_id: string | null }, [string]>("SELECT project_id FROM sessions WHERE id = ? LIMIT 1")
+			.get(sessionId);
+		if (!row) throw new Error(`Session ${sessionId} was not durably persisted`);
+		if (row.project_id !== projectId) throw new Error(`Session ${sessionId} was not durably persisted in project ${projectId}`);
+		this.workspaceSelectionService.set({ projectId, sessionId });
+	}
 	private async validateStoredTurnTarget(sessionId: string): Promise<WorkflowRunsInTarget> {
 		const row = this.options.database
 			.query<{ project_id: string | null; worktree_id: string | null; runs_in_json: string | null }, [string]>(
