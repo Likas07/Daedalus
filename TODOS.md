@@ -24,3 +24,14 @@ These items are approved follow-ups from `/plan-eng-review` and should stay behi
 - **Why:** Define typography, color/status tokens, spacing, row/card rules, warning states, and component vocabulary for desktop/ADE work.
 - **Context:** `/plan-design-review` reused existing GUI conventions for v1 because no design system exists. Future ADE expansion needs stronger visual governance.
 - **Depends on / blocked by:** Safe Worktree Loop implementation and post-v1 visual QA learnings.
+
+### M3 operation idempotency lease/repair semantics
+
+- **What:** Add stale in-progress recovery for operation idempotency records.
+- **Why:** `worktree/create`, `session/start`, and `turn/start` write `in-progress` idempotency records before running side effects. If the app crashes before `complete()` or `fail()`, a retry with the same operation id is blocked forever.
+- **Pros:** Makes workspace-start and Continue-in-Worktree retry behavior durable across crashes and aligns with the planned saga/repair path.
+- **Cons:** Requires lease/expiry or operation-owner semantics and must not conflict with duplicate-start protection.
+- **Context:** M1 intentionally keeps duplicate in-flight operation ids fail-closed. M3 saga/repair should decide whether stale matching operations can be resumed, replayed, failed, or safely taken over.
+- **Effort estimate:** M / CC+gstack: S
+- **Priority:** P1
+- **Depends on / blocked by:** M1 operation idempotency table; M3 Worktree/session/lineage saga repair design.

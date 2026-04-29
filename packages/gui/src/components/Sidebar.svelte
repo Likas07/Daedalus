@@ -32,7 +32,7 @@
 		<div class="eyebrow eyebrow-brass mb-2 px-1">drawer · 01</div>
 		<button
 			class="group relative flex w-full items-center justify-between gap-2 rounded-md border border-[color:var(--rule)] bg-[color:var(--ink-2)] px-3 py-2.5 text-left transition hover:border-[color:var(--brass-rule)]"
-			onclick={() => runtime.selectSession(undefined)}
+			onclick={() => void runtime.selectSession(undefined)}
 			aria-label={`Project overview, ${guiState.sessions.length} sessions, ${guiState.approvalItems.length} approvals pending`}
 		>
 			<span class="flex min-w-0 items-center gap-2">
@@ -66,7 +66,7 @@
 				<button
 					class="nav-row group"
 					data-active={guiState.selectedSessionId === session.id}
-					onclick={() => runtime.selectSession(session.id)}
+					onclick={() => void runtime.selectSession(session.id)}
 					aria-label={`Open session ${session.title}. Status: ${sessionStatusLabel(session)}`}
 				>
 					<div class="flex items-start justify-between gap-2">

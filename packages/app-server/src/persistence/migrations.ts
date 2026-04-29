@@ -282,6 +282,30 @@ ALTER TABLE gui_session_read_model ADD COLUMN validation_status TEXT;
 ALTER TABLE gui_session_read_model ADD COLUMN needs_attention_reason TEXT;
 `,
 	},
+	{
+		version: 13,
+		name: "thread_first_workspace_foundation",
+		sql: `
+CREATE TABLE IF NOT EXISTS workspace_active_selection (
+	project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+	session_id TEXT,
+	updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS operation_idempotency_records (
+	operation_id TEXT PRIMARY KEY,
+	method TEXT NOT NULL,
+	payload_hash TEXT NOT NULL,
+	status TEXT NOT NULL CHECK (status IN ('in-progress', 'completed', 'failed')),
+	result_json TEXT,
+	error_message TEXT,
+	created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+	updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS operation_idempotency_method_idx ON operation_idempotency_records(method);
+`,
+	},
 ];
 
 export function runMigrations(database: AppServerDatabase): void {

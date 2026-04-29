@@ -144,7 +144,7 @@ function runHandler(commandId: CommandId, context: CommandRegistryContext): (() 
 		case "new-session":
 			return () => {
 				context.ui.view = "empty";
-				context.runtime.selectSession(undefined);
+				void context.runtime.selectSession(undefined);
 				setTimeout(() => context.focusComposer?.(), 0);
 			};
 		case "open-project":
@@ -156,7 +156,7 @@ function runHandler(commandId: CommandId, context: CommandRegistryContext): (() 
 		case "provider-settings":
 			return () => {
 				context.ui.view = "settings";
-				context.runtime.selectSession(undefined);
+				void context.runtime.selectSession(undefined);
 			};
 		case "open-model-selector":
 			return () => {

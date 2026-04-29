@@ -87,6 +87,7 @@ import {
 	TerminalSnapshotResultSchema,
 } from "./terminal";
 import {
+	OperationIdSchema,
 	RootBoundaryViolationSchema,
 	WorkflowDiffSummarySchema,
 	WorkflowRunsInTargetSchema,
@@ -139,6 +140,7 @@ export const PromptContextParamsSchema = {
 	mode: Type.Optional(Type.String()),
 	fastMode: Type.Optional(Type.Boolean()),
 	draftState: Type.Optional(JsonObjectSchema),
+	operationId: Type.Optional(OperationIdSchema),
 } satisfies Record<string, TSchema>;
 
 export const SessionStartTargetSchema = Type.Union([
@@ -158,37 +160,34 @@ export const SessionStartTargetSchema = Type.Union([
 ]);
 export type SessionStartTarget = Static<typeof SessionStartTargetSchema>;
 
-export const SessionStartParamsSchema = Type.Union([
-	StrictObject({
-		startTarget: SessionStartTargetSchema,
-		prompt: Type.Optional(Type.String({ minLength: 1 })),
-		...PromptContextParamsSchema,
-	}),
-	StrictObject({
-		// Transitional compatibility for app-server before Safe Worktree Loop Task 3 moves routing to startTarget.
-		// Keep legacy top-level worktreeId rejected by intentionally allowing only projectId here.
-		projectId: ProjectIdSchema,
-		startTarget: Type.Optional(SessionStartTargetSchema),
-		prompt: Type.Optional(Type.String({ minLength: 1 })),
-		...PromptContextParamsSchema,
-	}),
-]);
+export const SessionStartParamsSchema = StrictObject({
+	// Transitional top-level projectId is accepted only as extra context; routing requires startTarget.
+	projectId: Type.Optional(ProjectIdSchema),
+	startTarget: SessionStartTargetSchema,
+	prompt: Type.Optional(Type.String({ minLength: 1 })),
+	...PromptContextParamsSchema,
+});
 export type SessionStartParams = Static<typeof SessionStartParamsSchema>;
 
 export const SessionStartResultSchema = StrictObject({
 	sessionId: SessionIdSchema,
 	runsIn: Type.Optional(WorkflowRunsInTargetSchema),
+	operationId: Type.Optional(OperationIdSchema),
 });
 export type SessionStartResult = Static<typeof SessionStartResultSchema>;
 
 export const TurnStartParamsSchema = StrictObject({
 	sessionId: SessionIdSchema,
 	prompt: Type.String({ minLength: 1 }),
+
 	...PromptContextParamsSchema,
 });
 export type TurnStartParams = Static<typeof TurnStartParamsSchema>;
 
-export const TurnStartResultSchema = StrictObject({ turnId: TurnIdSchema });
+export const TurnStartResultSchema = StrictObject({
+	turnId: TurnIdSchema,
+	operationId: Type.Optional(OperationIdSchema),
+});
 export type TurnStartResult = Static<typeof TurnStartResultSchema>;
 
 export const ProjectSummarySchema = StrictObject({
@@ -217,6 +216,7 @@ export const WorktreeCreateParamsSchema = StrictObject({
 	branch: Type.String({ minLength: 1 }),
 	path: Type.Optional(Type.String({ minLength: 1 })),
 	baseBranch: Type.Optional(Type.String({ minLength: 1 })),
+	operationId: Type.Optional(OperationIdSchema),
 });
 export type WorktreeCreateParams = Static<typeof WorktreeCreateParamsSchema>;
 
@@ -247,19 +247,19 @@ export const WorktreeCreateOutcomeSchema = Type.Union([
 	StrictObject({
 		outcome: Type.Literal("created"),
 		worktree: WorkflowWorktreeMetadataSchema,
-		operationId: Type.Optional(Type.String({ minLength: 1 })),
+		operationId: Type.Optional(OperationIdSchema),
 	}),
 	StrictObject({
 		outcome: Type.Literal("adopted-existing"),
 		worktree: WorkflowWorktreeMetadataSchema,
-		operationId: Type.Optional(Type.String({ minLength: 1 })),
+		operationId: Type.Optional(OperationIdSchema),
 		reason: Type.Optional(Type.String({ minLength: 1 })),
 	}),
 	StrictObject({
 		outcome: Type.Literal("conflict"),
 		reason: WorktreeConflictReasonSchema,
 		message: Type.String({ minLength: 1 }),
-		operationId: Type.Optional(Type.String({ minLength: 1 })),
+		operationId: Type.Optional(OperationIdSchema),
 		existingPath: Type.Optional(Type.String({ minLength: 1 })),
 		existingBranch: Type.Optional(Type.String({ minLength: 1 })),
 		boundaryViolation: Type.Optional(RootBoundaryViolationSchema),
@@ -267,14 +267,14 @@ export const WorktreeCreateOutcomeSchema = Type.Union([
 	StrictObject({
 		outcome: Type.Literal("rolled-back"),
 		message: Type.String({ minLength: 1 }),
-		operationId: Type.String({ minLength: 1 }),
+		operationId: OperationIdSchema,
 		reason: Type.Optional(WorktreeConflictReasonSchema),
 		rollbackPath: Type.Optional(Type.String({ minLength: 1 })),
 	}),
 	StrictObject({
 		outcome: Type.Literal("failed"),
 		message: Type.String({ minLength: 1 }),
-		operationId: Type.Optional(Type.String({ minLength: 1 })),
+		operationId: Type.Optional(OperationIdSchema),
 		reason: Type.Optional(WorktreeConflictReasonSchema),
 		recoverable: Type.Optional(Type.Boolean()),
 	}),
@@ -282,10 +282,45 @@ export const WorktreeCreateOutcomeSchema = Type.Union([
 export type WorktreeCreateOutcome = Static<typeof WorktreeCreateOutcomeSchema>;
 
 export const WorktreeCreateResultSchema = Type.Union([
-	StrictObject({ worktree: WorkflowWorktreeMetadataSchema }),
+	StrictObject({ worktree: WorkflowWorktreeMetadataSchema, operationId: Type.Optional(OperationIdSchema) }),
 	WorktreeCreateOutcomeSchema,
 ]);
 export type WorktreeCreateResult = Static<typeof WorktreeCreateResultSchema>;
+
+export const WorkspaceSelectionSchema = StrictObject({
+	projectId: ProjectIdSchema,
+	sessionId: SessionIdSchema,
+	updatedAt: Type.String({ minLength: 1 }),
+});
+export type WorkspaceSelection = Static<typeof WorkspaceSelectionSchema>;
+
+export const WorkspaceSelectionGetParamsSchema = StrictObject({ projectId: ProjectIdSchema });
+export type WorkspaceSelectionGetParams = Static<typeof WorkspaceSelectionGetParamsSchema>;
+
+export const WorkspaceSelectionSetParamsSchema = StrictObject({
+	projectId: ProjectIdSchema,
+	sessionId: Type.Optional(SessionIdSchema),
+});
+export type WorkspaceSelectionSetParams = Static<typeof WorkspaceSelectionSetParamsSchema>;
+
+export const WorkspaceSelectionResultSchema = StrictObject({
+	selection: Type.Optional(WorkspaceSelectionSchema),
+	degraded: Type.Boolean(),
+	reason: Type.Optional(Type.String({ minLength: 1 })),
+});
+export type WorkspaceSelectionResult = Static<typeof WorkspaceSelectionResultSchema>;
+
+export const WorkflowTargetValidateParamsSchema = StrictObject({
+	target: SessionStartTargetSchema,
+});
+export type WorkflowTargetValidateParams = Static<typeof WorkflowTargetValidateParamsSchema>;
+
+export const WorkflowTargetValidateResultSchema = StrictObject({
+	valid: Type.Boolean(),
+	runsIn: Type.Optional(WorkflowRunsInTargetSchema),
+	reason: Type.Optional(Type.String({ minLength: 1 })),
+});
+export type WorkflowTargetValidateResult = Static<typeof WorkflowTargetValidateResultSchema>;
 
 export const SettingsScopeSchema = Type.Union([Type.Literal("global"), Type.Literal("project")]);
 export type SettingsScope = Static<typeof SettingsScopeSchema>;
@@ -569,6 +604,9 @@ export const ClientRequestSchema = Type.Union([
 	request("worktree/create", WorktreeCreateParamsSchema),
 	request("worktree/cleanup-scan", WorktreeCleanupScanParamsSchema),
 	request("worktree/cleanup", WorktreeCleanupParamsSchema),
+	request("workspace/selection/get", WorkspaceSelectionGetParamsSchema),
+	request("workspace/selection/set", WorkspaceSelectionSetParamsSchema),
+	request("workflow/target/validate", WorkflowTargetValidateParamsSchema),
 	request("session/start", SessionStartParamsSchema),
 	request("session/stop", StrictObject({ sessionId: SessionIdSchema })),
 	request("session/list", SessionListParamsSchema),
@@ -672,6 +710,9 @@ export const ClientRequestResultSchemas = {
 	"worktree/create": WorktreeCreateResultSchema,
 	"worktree/cleanup-scan": WorktreeCleanupScanResultSchema,
 	"worktree/cleanup": WorktreeCleanupResultSchema,
+	"workspace/selection/get": WorkspaceSelectionResultSchema,
+	"workspace/selection/set": WorkspaceSelectionResultSchema,
+	"workflow/target/validate": WorkflowTargetValidateResultSchema,
 	"session/start": SessionStartResultSchema,
 	"session/stop": EmptyResultSchema,
 	"session/list": SessionListResultSchema,

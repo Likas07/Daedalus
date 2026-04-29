@@ -19,6 +19,7 @@ import {
 	type WorkflowRunsInTarget,
 	type WorkflowValidationStatus,
 	type WorkflowWorktreeMetadata,
+	type WorkspaceSelectionResult,
 	type WorktreeCleanupResult,
 	type WorktreeCleanupScanResult,
 	type WorktreeCreateResult,
@@ -100,6 +101,7 @@ export interface GuiRuntimeOptions {
 	readonly createTransport?: () => AppServerTransport;
 	readonly client?: AppServerClient;
 	readonly reconnect?: { readonly maxAttempts?: number; readonly baseDelayMs?: number; readonly maxDelayMs?: number };
+	readonly threadFirstRoute?: boolean;
 }
 export interface GuiRuntime {
 	readonly client: AppServerClient;
@@ -173,7 +175,7 @@ export interface GuiRuntime {
 	exportSessionJsonl?(sessionId: string): Promise<unknown>;
 	exportSessionHtml?(sessionId: string): Promise<unknown>;
 	close(): Promise<void>;
-	selectSession(sessionId?: string): void;
+	selectSession(sessionId?: string): Promise<void>;
 	reconnect(): Promise<void>;
 }
 export type GuiStateListener = (state: GuiState) => void;
@@ -326,6 +328,7 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 			transport: initialTransport ?? createTransport(),
 			requestIdPrefix: "gui",
 		});
+	const threadFirstRoute = options.threadFirstRoute ?? getThreadFirstRouteFlag();
 	const state: GuiState = {
 		connected: false,
 		connectionStatus: "connecting",
@@ -480,9 +483,9 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 				if (state.accessPolicy) state.accessPolicy = { ...state.accessPolicy, mode: params.mode };
 				notify();
 			});
-			await hydrateGuiState(client, state);
+			await hydrateGuiState(client, state, threadFirstRoute);
 			await hydrateDesktopNativeBridge(state, {
-				openProject: (path) => openProjectPath(client, state, path, notify),
+				openProject: (path) => openProjectPath(client, state, path, notify, threadFirstRoute),
 				notify,
 			});
 			notify();
@@ -494,12 +497,12 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 		},
 		notify,
 		async openProject(path) {
-			return openProjectPath(client, state, path, notify);
+			return openProjectPath(client, state, path, notify, threadFirstRoute);
 		},
 		async startSessionFromPrompt(input) {
 			const project = input.projectId
 				? { projectId: input.projectId }
-				: await openProjectPath(client, state, input.path, notify);
+				: await openProjectPath(client, state, input.path, notify, threadFirstRoute);
 			if (input.projectId) {
 				state.projectRoot = input.path;
 				state.lastProjectId = input.projectId;
@@ -525,6 +528,7 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 					state.newBuild = newBuild;
 					notify();
 				},
+				nextOperationId: () => `new-build-${crypto.randomUUID()}`,
 			});
 			const result = await flow.start({
 				projectId: project.projectId,
@@ -561,13 +565,11 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 				needsAttentionReason: session.runsIn?.reason,
 				bestNextAction: bestNextActionForRunsIn(session.runsIn),
 			});
-			selectSession(state, sessionId);
-			notify();
+			await selectSessionPersistently(client, state, sessionId, notify, threadFirstRoute);
 			return result;
 		},
-		selectSession(sessionId) {
-			selectSession(state, sessionId);
-			notify();
+		async selectSession(sessionId) {
+			await selectSessionPersistently(client, state, sessionId, notify, threadFirstRoute);
 		},
 		async resumeSession(sessionId, prompt) {
 			const result = await client.request("session/resume", { sessionId, prompt });
@@ -693,9 +695,10 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 			notify();
 			return result.commands;
 		},
-		async refreshDiff(diffId = state.lastProjectId ?? state.projectRoot) {
-			const target = defaultDiffTarget(state);
-			if (!diffId && !target) return undefined;
+		async refreshDiff(diffId) {
+			const target = diffId === undefined ? defaultDiffTarget(state) : undefined;
+			if (diffId === undefined && !target) return undefined;
+			if (diffId !== undefined && !diffId) return undefined;
 			const result = (await client.request("diff/get", target ? { target } : { diffId: diffId as string })) as {
 				diff?: RendererDiffSummary;
 			};
@@ -891,6 +894,7 @@ async function openProjectPath(
 	state: GuiState,
 	path: string,
 	notify: () => void,
+	threadFirstRoute = false,
 ): Promise<ProjectOpenResult> {
 	const result = await client.request("project/open", { path });
 	const project = result as Partial<ProjectOpenResult>;
@@ -904,6 +908,7 @@ async function openProjectPath(
 	else state.projects = [openedProject, ...state.projects];
 	const bridge = typeof window === "undefined" ? undefined : (window.desktopBridge ?? window.daedalusNative);
 	if (bridge?.recentProjects) state.recentProjects = await bridge.recentProjects.add(path);
+	if (threadFirstRoute) await hydrateWorkspaceSelection(client, state, project.projectId);
 	notify();
 	return { projectId: project.projectId };
 }
@@ -917,10 +922,11 @@ async function refreshDiffForState(
 	client: AppServerClient,
 	state: GuiState,
 	notify: () => void,
-	diffId = state.lastProjectId ?? state.projectRoot,
+	diffId?: string,
 ): Promise<RendererDiffSummary | undefined> {
-	const target = defaultDiffTarget(state);
-	if (!diffId && !target) return undefined;
+	const target = diffId === undefined ? defaultDiffTarget(state) : undefined;
+	if (diffId === undefined && !target) return undefined;
+	if (diffId !== undefined && !diffId) return undefined;
 	const result = (await client.request("diff/get", target ? { target } : { diffId: diffId as string })) as {
 		diff?: RendererDiffSummary;
 	};
@@ -975,6 +981,10 @@ export function getViteBootstrapEnv(env: Partial<ImportMetaEnv> = import.meta.en
 		token: env.VITE_DAEDALUS_APP_SERVER_TOKEN,
 		projectRoot: env.VITE_DAEDALUS_PROJECT_ROOT,
 	};
+}
+
+export function getThreadFirstRouteFlag(env: Partial<ImportMetaEnv> = import.meta.env ?? {}): boolean {
+	return env.VITE_DAEDALUS_THREAD_FIRST_ROUTE === "1" || env.VITE_DAEDALUS_THREAD_FIRST_ROUTE === "true";
 }
 
 function delay(ms: number): Promise<void> {
@@ -1085,6 +1095,49 @@ function selectSession(state: GuiState, sessionId?: string): void {
 	state.sessionTokensUsed = computeSessionTokensUsed(state, sessionId);
 }
 
+async function selectSessionPersistently(
+	client: AppServerClient,
+	state: GuiState,
+	sessionId: string | undefined,
+	notify: () => void,
+	threadFirstRoute: boolean,
+): Promise<void> {
+	const projectId = sessionId
+		? (state.sessions.find((session) => session.id === sessionId)?.projectId ?? state.lastProjectId)
+		: state.lastProjectId;
+	if (!projectId) {
+		if (threadFirstRoute) {
+			state.diagnostics.push("workspace selection: no project available");
+			selectSession(state, undefined);
+		} else {
+			selectSession(state, sessionId);
+		}
+		notify();
+		return;
+	}
+	const result = (await client.request("workspace/selection/set", {
+		projectId,
+		sessionId,
+	})) as WorkspaceSelectionResult;
+	applyWorkspaceSelectionResult(state, result);
+	notify();
+}
+
+async function hydrateWorkspaceSelection(
+	client: AppServerClient,
+	state: GuiState,
+	projectId = state.lastProjectId,
+): Promise<void> {
+	if (!projectId) return;
+	const result = (await client.request("workspace/selection/get", { projectId })) as WorkspaceSelectionResult;
+	applyWorkspaceSelectionResult(state, result);
+}
+
+function applyWorkspaceSelectionResult(state: GuiState, result: WorkspaceSelectionResult): void {
+	if (result.degraded && result.reason) state.diagnostics.push(`workspace selection degraded: ${result.reason}`);
+	selectSession(state, result.selection?.sessionId);
+}
+
 function computeSessionTokensUsed(state: GuiState, sessionId?: string): number {
 	let max = 0;
 	for (const event of state.events) {
@@ -1131,7 +1184,7 @@ function recordIntegrationState(state: GuiState, payload: unknown): void {
 	else state.integrations.push(integration);
 }
 
-async function hydrateGuiState(client: AppServerClient, state: GuiState): Promise<void> {
+async function hydrateGuiState(client: AppServerClient, state: GuiState, threadFirstRoute = false): Promise<void> {
 	await safeHydrateStep(state, "projects", async () => {
 		const result = (await client.request("project/list", {})) as {
 			projects?: Array<{ id?: string; projectId?: string; path?: string; name?: string }>;
@@ -1145,6 +1198,10 @@ async function hydrateGuiState(client: AppServerClient, state: GuiState): Promis
 						: undefined;
 			return id && typeof project.path === "string" ? [{ id, path: project.path, name: project.name }] : [];
 		});
+		if (state.projectRoot && !state.lastProjectId) {
+			const matched = state.projects.find((project) => project.path === state.projectRoot);
+			if (matched) state.lastProjectId = matched.id;
+		}
 	});
 	await safeHydrateStep(state, "sessions", async () => {
 		const result = (await client.request("session/list", {})) as { sessions?: SessionHydration[] };
@@ -1169,8 +1226,8 @@ async function hydrateGuiState(client: AppServerClient, state: GuiState): Promis
 					pendingApprovalCount: session.pendingApprovalCount,
 					pendingUserInput: session.pendingUserInput,
 					activeTurnId: session.activeTurnId,
-					projectId: session.projectId,
-					worktreeId: session.worktreeId,
+					projectId: session.projectId ?? session.runsIn?.projectId,
+					worktreeId: session.worktreeId ?? session.runsIn?.worktreeId,
 					branch: session.branch,
 					runsIn: session.runsIn,
 					isolationMode: session.runsIn?.isolationMode ?? session.isolationMode,
@@ -1180,6 +1237,11 @@ async function hydrateGuiState(client: AppServerClient, state: GuiState): Promis
 				});
 		}
 	});
+	if (threadFirstRoute) {
+		await safeHydrateStep(state, "workspace-selection", async () => {
+			await hydrateWorkspaceSelection(client, state);
+		});
+	}
 	await safeHydrateStep(state, "worktrees", async () => {
 		if (!state.lastProjectId) return;
 		const result = (await client.request("worktree/list", { projectId: state.lastProjectId })) as {
@@ -1255,7 +1317,7 @@ async function hydrateGuiState(client: AppServerClient, state: GuiState): Promis
 		state.automation = (await client.request("automation/read", {})) as AutomationProjection;
 	});
 	await safeHydrateStep(state, "event-cursor", async () => {
-		const result = await client.replayEvents({ cursor: { after: state.lastEventCursor }, types: [] });
+		const result = await client.replayEvents({ cursor: { after: state.lastEventCursor } });
 		state.lastEventCursor = result.next?.after ?? state.lastEventCursor;
 	});
 }
