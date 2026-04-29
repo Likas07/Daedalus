@@ -1,8 +1,9 @@
 <script lang="ts">
 	import type { AppEvent } from "@daedalus-pi/app-server-protocol";
 	import type { ComposerSubmitInput } from "../client/composer-state";
-	import { type ApprovalItem, type WorktreeSummary } from "../client/view-model";
+	import { createThreadTabsViewModel, type ApprovalItem } from "../client/view-model";
 	import type { GuiState, SessionSummary } from "../client/runtime";
+	import BuildTargetTrustBar from "./BuildTargetTrustBar.svelte";
 	import PlanBuildModePanel from "./PlanBuildModePanel.svelte";
 	import TaskComposer from "./TaskComposer.svelte";
 	import TranscriptTimeline from "./TranscriptTimeline.svelte";
@@ -16,10 +17,8 @@
 	const selectedSession = $derived(
 		guiState.sessions.find((session: SessionSummary) => session.id === guiState.selectedSessionId),
 	);
-	const branchLabel = $derived.by((): string => {
-		const worktree = guiState.worktrees.find((w: WorktreeSummary) => guiState.selectedSessionId && w.activeSessionIds.includes(guiState.selectedSessionId));
-		return worktree?.branch ?? "main";
-	});
+	const threadTabs = $derived(createThreadTabsViewModel(guiState));
+	const branchLabel = $derived(selectedSession?.runsIn?.branch ?? selectedSession?.branch ?? threadTabs.branchLabel);
 	const activeTurnId = $derived(findActiveTurnId(guiState.events, guiState.selectedSessionId));
 	const sessionApprovals = $derived(guiState.approvalItems.filter((approval: ApprovalItem) => !guiState.selectedSessionId || approval.sessionId === guiState.selectedSessionId));
 
@@ -58,7 +57,7 @@
 			<h1 class="text-[18px] font-medium leading-tight tracking-[-0.01em] text-bone-50">
 				{selectedSession?.title ?? "Session workspace"}
 			</h1>
-			<p class="mt-1.5 caps text-bone-400">{branchLabel}</p>
+			<p class="mt-1.5 caps text-bone-400">Thread · {branchLabel}</p>
 		</div>
 		<div class="flex shrink-0 items-center gap-2 caps">
 			<span class="text-bone-400">{selectedSession?.status ?? "idle"}</span>
@@ -76,6 +75,27 @@
 			>stop session</button>
 		</div>
 	</header>
+
+	{#if selectedSession?.runsIn}
+		<div class="px-10 pb-3">
+			<BuildTargetTrustBar runsIn={selectedSession.runsIn} nextAction={selectedSession.bestNextAction} />
+		</div>
+	{/if}
+
+	<div class="px-10 pb-3">
+		<div class="flex flex-wrap items-center gap-2 rounded-sm border border-ink-500 px-3 py-2 font-mono text-[10.5px] text-bone-400">
+			<span class="caps text-bone-300">{threadTabs.targetLabel}</span>
+			<span>{threadTabs.tabs.length} thread{threadTabs.tabs.length === 1 ? "" : "s"}</span>
+			<span>·</span>
+			<span>{threadTabs.attentionCount} need attention</span>
+			{#if selectedSession?.latestMessage}
+				<span class="min-w-[12ch] flex-1 truncate text-bone-300">Latest: {selectedSession.latestMessage}</span>
+			{/if}
+			{#if selectedSession?.needsAttentionReason}
+				<span class="text-gold">Needs attention: {selectedSession.needsAttentionReason}</span>
+			{/if}
+		</div>
+	</div>
 
 	<div class="px-10 pb-3">
 		<PlanBuildModePanel mode={autonomyMode?.mode ?? "build"} />

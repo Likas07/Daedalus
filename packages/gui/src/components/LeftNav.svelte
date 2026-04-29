@@ -2,7 +2,7 @@
 	import type { RendererProject } from "../client/gui-state-types";
 	import type { GuiRuntime, GuiState, SessionSummary } from "../client/runtime";
 	import type { UiState } from "../client/ui-state.svelte";
-	import type { ApprovalItem } from "../client/view-model";
+	import { createThreadTabsViewModel, type ApprovalItem } from "../client/view-model";
 
 	const { guiState, runtime, ui, onViewChange, onPaletteOpenChange } = $props<{
 		guiState: GuiState;
@@ -21,7 +21,8 @@
 				? [{ id: guiState.lastProjectId ?? "local", path: guiState.projectRoot, name: guiState.projectRoot.split("/").filter(Boolean).at(-1) }]
 				: [],
 	);
-	const activeProject = $derived(projectRows.find((project: RendererProject) => project.path === guiState.projectRoot) ?? projectRows[0]);
+
+	const threadTabs = $derived(createThreadTabsViewModel(guiState));
 
 	function hasApproval(sessionId: string): boolean {
 		return guiState.approvalItems.some((approval: ApprovalItem) => approval.sessionId === sessionId);
@@ -142,13 +143,14 @@
 		</section>
 
 		<section>
-			{@render sectionHeader("sessions", `${activeProject?.name ?? "project"} · sessions`, guiState.sessions.length)}
+			{@render sectionHeader("sessions", `${threadTabs.modeLabel} · threads`, threadTabs.tabs.length)}
 			{#if open.sessions}
 				<ul class="space-y-1 pb-4">
-					{#each guiState.sessions as session}
+					{#each threadTabs.tabs as tab}
+						{@const session = tab.session}
 						{@const m = mark(session)}
 						{@const isActive = guiState.selectedSessionId === session.id && ui.view === "session"}
-						{@const branch = guiState.worktrees.find((worktree: import("../client/view-model").WorktreeSummary) => (worktree.activeSessionIds ?? []).includes(session.id))?.branch ?? session.id}
+						{@const branch = session.runsIn?.branch ?? session.branch ?? threadTabs.branchLabel}
 						<li>
 							<button
 								onclick={() => { void runtime.selectSession(session.id).then(() => setView('session')); }}
@@ -168,14 +170,14 @@
 									<div class="truncate text-[12.5px] {isActive ? 'font-medium' : ''}">{session.title}</div>
 									<div class="truncate font-mono text-[10px] text-bone-400">{branch}</div>
 								</div>
-								{#if hasApproval(session.id)}
-									<span class="caps shrink-0 text-gold-soft">approval</span>
+								{#if tab.needsAttention}
+									<span class="caps shrink-0 text-gold-soft">{tab.pendingApprovalCount > 0 ? "approval" : "attention"}</span>
 								{/if}
 							</button>
 						</li>
 					{:else}
 						<li class="my-3 border border-dashed border-ink-500 px-4 py-3 text-center text-[11px] text-bone-400">
-							No sessions yet
+							No threads for this target
 						</li>
 					{/each}
 				</ul>

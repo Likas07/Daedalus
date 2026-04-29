@@ -1,12 +1,13 @@
 <script lang="ts">
 	import type { GuiRuntime, GuiState, SessionSummary } from "../client/runtime";
-	import type { ApprovalItem } from "../client/view-model";
+	import { createThreadTabsViewModel, type ApprovalItem } from "../client/view-model";
 
 	const { state: guiState, runtime, onOpenSettings } = $props<{
 		state: GuiState;
 		runtime: GuiRuntime;
 		onOpenSettings?: () => void;
 	}>();
+	const threadTabs = $derived(createThreadTabsViewModel(guiState));
 
 	function sessionHasApproval(sessionId: string): boolean {
 		return guiState.approvalItems.some((approval: ApprovalItem) => approval.sessionId === sessionId);
@@ -56,13 +57,14 @@
 	<!-- sessions list -->
 	<div class="min-h-0 flex-1 overflow-auto pb-2">
 		<div class="nav-section-label sidebar-secondary">
-			<span>Sessions</span>
+			<span>Threads</span>
 			<span class="ml-auto font-mono text-[10px] not-italic text-[color:var(--bone-faint)]">
-				{guiState.sessions.length.toString().padStart(2, "0")}
+				{threadTabs.tabs.length.toString().padStart(2, "0")}
 			</span>
 		</div>
 		<div>
-			{#each guiState.sessions as session, idx}
+			{#each threadTabs.tabs as tab, idx}
+				{@const session = tab.session}
 				<button
 					class="nav-row group"
 					data-active={guiState.selectedSessionId === session.id}
@@ -82,17 +84,20 @@
 							<div class="sidebar-secondary mt-1 flex items-center gap-2 text-[10.5px] text-[color:var(--bone-faint)]">
 								<span class="font-mono">{session.id.slice(0, 14)}</span>
 								<span aria-hidden="true">·</span>
-								<span class="font-mono">diff +0 -0</span>
+								<span class="font-mono">{session.runsIn?.branch ?? session.branch ?? threadTabs.branchLabel}</span>
 							</div>
 						</div>
 						<span class={sessionToneClass(session)} aria-label={`Status: ${sessionStatusLabel(session)}`}>
 							Status: {sessionStatusLabel(session)}
 						</span>
+						{#if tab.needsAttention}
+							<span class="pill pill-ember" title={tab.attentionLabel}>Needs attention</span>
+						{/if}
 					</div>
 				</button>
 			{:else}
 				<div class="hatch m-3 rounded-md border border-dashed border-[color:var(--rule)] p-5 text-center">
-					<p class="font-display text-[15px] italic text-[color:var(--bone-soft)]">No sessions yet</p>
+					<p class="font-display text-[15px] italic text-[color:var(--bone-soft)]">No threads for this target</p>
 					<p class="mt-1 font-mono text-[10.5px] tracking-wide text-[color:var(--bone-faint)]">
 						app-server events will populate this drawer
 					</p>
@@ -110,7 +115,7 @@
 		</div>
 		<p class="sidebar-footer-note mt-3 flex items-center gap-2 px-1 font-mono text-[9.5px] uppercase tracking-[0.16em] text-[color:var(--bone-faint)]">
 			<span class="size-1 rounded-full bg-[color:var(--brass)]" aria-hidden="true"></span>
-			branch · main · diff idle
+			{threadTabs.modeLabel} · {threadTabs.branchLabel} · {threadTabs.attentionCount} need attention
 		</p>
 	</footer>
 </aside>

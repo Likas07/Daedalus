@@ -1,6 +1,6 @@
 import type { AppEvent } from "@daedalus-pi/app-server-protocol";
 import type { AccessMode } from "./gui-state-types";
-import type { SessionSummary } from "./runtime";
+import type { GuiState, SessionSummary } from "./runtime";
 import { projectTranscriptEvent, type TranscriptKind } from "./transcript-projection";
 
 export type SessionStatus = "idle" | "active" | "running" | "waiting" | "failed" | "completed" | "disconnected";
@@ -73,6 +73,26 @@ export interface DiffSummary {
 	readonly deletions: number;
 }
 
+export interface ThreadTab {
+	readonly session: SessionSummary;
+	readonly label: string;
+	readonly statusLabel: string;
+	readonly needsAttention: boolean;
+	readonly attentionLabel?: string;
+	readonly pendingApprovalCount: number;
+	readonly latestMessage?: string;
+}
+
+export interface ThreadTabsViewModel {
+	readonly targetLabel: string;
+	readonly targetPath?: string;
+	readonly branchLabel: string;
+	readonly modeLabel: string;
+	readonly tabs: readonly ThreadTab[];
+	readonly selectedThreadId?: string;
+	readonly attentionCount: number;
+}
+
 export function statusTone(status: string | undefined): StatusTone {
 	switch (status) {
 		case "running":
@@ -100,6 +120,64 @@ export function activeSessions(sessions: readonly SessionSummary[]): SessionSumm
 
 export function approvalCount(approvals: readonly ApprovalItem[], sessionId?: string): number {
 	return approvals.filter((approval) => !sessionId || approval.sessionId === sessionId).length;
+}
+
+export function createThreadTabsViewModel(guiState: GuiState): ThreadTabsViewModel {
+	const selected = guiState.sessions.find((session) => session.id === guiState.selectedSessionId);
+	const target = selected?.runsIn;
+	const targetProjectId = target?.projectId ?? selected?.projectId ?? guiState.lastProjectId;
+	const targetWorktreeId = target?.worktreeId ?? selected?.worktreeId;
+	const targetPath = target?.path ?? selected?.cwd ?? guiState.projectRoot;
+	const branchLabel = target?.branch ?? selected?.branch ?? "base checkout";
+	const tabs = guiState.sessions
+		.filter((session) => sessionMatchesTarget(session, targetProjectId, targetWorktreeId, targetPath))
+		.map((session) => threadTab(session, approvalCount(guiState.approvalItems, session.id)));
+	const attentionCount = tabs.filter((tab) => tab.needsAttention).length;
+	return {
+		targetLabel: targetWorktreeId ? "Worktree threads" : "Base checkout threads",
+		targetPath,
+		branchLabel: branchLabel ?? "base checkout",
+		modeLabel: target?.isolationMode === "isolated-worktree" ? "worktree" : "base checkout",
+		tabs,
+		selectedThreadId: selected?.id,
+		attentionCount,
+	};
+}
+
+function sessionMatchesTarget(
+	session: SessionSummary,
+	projectId?: string,
+	worktreeId?: string,
+	path?: string,
+): boolean {
+	const runsIn = session.runsIn;
+	if (worktreeId) return runsIn?.worktreeId === worktreeId || session.worktreeId === worktreeId;
+	if (runsIn?.worktreeId || session.worktreeId) return false;
+	if (projectId && (runsIn?.projectId === projectId || session.projectId === projectId)) return true;
+	return Boolean(path && (runsIn?.path === path || session.cwd === path));
+}
+
+function threadTab(session: SessionSummary, approvalFallback: number): ThreadTab {
+	const pendingApprovalCount = Math.max(session.pendingApprovalCount ?? 0, approvalFallback);
+	const attentionLabel =
+		session.needsAttentionReason ??
+		(pendingApprovalCount > 0
+			? `${pendingApprovalCount} approval${pendingApprovalCount === 1 ? "" : "s"} pending`
+			: undefined);
+	return {
+		session,
+		label: session.title,
+		statusLabel: pendingApprovalCount > 0 ? "waiting approval" : session.status,
+		needsAttention: Boolean(
+			attentionLabel ||
+				session.pendingUserInput ||
+				session.status === "waiting" ||
+				session.status === "waiting_for_approval",
+		),
+		attentionLabel,
+		pendingApprovalCount,
+		latestMessage: session.latestMessage,
+	};
 }
 
 export function diffSummary(worktrees: readonly WorktreeSummary[]): DiffSummary {
