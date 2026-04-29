@@ -128,14 +128,17 @@ function providerAvailable(input: StartGateInput): boolean {
 			(model) => model.available !== false && providerReady(input.providerStatuses, model.provider),
 		);
 	if (input.providerStatuses?.length)
-		return input.providerStatuses.some(
-			(provider) => provider.status === "ready" && provider.enabled !== false && provider.authenticated !== false,
-		);
+		return input.providerStatuses.some((provider) => isUsableProviderStatus(provider));
 	return true;
 }
 
 function providerReady(statuses: readonly ProviderStatus[] | undefined, providerId: string | undefined): boolean {
 	if (!statuses?.length || !providerId) return true;
 	const status = statuses.find((provider) => provider.provider === providerId);
-	return !status || (status.status === "ready" && status.enabled !== false && status.authenticated !== false);
+	return !status || isUsableProviderStatus(status);
+}
+
+function isUsableProviderStatus(status: ProviderStatus): boolean {
+	if (status.enabled === false || status.authenticated === false) return false;
+	return status.status === "ready" || status.status === "oauth" || status.status === "env-key";
 }

@@ -134,6 +134,16 @@ function appRouterWithRealController(): {
 	return { appRouter: new AppRouter({ database, publish: () => {}, controller }), sessionStore, runtimes, events };
 }
 
+async function selectedModel(appRouter: AppRouter): Promise<string | undefined> {
+	const settings = (await appRouter.handle({
+		kind: "request",
+		id: "settings-read",
+		method: "settings/read",
+		params: {},
+	})) as { selectedModel?: string };
+	return settings.selectedModel;
+}
+
 async function initRepo(): Promise<string> {
 	const root = await mkdtemp(join(tmpdir(), "daedalus-session-routes-"));
 	const repo = join(root, "repo");
@@ -158,6 +168,21 @@ function expectRouteResult(method: keyof typeof ClientRequestResultSchemas, resu
 }
 
 describe("session store routes", () => {
+	test("rejects unknown model selection before persisting", async () => {
+		const appRouter = router();
+		const before = await selectedModel(appRouter);
+
+		await expect(
+			appRouter.handle({
+				kind: "request",
+				id: "model-select",
+				method: "model/select",
+				params: { model: "smoke-model" },
+			}),
+		).rejects.toThrow("Unknown model: smoke-model");
+		expect(await selectedModel(appRouter)).toBe(before);
+	});
+
 	test("imports and exports JSONL through the router", async () => {
 		const appRouter = router();
 		const content = serializeSessionJsonl({
