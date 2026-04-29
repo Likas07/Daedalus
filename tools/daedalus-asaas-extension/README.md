@@ -9,6 +9,12 @@ This repository is intentionally kept outside `.daedalus/extensions` so it is no
 - Bun
 - Daedalus with the `@daedalus-pi/coding-agent` and `@daedalus-pi/ai` extension SDK packages available to the runtime
 
+## Docs lookup behavior
+
+`mcp_asaas_docs_query` connects to `https://docs.asaas.com/mcp` as a real MCP Streamable HTTP client using `@modelcontextprotocol/sdk`. It calls Asaas MCP tools such as `list-specs`, `search-endpoints`, and `search`.
+
+If the MCP server is unavailable, the extension falls back to `https://docs.asaas.com/llms.txt` for read-only docs grounding. The fallback is degraded mode, not the normal path.
+
 ## Test
 
 ```sh

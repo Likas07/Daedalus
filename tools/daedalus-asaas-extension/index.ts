@@ -14,16 +14,22 @@ function renderDocs(results: Awaited<ReturnType<typeof queryAsaasDocs>>) {
 		.slice(0, 20_000);
 }
 
-const docsTool = defineTool({
-	name: "mcp_asaas_docs_query",
-	label: "Asaas Docs Query",
-	description: "Search Asaas docs using MCP/LLMs sources.",
-	parameters: asaasDocsQuerySchema,
-	async execute(_id, params, signal) {
-		const result = await queryAsaasDocs({ ...params, signal });
-		return { content: [{ type: "text", text: renderDocs(result) }], details: { source: result.source, count: result.results.length } };
-	},
-});
+interface RegisterAsaasExtensionDeps {
+	queryDocs?: typeof queryAsaasDocs;
+}
+
+function createDocsTool(queryDocs: typeof queryAsaasDocs) {
+	return defineTool({
+		name: "mcp_asaas_docs_query",
+		label: "Asaas Docs Query",
+		description: "Search Asaas docs using the Asaas MCP server with llms.txt degraded fallback.",
+		parameters: asaasDocsQuerySchema,
+		async execute(_id, params, signal) {
+			const result = await queryDocs({ ...params, signal });
+			return { content: [{ type: "text", text: renderDocs(result) }], details: { source: result.source, count: result.results.length } };
+		},
+	});
+}
 
 const getTool = defineTool({
 	name: "asaas_api_get",
@@ -66,8 +72,8 @@ const mutateTool = defineTool({
 	},
 });
 
-export default function registerAsaasExtension(pi: ExtensionAPI) {
-	pi.registerTool(docsTool);
+export default function registerAsaasExtension(pi: ExtensionAPI, deps: RegisterAsaasExtensionDeps = {}) {
+	pi.registerTool(createDocsTool(deps.queryDocs ?? queryAsaasDocs));
 	pi.registerTool(getTool);
 	pi.registerTool(mutateTool);
 	pi.on("resources_discover", async () => ({ skillPaths: [new URL("./asaas.md", import.meta.url).pathname] }));
