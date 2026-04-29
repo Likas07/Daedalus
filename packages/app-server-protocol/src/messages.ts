@@ -176,6 +176,26 @@ export const SessionStartResultSchema = StrictObject({
 });
 export type SessionStartResult = Static<typeof SessionStartResultSchema>;
 
+export const SessionContinueInWorktreeParamsSchema = StrictObject({
+	sourceSessionId: SessionIdSchema,
+	projectId: Type.Optional(ProjectIdSchema),
+	branch: Type.Optional(Type.String({ minLength: 1 })),
+	path: Type.Optional(Type.String({ minLength: 1 })),
+	baseBranch: Type.Optional(Type.String({ minLength: 1 })),
+	prompt: Type.Optional(Type.String({ minLength: 1 })),
+	operationId: Type.Optional(OperationIdSchema),
+});
+export type SessionContinueInWorktreeParams = Static<typeof SessionContinueInWorktreeParamsSchema>;
+
+export const SessionContinueInWorktreeResultSchema = StrictObject({
+	sessionId: SessionIdSchema,
+	parentSessionId: SessionIdSchema,
+	worktree: WorkflowWorktreeMetadataSchema,
+	runsIn: WorkflowRunsInTargetSchema,
+	operationId: Type.Optional(OperationIdSchema),
+});
+export type SessionContinueInWorktreeResult = Static<typeof SessionContinueInWorktreeResultSchema>;
+
 export const TurnStartParamsSchema = StrictObject({
 	sessionId: SessionIdSchema,
 	prompt: Type.String({ minLength: 1 }),
@@ -608,6 +628,7 @@ export const ClientRequestSchema = Type.Union([
 	request("workspace/selection/set", WorkspaceSelectionSetParamsSchema),
 	request("workflow/target/validate", WorkflowTargetValidateParamsSchema),
 	request("session/start", SessionStartParamsSchema),
+	request("session/continue-in-worktree", SessionContinueInWorktreeParamsSchema),
 	request("session/stop", StrictObject({ sessionId: SessionIdSchema })),
 	request("session/list", SessionListParamsSchema),
 	request("session/import-jsonl", SessionImportJsonlParamsSchema),
@@ -714,6 +735,7 @@ export const ClientRequestResultSchemas = {
 	"workspace/selection/set": WorkspaceSelectionResultSchema,
 	"workflow/target/validate": WorkflowTargetValidateResultSchema,
 	"session/start": SessionStartResultSchema,
+	"session/continue-in-worktree": SessionContinueInWorktreeResultSchema,
 	"session/stop": EmptyResultSchema,
 	"session/list": SessionListResultSchema,
 	"session/import-jsonl": SessionImportJsonlResultSchema,

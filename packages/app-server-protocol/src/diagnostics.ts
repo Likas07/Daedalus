@@ -1,5 +1,5 @@
 import { type Static, type TSchema, Type } from "@sinclair/typebox";
-import { SessionIdSchema } from "./ids";
+import { ProjectIdSchema, SessionIdSchema } from "./ids";
 
 const StrictObject = <Properties extends Record<string, TSchema>>(properties: Properties) =>
 	Type.Object(properties, { additionalProperties: false });
@@ -90,6 +90,25 @@ export const DesktopBootDiagnosticSchema = StrictObject({
 });
 export type DesktopBootDiagnostic = Static<typeof DesktopBootDiagnosticSchema>;
 
+export const RestorationTraceStatusSchema = Type.Union([
+	Type.Literal("restored"),
+	Type.Literal("missing"),
+	Type.Literal("mismatched"),
+	Type.Literal("degraded"),
+	Type.Literal("failed"),
+]);
+export type RestorationTraceStatus = Static<typeof RestorationTraceStatusSchema>;
+
+export const RestorationTraceSchema = StrictObject({
+	projectId: ProjectIdSchema,
+	requestedSelection: Type.Optional(Type.Unknown()),
+	resolvedSession: Type.Optional(SessionIdSchema),
+	status: RestorationTraceStatusSchema,
+	reason: Type.Optional(Type.String({ minLength: 1 })),
+	checkedAt: Type.String({ minLength: 1 }),
+});
+export type RestorationTrace = Static<typeof RestorationTraceSchema>;
+
 export const DiagnosticExportSchema = StrictObject({
 	exportedAt: Type.String({ minLength: 1 }),
 	kind: Type.Optional(DiagnosticExportKindSchema),
@@ -103,6 +122,7 @@ export const DiagnosticExportSchema = StrictObject({
 	integrationStatus: Type.Array(Type.Unknown()),
 	recentProtocolEvents: Type.Array(DiagnosticProtocolEventSchema),
 	desktopBoot: Type.Optional(DesktopBootDiagnosticSchema),
+	restorationTrace: Type.Optional(RestorationTraceSchema),
 });
 export type DiagnosticExport = Static<typeof DiagnosticExportSchema>;
 
