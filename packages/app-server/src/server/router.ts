@@ -519,18 +519,16 @@ export class AppRouter {
 			}
 			case "model/select": {
 				const settings = await this.settingsService.read();
-				const selected = settings.models.find(
-					(model) => model.id === request.params.model && model.available !== false,
-				);
+				const selected = findSelectableModel(settings.models, request.params.model, settings.selectedProvider);
 				if (!selected) throw new Error(`Unknown model: ${request.params.model}`);
-				await this.settingsService.set("global", "defaultModel", request.params.model);
-				this.configService.set("model.selected", request.params.model);
+				await this.settingsService.set("global", "defaultModel", selected.id);
+				this.configService.set("model.selected", selected.id);
 				this.options.publish({
 					kind: "notification",
 					method: "model/changed",
-					params: { model: request.params.model },
+					params: { model: selected.id },
 				});
-				return { model: request.params.model };
+				return { model: selected.id };
 			}
 			case "auth/status":
 				return this.providerAuthService.status(request.params.provider);
@@ -980,20 +978,21 @@ export class AppRouter {
 				.getAll()
 				.filter((model: ModelLike) => model.provider !== undefined && enabledProviders.has(model.provider));
 			return models.map((model) => {
-				const id = model.id ?? model.name ?? "";
+				const rawId = model.id ?? model.name ?? "";
 				const provider = model.provider ?? "unknown";
+				const id = providerQualifiedModelId(provider, rawId);
 				const reasoning = model.reasoning === true;
-				const reasoningLevels = reasoning ? buildReasoningLevels(id) : [];
+				const reasoningLevels = reasoning ? buildReasoningLevels(rawId) : [];
 				return {
 					id,
-					label: model.name ?? id,
+					label: model.name ?? rawId,
 					provider,
 					available: true,
 					contextWindow: model.contextWindow ?? 0,
 					maxTokens: model.maxTokens ?? 0,
 					reasoning,
 					reasoningLevels,
-					supportsFastMode: supportsFastModeFor(id, provider),
+					supportsFastMode: supportsFastModeFor(rawId, provider),
 					capabilities: [
 						...(reasoning ? ["reasoning"] : []),
 						...(model.input ?? []).map((input) => `input:${input}`),
@@ -1126,6 +1125,28 @@ function toSessionSummaryDto(summary: {
 
 function toIsoString(value: string | Date): string {
 	return value instanceof Date ? value.toISOString() : value;
+}
+
+function providerQualifiedModelId(provider: string, modelId: string): string {
+	return modelId.includes("/") ? modelId : `${provider}/${modelId}`;
+}
+
+function findSelectableModel(
+	models: readonly { id: string; provider?: string; available?: boolean }[],
+	modelId: string,
+	selectedProvider?: string,
+): { id: string; provider?: string; available?: boolean } | undefined {
+	const available = models.filter((model) => model.available !== false);
+	const exact = available.find((model) => model.id === modelId);
+	if (exact) return exact;
+	if (modelId.includes("/")) return undefined;
+	const providerQualifiedMatches = available.filter((model) => {
+		const [provider, id] = model.id.split("/", 2);
+		return id === modelId && (!selectedProvider || model.provider === selectedProvider || provider === selectedProvider);
+	});
+	if (providerQualifiedMatches.length === 1) return providerQualifiedMatches[0];
+	const bareMatches = available.filter((model) => model.id === providerQualifiedModelId(model.provider ?? "unknown", modelId));
+	return bareMatches.length === 1 ? bareMatches[0] : undefined;
 }
 
 function parseJsonObject(value: string | null): Record<string, unknown> {

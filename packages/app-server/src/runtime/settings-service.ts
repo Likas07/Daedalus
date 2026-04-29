@@ -102,7 +102,7 @@ export class SettingsService {
 		const global = this.settingsManager.getGlobalSettings() as Record<string, unknown>;
 		const project = this.settingsManager.getProjectSettings() as Record<string, unknown>;
 		const selectedProvider = this.settingsManager.getDefaultProvider();
-		const selectedModel = this.settingsManager.getDefaultModel();
+		const selectedModel = normalizeSelectedModel(models, this.settingsManager.getDefaultModel(), selectedProvider);
 		const diagnostics = this.settingsManager.drainErrors().map((error) => `${error.scope}: ${error.error.message}`);
 		return {
 			global,
@@ -258,6 +258,25 @@ function objectSetting(
 ): Record<string, unknown> | undefined {
 	const value = project[key] ?? global[key];
 	return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+function normalizeSelectedModel(
+	models: readonly SettingsModel[],
+	selectedModel: string | undefined,
+	selectedProvider: string | undefined,
+): string | undefined {
+	if (!selectedModel) return undefined;
+	if (models.some((model) => model.id === selectedModel)) return selectedModel;
+	if (!selectedModel.includes("/") && selectedProvider) {
+		const providerQualified = `${selectedProvider}/${selectedModel}`;
+		if (models.some((model) => model.id === providerQualified)) return providerQualified;
+	}
+	if (selectedModel.includes("/")) return selectedModel;
+	const matches = models.filter((model) => {
+		const [provider, id] = model.id.split("/", 2);
+		return id === selectedModel && (!selectedProvider || model.provider === selectedProvider || provider === selectedProvider);
+	});
+	return matches.length === 1 ? matches[0]?.id : selectedModel;
 }
 
 function keybindingOverrides(...settings: Record<string, unknown>[]): Record<string, string[]> {

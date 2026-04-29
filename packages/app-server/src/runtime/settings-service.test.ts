@@ -21,6 +21,23 @@ describe("SettingsService", () => {
 		expect(snapshot.schema.map((entry) => entry.key)).toContain("keybindings");
 	});
 
+	test("normalizes legacy bare selected models to provider-qualified GUI ids", async () => {
+		const service = new SettingsService({
+			settingsManager: SettingsManager.inMemory({
+				defaultProvider: "openai-codex",
+				defaultModel: "gpt-5.1",
+			}),
+			listModels: async () => [
+				{ id: "azure-openai-responses/gpt-5.1", provider: "azure-openai-responses" },
+				{ id: "openai-codex/gpt-5.1", provider: "openai-codex" },
+			],
+		});
+
+		const snapshot = await service.read();
+
+		expect(snapshot.selectedModel).toBe("openai-codex/gpt-5.1");
+	});
+
 	test("sets, resets, and validates settings", async () => {
 		const manager = SettingsManager.inMemory();
 		const service = new SettingsService({ settingsManager: manager });
