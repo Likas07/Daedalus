@@ -131,17 +131,19 @@ function projectSession(database: AppServerDatabase, payload: PayloadRecord, cre
 	const id = requiredText(payload, "sessionId", "session_id", "id");
 	database
 		.query(
-			`INSERT INTO sessions (id, project_id, worktree_id, status, title, runs_in_json, isolation_mode, validation_status, needs_attention_reason, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`INSERT INTO sessions (id, project_id, worktree_id, parent_session_id, status, title, runs_in_json, isolation_mode, validation_status, needs_attention_reason, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			 ON CONFLICT(id) DO UPDATE SET project_id = excluded.project_id, worktree_id = excluded.worktree_id,
-			 status = excluded.status, title = excluded.title, runs_in_json = excluded.runs_in_json,
-			 isolation_mode = excluded.isolation_mode, validation_status = excluded.validation_status,
-			 needs_attention_reason = excluded.needs_attention_reason, updated_at = excluded.updated_at`,
+			 parent_session_id = excluded.parent_session_id, status = excluded.status, title = excluded.title,
+			 runs_in_json = excluded.runs_in_json, isolation_mode = excluded.isolation_mode,
+			 validation_status = excluded.validation_status, needs_attention_reason = excluded.needs_attention_reason,
+			 updated_at = excluded.updated_at`,
 		)
 		.run(
 			id,
 			text(payload, "projectId", "project_id") ?? text(asRecord(payload.runsIn), "projectId") ?? null,
 			text(payload, "worktreeId", "worktree_id") ?? text(asRecord(payload.runsIn), "worktreeId") ?? null,
+			text(payload, "parentSessionId", "parent_session_id", "sourceSessionId", "source_session_id") ?? null,
 			text(payload, "status") ?? "active",
 			text(payload, "title") ?? null,
 			runsInJson(payload),

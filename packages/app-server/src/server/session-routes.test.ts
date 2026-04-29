@@ -118,8 +118,8 @@ function appRouterWithRealController(): {
 				projectRuntimeEvents(database!);
 			}
 		},
-		makeSessionManager: async ({ cwd, sessionId, sessionPath }) =>
-			SqliteSessionManager.create({ store: sessionStore, cwd, sessionId, sessionPath }).initialized(),
+		makeSessionManager: async ({ cwd, sessionId, sessionPath, parentSession }) =>
+			SqliteSessionManager.create({ store: sessionStore, cwd, sessionId, sessionPath, parentSession }).initialized(),
 		nextEventId: () => `event-${events.length + 1}`,
 		nextSessionId: () => "session-controller-id",
 		nextTurnId: () => "turn-1",
@@ -540,5 +540,140 @@ describe("session store routes", () => {
 		const persisted = await sessionStore.read({ sessionId: resumed.sessionId });
 		expect(persisted.header.id).toBe(resumed.sessionId);
 		expect(persisted.entries).toHaveLength(1);
+	});
+
+	test("continues a base session in an idempotent linked worktree without mutating the source", async () => {
+		const { appRouter, sessionStore, runtimes, events } = appRouterWithRealController();
+		const repo = await initRepo();
+		const opened = (await appRouter.handle({
+			kind: "request",
+			id: "open",
+			method: "project/open",
+			params: { path: repo },
+		})) as { projectId: string };
+		const runsIn = {
+			projectId: opened.projectId,
+			path: repo,
+			canonicalPath: repo,
+			branch: "master",
+			isolationMode: "base-checkout" as const,
+			validationStatus: "valid" as const,
+		};
+		appendEvent(database!, {
+			streamId: "source-session",
+			type: "session/started",
+			payload: { sessionId: "source-session", projectId: opened.projectId, runsIn },
+		});
+		projectRuntimeEvents(database!);
+
+		const first = (await appRouter.handle({
+			kind: "request",
+			id: "continue-1",
+			method: "session/continue-in-worktree",
+			params: {
+				sourceSessionId: "source-session",
+				projectId: opened.projectId,
+				branch: "continue-source-session",
+				prompt: "continue here",
+				operationId: "continue-op-1",
+			},
+		})) as { sessionId: string; parentSessionId: string; worktree: { id: string }; runsIn: { worktreeId?: string } };
+		expectRouteResult("session/continue-in-worktree", first);
+		expect(first.parentSessionId).toBe("source-session");
+		expect(first.runsIn.worktreeId).toBe(first.worktree.id);
+		expect(runtimes).toHaveLength(1);
+		expect(runtimes[0]?.prompts).toEqual(["continue here"]);
+
+		const replay = await appRouter.handle({
+			kind: "request",
+			id: "continue-2",
+			method: "session/continue-in-worktree",
+			params: {
+				sourceSessionId: "source-session",
+				projectId: opened.projectId,
+				branch: "continue-source-session",
+				prompt: "continue here",
+				operationId: "continue-op-1",
+			},
+		});
+		expect(replay).toEqual(first);
+		expect(runtimes).toHaveLength(1);
+
+		const child = await sessionStore.read({ sessionId: first.sessionId });
+		expect(child.header.parentSession).toBe("source-session");
+		const started = controllerEvent(events, "session/started") as { payload: { parentSessionId?: string } };
+		expect(started.payload.parentSessionId).toBe("source-session");
+		const source = database!
+			.query<{ worktree_id: string | null; runs_in_json: string | null }, [string]>(
+				"SELECT worktree_id, runs_in_json FROM sessions WHERE id = ?",
+			)
+			.get("source-session");
+		expect(source?.worktree_id).toBeNull();
+		expect(JSON.parse(source?.runs_in_json ?? "{}")).toMatchObject({ isolationMode: "base-checkout" });
+		expect(await appRouter.handle({
+			kind: "request",
+			id: "selection",
+			method: "workspace/selection/get",
+			params: { projectId: opened.projectId },
+		})).toMatchObject({ selection: { sessionId: first.sessionId } });
+	});
+
+	test("continue-in-worktree rejects missing, legacy, and cross-project sources", async () => {
+		const { appRouter } = appRouterWithRealController();
+		const repo = await initRepo();
+		const opened = (await appRouter.handle({
+			kind: "request",
+			id: "open",
+			method: "project/open",
+			params: { path: repo },
+		})) as { projectId: string };
+		appendEvent(database!, {
+			streamId: "legacy-session",
+			type: "session/started",
+			payload: { sessionId: "legacy-session", projectId: opened.projectId },
+		});
+		appendEvent(database!, {
+			streamId: "cross-session",
+			type: "session/started",
+			payload: {
+				sessionId: "cross-session",
+				projectId: opened.projectId,
+				runsIn: {
+					projectId: opened.projectId,
+					path: repo,
+					canonicalPath: repo,
+					branch: "master",
+					isolationMode: "base-checkout",
+					validationStatus: "valid",
+				},
+			},
+		});
+		projectRuntimeEvents(database!);
+
+		const params = { projectId: opened.projectId, branch: "continue-invalid", operationId: "invalid-op" };
+		await expect(
+			appRouter.handle({
+				kind: "request",
+				id: "missing",
+				method: "session/continue-in-worktree",
+				params: { ...params, sourceSessionId: "missing-session" },
+			}),
+		).rejects.toThrow("Unknown source session");
+		await expect(
+			appRouter.handle({
+				kind: "request",
+				id: "legacy",
+				method: "session/continue-in-worktree",
+				params: { ...params, operationId: "invalid-op-2", sourceSessionId: "legacy-session" },
+			}),
+		).rejects.toThrow("no stored workspace target");
+		await expect(
+			appRouter.handle({
+				kind: "request",
+				id: "cross",
+				method: "session/continue-in-worktree",
+				params: { ...params, operationId: "invalid-op-3", sourceSessionId: "cross-session", projectId: "other-project" },
+			}),
+		).rejects.toThrow("belongs to project");
 	});
 });
