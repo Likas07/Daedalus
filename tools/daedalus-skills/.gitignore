@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Build/output caches
+dist/
+.cache/
+*.tsbuildinfo
+
+# Runtime/editor noise
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Local Daedalus installs must not live in this repository
+.daedalus/
