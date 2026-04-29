@@ -1,0 +1,22 @@
+{
+  "name": "daedalus-skills",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Reusable Daedalus skill pack and installer.",
+  "bin": {
+    "daedalus-skills-setup": "./scripts/setup.ts"
+  },
+  "scripts": {
+    "setup": "bun run scripts/setup.ts",
+    "check": "bun run scripts/setup.ts --help && bun run scripts/setup.ts list && bun run scripts/setup.ts install --global --mode copy --dry-run",
+    "test": "bun run check"
+  },
+  "keywords": [
+    "daedalus",
+    "skills",
+    "agents"
+  ],
+  "license": "UNLICENSED",
+  "packageManager": "bun@1.3.7"
+}
