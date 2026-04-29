@@ -227,7 +227,7 @@
 				projectPath={guiState.projectRoot}
 				storageKey={projectDraftKey}
 				requireProjectPath={!guiState.projectRoot}
-				submitLabel="Start session"
+				submitLabel="Start Thread"
 				onSubmit={startFromComposer}
 			/>
 		</div>

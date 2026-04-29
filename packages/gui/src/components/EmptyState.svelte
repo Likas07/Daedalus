@@ -32,7 +32,7 @@
 		<div class="font-wordmark text-[20px] font-medium tracking-[0.32em] text-bone-300">DAEDALUS</div>
 
 		<p class="max-w-[44ch] text-[14px] leading-[1.7] text-bone-200">
-			Pick a session to continue,
+			Pick a Thread to continue,
 			<button
 				type="button"
 				onclick={() => onPaletteOpenChange?.(!ui.paletteOpen)}
@@ -54,7 +54,7 @@
 			</span>
 			<span class="flex items-center gap-2">
 				<kbd class="rounded-sm border border-ink-500 px-1.5 py-px font-mono text-[10px] tracking-normal text-bone-300">Super+N</kbd>
-				new session
+				new Thread
 			</span>
 		</div>
 	</div>
@@ -67,7 +67,7 @@
 			projectPath={guiState.projectRoot}
 			storageKey={draftKey}
 			requireProjectPath={!guiState.projectRoot}
-			submitLabel="Start session"
+			submitLabel="Start Thread"
 			onSubmit={start}
 		/>
 	</div>
