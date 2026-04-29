@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { GuiRuntime, GuiState } from "../client/runtime";
+	import { selectedTerminalCreateInput, type GuiRuntime, type GuiState } from "../client/runtime";
 	import { removeTerminal, selectExistingTerminal, terminalEvidenceRow, terminalWritableState } from "./terminal/terminal-state";
 	import { disposeManagedXterm } from "./terminal/xterm-manager";
 	import XtermViewport from "./terminal/XtermViewport.svelte";
@@ -20,11 +20,9 @@
 	});
 
 	async function createTerminal(): Promise<void> {
-		const selectedSession = appState.sessions.find((session: import("../client/runtime").SessionSummary) => session.id === appState.selectedSessionId);
-		const selectedWorktree = appState.worktrees.find((worktree: import("@daedalus-pi/app-server-protocol").WorkflowWorktreeMetadata) => worktree.id === selectedSession?.worktreeId);
-		const cwd = selectedWorktree?.path ?? selectedSession?.cwd ?? appState.projectRoot;
-		if (!cwd) throw new Error("Choose a project before creating a terminal.");
-		await runtime.createTerminal({ cwd, projectId: appState.lastProjectId, worktreeId: selectedSession?.worktreeId, cols: 100, rows: 24 });
+		const target = selectedTerminalCreateInput(appState, { cols: 100, rows: 24 });
+		if (!target) throw new Error("Select a valid Thread target before creating a terminal.");
+		await runtime.createTerminal(target);
 	}
 	function selectTerminal(id: string): void {
 		appState.activeTerminalId = id;
