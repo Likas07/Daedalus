@@ -10,6 +10,7 @@
 		"dev:gui": "bun --cwd=packages/gui run dev",
 		"dev:desktop": "bun --cwd=packages/desktop run dev",
 		"build:binary": "bun --cwd=packages/coding-agent run build:binary",
+		"test:binary:smoke": "bun --cwd=packages/coding-agent run test:binary:smoke",
 		"build:gui": "bun --cwd=packages/gui run build",
 		"build:desktop": "bun --cwd=packages/desktop run build",
 		"package:desktop": "bun --cwd=packages/desktop run package",
