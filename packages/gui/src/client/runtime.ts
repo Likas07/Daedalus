@@ -1201,7 +1201,8 @@ async function hydrateWorkspaceSelection(
 
 function applyWorkspaceSelectionResult(state: GuiState, result: WorkspaceSelectionResult): void {
 	if (result.degraded && result.reason) state.diagnostics.push(`workspace selection degraded: ${result.reason}`);
-	selectSession(state, result.selection?.sessionId);
+	if (result.restorationTrace) state.diagnostics.push(`workspace restoration trace: ${JSON.stringify(result.restorationTrace)}`);
+	selectSession(state, result.degraded ? undefined : result.selection?.sessionId);
 }
 
 function computeSessionTokensUsed(state: GuiState, sessionId?: string): number {

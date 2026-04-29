@@ -607,6 +607,7 @@ export class AppRouter {
 				return new ExportService({
 					database: this.options.database,
 					runtimeDiagnostics: () => this.options.controller.readState?.(),
+					restorationTrace: () => this.workspaceSelectionService.lastRestorationTrace(),
 				}).export(request.params);
 			case "orchestration/read":
 				return projectOrchestration(this.recentAppEvents());

@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { DiagnosticExport, DiagnosticExportKind, DiagnosticExportParams } from "@daedalus-pi/app-server-protocol";
+import type { DiagnosticExport, DiagnosticExportKind, DiagnosticExportParams, RestorationTrace } from "@daedalus-pi/app-server-protocol";
 import type { SessionStoreSession } from "@daedalus-pi/coding-agent";
 
 import type { AppServerDatabase } from "../persistence/database";
@@ -11,6 +11,7 @@ export interface ExportServiceOptions {
 	readonly database: AppServerDatabase;
 	readonly outputDir?: string;
 	readonly runtimeDiagnostics?: () => unknown;
+	readonly restorationTrace?: () => RestorationTrace | undefined;
 }
 export interface ExportServiceResult {
 	readonly export: DiagnosticExport;
@@ -89,6 +90,7 @@ export class ExportService {
 			toolLogs: params.includeToolLogs === false ? [] : allEvents.filter((event) => event.type.includes("tool")),
 			appServerLogs: [],
 			runtimeDiagnostics: this.options.runtimeDiagnostics?.(),
+			restorationTrace: this.options.restorationTrace?.(),
 			environment: {
 				platform: process.platform,
 				arch: process.arch,
