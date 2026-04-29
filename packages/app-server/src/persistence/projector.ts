@@ -52,8 +52,10 @@ function setLastProjectedSeq(database: AppServerDatabase, seq: number): void {
 }
 
 function projectEvent(database: AppServerDatabase, event: StoredEvent): void {
-	const payload = asRecord(event.payload);
-	const occurredAt = text(payload, "createdAt", "created_at", "occurredAt", "occurred_at") ?? event.createdAt;
+	const envelope = asRecord(event.payload);
+	const nestedPayload = asRecord(envelope.payload);
+	const payload = Object.keys(nestedPayload).length > 0 ? nestedPayload : envelope;
+	const occurredAt = text(envelope, "createdAt", "created_at", "occurredAt", "occurred_at") ?? event.createdAt;
 
 	switch (event.type) {
 		case "project/registered":

@@ -325,4 +325,89 @@ describe("web GUI E2E smoke", () => {
 			"smoke-model",
 		);
 	});
+
+	test("preserves M3 session lineage, worktree target, active selection, and restoration diagnostics across restart", async () => {
+		tempDir = mkdtempSync(join(tmpdir(), "daedalus-web-gui-continuity-"));
+		writeFileSync(join(tempDir, "README.md"), "# continuity\n");
+		await git(tempDir, "init");
+		await git(tempDir, "config", "user.email", "continuity@example.invalid");
+		await git(tempDir, "config", "user.name", "GUI Continuity");
+		await git(tempDir, "add", "README.md");
+		await git(tempDir, "commit", "-m", "initial");
+		const databasePath = join(tempDir, "app.sqlite");
+		const agentDir = join(tempDir, "agent");
+		server = await startAppServer({ databasePath, agentDir, runtimeFactory });
+
+		const opened = (await request(server, "project/open", { path: tempDir })) as { projectId: string };
+		const source = (await request(server, "session/start", {
+			projectId: opened.projectId,
+			startTarget: {
+				mode: "base-checkout",
+				projectId: opened.projectId,
+				confirmation: { confirmed: true, evidence: "continuity E2E source session uses base checkout" },
+			},
+			prompt: "source continuity thread",
+			operationId: "m3-continuity-source",
+		})) as { sessionId: string; runsIn: { isolationMode?: string; projectId?: string } };
+		expect(source.runsIn).toMatchObject({ projectId: opened.projectId, isolationMode: "base-checkout" });
+
+		const continued = (await request(server, "session/continue-in-worktree", {
+			sourceSessionId: source.sessionId,
+			projectId: opened.projectId,
+			branch: "m3-continuity-worktree",
+			prompt: "continue continuity in worktree",
+			operationId: "m3-continuity-continue",
+		})) as {
+			sessionId: string;
+			parentSessionId: string;
+			worktree: { id: string; path: string; branch: string };
+			runsIn: { projectId?: string; worktreeId?: string; path?: string; canonicalPath?: string; branch?: string; isolationMode?: string; validationStatus?: string };
+		};
+		expect(continued.parentSessionId).toBe(source.sessionId);
+		expect(continued.runsIn).toMatchObject({
+			projectId: opened.projectId,
+			worktreeId: continued.worktree.id,
+			branch: "m3-continuity-worktree",
+			isolationMode: "isolated-worktree",
+			validationStatus: "valid",
+		});
+		expect(continued.runsIn.path ?? continued.runsIn.canonicalPath).toBe(continued.worktree.path);
+
+		expect(await request(server, "workspace/selection/set", { projectId: opened.projectId, sessionId: continued.sessionId })).toMatchObject({
+			selection: { projectId: opened.projectId, sessionId: continued.sessionId },
+			restorationTrace: { status: "restored", resolvedSession: continued.sessionId },
+		});
+
+		await server.stop();
+		server = await startAppServer({ databasePath, agentDir, runtimeFactory });
+		expect(existsSync(databasePath)).toBe(true);
+
+		const sourceSessionsAfterRestart = (await request(server, "session/list", { cwd: tempDir })) as { sessions: Array<{ id: string }> };
+		expect(sourceSessionsAfterRestart.sessions).toEqual(expect.arrayContaining([expect.objectContaining({ id: source.sessionId })]));
+		const childSessionsAfterRestart = (await request(server, "session/list", { cwd: continued.worktree.path })) as {
+			sessions: Array<{ id: string; parentSessionPath?: string }>;
+		};
+		expect(childSessionsAfterRestart.sessions).toEqual(
+			expect.arrayContaining([expect.objectContaining({ id: continued.sessionId, parentSessionPath: source.sessionId })]),
+		);
+
+		const restoredSelection = await request(server, "workspace/selection/get", { projectId: opened.projectId });
+		expect(restoredSelection).toMatchObject({
+			selection: { projectId: opened.projectId, sessionId: continued.sessionId },
+			degraded: false,
+			restorationTrace: { status: "restored", resolvedSession: continued.sessionId },
+		});
+
+		const replay = (await request(server, "event/replay", { types: ["session/started"], cursor: { after: 0 } })) as { events: AppEvent[] };
+		expect(replay.events).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ payload: expect.objectContaining({ sessionId: source.sessionId }) }),
+				expect.objectContaining({ payload: expect.objectContaining({ sessionId: continued.sessionId, parentSessionId: source.sessionId }) }),
+			]),
+		);
+
+		const exported = (await request(server, "diagnostics/export", { kind: "support-bundle" })) as { content: string };
+		expect(exported.content).toContain("restorationTrace");
+		expect(exported.content).toContain(continued.sessionId);
+	});
 });

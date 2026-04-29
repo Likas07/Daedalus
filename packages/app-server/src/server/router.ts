@@ -279,10 +279,7 @@ export class AppRouter {
 								worktreeId: start.runsIn.worktreeId,
 							},
 						});
-						this.workspaceSelectionService.setValidated({
-							projectId: start.runsIn.projectId,
-							sessionId: result.sessionId,
-						});
+						this.persistActiveSelectionAfterDurableSession(start.runsIn.projectId, result.sessionId);
 						return withOperationId(result, request.params.operationId);
 					},
 				);
