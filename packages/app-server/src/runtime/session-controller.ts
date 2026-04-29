@@ -11,7 +11,7 @@ import type {
 export type RuntimeSessionManager = unknown;
 
 import { createSessionIdentitySnapshot } from "../sessions/session-identity";
-import { mapRuntimeEvent } from "./event-mapper";
+import { mapRuntimeEvent, type RuntimeAgentEvent } from "./event-mapper";
 
 export type RuntimeControllerMessage = AppEvent | ServerNotification | ServerRequest;
 export type RuntimeEventSink = (message: RuntimeControllerMessage) => void | Promise<void>;
@@ -232,6 +232,7 @@ export class SessionController {
 
 	async startTurn(input: StartTurnInput): Promise<{ turnId: TurnId }> {
 		const record = this.requireSession(input.sessionId);
+		if (record.activeTurnId) throw new Error(`Session already has an active turn: ${record.activeTurnId}`);
 		const turnId = input.turnId ?? this.nextTurnId();
 		record.activeTurnId = turnId;
 		await this.emit({
@@ -326,6 +327,7 @@ export class SessionController {
 			});
 			void this.emit(mapped.event);
 			if (mapped.notification) void this.emit(mapped.notification);
+			if ((event as RuntimeAgentEvent).type === "agent_end") record.activeTurnId = undefined;
 		});
 		this.sessions.set(sessionId, record);
 	}

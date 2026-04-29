@@ -645,6 +645,40 @@ describe("GUI runtime reconnect", () => {
 		expect(runtime.state.events.filter((item) => item.id === "event-1")).toHaveLength(1);
 	});
 
+	test("replayed events do not duplicate events or reorder the selected thread", async () => {
+		const live: AppEvent = {
+			id: "event-1",
+			type: "session/changed",
+			ts: "now",
+			sessionId: "session-2",
+			payload: { title: "Second", status: "running" },
+		};
+		const replayed: AppEvent = {
+			id: "event-2",
+			type: "session/changed",
+			ts: "now",
+			sessionId: "session-1",
+			payload: { title: "Selected remains", status: "waiting" },
+		};
+		const first = new MockTransport();
+		const second = new MockTransport([live, replayed]);
+		const runtime = await createGuiRuntime({
+			transport: first,
+			createTransport: () => second,
+			reconnect: { baseDelayMs: 1, maxDelayMs: 1 },
+		});
+		await runtime.initialize();
+		await runtime.selectSession("session-1");
+		first.emit({ kind: "notification", method: "event/appended", params: { event: live } });
+		first.emitLifecycle("close");
+
+		await runtime.reconnect();
+
+		expect(runtime.state.selectedSessionId).toBe("session-1");
+		expect(runtime.state.events.map((event) => event.id)).toEqual(["event-1", "event-2"]);
+		expect(runtime.state.events.filter((event) => event.id === "event-1")).toHaveLength(1);
+	});
+
 	test("records failed reconnect diagnostics", async () => {
 		const first = new MockTransport();
 		const runtime = await createGuiRuntime({
