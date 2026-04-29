@@ -1,6 +1,14 @@
-import * as fs from "node:fs";
 import type { SubagentDefinition } from "../../../../core/subagents/index.js";
 import { parseFrontmatter } from "../../../../utils/frontmatter.js";
+import musePrompt from "./agents/muse.md" with { type: "text" };
+import museClaudeOverride from "./agents/muse-overrides-claude.md" with { type: "text" };
+import museGptOverride from "./agents/muse-overrides-gpt.md" with { type: "text" };
+import sagePrompt from "./agents/sage.md" with { type: "text" };
+import sageClaudeOverride from "./agents/sage-overrides-claude.md" with { type: "text" };
+import sageGptOverride from "./agents/sage-overrides-gpt.md" with { type: "text" };
+import workerPrompt from "./agents/worker.md" with { type: "text" };
+import workerClaudeOverride from "./agents/worker-overrides-claude.md" with { type: "text" };
+import workerGptOverride from "./agents/worker-overrides-gpt.md" with { type: "text" };
 
 const mdGlob = "**/*.md";
 const toolPolicies: Record<string, SubagentDefinition["toolPolicy"]> = {
@@ -55,14 +63,17 @@ const toolPolicies: Record<string, SubagentDefinition["toolPolicy"]> = {
 	},
 };
 
-function readAgentFile(name: string): string {
-	return fs.readFileSync(new URL(`./agents/${name}.md`, import.meta.url), "utf8");
-}
+const agentPrompts = {
+	sage: sagePrompt,
+	muse: musePrompt,
+	worker: workerPrompt,
+} as const;
 
-function readOptionalAgentFile(name: string): string | undefined {
-	const url = new URL(`./agents/${name}`, import.meta.url);
-	return fs.existsSync(url) ? fs.readFileSync(url, "utf8") : undefined;
-}
+const agentModelOverrides: Record<keyof typeof agentPrompts, { gpt?: string; claude?: string }> = {
+	sage: { gpt: sageGptOverride.trim(), claude: sageClaudeOverride.trim() },
+	muse: { gpt: museGptOverride.trim(), claude: museClaudeOverride.trim() },
+	worker: { gpt: workerGptOverride.trim(), claude: workerClaudeOverride.trim() },
+};
 
 function parseBundledAgent(source: string): SubagentDefinition {
 	const { frontmatter, body } = parseFrontmatter<{
@@ -115,14 +126,11 @@ function parseBundledAgent(source: string): SubagentDefinition {
 			?.split(",")
 			.map((value) => value.trim())
 			.filter(Boolean),
-		modelOverrides: {
-			gpt: readOptionalAgentFile(`${frontmatter.name}-overrides-gpt.md`)?.trim(),
-			claude: readOptionalAgentFile(`${frontmatter.name}-overrides-claude.md`)?.trim(),
-		},
+		modelOverrides: agentModelOverrides[frontmatter.name as keyof typeof agentPrompts],
 		toolPolicy: toolPolicies[frontmatter.name],
 	};
 }
 
 export function getBundledStarterAgents(): SubagentDefinition[] {
-	return ["sage", "muse", "worker"].map((name) => parseBundledAgent(readAgentFile(name)));
+	return Object.values(agentPrompts).map((source) => parseBundledAgent(source));
 }
