@@ -518,6 +518,11 @@ export class AppRouter {
 				};
 			}
 			case "model/select": {
+				const settings = await this.settingsService.read();
+				const selected = settings.models.find(
+					(model) => model.id === request.params.model && model.available !== false,
+				);
+				if (!selected) throw new Error(`Unknown model: ${request.params.model}`);
 				await this.settingsService.set("global", "defaultModel", request.params.model);
 				this.configService.set("model.selected", request.params.model);
 				this.options.publish({

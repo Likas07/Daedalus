@@ -81,4 +81,26 @@ describe("computeStartGate", () => {
 			targetStatus: "starting",
 		});
 	});
+
+	test("treats authenticated oauth and env-key providers as usable", () => {
+		for (const status of ["oauth", "env-key"] as const) {
+			expect(
+				computeStartGate({
+					...ready,
+					providerStatuses: [{ provider: "test", authenticated: true, enabled: true, status }],
+				}),
+			).toMatchObject({ canSend: true, requiredAction: "none" });
+		}
+	});
+
+	test("rejects provider statuses that require auth or are unavailable", () => {
+		for (const status of ["missing-auth", "unavailable", "error"] as const) {
+			expect(
+				computeStartGate({
+					...ready,
+					providerStatuses: [{ provider: "test", authenticated: true, enabled: true, status }],
+				}),
+			).toMatchObject({ canSend: false, requiredAction: "configure-provider" });
+		}
+	});
 });

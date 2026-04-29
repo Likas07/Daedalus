@@ -1243,6 +1243,12 @@ function recordProviderStatus(state: GuiState, providerStatus: ProviderStatus): 
 	else state.providerStatuses.push(providerStatus);
 }
 
+function revalidateSelectedModel(state: GuiState): void {
+	if (!state.models.some((model) => model.id === state.selectedModel)) {
+		state.selectedModel = state.models[0]?.id;
+	}
+}
+
 function recordIntegrationState(state: GuiState, payload: unknown): void {
 	if (!payload || typeof payload !== "object") return;
 	const integration = payload as IntegrationViewState;
@@ -1334,15 +1340,14 @@ async function hydrateGuiState(client: AppServerClient, state: GuiState, threadF
 		const result = (await client.request("model/list", {})) as { models?: RendererModel[]; selectedModel?: string };
 		state.models = [...(result.models ?? [])];
 		state.selectedModel = result.selectedModel ?? state.selectedModel;
-		if (!state.models.some((model) => model.id === state.selectedModel)) {
-			state.selectedModel = state.models[0]?.id;
-		}
+		revalidateSelectedModel(state);
 	});
 	await safeHydrateStep(state, "settings", async () => {
 		const result = await client.readSettings();
 		state.settings = result;
 		state.models = (result.models as RendererModel[]) ?? state.models;
 		state.selectedModel = result.selectedModel ?? state.selectedModel;
+		revalidateSelectedModel(state);
 	});
 	await safeHydrateStep(state, "auth", async () => {
 		const result = (await client.request("auth/status", {})) as {

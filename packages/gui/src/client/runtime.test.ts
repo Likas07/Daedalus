@@ -467,6 +467,23 @@ describe("GUI runtime state model", () => {
 		expect(statusTone("done")).toBe("success");
 		expect(statusTone(undefined)).toBe("muted");
 	});
+
+	test("ignores stale settings selectedModel when refreshed models do not contain it", async () => {
+		const transport = new MockTransport([], (method) => {
+			if (method === "settings/read") {
+				return {
+					models: [{ id: "model-a", label: "Model A", provider: "test", available: true }],
+					selectedModel: "smoke-model",
+				};
+			}
+			return undefined;
+		});
+		const runtime = await createGuiRuntime({ client: new AppServerClient({ transport }) });
+
+		await runtime.initialize();
+
+		expect(runtime.state.selectedModel).toBe("model-a");
+	});
 });
 
 describe("GUI runtime expanded APIs", () => {
