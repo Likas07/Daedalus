@@ -62,6 +62,29 @@ function responseFor(method: string | undefined, request?: { params?: unknown })
 					},
 				],
 			};
+		case "session/continue-in-worktree":
+			return {
+				sessionId: "session-child",
+				parentSessionId: "session-1",
+				worktree: {
+					id: "wt-child",
+					projectId: "project-1",
+					path: "/repo-child",
+					branch: "continue/session-1",
+					dirtyCount: 0,
+					activeSessionCount: 1,
+					validationStatus: "valid",
+				},
+				runsIn: {
+					mode: "isolated-worktree",
+					projectId: "project-1",
+					worktreeId: "wt-child",
+					path: "/repo-child",
+					branch: "continue/session-1",
+					isolationMode: "isolated-worktree",
+					validationStatus: "valid",
+				},
+			};
 		case "project/list":
 			return { projects: [] };
 		case "session/list":
@@ -735,6 +758,7 @@ describe("GUI app", () => {
 		);
 		await app.close();
 	});
+
 });
 
 describe("Safe worktree build setup UI", () => {
@@ -745,6 +769,7 @@ describe("Safe worktree build setup UI", () => {
 		const projectCanvas = fs.readFileSync(path.join(root, "ProjectCanvas.svelte"), "utf8");
 		const taskComposer = fs.readFileSync(path.join(root, "TaskComposer.svelte"), "utf8");
 		const setup = fs.readFileSync(path.join(root, "NewBuildSetupSheet.svelte"), "utf8");
+		const sessionWorkspace = fs.readFileSync(path.join(root, "SessionWorkspace.svelte"), "utf8");
 
 		expect(projectCanvas).toContain("BuildTargetTrustBar");
 		expect(projectCanvas).toContain("selectedSession.runsIn");
@@ -757,5 +782,8 @@ describe("Safe worktree build setup UI", () => {
 		expect(setup).toContain("Retry by sending the prompt again");
 		expect(setup).toContain("Creating safe worktree");
 		expect(setup).toContain("Starting session");
+		expect(sessionWorkspace).toContain("continueInWorktree");
+		expect(sessionWorkspace).toContain("continue in worktree");
+		expect(sessionWorkspace).toContain("Source thread has no persisted workspace target");
 	});
 });

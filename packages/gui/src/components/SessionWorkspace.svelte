@@ -21,6 +21,7 @@
 	const branchLabel = $derived(selectedSession?.runsIn?.branch ?? selectedSession?.branch ?? threadTabs.branchLabel);
 	const activeTurnId = $derived(findActiveTurnId(guiState.events, guiState.selectedSessionId));
 	const sessionApprovals = $derived(guiState.approvalItems.filter((approval: ApprovalItem) => !guiState.selectedSessionId || approval.sessionId === guiState.selectedSessionId));
+	const continueDisabled = $derived(getContinueDisabledReason(selectedSession, activeTurnId));
 
 	async function sendFollowUp(input: ComposerSubmitInput): Promise<void> {
 		if (!guiState.selectedSessionId) throw new Error("Select a session before sending a follow-up.");
@@ -37,6 +38,14 @@
 		await runtime.stopSession(guiState.selectedSessionId);
 	}
 
+	async function continueInWorktree(): Promise<void> {
+		if (!selectedSession || continueDisabled || !runtime.continueInWorktree) return;
+		await runtime.continueInWorktree({
+			sourceSessionId: selectedSession.id,
+			projectId: selectedSession.projectId ?? selectedSession.runsIn?.projectId,
+		});
+	}
+
 	function findActiveTurnId(events: readonly AppEvent[], sessionId?: string): string | undefined {
 		for (const event of [...events].reverse()) {
 			if (sessionId && event.sessionId !== sessionId) continue;
@@ -45,6 +54,18 @@
 			if (!turnId) continue;
 			if (event.type.includes("completed") || event.type.includes("cancel") || payload?.status === "completed") return undefined;
 			return turnId;
+		}
+		return undefined;
+	}
+
+	function getContinueDisabledReason(session: SessionSummary | undefined, runningTurnId: string | undefined): string | undefined {
+		if (!session) return "Select a session first.";
+		if (runningTurnId || session.activeTurnId || session.status === "running") return "Wait for the active source turn to finish.";
+		if (session.archived || session.status === "archived") return "Archived source threads cannot continue in a worktree.";
+		if (session.status === "unavailable") return "Source thread is unavailable.";
+		if (!session.runsIn) return "Source thread has no persisted workspace target.";
+		if (session.runsIn.validationStatus && session.runsIn.validationStatus !== "valid") {
+			return session.runsIn.reason ?? "Resolve the source target before continuing in a worktree.";
 		}
 		return undefined;
 	}
@@ -67,6 +88,13 @@
 				disabled={!activeTurnId}
 				onclick={cancelTurn}
 			>cancel turn</button>
+			<button
+				type="button"
+				class="rounded-sm border border-ink-500 px-2 py-1 text-bone-300 transition hover:bg-ink-850 hover:text-bone-100 disabled:opacity-40"
+				disabled={Boolean(continueDisabled)}
+				title={continueDisabled ?? "Continue this thread in an isolated worktree"}
+				onclick={continueInWorktree}
+			>continue in worktree</button>
 			<button
 				type="button"
 				class="rounded-sm border border-ink-500 px-2 py-1 text-bone-300 transition hover:bg-ink-850 hover:text-bone-100 disabled:opacity-40"

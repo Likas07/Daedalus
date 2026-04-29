@@ -98,6 +98,9 @@ function runtime(guiState: GuiState): GuiRuntime {
 		async createWorktree() {
 			throw new Error("not used");
 		},
+		async continueInWorktree() {
+			throw new Error("not used");
+		},
 		async openInEditor() {},
 		async saveComposerAttachment() {
 			throw new Error("not used");

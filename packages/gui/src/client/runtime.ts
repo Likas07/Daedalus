@@ -16,6 +16,7 @@ import {
 	type ExtensionUiResponse,
 	type OrchestrationProjection,
 	type TerminalSnapshot,
+	type SessionContinueInWorktreeResult,
 	type WorkflowRunsInTarget,
 	type WorkflowValidationStatus,
 	type WorkflowWorktreeMetadata,
@@ -144,6 +145,7 @@ export interface GuiRuntime {
 	}): Promise<unknown>;
 	openPullRequest?(url: string, input?: { provider?: string; projectId?: string }): Promise<boolean>;
 	createWorktree(input: CreateWorktreeInput): Promise<WorkflowWorktreeMetadata>;
+	continueInWorktree(input: ContinueInWorktreeInput): Promise<SessionContinueInWorktreeResult>;
 	scanWorktreeCleanup?(worktreeId: string, operationId?: string): Promise<WorktreeCleanupScanResult>;
 	cleanupWorktree?(input: {
 		worktreeId: string;
@@ -243,6 +245,8 @@ export interface SessionSummary {
 	pendingApprovalCount?: number;
 	pendingUserInput?: boolean;
 	activeTurnId?: string;
+	parentSessionId?: string;
+	sourceSessionId?: string;
 	projectId?: string;
 	worktreeId?: string;
 	branch?: string | null;
@@ -274,6 +278,13 @@ export interface StartTurnInput extends Partial<ComposerSubmitContext> {
 	prompt: string;
 	attachmentIds?: readonly string[];
 	filePaths?: readonly string[];
+}
+export interface ContinueInWorktreeInput {
+	sourceSessionId: string;
+	projectId?: string;
+	branch?: string;
+	prompt?: string;
+	operationId?: string;
 }
 export interface SearchComposerFilesInput {
 	projectId: string;
@@ -798,6 +809,31 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 			state.projectRoot = worktree.path;
 			notify();
 			return worktree;
+		},
+		async continueInWorktree(input) {
+			const operationId = input.operationId ?? `continue-worktree-${crypto.randomUUID()}`;
+			const result = (await client.request("session/continue-in-worktree", {
+				...input,
+				operationId,
+			})) as SessionContinueInWorktreeResult;
+			state.worktrees = [...state.worktrees.filter((item) => item.id !== result.worktree.id), result.worktree];
+			upsertSession(state, {
+				id: result.sessionId,
+				title: `Worktree Thread`,
+				status: "active",
+				parentSessionId: result.parentSessionId,
+				sourceSessionId: input.sourceSessionId,
+				runsIn: result.runsIn,
+				projectId: result.runsIn.projectId,
+				worktreeId: result.runsIn.worktreeId,
+				branch: result.runsIn.branch,
+				isolationMode: result.runsIn.isolationMode,
+				validationStatus: result.runsIn.validationStatus,
+				needsAttentionReason: result.runsIn.reason,
+				bestNextAction: bestNextActionForRunsIn(result.runsIn),
+			});
+			await selectSessionPersistently(client, state, result.sessionId, notify, threadFirstRoute);
+			return result;
 		},
 		async scanWorktreeCleanup(worktreeId, operationId) {
 			const result = await client.request("worktree/cleanup-scan", { worktreeId, operationId });
