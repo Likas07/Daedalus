@@ -11,16 +11,16 @@
 	const disabledReasonId = $derived(`build-target-disabled-${runsIn?.worktreeId ?? runsIn?.projectId ?? "none"}`);
 </script>
 
-<section class="build-target-trust-bar" aria-label="Build target" aria-live="polite" data-testid="build-target-trust-bar">
+<section class="build-target-trust-bar" aria-label="Thread location and trust" aria-live="polite" data-testid="build-target-trust-bar">
 	<div class="build-target-zone build-target-main">
-		<span class="eyebrow">Runs in</span>
+		<span class="eyebrow">Thread location</span>
 		<strong title={targetPath}>{targetPath}</strong>
 		<span class="build-target-branch">{branch}</span>
 	</div>
 	<div class="build-target-zone build-target-isolation">
 		<span class="build-target-chip" data-state={isolationMode}>{isolationLabel}</span>
 		<details>
-			<summary>Full path</summary>
+			<summary>Verify full path</summary>
 			<code>{targetPath}</code>
 		</details>
 	</div>
