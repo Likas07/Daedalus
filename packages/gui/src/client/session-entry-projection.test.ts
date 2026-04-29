@@ -55,6 +55,44 @@ describe("session entry projection", () => {
 		expect(rows.every((row) => row.sessionId === "s1")).toBe(true);
 	});
 
+	test("projects assistant errors with empty content as visible rows", () => {
+		const rows = projectSessionEntries([
+			{
+				...base("message", "a-error"),
+				message: {
+					role: "assistant",
+					content: [],
+					stopReason: "error",
+					errorMessage: "Model unsupported for this provider",
+				},
+			},
+		]);
+
+		expect(rows[0]?.kind).toBe("assistant");
+		expect(rows[0]?.summary).toBe("Model unsupported for this provider");
+		expect(rows[0]?.content).toBe("Model unsupported for this provider");
+		expect(rows[0]?.status).toBe("error");
+	});
+
+	test("does not render empty assistant stream rows", () => {
+		const rows = projectSessionEntries([
+			{
+				...base("message", "a-empty"),
+				message: { role: "assistant", content: [] },
+			},
+		]);
+
+		expect(rows).toHaveLength(0);
+	});
+
+	test("strips GUI context blocks from rendered user messages", () => {
+		const rows = projectSessionEntries([
+			{ ...base("message", "u-context"), message: { role: "user", content: "<gui-context>internal</gui-context> Show me status" } },
+		]);
+
+		expect(rows[0]?.summary).toBe("Show me status");
+	});
+
 	test("hides custom messages marked display false", () => {
 		expect(
 			projectSessionEntries([{ ...base("custom_message"), customType: "hidden", content: "no", display: false }]),

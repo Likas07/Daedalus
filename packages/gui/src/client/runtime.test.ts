@@ -283,6 +283,30 @@ describe("GUI runtime state model", () => {
 		expect(runtime.state.sessions[0]).toMatchObject({ id: "session-1", title: "Implement GUI", status: "running" });
 	});
 
+	test("sanitizes GUI context blocks from hydrated sessions", async () => {
+		const transport = new MockTransport([], (method) => {
+			if (method === "session/list")
+				return {
+					sessions: [
+						{
+							sessionId: "session-context",
+							title: "<gui-context>internal</gui-context> Build the dashboard",
+							latestMessage: "<gui-context>metadata</gui-context> Check status",
+							status: "idle",
+						},
+					],
+				};
+			return undefined;
+		});
+		const runtime = await createGuiRuntime({ client: new AppServerClient({ transport }) });
+
+		await runtime.initialize();
+
+		const session = runtime.state.sessions.find((item) => item.id === "session-context");
+		expect(session?.title).toBe("Build the dashboard");
+		expect(session?.latestMessage).toBe("Check status");
+	});
+
 	test("captures approvals from notifications and events", async () => {
 		const transport = new MockTransport();
 		const runtime = await createGuiRuntime({ client: new AppServerClient({ transport }) });

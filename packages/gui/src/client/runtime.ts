@@ -1075,9 +1075,22 @@ function recordWorkflowProjection(state: GuiState, payload: unknown): void {
 	}
 }
 function upsertSession(state: GuiState, session: SessionSummary): void {
-	const index = state.sessions.findIndex((item) => item.id === session.id);
-	if (index >= 0) state.sessions[index] = session;
-	else state.sessions.unshift(session);
+	const sanitized = sanitizeSessionSummary(session);
+	const index = state.sessions.findIndex((item) => item.id === sanitized.id);
+	if (index >= 0) state.sessions[index] = sanitized;
+	else state.sessions.unshift(sanitized);
+}
+
+function stripGuiContextBlocks(value: string): string {
+	return value.replace(/<gui-context>[\s\S]*?<\/gui-context>/gi, " ").replace(/<gui-context>[\s\S]*$/gi, " ").replace(/\s+/g, " ").trim();
+}
+
+function sanitizeSessionSummary(session: SessionSummary): SessionSummary {
+	return {
+		...session,
+		title: stripGuiContextBlocks(session.title) || session.id,
+		latestMessage: session.latestMessage ? stripGuiContextBlocks(session.latestMessage) || undefined : undefined,
+	};
 }
 
 function upsertSessionFromEvent(state: GuiState, event: AppEvent): void {

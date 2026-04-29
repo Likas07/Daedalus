@@ -145,6 +145,25 @@ describe("SqliteSessionStore", () => {
 		expect(row?.status).toBe("archived");
 	});
 
+	test("strips GUI context blocks from read model previews", async () => {
+		const sessionStore = store();
+		await sessionStore.create({ id: "gui-context-session", cwd: "/repo", timestamp: "2026-04-26T00:00:00.000Z" });
+		await sessionStore.append({
+			sessionId: "gui-context-session",
+			entries: [userMessage("msg-1", "<gui-context>internal project metadata</gui-context> Build the dashboard")],
+		});
+
+		const row = database
+			?.query<{ title: string | null; last_message_preview: string | null }, []>(
+				`SELECT title, last_message_preview FROM ${GUI_SESSION_TABLES.readModel} WHERE session_id = 'gui-context-session'`,
+			)
+			.get();
+		expect(row).toEqual({
+			title: "Build the dashboard",
+			last_message_preview: "Build the dashboard",
+		});
+	});
+
 	test("lists server-projected runsIn recovery state from session header", async () => {
 		const sessionStore = store();
 		const header = {
