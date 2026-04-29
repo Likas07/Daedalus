@@ -15,3 +15,11 @@ Key routing rules:
 - Ship/deploy/PR → invoke /ship or /land-and-deploy
 - Save progress → invoke /context-save
 - Resume context → invoke /context-restore
+
+## Daedalus GUI product direction
+
+Model Daedalus GUI mode after T3Code/Jean: a persistent project/thread chat workspace, not a one-shot batch task runner. The user should enter a thread and keep chatting/work along with the agent instead of sending one large prompt, waiting for a single execution, and losing the session.
+
+Use a durable hierarchy such as `Project -> Thread -> Turn`, or `Project -> Worktree -> Thread -> Turn` when worktree isolation matters. The thread/session survives across turns so the user can continuously chat, steer, approve, answer inline questions, inspect diffs/review panels, use contextual terminals, recover from interruptions, and resume work.
+
+Chat is the center of gravity. Cockpit controls, project canvas/overview, diff/review panels, terminal panes, approvals, draft threads, and recovery tools are supporting panels around the active conversation, not the default interaction model.
