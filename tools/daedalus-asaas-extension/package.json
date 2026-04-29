@@ -10,9 +10,20 @@
 		"check": "bun test --dry-run",
 		"setup": "bun ./scripts/setup.ts"
 	},
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.26.0"
+	},
 	"peerDependencies": {
 		"@daedalus-pi/coding-agent": "*",
 		"@daedalus-pi/ai": "*"
+	},
+	"peerDependenciesMeta": {
+		"@daedalus-pi/coding-agent": {
+			"optional": true
+		},
+		"@daedalus-pi/ai": {
+			"optional": true
+		}
 	},
 	"devDependencies": {
 		"@types/bun": "^1.3"

@@ -35,6 +35,21 @@ describe("asaas extension registration", () => {
 		expect(fake.commands.map((command) => command.name).sort()).toEqual(["asaas-docs-refresh", "asaas-status"]);
 	});
 
+	test("docs tool reports MCP source and renders MCP results", async () => {
+		const fake = createFakePi();
+		registerAsaasExtension(fake.pi as never, {
+			queryDocs: async () => ({
+				source: "mcp",
+				results: [{ title: "POST /v3/customers", text: "POST /v3/customers\nCriar novo cliente" }],
+			}),
+		});
+		const docs = fake.tools.find((tool) => tool.name === "mcp_asaas_docs_query") as any;
+		const result = await docs.execute("tool-call", { query: "criar cliente", limit: 3 });
+		expect(result.details.source).toBe("mcp");
+		expect(result.details.count).toBe(1);
+		expect(result.content[0].text).toContain("POST /v3/customers");
+	});
+
 	test("mutate tool defaults to dry run and does not call fetch", async () => {
 		const fake = createFakePi();
 		registerAsaasExtension(fake.pi as never);
