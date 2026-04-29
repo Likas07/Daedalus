@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { appServerProtocolVersion, ClientRequestResultSchemas } from "@daedalus-pi/app-server-protocol";
@@ -16,6 +16,104 @@ import {
 const servers: AppServerInstance[] = [];
 afterEach(async () => {
 	await Promise.all(servers.splice(0).map((server) => server.stop()));
+});
+
+test("app server passes one injected agentDir to runtime and router auth/model storage", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "daedalus-app-server-agent-dir-"));
+	await git(dir, ["init"]);
+	const agentDir = join(dir, "agent");
+	mkdirSync(agentDir, { recursive: true });
+	const authPath = join(agentDir, "auth.json");
+	const modelsPath = join(agentDir, "models.json");
+	writeFileSync(authPath, JSON.stringify({ injected: { type: "api_key", key: "test-key" } }), { mode: 0o600 });
+	writeFileSync(
+		modelsPath,
+		JSON.stringify({
+			providers: {
+				injected: {
+					baseUrl: "https://example.invalid/v1",
+					apiKey: "test-key",
+					models: [{ id: "injected-model", name: "Injected Model", api: "openai-chat", contextWindow: 128 }],
+				},
+			},
+		}),
+	);
+	const database = openAppServerDatabase(":memory:");
+	runMigrations(database);
+	const runtimeAgentDirs: string[] = [];
+	try {
+		const router = new AppRouter({
+			database,
+			publish: () => {},
+			agentDir,
+			controller: {
+				readState: () => ({ sessions: [] }),
+				startSession: async () => ({ sessionId: "session-1" }),
+				startTurn: async () => ({ turnId: "turn-1" }),
+				interruptTurn: async () => {},
+				disposeSession: async () => {},
+			} as never,
+		});
+		const authStatus = (await router.handle({
+			kind: "request",
+			id: "auth",
+			method: "auth/status",
+			params: { provider: "injected" },
+		})) as { providers: Array<{ provider: string; authenticated: boolean; source?: string }> };
+		expect(authStatus.providers).toContainEqual(
+			expect.objectContaining({ provider: "injected", authenticated: true, source: "auth-storage" }),
+		);
+		const modelList = (await router.handle({
+			kind: "request",
+			id: "models",
+			method: "model/list",
+			params: {},
+		})) as { models: Array<{ id: string; provider: string }> };
+		expect(modelList.models).toContainEqual(expect.objectContaining({ id: "injected/injected-model" }));
+
+		const server = await startAppServer({
+			databasePath: join(dir, "app.sqlite"),
+			token: "test-token",
+			agentDir,
+			runtimeFactory: async (input) => {
+				runtimeAgentDirs.push(input.agentDir);
+				return {
+					cwd: input.cwd,
+					session: {
+						sessionFile: input.sessionId ? `sqlite://${input.sessionId}` : undefined,
+						subscribe: () => () => {},
+						prompt: async () => {},
+						abort: async () => {},
+					},
+					dispose: async () => {},
+				};
+			},
+		});
+		servers.push(server);
+		const project = (await server.router.handle({
+			kind: "request",
+			id: "project-open",
+			method: "project/open",
+			params: { path: dir },
+		})) as { projectId: string };
+		await server.router.handle({
+			kind: "request",
+			id: "session-start",
+			method: "session/start",
+			params: {
+				projectId: project.projectId,
+				startTarget: {
+					mode: "base-checkout",
+					projectId: project.projectId,
+					confirmation: { confirmed: true, evidence: "test explicitly uses base checkout" },
+				},
+				prompt: "hello",
+			},
+		});
+		expect(runtimeAgentDirs).toEqual([agentDir]);
+	} finally {
+		database.close();
+	}
 });
 
 test("app server accepts websocket protocol requests and persists events", async () => {

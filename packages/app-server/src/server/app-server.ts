@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import type { Server } from "bun";
+import { getAgentDir } from "@daedalus-pi/coding-agent";
 import { openAppServerDatabase, runMigrations } from "..";
 import { PromptContextService } from "../composer/prompt-context-service";
 import { ExtensionUiRouter } from "../extensions/extension-ui-router";
@@ -47,6 +48,7 @@ export async function startAppServer(options: CreateAppServerOptions): Promise<A
 	runMigrations(database);
 	const host = options.host ?? "127.0.0.1";
 	const token = options.token ?? createCapabilityToken();
+	const agentDir = options.agentDir ?? getAgentDir();
 	const clients = new Set<WebSocketClient>();
 	const publish = (message: OutboundMessage) => {
 		for (const client of clients) client.send(message);
@@ -66,7 +68,7 @@ export async function startAppServer(options: CreateAppServerOptions): Promise<A
 		},
 		makeSessionManager: async ({ cwd, sessionId, sessionPath, parentSession }) =>
 			SqliteSessionManager.create({ store: sessionStore, cwd, sessionId, sessionPath, parentSession }).initialized(),
-		agentDir: options.agentDir ?? join(process.cwd(), ".daedalus", "agent"),
+		agentDir,
 		promptContextResolver: new PromptContextService(),
 	});
 	router = new AppRouter({
@@ -78,6 +80,7 @@ export async function startAppServer(options: CreateAppServerOptions): Promise<A
 		accessPolicyService,
 		approvalService,
 		extensionUiRouter,
+		agentDir,
 	});
 	const websocket = createWebSocketHandlers(router, clients);
 	const server = Bun.serve({
