@@ -198,4 +198,49 @@ describe("agent tool timeout", () => {
 			expect(result.content[0]?.text).not.toContain("timed out");
 		}
 	});
+
+	it("ignores late tool progress updates after an aborted run has finished", async () => {
+		let markToolStarted!: () => void;
+		const toolStarted = new Promise<void>((resolve) => {
+			markToolStarted = resolve;
+		});
+		let markLateUpdateAttempted!: () => void;
+		const lateUpdateAttempted = new Promise<void>((resolve) => {
+			markLateUpdateAttempted = resolve;
+		});
+		const subagent = makeTool("subagent", async (_toolCallId, _params, signal, onUpdate) => {
+			markToolStarted();
+			signal?.addEventListener(
+				"abort",
+				() => {
+					setTimeout(() => {
+						onUpdate?.({ content: [{ type: "text", text: "late progress" }], details: {} });
+						markLateUpdateAttempted();
+					}, 0);
+				},
+				{ once: true },
+			);
+			await new Promise(() => {});
+			return { content: [{ type: "text", text: "never" }], details: {} };
+		});
+		const agent = makeAgent(
+			subagent,
+			assistant([{ type: "toolCall", id: "call-1", name: "subagent", arguments: {} }]),
+			{ toolTimeoutMs: 10 },
+		);
+		let updateEvents = 0;
+		agent.subscribe((event) => {
+			if (event.type === "tool_execution_update") updateEvents += 1;
+		});
+
+		const promptPromise = agent.prompt("run subagent forever");
+		await toolStarted;
+		agent.abort();
+		await expect(promptPromise).resolves.toBeUndefined();
+		await lateUpdateAttempted;
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(agent.state.isStreaming).toBe(false);
+		expect(updateEvents).toBe(0);
+	});
 });

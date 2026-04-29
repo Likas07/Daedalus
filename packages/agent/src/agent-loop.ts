@@ -538,28 +538,34 @@ async function executePreparedToolCall(
 	signal: AbortSignal | undefined,
 	emit: AgentEventSink,
 ): Promise<ExecutedToolCallOutcome> {
+	let updatesClosed = false;
 	const updateEvents: Promise<void>[] = [];
 	const timeoutMs = getEffectiveToolTimeoutMs(prepared.toolCall.name, config);
 
+	const onUpdate: Parameters<typeof prepared.tool.execute>[3] = (partialResult) => {
+		if (updatesClosed) return;
+		updateEvents.push(
+			Promise.resolve(
+				emit({
+					type: "tool_execution_update",
+					toolCallId: prepared.toolCall.id,
+					toolName: prepared.toolCall.name,
+					args: prepared.toolCall.arguments,
+					partialResult,
+				}),
+			),
+		);
+	};
+
 	try {
 		const result = await withToolTimeout(prepared.toolCall.name, timeoutMs, signal, (innerSignal) =>
-			prepared.tool.execute(prepared.toolCall.id, prepared.args as never, innerSignal, (partialResult) => {
-				updateEvents.push(
-					Promise.resolve(
-						emit({
-							type: "tool_execution_update",
-							toolCallId: prepared.toolCall.id,
-							toolName: prepared.toolCall.name,
-							args: prepared.toolCall.arguments,
-							partialResult,
-						}),
-					),
-				);
-			}),
+			prepared.tool.execute(prepared.toolCall.id, prepared.args as never, innerSignal, onUpdate),
 		);
+		updatesClosed = true;
 		await Promise.all(updateEvents);
 		return { result, isError: false };
 	} catch (error) {
+		updatesClosed = true;
 		await Promise.all(updateEvents);
 		const message =
 			error instanceof ToolTimeoutError ? error.message : error instanceof Error ? error.message : String(error);
