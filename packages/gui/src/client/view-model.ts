@@ -137,7 +137,7 @@ export function createThreadTabsViewModel(guiState: GuiState): ThreadTabsViewMod
 		targetLabel: targetWorktreeId ? "Worktree threads" : "Base checkout threads",
 		targetPath,
 		branchLabel: branchLabel ?? "base checkout",
-		modeLabel: target?.isolationMode === "isolated-worktree" ? "worktree" : "base checkout",
+		modeLabel: target?.isolationMode === "isolated-worktree" || targetWorktreeId ? "worktree" : "base checkout",
 		tabs,
 		selectedThreadId: selected?.id,
 		attentionCount,
@@ -151,9 +151,11 @@ function sessionMatchesTarget(
 	path?: string,
 ): boolean {
 	const runsIn = session.runsIn;
+	const sessionProjectId = runsIn?.projectId ?? session.projectId;
+	if (projectId && sessionProjectId && sessionProjectId !== projectId) return false;
 	if (worktreeId) return runsIn?.worktreeId === worktreeId || session.worktreeId === worktreeId;
 	if (runsIn?.worktreeId || session.worktreeId) return false;
-	if (projectId && (runsIn?.projectId === projectId || session.projectId === projectId)) return true;
+	if (projectId && sessionProjectId === projectId) return true;
 	return Boolean(path && (runsIn?.path === path || session.cwd === path));
 }
 

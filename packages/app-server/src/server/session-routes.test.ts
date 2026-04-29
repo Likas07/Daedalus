@@ -68,6 +68,7 @@ class PromptRecordingRuntime implements ControlledSessionRuntime {
 	readonly initialEntryCount: number;
 	readonly prompts: string[] = [];
 	private listeners: Array<(event: unknown) => void> = [];
+	blockPrompt = false;
 
 	constructor(cwd: string, sessionManager: RuntimeSessionManager) {
 		const manager = sessionManager as TestSessionManager;
@@ -85,6 +86,7 @@ class PromptRecordingRuntime implements ControlledSessionRuntime {
 			prompt: async (prompt) => {
 				this.prompts.push(prompt);
 				manager.appendMessage({ role: "user", content: [{ type: "text", text: prompt }], timestamp: 1 });
+				if (this.blockPrompt) return;
 				for (const listener of this.listeners) listener({ type: "agent_end" });
 			},
 			abort: async () => {},
@@ -488,6 +490,44 @@ describe("session store routes", () => {
 			params: { projectId },
 		});
 		expect(selection).toMatchObject({ degraded: false, selection: { projectId, sessionId: started.sessionId } });
+	});
+
+	test("turn/start rejects a second active turn for the same session", async () => {
+		const { appRouter, runtimes } = appRouterWithRealController();
+		const repo = await initRepo();
+		const { projectId } = (await appRouter.handle({
+			kind: "request",
+			id: "project-open-active-turn",
+			method: "project/open",
+			params: { path: repo },
+		})) as { projectId: string };
+		const started = (await appRouter.handle({
+			kind: "request",
+			id: "start-active-turn",
+			method: "session/start",
+			params: {
+				projectId,
+				startTarget: { mode: "base-checkout", projectId, confirmation: { confirmed: true, evidence: "test" } },
+			},
+		})) as { sessionId: string };
+		runtimes[0]!.blockPrompt = true;
+
+		await appRouter.handle({
+			kind: "request",
+			id: "turn-active-1",
+			method: "turn/start",
+			params: { sessionId: started.sessionId, prompt: "first active turn" },
+		});
+
+		await expect(
+			appRouter.handle({
+				kind: "request",
+				id: "turn-active-2",
+				method: "turn/start",
+				params: { sessionId: started.sessionId, prompt: "second active turn" },
+			}),
+		).rejects.toThrow("already has an active turn");
+		expect(runtimes[0]?.prompts).toEqual(["first active turn"]);
 	});
 
 	test("resumes an existing SQLite session then accepts a turn using the resumed id", async () => {
