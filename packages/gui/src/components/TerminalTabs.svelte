@@ -1,12 +1,14 @@
 <script lang="ts">
 	import type { RendererTerminal } from "../client/gui-state-types";
 	import { terminalCloseLabel, terminalLabel, terminalWritableState } from "./terminal/terminal-state";
-	const { terminals = [], selectedTerminalId, onSelect, onNew, onClose } = $props<{
+	const { terminals = [], selectedTerminalId, onSelect, onNew, onClose, canCreate = true, createDisabledReason = "Select a valid Thread target before creating a terminal." } = $props<{
 		terminals?: readonly RendererTerminal[];
 		selectedTerminalId?: string;
 		onSelect?: (id: string) => void;
 		onNew?: () => void;
 		onClose?: (id: string) => void;
+		canCreate?: boolean;
+		createDisabledReason?: string;
 	}>();
 
 	function onTabKeydown(event: KeyboardEvent, terminalId: string): void {
@@ -46,5 +48,5 @@
 	{:else}
 		<span class="px-2 pb-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-bone-400">No terminals</span>
 	{/each}
-	<button class="btn-mini mb-1 ml-auto" type="button" onclick={onNew}>New terminal</button>
+	<button class="btn-mini mb-1 ml-auto" type="button" onclick={onNew} disabled={!canCreate} title={!canCreate ? createDisabledReason : undefined}>New terminal</button>
 </div>
