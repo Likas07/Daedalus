@@ -8,7 +8,13 @@ class MockTransport implements AppServerTransport {
 	private listener: ((message: unknown) => void) | undefined;
 	readonly sent: unknown[] = [];
 	readonly lifecycle = new Map<string, Set<(event?: unknown) => void>>();
-	constructor(readonly replayEvents: AppEvent[] = []) {}
+	readonly responseOverride?: (method: string | undefined, params?: unknown) => unknown | undefined;
+	constructor(replayEvents: AppEvent[] = [], responseOverride?: (method: string | undefined, params?: unknown) => unknown | undefined) {
+		this.replayEvents = replayEvents;
+		this.responseOverride = responseOverride;
+	}
+
+	readonly replayEvents: AppEvent[];
 
 	send(message: unknown): void {
 		this.sent.push(message);
@@ -22,7 +28,7 @@ class MockTransport implements AppServerTransport {
 			result:
 				request.method === "event/replay"
 					? { events: this.replayEvents }
-					: responseFor(request.method, request.params),
+					: (this.responseOverride?.(request.method, request.params) ?? responseFor(request.method, request.params)),
 		});
 	}
 
@@ -356,6 +362,35 @@ describe("GUI runtime state model", () => {
 				params: { projectId: "project-1", sessionId: undefined },
 			}),
 		);
+	});
+
+	test("clears degraded workspace selection instead of falling back to the first thread", async () => {
+		const transport = new MockTransport([], (method) =>
+			method === "workspace/selection/get"
+				? {
+						degraded: true,
+						reason: "Selected session is stale: missing-session",
+						restorationTrace: {
+							projectId: "project-1",
+							status: "missing",
+							resolvedSession: "missing-session",
+							checkedAt: "now",
+						},
+					}
+				: undefined,
+		);
+		const runtime = await createGuiRuntime({
+			client: new AppServerClient({ transport }),
+			bootstrap: { projectRoot: "/repo" },
+			threadFirstRoute: true,
+		});
+
+		await runtime.initialize();
+
+		expect(runtime.state.sessions[0]?.id).toBe("session-1");
+		expect(runtime.state.selectedSessionId).toBeUndefined();
+		expect(runtime.state.diagnostics.join("\n")).toContain("workspace selection degraded");
+		expect(runtime.state.diagnostics.join("\n")).toContain("workspace restoration trace");
 	});
 
 	test("selects a newly started session from the first prompt", async () => {

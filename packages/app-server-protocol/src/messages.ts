@@ -10,7 +10,7 @@ import {
 	ComposerFileSearchResultSchema,
 } from "./composer";
 import { DaedalusWorkflowStateSchema } from "./daedalus-workflow";
-import { DiagnosticExportParamsSchema, DiagnosticExportResultSchema } from "./diagnostics";
+import { DiagnosticExportParamsSchema, DiagnosticExportResultSchema, RestorationTraceSchema } from "./diagnostics";
 import { EventReplayParamsSchema, EventReplayResultSchema } from "./events";
 import { ExtensionUiRequestSchema, ExtensionUiResponseSchema } from "./extension-ui";
 import {
@@ -327,6 +327,7 @@ export const WorkspaceSelectionResultSchema = StrictObject({
 	selection: Type.Optional(WorkspaceSelectionSchema),
 	degraded: Type.Boolean(),
 	reason: Type.Optional(Type.String({ minLength: 1 })),
+	restorationTrace: Type.Optional(RestorationTraceSchema),
 });
 export type WorkspaceSelectionResult = Static<typeof WorkspaceSelectionResultSchema>;
 
