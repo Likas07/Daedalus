@@ -510,6 +510,39 @@ describe("GUI runtime expanded APIs", () => {
 			expect.objectContaining({ method: "diff/get", params: { diffId: "explicit-diff" } }),
 		);
 	});
+
+	test("defaults diff, git, and terminals to the selected valid thread target", async () => {
+		const transport = new MockTransport();
+		const runtime = await createGuiRuntime({ client: new AppServerClient({ transport }) });
+		await runtime.initialize();
+		await runtime.selectSession("session-1");
+		await runtime.refreshDiff();
+		await runtime.stageFiles?.(["src/index.ts"]);
+		await runtime.createTerminal({
+			cwd: "/repo-wt",
+			projectId: "project-1",
+			worktreeId: "wt-1",
+			sessionId: "session-1",
+			requireRootBoundary: true,
+			guardTarget: {
+				projectId: "project-1",
+				rootPath: "/repo-wt",
+				canonicalRootPath: "/repo-wt",
+				targetPath: "/repo-wt",
+				canonicalTargetPath: "/repo-wt",
+			},
+		});
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({ method: "diff/get", params: { target: { kind: "worktree", projectId: "project-1", worktreeId: "wt-1" } } }),
+		);
+		expect(transport.sent).toContainEqual(expect.objectContaining({ method: "git/stage", params: { diffId: "wt-1", paths: ["src/index.ts"] } }));
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({
+				method: "terminal/create",
+				params: expect.objectContaining({ projectId: "project-1", worktreeId: "wt-1", sessionId: "session-1", requireRootBoundary: true }),
+			}),
+		);
+	});
 });
 
 describe("GUI runtime reconnect", () => {

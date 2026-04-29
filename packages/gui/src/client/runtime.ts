@@ -301,10 +301,13 @@ export interface SaveComposerAttachmentInput {
 export interface CreateTerminalInput {
 	projectId?: string;
 	worktreeId?: string;
+	sessionId?: string;
 	cwd: string;
 	shell?: string;
 	cols?: number;
 	rows?: number;
+	guardTarget?: import("@daedalus-pi/app-server-protocol").RootScopedTarget;
+	requireRootBoundary?: boolean;
 }
 export interface CreateWorktreeInput {
 	projectId: string;
@@ -717,7 +720,7 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 			notify();
 			return state.activeDiff;
 		},
-		async stageFiles(paths, diffId = state.lastProjectId ?? state.projectRoot) {
+		async stageFiles(paths, diffId = defaultGitDiffId(state)) {
 			if (!diffId) return undefined;
 			const result = (await client.request("git/stage", { diffId, paths: [...paths] })) as {
 				diff?: RendererDiffSummary;
@@ -726,7 +729,7 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 			notify();
 			return state.activeDiff;
 		},
-		async unstageFiles(paths, diffId = state.lastProjectId ?? state.projectRoot) {
+		async unstageFiles(paths, diffId = defaultGitDiffId(state)) {
 			if (!diffId) return undefined;
 			const result = (await client.request("git/unstage", { diffId, paths: [...paths] })) as {
 				diff?: RendererDiffSummary;
@@ -735,7 +738,7 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 			notify();
 			return state.activeDiff;
 		},
-		async discardFiles(paths, diffId = state.lastProjectId ?? state.projectRoot) {
+		async discardFiles(paths, diffId = defaultGitDiffId(state)) {
 			if (!diffId) return undefined;
 			const result = (await client.request("git/discard", { diffId, paths: [...paths] })) as {
 				diff?: RendererDiffSummary;
@@ -744,7 +747,7 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 			notify();
 			return state.activeDiff;
 		},
-		async commitChanges(message, diffId = state.lastProjectId ?? state.projectRoot) {
+		async commitChanges(message, diffId = defaultGitDiffId(state)) {
 			if (!diffId) return undefined;
 			const result = (await client.request("git/commit", { diffId, message })) as { diff?: RendererDiffSummary };
 			state.activeDiff = result.diff;
@@ -762,7 +765,7 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 			notify();
 			return state.activeDiff;
 		},
-		async diffCheckpoint(checkpointRef, diffId = state.lastProjectId ?? state.projectRoot) {
+		async diffCheckpoint(checkpointRef, diffId = defaultGitDiffId(state)) {
 			if (!diffId) return undefined;
 			const result = (await client.request("git/checkpoint-restore", { diffId, checkpointRef })) as {
 				diff?: RendererDiffSummary;
@@ -1111,13 +1114,40 @@ function upsertSessionFromEvent(state: GuiState, event: AppEvent): void {
 	});
 }
 
-function defaultDiffTarget(state: GuiState): DiffTarget | undefined {
+function selectedPanelTarget(state: GuiState): { diffTarget: DiffTarget; diffId: string; terminal: CreateTerminalInput } | undefined {
 	const selected = state.sessions.find((session) => session.id === state.selectedSessionId);
-	if (selected?.runsIn) return { kind: "session", sessionId: selected.id };
-	if (selected?.worktreeId && selected.projectId) {
-		return { kind: "worktree", projectId: selected.projectId, worktreeId: selected.worktreeId };
+	const runsIn = selected?.runsIn;
+	if (!selected || !runsIn || runsIn.validationStatus !== "valid") return undefined;
+	const projectId = runsIn.projectId;
+	const rootPath = runsIn.path;
+	const canonicalRootPath = runsIn.canonicalPath;
+	const guardTarget = { projectId, rootPath, canonicalRootPath, targetPath: rootPath, canonicalTargetPath: canonicalRootPath };
+	if (runsIn.worktreeId) {
+		return {
+			diffTarget: { kind: "worktree", projectId, worktreeId: runsIn.worktreeId },
+			diffId: runsIn.worktreeId,
+			terminal: { projectId, worktreeId: runsIn.worktreeId, sessionId: selected.id, cwd: rootPath, guardTarget, requireRootBoundary: true },
+		};
 	}
-	return state.lastProjectId ? { kind: "project", projectId: state.lastProjectId } : undefined;
+	return {
+		diffTarget: { kind: "project", projectId },
+		diffId: projectId,
+		terminal: { projectId, sessionId: selected.id, cwd: rootPath, guardTarget, requireRootBoundary: true },
+	};
+}
+
+function defaultDiffTarget(state: GuiState): DiffTarget | undefined {
+	return selectedPanelTarget(state)?.diffTarget;
+}
+
+function defaultGitDiffId(state: GuiState): string | undefined {
+	return selectedPanelTarget(state)?.diffId;
+}
+
+export function selectedTerminalCreateInput(state: GuiState, input: Partial<CreateTerminalInput> = {}): CreateTerminalInput | undefined {
+	const target = selectedPanelTarget(state)?.terminal;
+	if (!target) return undefined;
+	return { ...target, ...input, cwd: input.cwd ?? target.cwd, guardTarget: input.guardTarget ?? target.guardTarget, requireRootBoundary: true };
 }
 
 function bestNextActionForRunsIn(runsIn?: WorkflowRunsInTarget): SessionBestNextAction | undefined {

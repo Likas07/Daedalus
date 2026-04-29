@@ -638,6 +638,20 @@ export class AppRouter {
 			: undefined;
 		const requestedCwd = resolve(params.cwd);
 		const scopedTargets: Array<{ root: string; candidate: string; projectId?: string }> = [];
+		let sessionRunsIn: WorkflowRunsInTarget | undefined;
+		if (params.sessionId) {
+			const projectId = params.projectId ?? this.projectIdForSession(params.sessionId);
+			const session = listProjectSessions(this.options.database, projectId).find((row) => row.id === params.sessionId);
+			if (!session) throw new Error(`Unknown terminal session target: ${params.sessionId}`);
+			if (!session.runsIn || session.runsIn.validationStatus !== "valid")
+				throw new Error(`Session ${params.sessionId} does not have a valid terminal target`);
+			if (params.projectId && session.runsIn.projectId !== params.projectId)
+				throw new Error(`Session ${params.sessionId} does not belong to project ${params.projectId}`);
+			if ((params.worktreeId ?? session.runsIn.worktreeId) !== session.runsIn.worktreeId)
+				throw new Error(`Session ${params.sessionId} does not match worktree ${params.worktreeId}`);
+			sessionRunsIn = session.runsIn;
+			scopedTargets.push({ root: sessionRunsIn.canonicalPath, candidate: requestedCwd, projectId: sessionRunsIn.projectId });
+		}
 		if (guardTarget) {
 			scopedTargets.push({
 				root: guardTarget.canonicalRootPath,
@@ -648,6 +662,8 @@ export class AppRouter {
 		if (params.projectId) {
 			const project = this.projectService.get(params.projectId);
 			if (!project) throw new Error(`Unknown project: ${params.projectId}`);
+			if (sessionRunsIn && sessionRunsIn.projectId !== project.id)
+				throw new Error(`Session ${params.sessionId} does not belong to project ${params.projectId}`);
 			scopedTargets.push({ root: project.path, candidate: requestedCwd, projectId: project.id });
 		}
 		if (params.worktreeId) {
@@ -655,6 +671,8 @@ export class AppRouter {
 			if (!worktree) throw new Error(`Unknown worktree: ${params.worktreeId}`);
 			if (params.projectId && worktree.projectId !== params.projectId)
 				throw new Error(`Worktree ${params.worktreeId} does not belong to project ${params.projectId}`);
+			if (sessionRunsIn && sessionRunsIn.worktreeId !== worktree.id)
+				throw new Error(`Session ${params.sessionId} does not match worktree ${params.worktreeId}`);
 			scopedTargets.push({ root: worktree.path, candidate: requestedCwd, projectId: worktree.projectId });
 		}
 		let cwd = requestedCwd;
