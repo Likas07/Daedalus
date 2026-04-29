@@ -190,6 +190,34 @@ function responseFor(method: string | undefined, params?: unknown): unknown {
 					validationStatus: "valid",
 				},
 			};
+		case "session/continue-in-worktree":
+			return {
+				sessionId: "session-child",
+				parentSessionId: "session-1",
+				worktree: {
+					id: "wt-child",
+					projectId: "project-1",
+					branch: "continue/session-1",
+					path: "/repo-child",
+					status: "ready",
+					dirty: false,
+					dirtyCount: 0,
+					activeSessionCount: 1,
+					cleanupRequiresConfirmation: false,
+					createdAt: "now",
+					updatedAt: "now",
+				},
+				runsIn: {
+					mode: "isolated-worktree",
+					projectId: "project-1",
+					worktreeId: "wt-child",
+					branch: "continue/session-1",
+					path: "/repo-child",
+					isolationMode: "isolated-worktree",
+					validationStatus: "valid",
+				},
+				operationId: (params as { operationId?: string } | undefined)?.operationId,
+			};
 		case "terminal/create":
 		case "terminal/resize":
 		case "terminal/kill":
@@ -356,6 +384,43 @@ describe("GUI runtime state model", () => {
 			expect.objectContaining({
 				method: "session/start",
 				params: expect.objectContaining({ operationId: expect.stringMatching(/^new-build-/) }),
+			}),
+		);
+	});
+
+	test("continues the selected source session in a returned worktree thread", async () => {
+		const transport = new MockTransport();
+		const runtime = await createGuiRuntime({ client: new AppServerClient({ transport }), threadFirstRoute: true });
+		await runtime.initialize();
+		const sourceBefore = { ...runtime.state.sessions.find((session) => session.id === "session-1") };
+
+		const result = await runtime.continueInWorktree({ sourceSessionId: "session-1", projectId: "project-1" });
+
+		expect(result.sessionId).toBe("session-child");
+		expect(runtime.state.sessions.find((session) => session.id === "session-1")).toMatchObject(sourceBefore);
+		expect(runtime.state.worktrees.find((worktree) => worktree.id === "wt-child")).toMatchObject({ path: "/repo-child" });
+		expect(runtime.state.sessions.find((session) => session.id === "session-child")).toMatchObject({
+			id: "session-child",
+			parentSessionId: "session-1",
+			sourceSessionId: "session-1",
+			projectId: "project-1",
+			worktreeId: "wt-child",
+		});
+		expect(runtime.state.selectedSessionId).toBe("session-child");
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({
+				method: "session/continue-in-worktree",
+				params: expect.objectContaining({
+					sourceSessionId: "session-1",
+					projectId: "project-1",
+					operationId: expect.stringMatching(/^continue-worktree-/),
+				}),
+			}),
+		);
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({
+				method: "workspace/selection/set",
+				params: { projectId: "project-1", sessionId: "session-child" },
 			}),
 		);
 	});
