@@ -19,6 +19,7 @@ import { FileSearchService } from "../composer/file-search-service";
 import type { ExtensionUiRouter } from "../extensions/extension-ui-router";
 import type { CommandRunner } from "../integrations/integration-api";
 import { IntegrationService } from "../integrations/integration-service";
+import { projectAppEventToProjectionEvents } from "../projections/projection-events";
 import { buildShellSnapshot } from "../projections/shell-projection";
 import { buildThreadDetailSnapshot } from "../projections/thread-detail-projection";
 import { projectRuntimeEvents } from "../persistence/projector";
@@ -1115,6 +1116,13 @@ export class AppRouter {
 			method: "event/appended",
 			params: { event: { ...event, seq: stored.seq } },
 		});
+		const projectionEvents = projectAppEventToProjectionEvents({ event, seq: stored.seq });
+		for (const shellEvent of projectionEvents.shell) {
+			this.options.publish({ kind: "notification", method: "shell/event", params: shellEvent });
+		}
+		for (const threadEvent of projectionEvents.thread) {
+			this.options.publish({ kind: "notification", method: "thread/event", params: threadEvent });
+		}
 	}
 }
 
