@@ -9,6 +9,22 @@
 		".": {
 			"types": "./src/index.ts",
 			"import": "./src/index.ts"
+		},
+		"./approval/reducer": {
+			"types": "./src/approval/reducer.ts",
+			"import": "./src/approval/reducer.ts"
+		},
+		"./diff/reducer": {
+			"types": "./src/diff/reducer.ts",
+			"import": "./src/diff/reducer.ts"
+		},
+		"./terminal/reducer": {
+			"types": "./src/terminal/reducer.ts",
+			"import": "./src/terminal/reducer.ts"
+		},
+		"./thread/reducer": {
+			"types": "./src/thread/reducer.ts",
+			"import": "./src/thread/reducer.ts"
 		}
 	},
 	"scripts": {
