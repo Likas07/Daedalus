@@ -14,6 +14,12 @@ export type ProjectId = Static<typeof ProjectIdSchema>;
 export const WorktreeIdSchema = Type.String({ minLength: 1 });
 export type WorktreeId = Static<typeof WorktreeIdSchema>;
 
+export const ThreadIdSchema = Type.String({ minLength: 1 });
+export type ThreadId = Static<typeof ThreadIdSchema>;
+
+export const WorkspaceTargetIdSchema = Type.String({ minLength: 1 });
+export type WorkspaceTargetId = Static<typeof WorkspaceTargetIdSchema>;
+
 export const SessionIdSchema = Type.String({ minLength: 1 });
 export type SessionId = Static<typeof SessionIdSchema>;
 

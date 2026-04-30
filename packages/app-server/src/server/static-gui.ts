@@ -19,8 +19,23 @@ const CONTENT_TYPES: Record<string, string> = {
 	".ico": "image/x-icon",
 };
 
+export function reactGuiDistDir(): string {
+	return resolve(dirname(fileURLToPath(import.meta.url)), "../../../react-gui/dist");
+}
+
+export function legacyGuiDistDir(): string {
+	return resolve(dirname(fileURLToPath(import.meta.url)), "../../../gui/dist");
+}
+
+function configuredGuiDistDir(): string | undefined {
+	const distDir = Bun.env.DAEDALUS_GUI_DIST_DIR;
+	return distDir ? resolve(distDir) : undefined;
+}
 export function defaultGuiDistDir(): string {
-	return resolve(dirname(fileURLToPath(import.meta.url)), "../../../../gui/dist");
+	const configuredDist = configuredGuiDistDir();
+	if (configuredDist) return configuredDist;
+	const reactDist = reactGuiDistDir();
+	return existsSync(join(reactDist, "index.html")) ? reactDist : legacyGuiDistDir();
 }
 
 export function createGuiBootstrap(options: StaticGuiOptions): Record<string, string | undefined> {

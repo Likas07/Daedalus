@@ -7,6 +7,9 @@ import { createAgentSession } from "../src/core/sdk.js";
 import { SessionManager } from "../src/core/session-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
 import { syncSemanticWorkspace } from "../src/extensions/daedalus/tools/semantic-workspace.js";
+import { isSemanticWorkspaceIndexingAvailable } from "./semantic-test-helpers.js";
+
+const semanticWorkspaceIt = it.skipIf(!(await isSemanticWorkspaceIndexingAvailable()));
 
 function getText(result: any): string {
 	return result.content
@@ -19,20 +22,19 @@ describe("status dashboard", () => {
 	let tempDir: string;
 	let agentDir: string;
 
-	beforeEach(async () => {
+	beforeEach(() => {
 		tempDir = join(tmpdir(), `daedalus-status-dashboard-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		agentDir = join(tempDir, "agent");
 		mkdirSync(agentDir, { recursive: true });
 		mkdirSync(join(tempDir, "src"), { recursive: true });
 		writeFileSync(join(tempDir, "src", "auth.ts"), "export const auth = true;\n");
-		await syncSemanticWorkspace(tempDir);
 	});
 
 	afterEach(() => {
 		if (tempDir && existsSync(tempDir)) rmSync(tempDir, { recursive: true, force: true });
 	});
 
-	it("status_overview reports workspace readiness and todo summary", async () => {
+	semanticWorkspaceIt("status_overview reports workspace readiness and todo summary", async () => {
 		const settingsManager = SettingsManager.create(tempDir, agentDir);
 		const sessionManager = SessionManager.inMemory();
 		sessionManager.appendCustomEntry("plan-execution-state", {
@@ -42,6 +44,7 @@ describe("status dashboard", () => {
 			],
 			summary: { total: 2, active: 1, pending: 0, in_progress: 1, completed: 1, cancelled: 0 },
 		});
+
 		const { session } = await createAgentSession({
 			cwd: tempDir,
 			agentDir,
@@ -68,9 +71,10 @@ describe("status dashboard", () => {
 		session.dispose();
 	});
 
-	it("/status command emits a status dashboard custom message", async () => {
+	semanticWorkspaceIt("/status command emits a status dashboard custom message", async () => {
 		const settingsManager = SettingsManager.create(tempDir, agentDir);
 		const sessionManager = SessionManager.inMemory();
+
 		const { session } = await createAgentSession({
 			cwd: tempDir,
 			agentDir,
@@ -93,30 +97,35 @@ describe("status dashboard", () => {
 		session.dispose();
 	});
 
-	it("status_overview reports soft-stale semantic state without treating it as unusable", async () => {
-		const settingsManager = SettingsManager.create(tempDir, agentDir);
-		const sessionManager = SessionManager.inMemory();
-		const { session } = await createAgentSession({
-			cwd: tempDir,
-			agentDir,
-			model: getModel("anthropic", "claude-sonnet-4-5")!,
-			settingsManager,
-			sessionManager,
-		});
-		await session.bindExtensions({});
-		await syncSemanticWorkspace(tempDir);
-		writeFileSync(join(tempDir, "src", "auth.ts"), "export const auth = 'changed';\n");
+	semanticWorkspaceIt(
+		"status_overview reports soft-stale semantic state without treating it as unusable",
+		async () => {
+			const settingsManager = SettingsManager.create(tempDir, agentDir);
+			const sessionManager = SessionManager.inMemory();
 
-		const tool = session.getToolDefinition("status_overview")!;
-		const result = await tool.execute("status-overview-soft-stale", {}, undefined, undefined, {
-			cwd: tempDir,
-			model: getModel("anthropic", "claude-sonnet-4-5")!,
-			hasPendingMessages: () => false,
-			sessionManager,
-		} as any);
+			const { session } = await createAgentSession({
+				cwd: tempDir,
+				agentDir,
+				model: getModel("anthropic", "claude-sonnet-4-5")!,
+				settingsManager,
+				sessionManager,
+			});
+			await session.bindExtensions({});
+			await syncSemanticWorkspace(tempDir);
 
-		expect(getText(result)).toContain("semantic_workspace: stale_soft");
+			writeFileSync(join(tempDir, "src", "auth.ts"), "export const auth = 'changed';\n");
 
-		session.dispose();
-	});
+			const tool = session.getToolDefinition("status_overview")!;
+			const result = await tool.execute("status-overview-soft-stale", {}, undefined, undefined, {
+				cwd: tempDir,
+				model: getModel("anthropic", "claude-sonnet-4-5")!,
+				hasPendingMessages: () => false,
+				sessionManager,
+			} as any);
+
+			expect(getText(result)).toContain("semantic_workspace: stale_soft");
+
+			session.dispose();
+		},
+	);
 });

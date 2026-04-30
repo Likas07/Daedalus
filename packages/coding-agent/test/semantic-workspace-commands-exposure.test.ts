@@ -6,6 +6,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createAgentSession } from "../src/core/sdk.js";
 import { SessionManager } from "../src/core/session-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
+import { isSemanticWorkspaceIndexingAvailable } from "./semantic-test-helpers.js";
+
+const semanticWorkspaceIt = it.skipIf(!(await isSemanticWorkspaceIndexingAvailable()));
 
 describe("semantic workspace commands and exposure", () => {
 	let tempDir: string;
@@ -26,64 +29,73 @@ describe("semantic workspace commands and exposure", () => {
 		if (tempDir && existsSync(tempDir)) rmSync(tempDir, { recursive: true, force: true });
 	});
 
-	it("uses slash commands for lifecycle and only exposes sem_search after indexing", async () => {
-		const settingsManager = SettingsManager.create(tempDir, agentDir);
-		const sessionManager = SessionManager.inMemory();
-		const { session } = await createAgentSession({
-			cwd: tempDir,
-			agentDir,
-			model: getModel("anthropic", "claude-sonnet-4-5")!,
-			settingsManager,
-			sessionManager,
-		});
-		await session.bindExtensions({});
+	semanticWorkspaceIt(
+		"uses slash commands for lifecycle and only exposes sem_search after indexing",
+		async () => {
+			const settingsManager = SettingsManager.create(tempDir, agentDir);
+			const sessionManager = SessionManager.inMemory();
+			const { session } = await createAgentSession({
+				cwd: tempDir,
+				agentDir,
+				model: getModel("anthropic", "claude-sonnet-4-5")!,
+				settingsManager,
+				sessionManager,
+			});
+			await session.bindExtensions({});
 
-		expect(session.getActiveToolNames()).not.toContain("sem_search");
-		expect(session.systemPrompt).not.toContain("- sem_search:");
-		expect(session.systemPrompt).not.toContain("Use sem_search for concept-level discovery");
-		expect(session.getActiveToolNames()).not.toContain("sem_workspace_init");
-		expect(session.getActiveToolNames()).not.toContain("sem_workspace_sync");
-		expect(session.getActiveToolNames()).not.toContain("sem_workspace_status");
-		expect(session.getActiveToolNames()).not.toContain("sem_workspace_info");
+			expect(session.getActiveToolNames()).not.toContain("sem_search");
+			expect(session.systemPrompt).not.toContain("- sem_search:");
+			expect(session.systemPrompt).not.toContain("Use sem_search for concept-level discovery");
+			expect(session.getActiveToolNames()).not.toContain("sem_workspace_init");
+			expect(session.getActiveToolNames()).not.toContain("sem_workspace_sync");
+			expect(session.getActiveToolNames()).not.toContain("sem_workspace_status");
+			expect(session.getActiveToolNames()).not.toContain("sem_workspace_info");
 
-		await session.prompt("/workspace-status");
-		await session.prompt("/workspace-init");
-		await session.prompt("/workspace-sync");
+			await session.prompt("/workspace-status");
+			await session.prompt("/workspace-init");
+			await session.prompt("/workspace-sync");
 
-		expect(session.getActiveToolNames()).toContain("sem_search");
-		expect(session.systemPrompt).toContain("- sem_search:");
-		expect(session.systemPrompt).toContain("Use sem_search for concept-level discovery");
+			expect(session.getActiveToolNames()).toContain("sem_search");
+			expect(session.systemPrompt).toContain("- sem_search:");
+			expect(session.systemPrompt).toContain("Use sem_search for concept-level discovery");
 
-		const statusMessages = session.messages.filter(
-			(message) => message.role === "custom" && message.customType === "semantic-workspace-status",
-		);
-		expect(statusMessages.length).toBeGreaterThanOrEqual(3);
-		const latest = statusMessages.at(-1);
-		const latestText = typeof latest?.content === "string" ? latest.content : "";
-		expect(latestText).toContain("state: ready");
+			const statusMessages = session.messages.filter(
+				(message) => message.role === "custom" && message.customType === "semantic-workspace-status",
+			);
+			expect(statusMessages.length).toBeGreaterThanOrEqual(3);
+			const latest = statusMessages.at(-1);
+			const latestText = typeof latest?.content === "string" ? latest.content : "";
+			expect(latestText).toContain("state: ready");
 
-		session.dispose();
-	}, 120_000);
+			session.dispose();
+		},
+		120_000,
+	);
 
-	it("keeps sem_search exposed after indexed workspace becomes soft-stale", async () => {
-		const settingsManager = SettingsManager.create(tempDir, agentDir);
-		const sessionManager = SessionManager.inMemory();
-		const { session } = await createAgentSession({
-			cwd: tempDir,
-			agentDir,
-			model: getModel("anthropic", "claude-sonnet-4-5")!,
-			settingsManager,
-			sessionManager,
-		});
-		await session.bindExtensions({});
+	semanticWorkspaceIt(
+		"keeps sem_search exposed after indexed workspace becomes soft-stale",
+		async () => {
+			const settingsManager = SettingsManager.create(tempDir, agentDir);
+			const sessionManager = SessionManager.inMemory();
+			const { session } = await createAgentSession({
+				cwd: tempDir,
+				agentDir,
+				model: getModel("anthropic", "claude-sonnet-4-5")!,
+				settingsManager,
+				sessionManager,
+			});
+			await session.bindExtensions({});
 
-		await session.prompt("/workspace-init");
-		await session.prompt("/workspace-sync");
-		writeFileSync(join(tempDir, "src", "refresh-token.ts"), "export const refresh = 'beta';\n");
+			await session.prompt("/workspace-init");
+			await session.prompt("/workspace-sync");
 
-		expect(session.getActiveToolNames()).toContain("sem_search");
-		expect(session.systemPrompt).toContain("- sem_search:");
+			writeFileSync(join(tempDir, "src", "refresh-token.ts"), "export const refresh = 'beta';\n");
 
-		session.dispose();
-	}, 120_000);
+			expect(session.getActiveToolNames()).toContain("sem_search");
+			expect(session.systemPrompt).toContain("- sem_search:");
+
+			session.dispose();
+		},
+		120_000,
+	);
 });

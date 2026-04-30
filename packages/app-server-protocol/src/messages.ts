@@ -95,6 +95,29 @@ import {
 	TerminalSnapshotResultSchema,
 } from "./terminal";
 import {
+	ApprovalAnswerInputParamsSchema as ProtocolV1ApprovalAnswerInputParamsSchema,
+	ApprovalAnswerInputResultSchema as ProtocolV1ApprovalAnswerInputResultSchema,
+	ApprovalDecisionParamsSchema as ProtocolV1ApprovalDecisionParamsSchema,
+	ApprovalDecisionResultSchema as ProtocolV1ApprovalDecisionResultSchema,
+	ApprovalListParamsSchema as ProtocolV1ApprovalListParamsSchema,
+	ApprovalListResultSchema as ProtocolV1ApprovalListResultSchema,
+	ApprovalRequestNotificationSchema as ProtocolV1ApprovalRequestNotificationSchema,
+	DiffFileWindowParamsSchema as ProtocolV1DiffFileWindowParamsSchema,
+	DiffFileWindowResultSchema as ProtocolV1DiffFileWindowResultSchema,
+	DiffSummaryNotificationSchema as ProtocolV1DiffSummaryNotificationSchema,
+	DiffSummaryParamsSchema as ProtocolV1DiffSummaryParamsSchema,
+	DiffSummaryResultSchema as ProtocolV1DiffSummaryResultSchema,
+	TerminalCloseParamsSchema as ProtocolV1TerminalCloseParamsSchema,
+	TerminalCommandResultSchema as ProtocolV1TerminalCommandResultSchema,
+	TerminalContextNotificationSchema as ProtocolV1TerminalContextNotificationSchema,
+	TerminalInputParamsSchema as ProtocolV1TerminalInputParamsSchema,
+	TerminalOpenParamsSchema as ProtocolV1TerminalOpenParamsSchema,
+	TerminalOutputNotificationSchema as ProtocolV1TerminalOutputNotificationSchema,
+	TerminalReplayParamsSchema as ProtocolV1TerminalReplayParamsSchema,
+	TerminalReplayResultSchema as ProtocolV1TerminalReplayResultSchema,
+	TerminalResizeParamsSchema as ProtocolV1TerminalResizeParamsSchema,
+} from "./v1";
+import {
 	OperationIdSchema,
 	RootBoundaryViolationSchema,
 	WorkflowDiffSummarySchema,
@@ -125,6 +148,46 @@ const notification = <Method extends string, Params extends TSchema>(method: Met
 		method: Type.Literal(method),
 		params,
 	});
+
+export const ProtocolV1Phase3ClientRequestSchema = Type.Union([
+	request("v1.approval.list", ProtocolV1ApprovalListParamsSchema),
+	request("v1.approval.decide", ProtocolV1ApprovalDecisionParamsSchema),
+	request("v1.approval.answer", ProtocolV1ApprovalAnswerInputParamsSchema),
+	request("v1.diff.summary", ProtocolV1DiffSummaryParamsSchema),
+	request("v1.diff.fileWindow", ProtocolV1DiffFileWindowParamsSchema),
+	request("v1.terminal.open", ProtocolV1TerminalOpenParamsSchema),
+	request("v1.terminal.input", ProtocolV1TerminalInputParamsSchema),
+	request("v1.terminal.resize", ProtocolV1TerminalResizeParamsSchema),
+	request("v1.terminal.close", ProtocolV1TerminalCloseParamsSchema),
+	request("v1.terminal.replay", ProtocolV1TerminalReplayParamsSchema),
+]);
+export type ProtocolV1Phase3ClientRequest = Static<typeof ProtocolV1Phase3ClientRequestSchema>;
+
+export const ProtocolV1Phase3ClientRequestResultSchemas = {
+	"v1.approval.list": ProtocolV1ApprovalListResultSchema,
+	"v1.approval.decide": ProtocolV1ApprovalDecisionResultSchema,
+	"v1.approval.answer": ProtocolV1ApprovalAnswerInputResultSchema,
+	"v1.diff.summary": ProtocolV1DiffSummaryResultSchema,
+	"v1.diff.fileWindow": ProtocolV1DiffFileWindowResultSchema,
+	"v1.terminal.open": ProtocolV1TerminalCommandResultSchema,
+	"v1.terminal.input": ProtocolV1TerminalCommandResultSchema,
+	"v1.terminal.resize": ProtocolV1TerminalCommandResultSchema,
+	"v1.terminal.close": ProtocolV1TerminalCommandResultSchema,
+	"v1.terminal.replay": ProtocolV1TerminalReplayResultSchema,
+} as const;
+export type ProtocolV1Phase3ClientRequestResultMap = {
+	[Method in keyof typeof ProtocolV1Phase3ClientRequestResultSchemas]: Static<
+		(typeof ProtocolV1Phase3ClientRequestResultSchemas)[Method]
+	>;
+};
+
+export const ProtocolV1Phase3ServerNotificationSchema = Type.Union([
+	notification("v1.approval.changed", ProtocolV1ApprovalRequestNotificationSchema),
+	notification("v1.diff.changed", ProtocolV1DiffSummaryNotificationSchema),
+	notification("v1.terminal.changed", ProtocolV1TerminalContextNotificationSchema),
+	notification("v1.terminal.output", ProtocolV1TerminalOutputNotificationSchema),
+]);
+export type ProtocolV1Phase3ServerNotification = Static<typeof ProtocolV1Phase3ServerNotificationSchema>;
 
 export const InitializeParamsSchema = StrictObject({
 	protocolVersion: ProtocolVersionSchema,

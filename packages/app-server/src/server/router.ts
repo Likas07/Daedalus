@@ -7,6 +7,8 @@ import type {
 	ClientNotification,
 	ClientRequest,
 	DiffTarget,
+	protocolV1,
+	RootScopedTarget,
 	ServerNotification,
 	ServerRequest,
 	WorkflowRunsInTarget,
@@ -52,6 +54,7 @@ import { validateWorktreeTarget } from "../workspaces/worktree-safety";
 import { WorktreeService } from "../workspaces/worktree-service";
 
 import { ExportService } from "./export-service";
+import { handleThreadV1Request, notificationForThreadV1StoredEvent } from "./thread-v1-routes";
 
 export type OutboundMessage = AppEvent | ServerNotification | ServerRequest;
 export type Publish = (message: OutboundMessage) => void;
@@ -165,6 +168,38 @@ export class AppRouter {
 		}
 	}
 	async handle(request: ClientRequest): Promise<unknown> {
+		const threadV1Route = await handleThreadV1Request(
+			{
+				database: this.options.database,
+				authority: {
+					startTurn: async (params) =>
+						this.options.controller.startTurn({
+							sessionId: params.threadId,
+							prompt: params.prompt,
+							context: {
+								attachmentIds: params.attachmentIds,
+								filePaths: params.filePaths,
+								model: params.model,
+								effort: params.effort,
+								draftState: params.draftState,
+							},
+						}),
+					cancelTurn: async (params) =>
+						this.options.controller.interruptTurn({ sessionId: params.threadId, turnId: params.turnId }),
+				},
+				beforeStartTurn: async (threadId) => {
+					await this.validateStoredTurnTarget(threadId);
+				},
+				afterStartTurn: async (threadId) => {
+					const runsIn = await this.validateStoredTurnTarget(threadId);
+					this.workspaceSelectionService.setValidated({ projectId: runsIn.projectId, sessionId: threadId });
+				},
+			},
+			request,
+		);
+		if (threadV1Route.handled) return threadV1Route.result;
+		const phase3V1Route = await this.handlePhase3V1Request(request);
+		if (phase3V1Route.handled) return phase3V1Route.result;
 		switch (request.method) {
 			case "initialize":
 				return {
@@ -971,6 +1006,195 @@ export class AppRouter {
 			},
 		};
 	}
+	private async handlePhase3V1Request(request: unknown): Promise<{ handled: boolean; result?: unknown }> {
+		if (!request || typeof request !== "object") return { handled: false };
+		const method = (request as { method?: unknown }).method;
+		const params = (request as { params?: unknown }).params;
+		switch (method) {
+			case "v1.approval.list":
+				return { handled: true, result: this.approvalService.listV1(params as protocolV1.ApprovalListParams) };
+			case "v1.approval.decide":
+				return {
+					handled: true,
+					result: this.approvalService.decideV1(params as protocolV1.ApprovalDecisionParams),
+				};
+			case "v1.approval.answer":
+				return {
+					handled: true,
+					result: this.approvalService.answerInputV1(params as protocolV1.ApprovalAnswerInputParams),
+				};
+			case "v1.diff.summary":
+				return { handled: true, result: await this.handleDiffSummaryV1(params as protocolV1.DiffSummaryParams) };
+			case "v1.diff.fileWindow":
+				return {
+					handled: true,
+					result: await this.handleDiffFileWindowV1(params as protocolV1.DiffFileWindowParams),
+				};
+			case "v1.terminal.open":
+				return { handled: true, result: await this.handleTerminalOpenV1(params as protocolV1.TerminalOpenParams) };
+			case "v1.terminal.input":
+				return { handled: true, result: this.handleTerminalInputV1(params as protocolV1.TerminalInputParams) };
+			case "v1.terminal.resize":
+				return { handled: true, result: this.handleTerminalResizeV1(params as protocolV1.TerminalResizeParams) };
+			case "v1.terminal.close":
+				return { handled: true, result: this.handleTerminalCloseV1(params as protocolV1.TerminalCloseParams) };
+			case "v1.terminal.replay":
+				return { handled: true, result: this.handleTerminalReplayV1(params as protocolV1.TerminalReplayParams) };
+			default:
+				return { handled: false };
+		}
+	}
+
+	private async handleDiffSummaryV1(params: protocolV1.DiffSummaryParams): Promise<protocolV1.DiffSummaryResult> {
+		const target = await this.resolveV1WorkspaceTarget(params.threadId, params.workspaceTargetId);
+		if (!target.ok) return diffTargetMismatch(params, target.actualWorkspaceTargetId, target.message);
+		return this.diffService.getSummaryV1(target.cwd, params);
+	}
+
+	private async handleDiffFileWindowV1(
+		params: protocolV1.DiffFileWindowParams,
+	): Promise<protocolV1.DiffFileWindowResult> {
+		const target = await this.resolveV1WorkspaceTarget(params.threadId, params.workspaceTargetId);
+		if (!target.ok) return diffTargetMismatch(params, target.actualWorkspaceTargetId, target.message);
+		return this.diffService.getFileWindowV1(target.cwd, params);
+	}
+
+	private async handleTerminalOpenV1(
+		params: protocolV1.TerminalOpenParams,
+	): Promise<protocolV1.TerminalCommandResult> {
+		const target = await this.resolveV1WorkspaceTarget(params.threadId, params.workspaceTargetId);
+		if (!target.ok) return terminalFailure(params, "workspace-target-blocked", target.message);
+		try {
+			const record = await this.terminalService.create({
+				projectId: target.projectId,
+				worktreeId: target.worktreeId,
+				sessionId: params.threadId,
+				owner: params.route,
+				cwd: params.cwd ? resolve(target.cwd, params.cwd) : target.cwd,
+				cols: params.cols,
+				rows: params.rows,
+				guardTarget: target.guardTarget,
+				requireRootBoundary: true,
+			});
+			if (params.initialInput) this.terminalService.input(record.terminalId, params.initialInput);
+			return {
+				ok: true,
+				context: terminalContext(record, params.workspaceTargetId, params.threadId, params.turnId, params.title),
+			};
+		} catch (error) {
+			return terminalFailure(
+				params,
+				"cwd-outside-workspace",
+				error instanceof Error ? error.message : String(error),
+			);
+		}
+	}
+
+	private handleTerminalInputV1(params: protocolV1.TerminalInputParams): protocolV1.TerminalCommandResult {
+		try {
+			let record = this.terminalService.get(params.terminalId);
+			const mismatch = validateTerminalRecordScope(record, params);
+			if (mismatch) return mismatch;
+			this.terminalService.input(params.terminalId, params.input);
+			record = this.terminalService.get(params.terminalId);
+			return {
+				ok: true,
+				context: terminalContext(record, params.workspaceTargetId, params.threadId, params.turnId),
+			};
+		} catch (error) {
+			return terminalFailure(params, "io-error", error instanceof Error ? error.message : String(error));
+		}
+	}
+
+	private handleTerminalResizeV1(params: protocolV1.TerminalResizeParams): protocolV1.TerminalCommandResult {
+		try {
+			const current = this.terminalService.get(params.terminalId);
+			const mismatch = validateTerminalRecordScope(current, params);
+			if (mismatch) return mismatch;
+			const record = this.terminalService.resize(params.terminalId, { cols: params.cols, rows: params.rows });
+			return {
+				ok: true,
+				context: terminalContext(record, params.workspaceTargetId, params.threadId, params.turnId),
+			};
+		} catch (error) {
+			return terminalFailure(params, "not-found", error instanceof Error ? error.message : String(error));
+		}
+	}
+
+	private handleTerminalCloseV1(params: protocolV1.TerminalCloseParams): protocolV1.TerminalCommandResult {
+		try {
+			const current = this.terminalService.get(params.terminalId);
+			const mismatch = validateTerminalRecordScope(current, params);
+			if (mismatch) return mismatch;
+			const record = this.terminalService.kill(params.terminalId);
+			return {
+				ok: true,
+				context: terminalContext(record, params.workspaceTargetId, params.threadId, params.turnId),
+			};
+		} catch (error) {
+			return terminalFailure(params, "not-found", error instanceof Error ? error.message : String(error));
+		}
+	}
+
+	private handleTerminalReplayV1(params: protocolV1.TerminalReplayParams): protocolV1.TerminalReplayResult {
+		try {
+			const record = this.terminalService.get(params.terminalId);
+			const mismatch = validateTerminalRecordScope(record, params);
+			if (mismatch) return mismatch;
+			const replay = this.terminalService.replay(params.terminalId, params.after?.seq ?? 0);
+			const context = terminalContext(record, params.workspaceTargetId, params.threadId, params.turnId);
+			const chunks = replay.chunks.slice(0, params.limit).map((chunk) => ({
+				cursor: { seq: chunk.seq },
+				text: chunk.data,
+				byteLength: Buffer.byteLength(chunk.data, "utf8"),
+			}));
+			const watermark = { seq: chunks.at(-1)?.cursor.seq ?? params.after?.seq ?? 0 };
+			return {
+				ok: true,
+				context,
+				chunks,
+				watermark,
+				nextCursor: replay.nextSeq > watermark.seq ? watermark : undefined,
+				previousCursor: params.after,
+				hasMoreAfter: replay.nextSeq > watermark.seq + 1,
+				hasMoreBefore: Boolean(params.after && params.after.seq > 0),
+			};
+		} catch (error) {
+			return terminalFailure(params, "not-found", error instanceof Error ? error.message : String(error));
+		}
+	}
+
+	private async resolveV1WorkspaceTarget(
+		threadId: string,
+		workspaceTargetId: string,
+	): Promise<
+		| { ok: true; cwd: string; projectId: string; worktreeId?: string; guardTarget: RootScopedTarget }
+		| { ok: false; actualWorkspaceTargetId?: string; message: string }
+	> {
+		const runsIn = await this.validateStoredTurnTarget(threadId);
+		const actualWorkspaceTargetId = workspaceTargetIdForRunsIn(runsIn);
+		if (workspaceTargetId !== actualWorkspaceTargetId)
+			return {
+				ok: false,
+				actualWorkspaceTargetId,
+				message: `Workspace target mismatch: requested ${workspaceTargetId}, actual ${actualWorkspaceTargetId}`,
+			};
+		const guardTarget = await resolveRootScopedTarget({
+			database: this.options.database,
+			target:
+				runsIn.isolationMode === "isolated-worktree"
+					? { kind: "worktree", projectId: runsIn.projectId, worktreeId: runsIn.worktreeId ?? workspaceTargetId }
+					: { kind: "project", projectId: runsIn.projectId },
+		});
+		return {
+			ok: true,
+			cwd: runsIn.canonicalPath,
+			projectId: runsIn.projectId,
+			worktreeId: runsIn.worktreeId,
+			guardTarget,
+		};
+	}
+
 	private recentAppEvents(limit = 1000): AppEvent[] {
 		return readEventsAfter(this.options.database, 0, { limit })
 			.map((event) => event.payload as unknown as AppEvent)
@@ -1116,6 +1340,14 @@ export class AppRouter {
 			method: "event/appended",
 			params: { event: { ...event, seq: stored.seq } },
 		});
+		const threadV1Notification = notificationForThreadV1StoredEvent({
+			seq: stored.seq,
+			streamId: event.sessionId ?? "app",
+			type: event.type,
+			payload: event as unknown as EventPayload,
+			createdAt: event.ts ?? new Date().toISOString(),
+		});
+		if (threadV1Notification) this.options.publish(threadV1Notification as unknown as OutboundMessage);
 		const projectionEvents = projectAppEventToProjectionEvents({ event, seq: stored.seq });
 		for (const shellEvent of projectionEvents.shell) {
 			this.options.publish({ kind: "notification", method: "shell/event", params: shellEvent });
@@ -1149,6 +1381,119 @@ function toSessionSummaryDto(summary: {
 		created: toIsoString(summary.created),
 		modified: toIsoString(summary.modified),
 	};
+}
+
+function workspaceTargetIdForRunsIn(runsIn: WorkflowRunsInTarget): string {
+	return runsIn.isolationMode === "isolated-worktree"
+		? (runsIn.worktreeId ?? runsIn.projectId)
+		: `base:${runsIn.projectId}`;
+}
+
+function diffTargetMismatch(
+	params: protocolV1.DiffSummaryParams | protocolV1.DiffFileWindowParams,
+	actualWorkspaceTargetId: string | undefined,
+	message: string,
+	code: protocolV1.DiffFailureCode = "target-mismatch",
+): protocolV1.DiffFailure {
+	return {
+		ok: false,
+		code,
+		workspaceTargetId: params.workspaceTargetId,
+		threadId: params.threadId,
+		turnId: params.turnId,
+		checkpointId: params.checkpointId,
+		diffId: "diffId" in params ? params.diffId : undefined,
+		message,
+		actualWorkspaceTargetId,
+	};
+}
+
+function terminalFailure(
+	params:
+		| protocolV1.TerminalOpenParams
+		| protocolV1.TerminalInputParams
+		| protocolV1.TerminalResizeParams
+		| protocolV1.TerminalCloseParams
+		| protocolV1.TerminalReplayParams,
+	code: protocolV1.TerminalErrorCode,
+	message: string,
+	guard?: protocolV1.TerminalGuardError,
+): protocolV1.TerminalFailure {
+	return {
+		ok: false,
+		code,
+		terminalId: "terminalId" in params ? params.terminalId : undefined,
+		workspaceTargetId: params.workspaceTargetId,
+		threadId: params.threadId,
+		turnId: params.turnId,
+		message,
+		guard,
+	};
+}
+
+function validateTerminalRecordScope(
+	record: {
+		readonly terminalId: string;
+		readonly sessionId?: string;
+		readonly projectId?: string;
+		readonly worktreeId?: string;
+	},
+	params:
+		| protocolV1.TerminalInputParams
+		| protocolV1.TerminalResizeParams
+		| protocolV1.TerminalCloseParams
+		| protocolV1.TerminalReplayParams,
+): protocolV1.TerminalFailure | undefined {
+	if (record.sessionId && record.sessionId !== params.threadId)
+		return terminalFailure(params, "wrong-thread", `Terminal ${record.terminalId} belongs to another thread.`);
+	const actualWorkspaceTargetId = record.worktreeId ?? (record.projectId ? `base:${record.projectId}` : undefined);
+	if (actualWorkspaceTargetId && actualWorkspaceTargetId !== params.workspaceTargetId)
+		return terminalFailure(
+			params,
+			"workspace-target-blocked",
+			`Terminal ${record.terminalId} belongs to workspace target ${actualWorkspaceTargetId}.`,
+		);
+	return undefined;
+}
+
+function terminalContext(
+	record: {
+		readonly terminalId: string;
+		readonly cwd: string;
+		readonly status: string;
+		readonly dimensions: { readonly rows: number; readonly cols: number };
+		readonly createdAt: string;
+		readonly updatedAt: string;
+		readonly exitCode?: number | null;
+	},
+	workspaceTargetId: string,
+	threadId: string,
+	turnId?: string,
+	title?: string,
+): protocolV1.TerminalContext {
+	return {
+		terminalId: record.terminalId,
+		workspaceTargetId,
+		threadId,
+		turnId,
+		title: title ?? "Terminal",
+		status: mapTerminalStatus(record.status),
+		cwd: record.cwd,
+		rows: record.dimensions.rows,
+		cols: record.dimensions.cols,
+		createdAt: record.createdAt,
+		updatedAt: record.updatedAt,
+		killedAt: record.status === "killed" ? record.updatedAt : undefined,
+		exitCode: record.exitCode,
+	};
+}
+
+function mapTerminalStatus(status: string): protocolV1.TerminalContextStatus {
+	if (status === "killed") return "killed";
+	if (status === "exited") return "closed";
+	if (status === "error") return "error";
+	if (status === "starting") return "opening";
+	return "running";
 }
 
 function toIsoString(value: string | Date): string {

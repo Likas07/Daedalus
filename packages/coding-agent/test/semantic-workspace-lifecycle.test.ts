@@ -10,6 +10,9 @@ import {
 	getSemanticWorkspaceStatus,
 	initSemanticWorkspace,
 } from "../src/extensions/daedalus/tools/semantic-workspace.js";
+import { isSemanticWorkspaceIndexingAvailable } from "./semantic-test-helpers.js";
+
+const semanticWorkspaceIt = it.skipIf(!(await isSemanticWorkspaceIndexingAvailable()));
 
 function getText(result: any): string {
 	return result.content
@@ -106,32 +109,60 @@ describe("semantic workspace lifecycle", () => {
 		}
 	});
 
-	it("initializes, syncs, and then serves indexed semantic results", async () => {
-		const settingsManager = SettingsManager.create(tempDir, agentDir);
-		const sessionManager = SessionManager.inMemory();
-		const { session } = await createAgentSession({
-			cwd: tempDir,
-			agentDir,
-			model: getModel("anthropic", "claude-sonnet-4-5")!,
-			settingsManager,
-			sessionManager,
-		});
-		await session.bindExtensions({});
+	semanticWorkspaceIt(
+		"initializes, syncs, and then serves indexed semantic results",
+		async () => {
+			const settingsManager = SettingsManager.create(tempDir, agentDir);
+			const sessionManager = SessionManager.inMemory();
+			const { session } = await createAgentSession({
+				cwd: tempDir,
+				agentDir,
+				model: getModel("anthropic", "claude-sonnet-4-5")!,
+				settingsManager,
+				sessionManager,
+			});
+			await session.bindExtensions({});
 
-		const semSearch = session.getToolDefinition("sem_search");
-		expect(semSearch).toBeDefined();
+			const semSearch = session.getToolDefinition("sem_search");
+			expect(semSearch).toBeDefined();
 
-		await session.prompt("/workspace-init");
-		const initStatusMessage = session.messages
-			.filter((message) => message.role === "custom" && message.customType === "semantic-workspace-status")
-			.at(-1);
-		expect(typeof initStatusMessage?.content === "string" ? initStatusMessage.content : "").toContain(
-			"state: initialized",
-		);
+			await session.prompt("/workspace-init");
+			const initStatusMessage = session.messages
+				.filter((message) => message.role === "custom" && message.customType === "semantic-workspace-status")
+				.at(-1);
+			expect(typeof initStatusMessage?.content === "string" ? initStatusMessage.content : "").toContain(
+				"state: initialized",
+			);
 
-		await expect(
-			semSearch!.execute(
-				"sem-search-initialized-only",
+			await expect(
+				semSearch!.execute(
+					"sem-search-initialized-only",
+					{
+						queries: [{ query: "token refresh flow", use_case: "find token refresh implementation" }],
+						path: ".",
+						limit: 3,
+					},
+					undefined,
+					undefined,
+					{ cwd: tempDir } as any,
+				),
+			).rejects.toThrow(/initialized but not indexed|sem_workspace_sync/i);
+
+			const statusAfterInit = getSemanticWorkspaceStatus(tempDir);
+			expect(statusAfterInit).toMatchObject({ initialized: true, ready: false, state: "initialized" });
+
+			await session.prompt("/workspace-sync");
+
+			const status = getSemanticWorkspaceStatus(tempDir);
+			expect(status).toMatchObject({ initialized: true, ready: true, state: "ready" });
+			expect(status.chunkCount).toBeGreaterThan(0);
+
+			const info = getSemanticWorkspaceStatus(tempDir);
+			expect(info.chunkCount).toBeGreaterThan(0);
+			expect(info.indexPath).toContain(".daedalus");
+
+			const result = await semSearch!.execute(
+				"sem-search-ready",
 				{
 					queries: [{ query: "token refresh flow", use_case: "find token refresh implementation" }],
 					path: ".",
@@ -140,86 +171,68 @@ describe("semantic workspace lifecycle", () => {
 				undefined,
 				undefined,
 				{ cwd: tempDir } as any,
-			),
-		).rejects.toThrow(/initialized but not indexed|sem_workspace_sync/i);
+			);
+			expect(getText(result)).toContain("refresh-token.ts");
+			expect(result.details.workspace.state).toBe("ready");
+			expect(result.details.workspace.source).toBe("index");
+			expect(result.details.queries[0].query).toBe("token refresh flow");
 
-		const statusAfterInit = getSemanticWorkspaceStatus(tempDir);
-		expect(statusAfterInit).toMatchObject({ initialized: true, ready: false, state: "initialized" });
+			const indexText = readFileSync(join(tempDir, ".daedalus", "semantic-workspace.json"), "utf-8");
+			expect(indexText).toContain("embeddingModel");
+			expect(indexText).toContain("lastDiscoverySummary");
+			expect(info.lastDiscoverySummary?.candidateFiles).toBeGreaterThan(0);
+			expect(info.lastDiscoverySummary?.skippedFiles).toBeGreaterThanOrEqual(0);
 
-		await session.prompt("/workspace-sync");
-		const status = getSemanticWorkspaceStatus(tempDir);
-		expect(status).toMatchObject({ initialized: true, ready: true, state: "ready" });
-		expect(status.chunkCount).toBeGreaterThan(0);
+			session.dispose();
+		},
+		120_000,
+	);
 
-		const info = getSemanticWorkspaceStatus(tempDir);
-		expect(info.chunkCount).toBeGreaterThan(0);
-		expect(info.indexPath).toContain(".daedalus");
+	semanticWorkspaceIt(
+		"treats ordinary post-sync edits as stale_soft and still allows sem_search",
+		async () => {
+			const settingsManager = SettingsManager.create(tempDir, agentDir);
+			const sessionManager = SessionManager.inMemory();
+			const { session } = await createAgentSession({
+				cwd: tempDir,
+				agentDir,
+				model: getModel("anthropic", "claude-sonnet-4-5")!,
+				settingsManager,
+				sessionManager,
+			});
+			await session.bindExtensions({});
 
-		const result = await semSearch!.execute(
-			"sem-search-ready",
-			{
-				queries: [{ query: "token refresh flow", use_case: "find token refresh implementation" }],
-				path: ".",
-				limit: 3,
-			},
-			undefined,
-			undefined,
-			{ cwd: tempDir } as any,
-		);
-		expect(getText(result)).toContain("refresh-token.ts");
-		expect(result.details.workspace.state).toBe("ready");
-		expect(result.details.workspace.source).toBe("index");
-		expect(result.details.queries[0].query).toBe("token refresh flow");
+			const semSearch = session.getToolDefinition("sem_search")!;
 
-		const indexText = readFileSync(join(tempDir, ".daedalus", "semantic-workspace.json"), "utf-8");
-		expect(indexText).toContain("embeddingModel");
-		expect(indexText).toContain("lastDiscoverySummary");
-		expect(info.lastDiscoverySummary?.candidateFiles).toBeGreaterThan(0);
-		expect(info.lastDiscoverySummary?.skippedFiles).toBeGreaterThanOrEqual(0);
+			await session.prompt("/workspace-init");
+			await session.prompt("/workspace-sync");
 
-		session.dispose();
-	});
+			writeFileSync(
+				join(tempDir, "src", "refresh-token.ts"),
+				"export function refreshTokenFlow() {\n  const refreshToken = 'beta';\n  return refreshToken;\n}\n",
+			);
 
-	it("treats ordinary post-sync edits as stale_soft and still allows sem_search", async () => {
-		const settingsManager = SettingsManager.create(tempDir, agentDir);
-		const sessionManager = SessionManager.inMemory();
-		const { session } = await createAgentSession({
-			cwd: tempDir,
-			agentDir,
-			model: getModel("anthropic", "claude-sonnet-4-5")!,
-			settingsManager,
-			sessionManager,
-		});
-		await session.bindExtensions({});
+			const status = getSemanticWorkspaceStatus(tempDir);
+			expect(status.state).toBe("stale_soft");
+			expect(status.ready).toBe(true);
 
-		const semSearch = session.getToolDefinition("sem_search")!;
+			const result = await semSearch.execute(
+				"sem-search-soft-stale",
+				{
+					queries: [{ query: "token refresh flow", use_case: "find token refresh implementation" }],
+					path: ".",
+					limit: 3,
+				},
+				undefined,
+				undefined,
+				{ cwd: tempDir } as any,
+			);
 
-		await session.prompt("/workspace-init");
-		await session.prompt("/workspace-sync");
-		writeFileSync(
-			join(tempDir, "src", "refresh-token.ts"),
-			"export function refreshTokenFlow() {\n  const refreshToken = 'beta';\n  return refreshToken;\n}\n",
-		);
+			expect(getText(result)).toContain("refresh-token.ts");
+			expect(result.details.workspace.state).toBe("stale_soft");
 
-		const status = getSemanticWorkspaceStatus(tempDir);
-		expect(status.state).toBe("stale_soft");
-		expect(status.ready).toBe(true);
-
-		const result = await semSearch.execute(
-			"sem-search-soft-stale",
-			{
-				queries: [{ query: "token refresh flow", use_case: "find token refresh implementation" }],
-				path: ".",
-				limit: 3,
-			},
-			undefined,
-			undefined,
-			{ cwd: tempDir } as any,
-		);
-
-		expect(getText(result)).toContain("refresh-token.ts");
-		expect(result.details.workspace.state).toBe("stale_soft");
-
-		session.dispose();
-	});
+			session.dispose();
+		},
+		120_000,
+	);
 });

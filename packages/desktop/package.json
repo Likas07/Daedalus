@@ -16,7 +16,7 @@
 		"build:app-server": "bun scripts/build-app-server-artifact.ts",
 		"build:app-server:fallback": "bun scripts/build-app-server-artifact.ts --allow-fallback",
 		"build:dev": "bun build src/main.ts --outdir .daedalus/desktop-dev --target node --format esm --external electron --sourcemap=external && bun build src/preload.ts --outdir .daedalus/desktop-dev --entry-naming [name].cjs --target node --format cjs --external electron --sourcemap=external",
-		"build:gui": "bun --cwd=../gui run build",
+		"build:gui": "bun --cwd=../react-gui run build",
 		"build:main": "bun build src/main.ts --outdir dist --target node --format esm --external electron --sourcemap=external && bun build src/preload.ts --outdir dist --entry-naming [name].cjs --target node --format cjs --external electron --sourcemap=external",
 		"check": "tsgo -p tsconfig.json",
 		"dev": "bun src/dev.ts",
@@ -31,7 +31,7 @@
 		"@daedalus-pi/app-server": "workspace:*",
 		"@daedalus-pi/app-server-client": "workspace:*",
 		"@daedalus-pi/app-server-protocol": "workspace:*",
-		"@daedalus-pi/gui": "workspace:*"
+		"@daedalus-pi/react-gui": "workspace:*"
 	},
 	"devDependencies": {
 		"@types/bun": "^1.3",

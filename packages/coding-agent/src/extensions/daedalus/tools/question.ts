@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
-import { Editor, type EditorTheme, Key, matchesKey, Text, truncateToWidth } from "@daedalus-pi/tui";
+import { Editor, type EditorTheme, Key, matchesKey, Text, truncateToWidth, visibleWidth } from "@daedalus-pi/tui";
 import { Type } from "@sinclair/typebox";
 import { requireUI } from "../shared/ui.js";
 
@@ -135,10 +135,18 @@ export default function question(pi: ExtensionAPI) {
 						if (cachedLines) return cachedLines;
 
 						const lines: string[] = [];
-						const add = (s: string) => lines.push(truncateToWidth(s, width));
+						const addChrome = (s: string) => lines.push(truncateToWidth(s, width));
+						const addWrapped = (prefix: string, text: string, continuationPrefix = " ") => {
+							const contentWidth = Math.max(1, width - visibleWidth(prefix));
+							const wrapped = new Text(text, 0, 0).render(contentWidth);
+							const continuation = " ".repeat(visibleWidth(prefix));
+							for (let i = 0; i < wrapped.length; i++) {
+								lines.push(`${i === 0 ? prefix : continuationPrefix || continuation}${wrapped[i]}`);
+							}
+						};
 
-						add(theme.fg("accent", "─".repeat(width)));
-						add(theme.fg("text", ` ${params.question}`));
+						addChrome(theme.fg("accent", "─".repeat(width)));
+						addWrapped(" ", theme.fg("text", params.question));
 						lines.push("");
 
 						for (let i = 0; i < allOptions.length; i++) {
@@ -148,34 +156,29 @@ export default function question(pi: ExtensionAPI) {
 							const isOther = opt.isOther === true;
 							const prefix = selected ? theme.fg("accent", "> ") : "  ";
 
-							if (isOther && editMode) {
-								add(prefix + theme.fg("accent", `${i + 1}. ${opt.label} ✎`));
-							} else if (selected) {
-								add(prefix + theme.fg("accent", `${i + 1}. ${opt.label}`));
-							} else {
-								add(`  ${theme.fg("text", `${i + 1}. ${opt.label}`)}`);
-							}
+							const label = `${i + 1}. ${opt.label}${isOther && editMode ? " ✎" : ""}`;
+							addWrapped(prefix, theme.fg(selected || (isOther && editMode) ? "accent" : "text", label), "  ");
 
 							if (opt.description) {
-								add(`     ${theme.fg("muted", opt.description)}`);
+								addWrapped("     ", theme.fg("muted", opt.description), "     ");
 							}
 						}
 
 						if (editMode) {
 							lines.push("");
-							add(theme.fg("muted", " Your answer:"));
+							addChrome(theme.fg("muted", " Your answer:"));
 							for (const line of editor.render(width - 2)) {
-								add(` ${line}`);
+								addChrome(` ${line}`);
 							}
 						}
 
 						lines.push("");
 						if (editMode) {
-							add(theme.fg("dim", " Enter to submit • Esc to go back"));
+							addChrome(theme.fg("dim", " Enter to submit • Esc to go back"));
 						} else {
-							add(theme.fg("dim", " ↑↓ navigate • Enter to select • Esc to cancel"));
+							addChrome(theme.fg("dim", " ↑↓ navigate • Enter to select • Esc to cancel"));
 						}
-						add(theme.fg("accent", "─".repeat(width)));
+						addChrome(theme.fg("accent", "─".repeat(width)));
 
 						cachedLines = lines;
 						return lines;

@@ -37,7 +37,9 @@ import {
 	collectEntriesForBranchSummary,
 	compact,
 	createFileOps,
+	diagnoseCompaction,
 	estimateContextTokens,
+	estimatePostCompactionContext,
 	generateBranchSummary,
 	prepareCompaction,
 	shouldCompact,
@@ -1923,12 +1925,7 @@ export class AgentSession {
 				}
 			}
 			if (!preparation) {
-				// Check why we can't compact
-				const lastEntry = pathEntries[pathEntries.length - 1];
-				if (lastEntry?.type === "compaction") {
-					throw new Error("Already compacted");
-				}
-				throw new Error("Nothing to compact (session too small)");
+				throw new Error(diagnoseCompaction(pathEntries, settings, this.model.contextWindow));
 			}
 
 			let extensionCompaction: CompactionResult | undefined;
@@ -2199,6 +2196,7 @@ export class AgentSession {
 				settings,
 				this.sessionManager.getCwd(),
 				this.model.contextWindow,
+				{ allowSummaryRewrite: reason === "overflow", reason },
 			);
 			if (!preparation) {
 				this._emit({
@@ -2207,6 +2205,7 @@ export class AgentSession {
 					result: undefined,
 					aborted: false,
 					willRetry: false,
+					errorMessage: diagnoseCompaction(pathEntries, settings, this.model.contextWindow),
 				});
 				return;
 			}
@@ -2282,6 +2281,11 @@ export class AgentSession {
 			const newEntries = this.sessionManager.getEntries();
 			const sessionContext = this.sessionManager.buildSessionContext();
 			this.agent.state.messages = sessionContext.messages;
+			const postCompactionDiagnostic = estimatePostCompactionContext(
+				this.sessionManager.getBranch(),
+				settings,
+				this.model.contextWindow,
+			);
 
 			// Get the saved compaction entry for the extension event
 			const savedCompactionEntry = newEntries.find((e) => e.type === "compaction" && e.summary === summary) as
@@ -2302,7 +2306,16 @@ export class AgentSession {
 				tokensBefore,
 				details,
 			};
-			this._emit({ type: "compaction_end", reason, result, aborted: false, willRetry });
+			this._emit({
+				type: "compaction_end",
+				reason,
+				result,
+				aborted: false,
+				willRetry,
+				errorMessage: postCompactionDiagnostic.willRetrigger
+					? `Warning: ${postCompactionDiagnostic.message}`
+					: undefined,
+			});
 
 			if (willRetry) {
 				const messages = this.agent.state.messages;
