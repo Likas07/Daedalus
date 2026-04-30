@@ -1,5 +1,5 @@
-import type { TerminalDrawerState } from "@daedalus-pi/gui-core/terminal/reducer";
 import { describe, expect, test } from "bun:test";
+import type { TerminalDrawerState } from "@daedalus-pi/gui-core/terminal/reducer";
 import React from "react";
 import { expectMarkupContains, renderMarkup } from "../test/render";
 import { TerminalDrawer } from "./TerminalDrawer";
@@ -54,9 +54,9 @@ function makeState(
 	return {
 		isOpen: contexts.length > 0,
 		activeTerminalId: contexts[0]?.terminalId,
-		contextsById: Object.fromEntries(contexts.map((context) => [context.terminalId, context])) as TerminalDrawerState[
-			"contextsById"
-		],
+		contextsById: Object.fromEntries(
+			contexts.map((context) => [context.terminalId, context]),
+		) as TerminalDrawerState["contextsById"],
 		terminalOrder: contexts.map((context) => context.terminalId),
 		outputByTerminalId: {},
 		failureByTerminalId: {},
@@ -105,7 +105,8 @@ function findButton(root: unknown, label: string): TestElement {
 
 function click(button: TestElement): void {
 	const onClick = button.props?.onClick;
-	if (typeof onClick !== "function") throw new Error(`Expected ${textContent(button.props?.children)} to be clickable`);
+	if (typeof onClick !== "function")
+		throw new Error(`Expected ${textContent(button.props?.children)} to be clickable`);
 	onClick();
 }
 

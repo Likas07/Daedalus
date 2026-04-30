@@ -31,7 +31,7 @@ export function formatProjectDisplayName(project: Pick<GuiProjectSummary, "name"
 	return project.name.trim() || project.path;
 }
 
+export * from "./thread/presentation";
 export * from "./thread/reducer";
 export * from "./thread/selectors";
 export * from "./thread/view-model";
-export * from "./thread/presentation";

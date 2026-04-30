@@ -1,6 +1,6 @@
+import { describe, expect, test } from "bun:test";
 import type { protocolV1 } from "@daedalus-pi/app-server-protocol";
 import type { DiffPanelState } from "@daedalus-pi/gui-core/diff/reducer";
-import { describe, expect, test } from "bun:test";
 import React from "react";
 import { expectMarkupContains, renderMarkup } from "../test/render";
 import { DiffPanel } from "./DiffPanel";

@@ -64,7 +64,7 @@ describe("Composer", () => {
 			'class="daedalus-thread-composer daedalus-thread-composer-t3"',
 			'class="daedalus-thread-composer-frame"',
 			'class="daedalus-thread-composer-editor"',
-			'<textarea',
+			"<textarea",
 			'name="prompt"',
 			'data-testid="thread-composer-prompt"',
 			'class="daedalus-thread-composer-toolbar"',
@@ -85,13 +85,7 @@ describe("Composer", () => {
 	test("renders idle and disabled state without requiring a cancel handler", () => {
 		const markup = renderComposer({ disabled: true });
 
-		expectMarkupContains(markup, [
-			"Message Daedalus",
-			"Ready",
-			"Send turn",
-			"disabled",
-			'data-testid="thread-send"',
-		]);
+		expectMarkupContains(markup, ["Message Daedalus", "Ready", "Send turn", "disabled", 'data-testid="thread-send"']);
 		expect(markup).not.toContain('data-testid="thread-stop"');
 	});
 

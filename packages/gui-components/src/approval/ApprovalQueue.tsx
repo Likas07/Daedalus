@@ -50,7 +50,9 @@ export function ApprovalQueue({ state, onApprove, onDeny }: ApprovalQueueProps):
 			),
 		),
 		state.isLoading ? React.createElement("p", null, "Loading approvals…") : null,
-		state.error ? React.createElement("p", { className: "daedalus-approval-failure", role: "alert" }, state.error) : null,
+		state.error
+			? React.createElement("p", { className: "daedalus-approval-failure", role: "alert" }, state.error)
+			: null,
 		requests.length === 0 && !state.isLoading
 			? React.createElement("p", { className: "daedalus-approval-empty" }, "No pending approvals")
 			: null,

@@ -1,9 +1,6 @@
-import type { protocolV1 } from "@daedalus-pi/app-server-protocol";
-import {
-	type ApprovalQueueState,
-	createInitialApprovalQueueState,
-} from "@daedalus-pi/gui-core/approval/reducer";
 import { describe, expect, test } from "bun:test";
+import type { protocolV1 } from "@daedalus-pi/app-server-protocol";
+import { type ApprovalQueueState, createInitialApprovalQueueState } from "@daedalus-pi/gui-core/approval/reducer";
 import React from "react";
 import { expectMarkupContains, renderMarkup } from "../test/render";
 import { ApprovalCard } from "./ApprovalCard";

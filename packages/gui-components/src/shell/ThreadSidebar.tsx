@@ -24,7 +24,8 @@ function getConnectionTone(connectionLabel: string): StatusPillTone {
 	const normalized = connectionLabel.toLowerCase();
 	if (normalized.includes("error") || normalized.includes("failed")) return "danger";
 	if (normalized.includes("disconnect") || normalized.includes("offline")) return "warning";
-	if (normalized.includes("connect") || normalized.includes("online") || normalized.includes("ready")) return "success";
+	if (normalized.includes("connect") || normalized.includes("online") || normalized.includes("ready"))
+		return "success";
 	if (normalized.includes("pending") || normalized.includes("sync") || normalized.includes("load")) return "running";
 	return "idle";
 }
@@ -37,7 +38,9 @@ function getActiveProjectLabel(state: GuiShellState): string {
 }
 
 function getActiveThreadTitle(state: GuiShellState, activeThreadTitle?: string): string {
-	const activeThread = state.activeThreadId ? state.threads.find((thread) => thread.id === state.activeThreadId) : undefined;
+	const activeThread = state.activeThreadId
+		? state.threads.find((thread) => thread.id === state.activeThreadId)
+		: undefined;
 	return firstNonEmpty(activeThreadTitle, activeThread?.title) ?? "No active thread";
 }
 
@@ -86,8 +89,16 @@ export function ThreadSidebar({ state, connectionLabel, activeThreadTitle }: Thr
 			React.createElement(
 				"div",
 				{ "aria-label": "Workspace counts", className: "daedalus-thread-sidebar-counts" },
-				React.createElement(Badge, { ariaLabel: `Projects: ${projectCountLabel}`, tone: "accent" }, projectCountLabel),
-				React.createElement(Badge, { ariaLabel: `Threads: ${threadCountLabel}`, tone: "neutral" }, threadCountLabel),
+				React.createElement(
+					Badge,
+					{ ariaLabel: `Projects: ${projectCountLabel}`, tone: "accent" },
+					projectCountLabel,
+				),
+				React.createElement(
+					Badge,
+					{ ariaLabel: `Threads: ${threadCountLabel}`, tone: "neutral" },
+					threadCountLabel,
+				),
 				React.createElement(
 					"span",
 					{ className: "daedalus-thread-sidebar-count-summary" },
