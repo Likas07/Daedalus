@@ -4,6 +4,7 @@ export interface OllamaSemanticEmbedderConfig {
 	batchSize?: number;
 	concurrency?: number;
 	keepAlive?: string;
+	requestTimeoutMs?: number;
 }
 
 function positiveIntegerEnv(name: string, fallback: number): number {
@@ -18,6 +19,14 @@ export const DEFAULT_OLLAMA_EMBED_MODEL = "embeddinggemma";
 export const DEFAULT_OLLAMA_EMBED_BATCH_SIZE = positiveIntegerEnv("DAEDALUS_OLLAMA_EMBED_BATCH_SIZE", 64);
 export const DEFAULT_OLLAMA_EMBED_CONCURRENCY = positiveIntegerEnv("DAEDALUS_OLLAMA_EMBED_CONCURRENCY", 4);
 export const DEFAULT_OLLAMA_EMBED_KEEP_ALIVE = process.env.DAEDALUS_OLLAMA_EMBED_KEEP_ALIVE || "15m";
+export const OLLAMA_EMBED_REQUEST_TIMEOUT_ENV = "DAEDALUS_OLLAMA_EMBED_REQUEST_TIMEOUT_MS";
+
+export function resolveOllamaEmbedRequestTimeoutMs(
+	value = process.env[OLLAMA_EMBED_REQUEST_TIMEOUT_ENV],
+): number | undefined {
+	const parsed = Number.parseInt(value ?? "", 10);
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
 
 export type SemanticIndexProfile = "minimal" | "normal" | "broad" | "exhaustive";
 export const DEFAULT_SEMANTIC_INDEX_PROFILE: SemanticIndexProfile = "normal";

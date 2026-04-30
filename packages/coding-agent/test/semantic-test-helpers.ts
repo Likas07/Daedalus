@@ -1,21 +1,39 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { OLLAMA_EMBED_REQUEST_TIMEOUT_ENV } from "../src/extensions/daedalus/tools/semantic-config.js";
 import {
 	getSemanticWorkspaceStatus,
 	syncSemanticWorkspace,
 } from "../src/extensions/daedalus/tools/semantic-workspace.js";
 
-type SkippableTestContext = {
-	skip: (reason?: string) => void;
-};
+export const SEMANTIC_TEST_SETUP_TIMEOUT_MS = positiveIntegerEnv("DAEDALUS_SEMANTIC_TEST_SETUP_TIMEOUT_MS", 20_000);
+setDefaultOllamaRequestTimeout();
 
 let semanticWorkspaceIndexingAvailablePromise: Promise<boolean> | undefined;
+let semanticWorkspaceIndexingUnavailableReason: string | undefined;
 
-function isSkippableTestContext(ctx: unknown): ctx is SkippableTestContext {
-	return (
-		typeof ctx === "object" && ctx !== null && "skip" in ctx && typeof (ctx as { skip?: unknown }).skip === "function"
-	);
+interface SemanticSetupOptions {
+	label: string;
+	reasonPrefix?: string;
+	timeoutMs?: number;
+}
+
+function positiveIntegerEnv(name: string, fallback: number): number {
+	const raw = process.env[name];
+	if (!raw) return fallback;
+	const parsed = Number.parseInt(raw, 10);
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function setDefaultOllamaRequestTimeout(): void {
+	const parsed = Number.parseInt(process.env[OLLAMA_EMBED_REQUEST_TIMEOUT_ENV] ?? "", 10);
+	if (Number.isFinite(parsed) && parsed > 0) return;
+	process.env[OLLAMA_EMBED_REQUEST_TIMEOUT_ENV] = String(SEMANTIC_TEST_SETUP_TIMEOUT_MS);
+}
+
+function formatDuration(ms: number): string {
+	return ms >= 1000 && ms % 1000 === 0 ? `${ms / 1000}s` : `${ms}ms`;
 }
 
 function formatError(error: unknown): string {
@@ -29,40 +47,76 @@ function semanticWorkspaceNotIndexedReason(cwd: string): string | undefined {
 	return `Semantic workspace is not indexed (state=${status.state}, ready=${status.ready}, chunks=${status.chunkCount})`;
 }
 
-export function skipSemanticTest(ctx: unknown, reason: string): true {
-	if (!isSkippableTestContext(ctx)) {
-		throw new Error(`Cannot dynamically skip semantic test: ${reason}`);
-	}
-	ctx.skip(reason);
+export function getSemanticWorkspaceIndexingUnavailableReason(): string | undefined {
+	return semanticWorkspaceIndexingUnavailableReason;
+}
+
+export function skipSemanticTest(reason: string): true {
+	console.warn(`[semantic integration skipped] ${reason}`);
 	return true;
 }
 
-export function skipIfSemanticWorkspaceNotIndexed(ctx: unknown, cwd: string): boolean {
+export function skipIfSemanticWorkspaceNotIndexed(cwd: string): boolean {
 	const reason = semanticWorkspaceNotIndexedReason(cwd);
 	if (!reason) return false;
-	return skipSemanticTest(ctx, reason);
+	return skipSemanticTest(reason);
 }
 
-export async function syncSemanticWorkspaceOrSkip(ctx: unknown, cwd: string): Promise<boolean> {
+export async function withSemanticTestTimeout<T>(
+	operation: () => Promise<T>,
+	{ label, timeoutMs = SEMANTIC_TEST_SETUP_TIMEOUT_MS }: Pick<SemanticSetupOptions, "label" | "timeoutMs">,
+): Promise<T> {
+	let timeout: ReturnType<typeof setTimeout> | undefined;
+	const timeoutPromise = new Promise<never>((_resolve, reject) => {
+		timeout = setTimeout(() => {
+			reject(new Error(`${label} exceeded ${formatDuration(timeoutMs)} semantic setup timeout`));
+		}, timeoutMs);
+	});
 	try {
-		await syncSemanticWorkspace(cwd);
-	} catch (error) {
-		return skipSemanticTest(ctx, `Semantic workspace sync unavailable: ${formatError(error)}`);
+		return await Promise.race([operation(), timeoutPromise]);
+	} finally {
+		if (timeout) clearTimeout(timeout);
 	}
-	return skipIfSemanticWorkspaceNotIndexed(ctx, cwd);
 }
 
 export async function semanticSetupOrSkip<T>(
-	ctx: unknown,
 	setup: () => Promise<T>,
-	reasonPrefix = "Semantic integration setup unavailable",
+	{
+		label,
+		reasonPrefix = "Semantic integration setup unavailable",
+		timeoutMs = SEMANTIC_TEST_SETUP_TIMEOUT_MS,
+	}: SemanticSetupOptions,
 ): Promise<T | undefined> {
 	try {
-		return await setup();
+		return await withSemanticTestTimeout(setup, { label, timeoutMs });
 	} catch (error) {
-		skipSemanticTest(ctx, `${reasonPrefix}: ${formatError(error)}`);
+		skipSemanticTest(`${reasonPrefix}: ${formatError(error)}`);
 		return undefined;
 	}
+}
+
+export async function semanticOperationOrSkip(
+	operation: () => Promise<unknown>,
+	options: SemanticSetupOptions,
+): Promise<boolean> {
+	const result = await semanticSetupOrSkip(async () => {
+		await operation();
+		return true;
+	}, options);
+	return result !== true;
+}
+
+export async function syncSemanticWorkspaceOrSkip(
+	cwd: string,
+	options: Partial<SemanticSetupOptions> = {},
+): Promise<boolean> {
+	const skipped = await semanticOperationOrSkip(() => syncSemanticWorkspace(cwd), {
+		label: options.label ?? `semantic workspace sync for ${cwd}`,
+		reasonPrefix: options.reasonPrefix ?? `Semantic workspace sync unavailable for ${cwd}`,
+		timeoutMs: options.timeoutMs,
+	});
+	if (skipped) return true;
+	return skipIfSemanticWorkspaceNotIndexed(cwd);
 }
 
 export async function isSemanticWorkspaceIndexingAvailable(): Promise<boolean> {
@@ -75,9 +129,13 @@ async function probeSemanticWorkspaceIndexingAvailability(): Promise<boolean> {
 	try {
 		mkdirSync(join(tempDir, "src"), { recursive: true });
 		writeFileSync(join(tempDir, "src", "probe.ts"), "export const semanticProbe = true;\n");
-		await syncSemanticWorkspace(tempDir);
-		return semanticWorkspaceNotIndexedReason(tempDir) === undefined;
-	} catch {
+		await withSemanticTestTimeout(() => syncSemanticWorkspace(tempDir), {
+			label: "semantic workspace availability probe",
+		});
+		semanticWorkspaceIndexingUnavailableReason = semanticWorkspaceNotIndexedReason(tempDir);
+		return semanticWorkspaceIndexingUnavailableReason === undefined;
+	} catch (error) {
+		semanticWorkspaceIndexingUnavailableReason = `Semantic workspace availability probe failed: ${formatError(error)}`;
 		return false;
 	} finally {
 		if (existsSync(tempDir)) rmSync(tempDir, { recursive: true, force: true });

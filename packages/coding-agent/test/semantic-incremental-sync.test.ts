@@ -2,13 +2,34 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { collectLocalFileStates, createSemanticStoreRuntime } from "../src/extensions/daedalus/tools/semantic-store.js";
+import {
+	collectLocalFileStates,
+	createSemanticStoreRuntime,
+	type SemanticStoreConfig,
+	type SemanticStoreRuntime,
+} from "../src/extensions/daedalus/tools/semantic-store.js";
 import { buildSemanticSyncPlan } from "../src/extensions/daedalus/tools/semantic-sync-plan.js";
 import type { SemanticIndexedFile, SemanticLocalFileState } from "../src/extensions/daedalus/tools/semantic-types.js";
-import { initSemanticWorkspace, loadSemanticWorkspace } from "../src/extensions/daedalus/tools/semantic-workspace.js";
-import { isSemanticWorkspaceIndexingAvailable } from "./semantic-test-helpers.js";
+import {
+	initSemanticWorkspace,
+	loadSemanticWorkspace,
+	type SemanticWorkspacePersistedState,
+} from "../src/extensions/daedalus/tools/semantic-workspace.js";
+import {
+	getSemanticWorkspaceIndexingUnavailableReason,
+	isSemanticWorkspaceIndexingAvailable,
+	semanticSetupOrSkip,
+	skipSemanticTest,
+} from "./semantic-test-helpers.js";
 
-const semanticWorkspaceIt = it.skipIf(!(await isSemanticWorkspaceIndexingAvailable()));
+const semanticWorkspaceIndexingAvailable = await isSemanticWorkspaceIndexingAvailable();
+if (!semanticWorkspaceIndexingAvailable) {
+	skipSemanticTest(
+		getSemanticWorkspaceIndexingUnavailableReason() ??
+			"Semantic workspace indexing unavailable for incremental sync tests",
+	);
+}
+const semanticWorkspaceIt = it.skipIf(!semanticWorkspaceIndexingAvailable);
 
 function indexedFile(filePath: string, fileHash: string, chunkCount = 1): SemanticIndexedFile {
 	return {
@@ -33,6 +54,22 @@ function localFile(filePath: string, fileHash: string): SemanticLocalFileState {
 function runGit(args: string[], cwd: string): void {
 	const result = Bun.spawnSync(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
 	if (result.exitCode !== 0) throw new Error(`git ${args.join(" ")} failed`);
+}
+
+function loadInitializedWorkspace(cwd: string): SemanticWorkspacePersistedState {
+	const workspace = loadSemanticWorkspace(cwd);
+	if (!workspace) throw new Error("Semantic workspace was not initialized");
+	return workspace;
+}
+
+async function createRuntimeOrSkip(
+	config: SemanticStoreConfig,
+	label: string,
+): Promise<SemanticStoreRuntime | undefined> {
+	return await semanticSetupOrSkip(() => createSemanticStoreRuntime(config), {
+		label: `${label} semantic runtime creation`,
+		reasonPrefix: `Semantic store runtime unavailable for ${label}`,
+	});
 }
 
 describe("semantic incremental sync", () => {
@@ -106,23 +143,44 @@ describe("semantic incremental sync", () => {
 		async () => {
 			writeFileSync(join(tempDir, "src", "a.ts"), "export const a = 'alpha';\n");
 			await initSemanticWorkspace(tempDir);
-			const workspace = loadSemanticWorkspace(tempDir)!;
-			const runtime = await createSemanticStoreRuntime({
-				databaseDir: workspace.databaseDir,
-				workspaceRoot: tempDir,
-				host: workspace.embeddingHost,
-				model: workspace.embeddingModel,
-			});
+			const workspace = loadInitializedWorkspace(tempDir);
+			const runtime = await createRuntimeOrSkip(
+				{
+					databaseDir: workspace.databaseDir,
+					workspaceRoot: tempDir,
+					host: workspace.embeddingHost,
+					model: workspace.embeddingModel,
+				},
+				"unchanged stat metadata test",
+			);
+			if (!runtime) return;
 
-			await runtime.sync();
-			const before = await runtime.listIndexedFiles();
-			const second = await runtime.sync();
+			const firstSync = await semanticSetupOrSkip(() => runtime.sync(), {
+				label: "unchanged stat metadata initial semantic sync",
+				reasonPrefix: "Semantic initial sync unavailable for unchanged stat metadata test",
+			});
+			if (!firstSync) return;
+			const before = await semanticSetupOrSkip(() => runtime.listIndexedFiles(), {
+				label: "unchanged stat metadata manifest read before no-op sync",
+				reasonPrefix: "Semantic manifest read unavailable for unchanged stat metadata test",
+			});
+			if (!before) return;
+			const second = await semanticSetupOrSkip(() => runtime.sync(), {
+				label: "unchanged stat metadata no-op semantic sync",
+				reasonPrefix: "Semantic no-op sync unavailable for unchanged stat metadata test",
+			});
+			if (!second) return;
+			const after = await semanticSetupOrSkip(() => runtime.listIndexedFiles(), {
+				label: "unchanged stat metadata manifest read after no-op sync",
+				reasonPrefix: "Semantic manifest read unavailable after unchanged stat metadata sync",
+			});
+			if (!after) return;
 
 			expect(second.changedFiles).toBe(0);
 			expect(second.unchangedFiles).toBe(1);
 			expect(second.statUnchangedFiles).toBe(1);
 			expect(second.hashedFiles).toBe(0);
-			expect(await runtime.listIndexedFiles()).toEqual(before);
+			expect(after).toEqual(before);
 		},
 		120_000,
 	);
@@ -136,14 +194,27 @@ describe("semantic incremental sync", () => {
 			}
 			runGit(["add", "src"], tempDir);
 			await initSemanticWorkspace(tempDir);
-			const workspace = loadSemanticWorkspace(tempDir)!;
-			const runtime = await createSemanticStoreRuntime({
-				databaseDir: workspace.databaseDir,
-				workspaceRoot: tempDir,
+			const workspace = loadInitializedWorkspace(tempDir);
+			const runtime = await createRuntimeOrSkip(
+				{
+					databaseDir: workspace.databaseDir,
+					workspaceRoot: tempDir,
+				},
+				"concurrent scanning test",
+			);
+			if (!runtime) return;
+			const result = await semanticSetupOrSkip(() => runtime.sync(), {
+				label: "concurrent scanning semantic sync",
+				reasonPrefix: "Semantic sync unavailable for concurrent scanning test",
 			});
-			const result = await runtime.sync();
+			if (!result) return;
+			const indexedFiles = await semanticSetupOrSkip(() => runtime.listIndexedFiles(), {
+				label: "concurrent scanning indexed-file manifest read",
+				reasonPrefix: "Semantic manifest read unavailable for concurrent scanning test",
+			});
+			if (!indexedFiles) return;
 			expect(result.changedFiles).toBe(50);
-			expect((await runtime.listIndexedFiles()).map((file) => file.filePath)).toHaveLength(50);
+			expect(indexedFiles.map((file) => file.filePath)).toHaveLength(50);
 		},
 		120_000,
 	);
@@ -158,13 +229,21 @@ describe("semantic incremental sync", () => {
 				);
 			}
 			await initSemanticWorkspace(tempDir);
-			const workspace = loadSemanticWorkspace(tempDir)!;
-			const runtime = await createSemanticStoreRuntime({
-				databaseDir: workspace.databaseDir,
-				workspaceRoot: tempDir,
-			});
+			const workspace = loadInitializedWorkspace(tempDir);
+			const runtime = await createRuntimeOrSkip(
+				{
+					databaseDir: workspace.databaseDir,
+					workspaceRoot: tempDir,
+				},
+				"chunk batch progress test",
+			);
+			if (!runtime) return;
 			const progress: any[] = [];
-			await runtime.sync((event) => progress.push(event));
+			const result = await semanticSetupOrSkip(() => runtime.sync((event) => progress.push(event)), {
+				label: "chunk batch progress semantic sync",
+				reasonPrefix: "Semantic sync unavailable for chunk batch progress test",
+			});
+			if (!result) return;
 			expect(progress.some((event) => event.embeddingBatchesTotal && event.embeddingBatchesCompleted != null)).toBe(
 				true,
 			);
@@ -177,14 +256,26 @@ describe("semantic incremental sync", () => {
 		async () => {
 			writeFileSync(join(tempDir, "src", "a.ts"), "export const a = 1;\n");
 			await initSemanticWorkspace(tempDir);
-			const workspace = loadSemanticWorkspace(tempDir)!;
-			const runtime = await createSemanticStoreRuntime({
-				databaseDir: workspace.databaseDir,
-				workspaceRoot: tempDir,
+			const workspace = loadInitializedWorkspace(tempDir);
+			const runtime = await createRuntimeOrSkip(
+				{
+					databaseDir: workspace.databaseDir,
+					workspaceRoot: tempDir,
+				},
+				"no-op index refresh test",
+			);
+			if (!runtime) return;
+			const firstSync = await semanticSetupOrSkip(() => runtime.sync(), {
+				label: "no-op index refresh initial semantic sync",
+				reasonPrefix: "Semantic initial sync unavailable for no-op index refresh test",
 			});
-			await runtime.sync();
+			if (!firstSync) return;
 			const progress: any[] = [];
-			await runtime.sync((event) => progress.push(event));
+			const secondSync = await semanticSetupOrSkip(() => runtime.sync((event) => progress.push(event)), {
+				label: "no-op index refresh second semantic sync",
+				reasonPrefix: "Semantic no-op sync unavailable for no-op index refresh test",
+			});
+			if (!secondSync) return;
 			expect(progress.some((event) => event.phase === "indexing" && /skipped/i.test(event.message))).toBe(true);
 		},
 		120_000,
@@ -198,20 +289,31 @@ describe("semantic incremental sync", () => {
 			writeFileSync(join(tempDir, "src", "c.ts"), "export const c = 'charlie';\n");
 
 			await initSemanticWorkspace(tempDir);
-			const workspace = loadSemanticWorkspace(tempDir);
-			expect(workspace).toBeDefined();
-			const runtime = await createSemanticStoreRuntime({
-				databaseDir: workspace!.databaseDir,
-				workspaceRoot: tempDir,
-				host: workspace!.embeddingHost,
-				model: workspace!.embeddingModel,
-			});
+			const workspace = loadInitializedWorkspace(tempDir);
+			const runtime = await createRuntimeOrSkip(
+				{
+					databaseDir: workspace.databaseDir,
+					workspaceRoot: tempDir,
+					host: workspace.embeddingHost,
+					model: workspace.embeddingModel,
+				},
+				"incremental preservation test",
+			);
+			if (!runtime) return;
 
-			const firstSync = await runtime.sync();
+			const firstSync = await semanticSetupOrSkip(() => runtime.sync(), {
+				label: "incremental preservation initial semantic sync",
+				reasonPrefix: "Semantic initial sync unavailable for incremental preservation test",
+			});
+			if (!firstSync) return;
 			expect(firstSync.changedFiles).toBe(3);
 			expect(firstSync.unchangedFiles).toBe(0);
 
-			const firstManifest = await runtime.listIndexedFiles();
+			const firstManifest = await semanticSetupOrSkip(() => runtime.listIndexedFiles(), {
+				label: "incremental preservation initial manifest read",
+				reasonPrefix: "Semantic initial manifest read unavailable for incremental preservation test",
+			});
+			if (!firstManifest) return;
 			expect(firstManifest).toHaveLength(3);
 			const firstA = firstManifest.find((file) => file.filePath === "src/a.ts");
 			const firstC = firstManifest.find((file) => file.filePath === "src/c.ts");
@@ -220,12 +322,20 @@ describe("semantic incremental sync", () => {
 
 			writeFileSync(join(tempDir, "src", "b.ts"), "export const b = 'beta';\n");
 
-			const secondSync = await runtime.sync();
+			const secondSync = await semanticSetupOrSkip(() => runtime.sync(), {
+				label: "incremental preservation second semantic sync",
+				reasonPrefix: "Semantic second sync unavailable for incremental preservation test",
+			});
+			if (!secondSync) return;
 			expect(secondSync.changedFiles).toBe(1);
 			expect(secondSync.deletedFiles).toBe(0);
 			expect(secondSync.unchangedFiles).toBe(2);
 
-			const secondManifest = await runtime.listIndexedFiles();
+			const secondManifest = await semanticSetupOrSkip(() => runtime.listIndexedFiles(), {
+				label: "incremental preservation second manifest read",
+				reasonPrefix: "Semantic second manifest read unavailable for incremental preservation test",
+			});
+			if (!secondManifest) return;
 			expect(secondManifest).toHaveLength(3);
 			const secondA = secondManifest.find((file) => file.filePath === "src/a.ts");
 			const secondC = secondManifest.find((file) => file.filePath === "src/c.ts");

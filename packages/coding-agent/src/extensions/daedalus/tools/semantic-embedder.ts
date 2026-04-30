@@ -7,6 +7,7 @@ import {
 	DEFAULT_OLLAMA_EMBED_MODEL,
 	DEFAULT_OLLAMA_HOST,
 	type OllamaSemanticEmbedderConfig,
+	resolveOllamaEmbedRequestTimeoutMs,
 } from "./semantic-config.js";
 import type { SemanticEmbedDocumentsOptions, SemanticEmbedder, SemanticEmbedderModelInfo } from "./semantic-types.js";
 
@@ -65,6 +66,7 @@ class OllamaSemanticEmbedderImpl implements SemanticEmbedder {
 	private readonly batchSize: number;
 	private readonly concurrency: number;
 	private readonly keepAlive: string;
+	private readonly requestTimeoutMs?: number;
 	private dimension?: number;
 
 	constructor(config: OllamaSemanticEmbedderConfig = {}) {
@@ -73,6 +75,7 @@ class OllamaSemanticEmbedderImpl implements SemanticEmbedder {
 		this.batchSize = Math.max(1, Math.trunc(config.batchSize ?? DEFAULT_OLLAMA_EMBED_BATCH_SIZE));
 		this.concurrency = Math.max(1, Math.trunc(config.concurrency ?? DEFAULT_OLLAMA_EMBED_CONCURRENCY));
 		this.keepAlive = config.keepAlive ?? DEFAULT_OLLAMA_EMBED_KEEP_ALIVE;
+		this.requestTimeoutMs = config.requestTimeoutMs ?? resolveOllamaEmbedRequestTimeoutMs();
 	}
 
 	private async embedBatch(texts: string[], batchIndex: number): Promise<number[][]> {
@@ -86,11 +89,28 @@ class OllamaSemanticEmbedderImpl implements SemanticEmbedder {
 			concurrency: this.concurrency,
 			keepAlive: this.keepAlive,
 		});
-		const response = await fetch(new URL("/api/embed", this.host), {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ model: this.model, input: texts, keep_alive: this.keepAlive }),
-		});
+		const timeoutMs = this.requestTimeoutMs;
+		const controller = timeoutMs ? new AbortController() : undefined;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+		if (controller && timeoutMs) {
+			timeout = setTimeout(() => controller.abort(), timeoutMs);
+		}
+		let response: Response;
+		try {
+			response = await fetch(new URL("/api/embed", this.host), {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ model: this.model, input: texts, keep_alive: this.keepAlive }),
+				signal: controller?.signal,
+			});
+		} catch (error) {
+			if (controller?.signal.aborted) {
+				throw new Error(`Ollama embedding request timed out after ${timeoutMs}ms`);
+			}
+			throw error;
+		} finally {
+			if (timeout) clearTimeout(timeout);
+		}
 		if (!response.ok) {
 			throw new Error(`Ollama embedding request failed: ${response.status} ${response.statusText}`);
 		}
