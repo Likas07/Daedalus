@@ -119,6 +119,7 @@ interface SessionRecord {
 	readonly runtime: ControlledSessionRuntime;
 	unsubscribe: () => void;
 	activeTurnId?: TurnId;
+	lastTurnId?: TurnId;
 }
 
 export class SessionController {
@@ -235,6 +236,7 @@ export class SessionController {
 		if (record.activeTurnId) throw new Error(`Session already has an active turn: ${record.activeTurnId}`);
 		const turnId = input.turnId ?? this.nextTurnId();
 		record.activeTurnId = turnId;
+		record.lastTurnId = turnId;
 		await this.emit({
 			id: this.nextEventId(),
 			type: "turn/started",
@@ -258,7 +260,7 @@ export class SessionController {
 	async interruptTurn(input: InterruptTurnInput): Promise<void> {
 		const record = this.requireSession(input.sessionId);
 		await record.runtime.session.abort();
-		const turnId = input.turnId ?? record.activeTurnId;
+		const turnId = input.turnId ?? record.activeTurnId ?? record.lastTurnId;
 		if (turnId) {
 			await this.emit({
 				id: this.nextEventId(),
