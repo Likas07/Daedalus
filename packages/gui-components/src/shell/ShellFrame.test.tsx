@@ -1,5 +1,5 @@
-import type { GuiShellState } from "@daedalus-pi/gui-core";
 import { describe, test } from "bun:test";
+import type { GuiShellState } from "@daedalus-pi/gui-core";
 import React from "react";
 import { expectMarkupContains, renderMarkup } from "../test/render";
 import { ShellFrame } from "./ShellFrame";

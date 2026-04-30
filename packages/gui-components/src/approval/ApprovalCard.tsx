@@ -1,6 +1,6 @@
 import type { protocolV1 } from "@daedalus-pi/app-server-protocol";
 import React, { type ReactNode } from "react";
-import { Badge, Button, StatusPill, type BadgeTone, type StatusPillTone } from "../ui";
+import { Badge, type BadgeTone, Button, StatusPill, type StatusPillTone } from "../ui";
 
 export interface ApprovalCardProps {
 	readonly request: protocolV1.ApprovalRequest;
@@ -97,19 +97,17 @@ export function ApprovalCard({ request, pendingDecision, failure, onApprove, onD
 		React.createElement(
 			"div",
 			{ className: "daedalus-approval-card-meta" },
-			React.createElement(Badge, { ariaLabel: `Approval kind: ${kindLabel}`, tone: getKindTone(request.kind) }, kindLabel),
+			React.createElement(
+				Badge,
+				{ ariaLabel: `Approval kind: ${kindLabel}`, tone: getKindTone(request.kind) },
+				kindLabel,
+			),
 			pendingLabel
 				? React.createElement(Badge, { ariaLabel: pendingLabel, tone: "warning" }, "Decision pending")
 				: null,
 		),
 		summary ? React.createElement("p", { className: "daedalus-approval-summary" }, summary) : null,
-		body
-			? React.createElement(
-					"p",
-					{ className: "daedalus-approval-body daedalus-approval-question" },
-					body,
-				)
-			: null,
+		body ? React.createElement("p", { className: "daedalus-approval-body daedalus-approval-question" }, body) : null,
 		failure
 			? React.createElement(
 					"div",

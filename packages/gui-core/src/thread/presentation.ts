@@ -65,7 +65,9 @@ function deriveTitle(viewModel: ThreadViewModel): string {
 	const explicitTitle = normalizeTitle(viewModel.thread?.title);
 	if (explicitTitle) return explicitTitle;
 
-	const firstUserMessage = viewModel.timeline.find((entry) => entry.kind === "user-message" && normalizeTitle(entry.body));
+	const firstUserMessage = viewModel.timeline.find(
+		(entry) => entry.kind === "user-message" && normalizeTitle(entry.body),
+	);
 	const timelineTitle = normalizeTitle(firstUserMessage?.body);
 	return timelineTitle ? truncateTitle(timelineTitle) : UNTITLED_THREAD_TITLE;
 }

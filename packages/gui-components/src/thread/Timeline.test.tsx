@@ -1,5 +1,5 @@
-import type { TimelineEntryViewModel } from "@daedalus-pi/gui-core";
 import { describe, expect, test } from "bun:test";
+import type { TimelineEntryViewModel } from "@daedalus-pi/gui-core";
 import React from "react";
 import { expectMarkupContains, renderMarkup } from "../test/render";
 import { Timeline } from "./Timeline";

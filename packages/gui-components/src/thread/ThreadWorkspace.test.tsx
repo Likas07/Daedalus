@@ -1,5 +1,5 @@
-import type { ThreadViewModel, TimelineEntryViewModel } from "@daedalus-pi/gui-core";
 import { describe, expect, test } from "bun:test";
+import type { ThreadViewModel, TimelineEntryViewModel } from "@daedalus-pi/gui-core";
 import React from "react";
 import { expectMarkupContains, renderMarkup } from "../test/render";
 import { ThreadHeader } from "./ThreadHeader";
@@ -80,13 +80,13 @@ describe("ThreadHeader", () => {
 			"1 terminal output",
 			'data-testid="thread-approvals-label"',
 			'aria-label="Approvals: 1 approval"',
-			'<dt>Approvals</dt><dd>1</dd>',
+			"<dt>Approvals</dt><dd>1</dd>",
 			'data-testid="thread-diff-label"',
 			'aria-label="Diff: 1 diff"',
-			'<dt>Diff</dt><dd>1</dd>',
+			"<dt>Diff</dt><dd>1</dd>",
 			'data-testid="thread-terminal-label"',
 			'aria-label="Terminal: 1 terminal event"',
-			'<dt>Terminal</dt><dd>1</dd>',
+			"<dt>Terminal</dt><dd>1</dd>",
 		]);
 	});
 

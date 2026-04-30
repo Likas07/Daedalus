@@ -1,10 +1,9 @@
-export * from "./shell/ShellFrame";
-export * from "./shell/ThreadSidebar";
-
 export * from "./approval/ApprovalCard";
 export * from "./approval/ApprovalQueue";
 export * from "./diff/DiffFileView";
 export * from "./diff/DiffPanel";
+export * from "./shell/ShellFrame";
+export * from "./shell/ThreadSidebar";
 export * from "./terminal/TerminalDrawer";
 export * from "./terminal/TerminalPane";
 export * from "./thread/Composer";
