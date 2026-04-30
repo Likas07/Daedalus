@@ -9,6 +9,7 @@ export * from "./terminal/TerminalDrawer";
 export * from "./terminal/TerminalPane";
 export * from "./thread/Composer";
 export * from "./thread/EmptyStates";
+export * from "./thread/ThreadHeader";
 export * from "./thread/ThreadWorkspace";
 export * from "./thread/Timeline";
 export * from "./ui";
