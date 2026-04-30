@@ -10,33 +10,61 @@ export function EmptyTimeline({ isLoading, error, onReconnect }: EmptyTimelinePr
 	if (error) {
 		return React.createElement(
 			"section",
-			{ className: "daedalus-thread-empty daedalus-thread-empty-error", role: "status" },
-			React.createElement("h2", null, "Thread connection needs attention"),
-			React.createElement("p", null, error),
-			onReconnect
-				? React.createElement(
-						"button",
-						{ type: "button", onClick: onReconnect, "data-testid": "thread-reconnect" },
-						"Reconnect",
-					)
-				: null,
+			{
+				className: "daedalus-thread-empty daedalus-thread-empty-error",
+				role: "status",
+				"aria-live": "assertive",
+			},
+			renderEmptyCard(
+				"error",
+				"Connection",
+				"Thread connection needs attention",
+				error,
+				onReconnect
+					? React.createElement(
+							"button",
+							{
+								type: "button",
+								onClick: onReconnect,
+								className: "daedalus-thread-empty-action",
+								"data-testid": "thread-reconnect",
+							},
+							"Reconnect",
+						)
+					: null,
+			),
 		);
 	}
 
 	if (isLoading) {
 		return React.createElement(
 			"section",
-			{ className: "daedalus-thread-empty", role: "status" },
-			React.createElement("h2", null, "Loading thread"),
-			React.createElement("p", null, "Replaying Daedalus timeline events…"),
+			{ className: "daedalus-thread-empty daedalus-thread-empty-loading", role: "status", "aria-live": "polite" },
+			renderEmptyCard("loading", "Replaying", "Loading thread", "Replaying Daedalus timeline events…"),
 		);
 	}
 
 	return React.createElement(
 		"section",
-		{ className: "daedalus-thread-empty", role: "status" },
-		React.createElement("h2", null, "No timeline entries yet"),
-		React.createElement("p", null, "Send a turn to start this Daedalus thread."),
+		{ className: "daedalus-thread-empty daedalus-thread-empty-ready", role: "status", "aria-live": "polite" },
+		renderEmptyCard("empty", "Thread", "No timeline entries yet", "Send a turn to start this Daedalus thread."),
+	);
+}
+
+function renderEmptyCard(
+	state: string,
+	eyebrow: string,
+	title: string,
+	body: string,
+	action: ReactNode = null,
+): ReactNode {
+	return React.createElement(
+		"article",
+		{ className: `daedalus-thread-empty-card daedalus-thread-empty-card-${state} daedalus-thread-entry-shell` },
+		React.createElement("p", { className: "daedalus-thread-empty-eyebrow" }, eyebrow),
+		React.createElement("h2", { className: "daedalus-thread-empty-title" }, title),
+		React.createElement("p", { className: "daedalus-thread-empty-copy" }, body),
+		action,
 	);
 }
 
