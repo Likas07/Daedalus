@@ -8,7 +8,8 @@ describe("gui-components package contract", () => {
 		const entrypoint = await readFile(new URL("src/index.ts", packageRoot), "utf8");
 
 		expect(manifest.exports["."].import).toBe("./src/index.ts");
-		expect(entrypoint).toContain("export function ShellFrame");
+		expect(entrypoint).toContain('export * from "./shell/ShellFrame";');
+		expect(entrypoint).toContain('export * from "./shell/ThreadSidebar";');
 		expect(entrypoint).toContain('export * from "./approval/ApprovalCard";');
 		expect(entrypoint).toContain('export * from "./approval/ApprovalQueue";');
 		expect(entrypoint).toContain('export * from "./diff/DiffFileView";');
