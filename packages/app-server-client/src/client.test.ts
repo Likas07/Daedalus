@@ -69,6 +69,37 @@ test("provides typed GUI protocol helpers", async () => {
 		transport: createInProcessTransport((message, send) => {
 			const request = message as ClientRequest;
 			seenMethods.push(request.method);
+			if (request.method === "shell/snapshot") {
+				send({
+					kind: "response",
+					id: request.id,
+					ok: true,
+					result: { snapshot: { cursor: { seq: 0, updatedAt: "2026-04-30T00:00:00.000Z" }, threads: [] } },
+				});
+				return;
+			}
+			if (request.method === "thread/snapshot") {
+				send({
+					kind: "response",
+					id: request.id,
+					ok: true,
+					result: {
+						snapshot: {
+							cursor: { seq: 0, updatedAt: "2026-04-30T00:00:00.000Z" },
+							threadId: request.params.threadId,
+							sessionId: "session-1",
+							title: "Thread",
+							status: "idle",
+							messages: [],
+							activity: [],
+							pendingActions: [],
+							safetySignals: [],
+							diffIds: [],
+						},
+					},
+				});
+				return;
+			}
 			if (request.method === "composer/file-search") {
 				send({
 					kind: "response",
@@ -244,6 +275,12 @@ test("provides typed GUI protocol helpers", async () => {
 		}),
 	});
 
+	await expect(client.readShellSnapshot({ projectId: "project-1" })).resolves.toMatchObject({
+		snapshot: { cursor: { seq: 0 }, threads: [] },
+	});
+	await expect(client.readThreadSnapshot({ threadId: "thread-1" })).resolves.toMatchObject({
+		snapshot: { threadId: "thread-1", cursor: { seq: 0 } },
+	});
 	await expect(client.searchComposerFiles({ projectId: "project-1", query: "src", limit: 5 })).resolves.toMatchObject({
 		files: [{ path: "src/index.ts" }],
 	});
@@ -316,6 +353,8 @@ test("provides typed GUI protocol helpers", async () => {
 	await client.cancelTurn({ sessionId: "session-1", turnId: "turn-1" });
 	await client.stopSession({ sessionId: "session-1" });
 
+	expect(seenMethods).toContain("shell/snapshot");
+	expect(seenMethods).toContain("thread/snapshot");
 	expect(seenMethods).toContain("composer/file-search");
 	expect(seenMethods).toContain("access/set");
 	expect(seenMethods).toContain("terminal/create");

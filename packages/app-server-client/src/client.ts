@@ -4,6 +4,10 @@ import type {
 	ClientRequest,
 	EventReplayParams,
 	EventReplayResult,
+	ShellSnapshotParams,
+	ShellSnapshotResult,
+	ThreadSnapshotParams,
+	ThreadSnapshotResult,
 	ExtensionUiRequest,
 	ExtensionUiResponse,
 	InitializeParams,
@@ -141,6 +145,14 @@ export class AppServerClient {
 
 	replayEvents(params: EventReplayParams = {}): Promise<EventReplayResult> {
 		return this.request("event/replay", params);
+	}
+
+	readShellSnapshot(params: ShellSnapshotParams = {}): Promise<ShellSnapshotResult> {
+		return this.request("shell/snapshot", params);
+	}
+
+	readThreadSnapshot(params: ThreadSnapshotParams): Promise<ThreadSnapshotResult> {
+		return this.request("thread/snapshot", params);
 	}
 
 	getDiff(params: ParamsFor<"diff/get">): Promise<RequestResultMap["diff/get"]> {
