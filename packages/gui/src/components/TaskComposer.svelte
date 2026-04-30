@@ -19,6 +19,7 @@
 		disabledReason,
 		submitLabel = "Start session",
 		onSubmit,
+		showWorkflowPrompt = true,
 	} = $props<{
 		guiState: GuiState;
 		runtime: GuiRuntime;
@@ -31,12 +32,13 @@
 		disabledReason?: string;
 		submitLabel?: string;
 		onSubmit?: (input: ComposerSubmitInput) => Promise<void> | void;
+		showWorkflowPrompt?: boolean;
 	}>();
 	const workflow = $derived(workflowFromTypedEvents(guiState.events));
 	const openQuestion = $derived(workflow?.questions.find((question) => question.status === "open"));
 </script>
 
-{#if openQuestion}
+{#if showWorkflowPrompt && openQuestion}
 	<div class="mb-2 rounded-md border border-[color:var(--ember-rule)] bg-[color:var(--ember-glow)] px-3 py-2 font-mono text-[11px] text-[color:var(--bone)]" data-testid="composer-question-prompt">
 		<span class="uppercase tracking-[0.14em] text-[color:var(--ember)]">question</span>
 		<span class="ml-2">{openQuestion.prompt}</span>
