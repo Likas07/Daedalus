@@ -5,7 +5,8 @@ import { openAppServerDatabase } from "../persistence/database";
 import { appendEvent } from "../persistence/event-store";
 import { runMigrations } from "../persistence/migrations";
 import { projectRuntimeEvents } from "../persistence/projector";
-import { buildThreadV1Snapshot, replayThreadV1 } from "./thread-v1-projection";
+import { notificationForThreadV1StoredEvent } from "../server/thread-v1-routes";
+import { buildThreadV1Snapshot, projectStoredEventToTimelineEntry, replayThreadV1 } from "./thread-v1-projection";
 
 function seededDatabase() {
 	const database = openAppServerDatabase(":memory:");
@@ -116,5 +117,107 @@ describe("thread v1 projection", () => {
 		} finally {
 			database.close();
 		}
+	});
+
+	test("replays AppEvent-shaped nested turn prompt content from stored events", () => {
+		const database = seededDatabase();
+		try {
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "turn/started",
+				payload: {
+					id: "event-turn-2",
+					type: "turn/started",
+					ts: "2026-04-30T00:00:03.000Z",
+					sessionId: "thread-1",
+					payload: {
+						sessionId: "thread-1",
+						turnId: "turn-2",
+						prompt: "QA final browser turn",
+						content: "QA final browser turn",
+					},
+				},
+			});
+
+			const snapshot = buildThreadV1Snapshot({ database, threadId: "thread-1" });
+			expect(snapshot.turns.find((turn) => turn.turnId === "turn-2")).toMatchObject({
+				turnId: "turn-2",
+				prompt: "QA final browser turn",
+			});
+			expect(snapshot.timeline.entries.find((entry) => entry.entryId === "turn:turn-2:user")).toMatchObject({
+				kind: "user-message",
+				content: "QA final browser turn",
+			});
+		} finally {
+			database.close();
+		}
+	});
+
+	test("projects AppEvent-shaped nested turn prompts without losing normalized payload support", () => {
+		const normalized = projectStoredEventToTimelineEntry({
+			seq: 8,
+			streamId: "thread-1",
+			type: "turn/started",
+			payload: { sessionId: "thread-1", turnId: "turn-normalized", prompt: "Normalized prompt" },
+			createdAt: "2026-04-30T00:00:00.000Z",
+		});
+		expect(normalized).toMatchObject({
+			entryId: "turn:turn-normalized:user",
+			threadId: "thread-1",
+			kind: "user-message",
+			content: "Normalized prompt",
+		});
+
+		const appEventShaped = projectStoredEventToTimelineEntry({
+			seq: 9,
+			streamId: "thread-1",
+			type: "turn/started",
+			payload: {
+				id: "event-9",
+				type: "turn/started",
+				ts: "2026-04-30T00:00:01.000Z",
+				sessionId: "thread-1",
+				payload: { turnId: "turn-app-event", content: "QA final browser turn" },
+			},
+			createdAt: "2026-04-30T00:00:01.000Z",
+		});
+		expect(appEventShaped).toMatchObject({
+			entryId: "turn:turn-app-event:user",
+			threadId: "thread-1",
+			kind: "user-message",
+			turnId: "turn-app-event",
+			messageId: "turn-app-event",
+			content: "QA final browser turn",
+		});
+	});
+
+	test("thread timeline notifications include AppEvent-shaped nested turn prompt content", () => {
+		const notification = notificationForThreadV1StoredEvent({
+			seq: 10,
+			streamId: "thread-1",
+			type: "turn/started",
+			payload: {
+				id: "event-10",
+				type: "turn/started",
+				ts: "2026-04-30T00:00:02.000Z",
+				sessionId: "thread-1",
+				payload: { turnId: "turn-live", prompt: "QA final browser turn" },
+			},
+			createdAt: "2026-04-30T00:00:02.000Z",
+		});
+
+		expect(notification).toMatchObject({
+			kind: "notification",
+			method: "thread.timeline",
+			params: {
+				threadId: "thread-1",
+				nextCursor: { seq: 10 },
+				entry: {
+					entryId: "turn:turn-live:user",
+					kind: "user-message",
+					content: "QA final browser turn",
+				},
+			},
+		});
 	});
 });
