@@ -168,3 +168,5 @@ export {
 export { type DiffFileSummary, type DiffResult, DiffService, parseNameStatus } from "./workspaces/diff-service";
 export { type OpenProjectInput, ProjectService, type ProjectServiceOptions } from "./workspaces/project-service";
 export { type CreateWorktreeInput, WorktreeService, type WorktreeServiceOptions } from "./workspaces/worktree-service";
+export { buildShellSnapshot, type BuildShellSnapshotOptions } from "./projections/shell-projection";
+export { buildThreadDetailSnapshot, type BuildThreadDetailSnapshotOptions } from "./projections/thread-detail-projection";
