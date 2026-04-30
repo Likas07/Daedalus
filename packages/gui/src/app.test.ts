@@ -821,7 +821,7 @@ describe("Safe worktree build setup UI", () => {
 		expect(bubble).toContain("assistant-row");
 		expect(bubble).toContain("streaming-indicator");
 		expect(header).toContain("ProjectionStatusPills");
-		expect(header).toContain("SafetySignalStrip");
+		expect(header).not.toContain("SafetySignalStrip");
 		expect(composer).toContain("ComposerPendingActions");
 		expect(pending).toContain("composer-pending-actions");
 		expect(`${timeline}\n${bubble}\n${header}\n${composer}`).not.toMatch(

@@ -83,9 +83,6 @@
 			{thread}
 			{activeTurnId}
 			accessMode={guiState.accessMode}
-			{targetValidation}
-			{dirtyTarget}
-			connectionState={guiState.connectionStatus}
 			onCancelTurn={cancelTurn}
 			onStop={stopThread}
 			onContinueInWorktree={continueInWorktree}

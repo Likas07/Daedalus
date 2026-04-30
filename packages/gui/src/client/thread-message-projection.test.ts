@@ -67,6 +67,26 @@ describe("projectThreadMessages", () => {
 		expect(rows.at(-1)).toMatchObject({ kind: "working" });
 	});
 
+	test("suppresses gui-context-only and empty chat bubbles while running", () => {
+		const rows = projectThreadMessages({
+			status: "running",
+			messages: [
+				message("u1", "user", "<gui-context>internal</gui-context>"),
+				message("a1", "assistant", "   "),
+			],
+		});
+		expect(rows.filter((row) => row.kind === "message")).toHaveLength(0);
+		expect(rows.at(-1)).toMatchObject({ kind: "working" });
+	});
+
+	test("strips gui-context from visible user message text", () => {
+		const rows = projectThreadMessages({
+			status: "waiting",
+			messages: [message("u1", "user", "<gui-context>internal</gui-context> Show me status")],
+		});
+		expect(rows[0]).toMatchObject({ kind: "message", message: { content: "Show me status" } });
+	});
+
 	test("message components expose chat semantics without ledger affordances", async () => {
 		const [timeline, bubble, activity, markdown] = await Promise.all([
 			readFile(new URL("../components/messages/MessagesTimeline.svelte", import.meta.url), "utf8"),

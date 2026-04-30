@@ -26,7 +26,11 @@ export interface ProjectThreadMessagesInput {
 
 export function projectThreadMessages(input: ProjectThreadMessagesInput): readonly ThreadMessageRow[] {
 	const chronologicalRows: ThreadMessageRow[] = [];
-	const messages = coalesceAssistantUpdates(input.messages);
+	const messages = coalesceAssistantUpdates(input.messages).flatMap((message) => {
+		const content = stripGuiContext(message.content).trim();
+		if ((message.role === "user" || message.role === "assistant") && !content) return [];
+		return [{ ...message, content }];
+	});
 	const latestAssistantId = findLatestAssistantId(messages);
 
 	for (const message of messages) {
@@ -87,6 +91,10 @@ function coalesceAssistantUpdates(messages: readonly ThreadMessage[]): ThreadMes
 		const message = byId.get(id);
 		return message ? [message] : [];
 	});
+}
+
+function stripGuiContext(value: string): string {
+	return value.replace(/<gui-context>[\s\S]*?<\/gui-context>/gi, " ").replace(/<gui-context>[\s\S]*$/gi, " ");
 }
 
 function findLatestAssistantId(messages: readonly ThreadMessage[]): string | undefined {
