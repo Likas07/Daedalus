@@ -353,13 +353,22 @@ describe("GUI app", () => {
 		];
 		app.runtime.notify();
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(root.textContent).toContain("Tool · Call");
-		expect(root.textContent).toContain("bun test");
-		expect(root.textContent).toContain("Approval · Requested");
-		expect(root.textContent).not.toContain("RAW_SECRET_TRANSCRIPT_PAYLOAD");
-		root.querySelector<HTMLButtonElement>('[data-testid="inspector-debug-tab"]')?.click();
+		const activeChat = root.querySelector('[data-testid="thread-messages-surface"]');
+		expect(activeChat?.textContent).toContain("Tool · Call");
+		expect(activeChat?.textContent).toContain("bun test");
+		expect(activeChat?.textContent).toContain("Approval · Requested");
+		expect(activeChat?.textContent).not.toContain("RAW_SECRET_TRANSCRIPT_PAYLOAD");
+		expect(activeChat?.textContent).not.toMatch(/transcript · ledger|Messages Tools Approvals Diffs Terminal Errors Debug|001|top trust|build mode/i);
+		expect(root.textContent).toContain("Target validation:");
+		[...root.querySelectorAll<HTMLButtonElement>("button")]
+			.find((button) => button.textContent?.trim().startsWith("audit"))
+			?.click();
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(root.querySelector('[data-testid="debug-inspector"]')?.textContent).toContain(
+		[...root.querySelectorAll<HTMLButtonElement>("button")]
+			.find((button) => button.textContent?.trim() === "Expand")
+			?.click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(root.querySelector('[data-testid="audit-timeline"]')?.textContent).toContain(
 			"RAW_SECRET_TRANSCRIPT_PAYLOAD",
 		);
 		await app.close();
@@ -776,5 +785,24 @@ describe("Safe worktree build setup UI", () => {
 		expect(sessionWorkspace).toContain("continueInWorktree");
 		expect(sessionWorkspace).toContain("continue in worktree");
 		expect(sessionWorkspace).toContain("Source thread has no persisted workspace target");
+	});
+
+	test("active Thread source stays free of audit ledger and top-card imports", () => {
+		const fs = require("node:fs");
+		const path = require("node:path");
+		const root = path.join(import.meta.dir, "components");
+		const activeThreadFiles = [
+			"SessionWorkspace.svelte",
+			"projection/ThreadWorkspace.svelte",
+			"projection/ThreadHeader.svelte",
+			"messages/MessagesTimeline.svelte",
+		];
+
+		for (const file of activeThreadFiles) {
+			const text = fs.readFileSync(path.join(root, file), "utf8");
+			expect(text).not.toContain("TranscriptTimeline");
+			expect(text).not.toContain("BuildTargetTrustBar");
+			expect(text).not.toContain("PlanBuildModePanel");
+		}
 	});
 });

@@ -43,7 +43,7 @@
 	}
 </script>
 
-<div class="space-y-4">
+<div class="space-y-4" data-testid="legacy-audit-transcript" aria-label="Legacy audit transcript ledger">
 	<header class="flex flex-wrap items-center justify-between gap-3">
 		<div class="flex items-baseline gap-3">
 			<span class="eyebrow eyebrow-brass">transcript · ledger</span>
@@ -51,7 +51,7 @@
 				{visibleItems.length} <span class="text-[color:var(--bone-faint)]">/ {items.length} entries</span>
 			</span>
 		</div>
-		<div class="flex flex-wrap items-center gap-1.5" aria-label="Transcript filters">
+		<div class="flex flex-wrap items-center gap-1.5" aria-label="Audit transcript filters">
 			{#each filters as filter}
 				<button
 					type="button"

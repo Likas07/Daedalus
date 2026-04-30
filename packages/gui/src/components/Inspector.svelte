@@ -1,11 +1,12 @@
 <script lang="ts">
-	import type { WorkflowChangedFile } from "@daedalus-pi/app-server-protocol";
+	import type { AppEvent, WorkflowChangedFile } from "@daedalus-pi/app-server-protocol";
 	import { buildDaedalusWorkflowViewModel, workflowFromTypedEvents } from "../client/daedalus-workflow-view-model";
 	import type { GuiState } from "../client/runtime";
 	import type { UiState } from "../client/ui-state.svelte";
 	import ApprovalQueue from "./ApprovalQueue.svelte";
+	import AuditTimeline from "./inspector/AuditTimeline.svelte";
 
-	type Section = "plan" | "approvals" | "diff";
+	type Section = "plan" | "approvals" | "diff" | "audit";
 
 	const { guiState, respondToApproval, ui } = $props<{
 		guiState: GuiState;
@@ -13,7 +14,7 @@
 		ui: UiState;
 	}>();
 
-	let open = $state<Record<Section, boolean>>({ plan: true, approvals: true, diff: true });
+	let open = $state<Record<Section, boolean>>({ plan: true, approvals: true, diff: true, audit: false });
 	let diffExpanded = $state(false);
 	const DIFF_COLLAPSED_LIMIT = 6;
 
@@ -31,6 +32,7 @@
 		plan: workflowView ? workflowView.workflow.todos.length.toString() : "0",
 		approvals: guiState.approvalItems.length.toString().padStart(2, "0"),
 		diff: `${diffFiles.length}`,
+		audit: guiState.events.filter((event: AppEvent) => !guiState.selectedSessionId || event.sessionId === guiState.selectedSessionId).length.toString(),
 	});
 
 	function toggle(section: Section): void {
@@ -94,7 +96,7 @@
 		{/if}
 	</section>
 
-	<section>
+	<section class="border-b border-ink-500">
 		{@render sectionHeader("diff", "diff")}
 		{#if open.diff}
 			<ul class="space-y-1 pb-2">
@@ -130,6 +132,15 @@
 					{diffExpanded ? "show less" : `show ${diffOverflow} more`}
 				</button>
 			{/if}
+		{/if}
+	</section>
+
+	<section data-testid="inspector-audit-section">
+		{@render sectionHeader("audit", "audit")}
+		{#if open.audit}
+			<div class="pb-4">
+				<AuditTimeline events={guiState.events} sessionId={guiState.selectedSessionId} />
+			</div>
 		{/if}
 	</section>
 </aside>
