@@ -1,7 +1,7 @@
 import type { ThreadViewModel } from "@daedalus-pi/gui-core";
 import React, { type ReactNode } from "react";
 import { Composer } from "./Composer";
-import { ApprovalPlaceholder, DiffPlaceholder, TerminalPlaceholder } from "./EmptyStates";
+import { ThreadHeader } from "./ThreadHeader";
 import { Timeline } from "./Timeline";
 
 type RefObject<T> = { readonly current: T };
@@ -27,45 +27,39 @@ export function ThreadWorkspace({
 }: ThreadWorkspaceProps): ReactNode {
 	const thread = viewModel.thread;
 	const isRunning = thread?.status === "running" || viewModel.turns.some((turn) => turn.status === "running");
-	const statusLabel = viewModel.isReplaying
-		? "Replaying"
-		: viewModel.isLive
-			? "Live"
-			: (thread?.status ?? "Disconnected");
 
 	return React.createElement(
 		"main",
 		{ className: "daedalus-thread-workspace", "data-testid": "thread-workspace" },
+		React.createElement(ThreadHeader, { viewModel }),
 		React.createElement(
 			"section",
-			{ className: "daedalus-thread-main" },
-			React.createElement(
-				"header",
-				{ className: "daedalus-thread-header" },
-				React.createElement("p", null, "Thread"),
-				React.createElement("h1", null, thread?.title ?? "Daedalus thread"),
-				React.createElement("p", { "data-testid": "thread-status" }, statusLabel),
-			),
+			{
+				"aria-label": "Thread timeline viewport",
+				className: "daedalus-thread-timeline-viewport",
+				"data-testid": "thread-timeline-viewport",
+			},
 			React.createElement(Timeline, {
 				entries: viewModel.timeline,
-				isLoading: isLoading || viewModel.isReplaying,
 				error: viewModel.error,
+				isLoading: isLoading || viewModel.isReplaying,
 				onReconnect: onReconnect ? () => void onReconnect() : undefined,
-			}),
-			React.createElement(Composer, {
-				disabled: isLoading || isSubmitting || viewModel.isReplaying,
-				isRunning,
-				inputRef: composerRef,
-				onSubmit: onSubmitTurn,
-				onCancel: onCancelTurn,
 			}),
 		),
 		React.createElement(
-			"aside",
-			{ className: "daedalus-thread-sidecar", "aria-label": "Thread side panels" },
-			React.createElement(ApprovalPlaceholder),
-			React.createElement(DiffPlaceholder),
-			React.createElement(TerminalPlaceholder),
+			"section",
+			{
+				"aria-label": "Thread composer dock",
+				className: "daedalus-thread-composer-dock",
+				"data-testid": "thread-composer-dock",
+			},
+			React.createElement(Composer, {
+				disabled: isLoading || isSubmitting || viewModel.isReplaying,
+				inputRef: composerRef,
+				isRunning,
+				onCancel: onCancelTurn,
+				onSubmit: onSubmitTurn,
+			}),
 		),
 	);
 }
