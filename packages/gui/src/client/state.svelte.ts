@@ -16,6 +16,22 @@ export function createGuiStateStore(runtime: GuiRuntime): GuiStateStore {
 			worktrees: [...state.worktrees],
 			terminals: [...state.terminals],
 			models: [...state.models],
+			projections: state.projections
+				? {
+						shell: { ...state.projections.shell, threads: [...state.projections.shell.threads], safetySignals: [...state.projections.shell.safetySignals] },
+						thread: state.projections.thread
+							? {
+									...state.projections.thread,
+									messages: [...state.projections.thread.messages],
+									activity: [...state.projections.thread.activity],
+									pendingActions: [...state.projections.thread.pendingActions],
+									safetySignals: [...state.projections.thread.safetySignals],
+									diffIds: [...state.projections.thread.diffIds],
+									rows: [...state.projections.thread.rows],
+								}
+							: undefined,
+					}
+				: undefined,
 		};
 	});
 	return {
