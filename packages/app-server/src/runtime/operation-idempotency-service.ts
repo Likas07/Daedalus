@@ -21,7 +21,12 @@ export interface OperationIdempotencyServiceOptions {
 }
 
 export type OperationBeginResult =
-	| { readonly status: "started"; readonly leaseOwner: string; readonly leaseExpiresAt: string; readonly attemptCount: number }
+	| {
+			readonly status: "started";
+			readonly leaseOwner: string;
+			readonly leaseExpiresAt: string;
+			readonly attemptCount: number;
+	  }
 	| { readonly status: "replay"; readonly result: unknown };
 
 export class OperationIdempotencyService {
@@ -70,7 +75,16 @@ export class OperationIdempotencyService {
 					 (operation_id, method, payload_hash, status, lease_owner, lease_expires_at, attempt_count, created_at, updated_at)
 					 VALUES (?, ?, ?, 'in-progress', ?, ?, ?, ?, ?)`,
 				)
-				.run(input.operationId, input.method, payloadHash, leaseOwner, leaseExpiresAt, attemptCount, nowIso, nowIso);
+				.run(
+					input.operationId,
+					input.method,
+					payloadHash,
+					leaseOwner,
+					leaseExpiresAt,
+					attemptCount,
+					nowIso,
+					nowIso,
+				);
 			return { status: "started" as const, leaseOwner, leaseExpiresAt, attemptCount };
 		})();
 	}
@@ -93,7 +107,12 @@ export class OperationIdempotencyService {
 				 SET status = 'failed', error_message = ?, updated_at = ?
 				 WHERE operation_id = ? AND status = 'in-progress' AND lease_owner = ?`,
 			)
-			.run(error instanceof Error ? error.message : String(error), this.now().toISOString(), operationId, leaseOwner) as {
+			.run(
+				error instanceof Error ? error.message : String(error),
+				this.now().toISOString(),
+				operationId,
+				leaseOwner,
+			) as {
 			changes?: number;
 		};
 		if (resultInfo.changes === 0) throw new Error(`Operation lease no longer owned by attempt: ${operationId}`);

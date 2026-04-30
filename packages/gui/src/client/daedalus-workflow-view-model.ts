@@ -50,20 +50,30 @@ export interface ThreadScopedPendingActions {
 export function threadScopedPendingActions(input: ThreadScopedPendingActionsInput): ThreadScopedPendingActions {
 	const sessionId = input.sessionId;
 	const threadId = input.threadId;
-	const matchesSession = (value?: string): boolean => !!value && (!!sessionId && value === sessionId || !!threadId && value === threadId);
+	const matchesSession = (value?: string): boolean =>
+		!!value && ((!!sessionId && value === sessionId) || (!!threadId && value === threadId));
 	const workflow = input.workflow;
-	const openQuestions = workflow && matchesSession(workflow.sessionId)
-		? workflow.questions.filter((question) => question.status === "open")
-		: [];
+	const openQuestions =
+		workflow && matchesSession(workflow.sessionId)
+			? workflow.questions.filter((question) => question.status === "open")
+			: [];
 	const threadActions = (input.threadActions ?? []).filter((action) => {
 		const record = action as ThreadPendingAction & { sessionId?: string; threadId?: string };
-		return !record.sessionId && !record.threadId || matchesSession(record.sessionId) || matchesSession(record.threadId);
+		return (
+			(!record.sessionId && !record.threadId) || matchesSession(record.sessionId) || matchesSession(record.threadId)
+		);
 	});
 	const approvalIds = new Set(threadActions.map((action) => action.approvalId).filter((id): id is string => !!id));
-	const approvals = (input.approvals ?? []).filter((approval) => matchesSession(approval.sessionId) && (approvalIds.size === 0 || approvalIds.has(approval.id)));
+	const approvals = (input.approvals ?? []).filter(
+		(approval) => matchesSession(approval.sessionId) && (approvalIds.size === 0 || approvalIds.has(approval.id)),
+	);
 	const pendingInput = (input.sessions ?? [])
 		.filter((session) => matchesSession(session.id) && session.pendingUserInput)
-		.map((session) => ({ id: session.id, title: session.bestNextAction?.label ?? "User input requested", summary: session.needsAttentionReason ?? session.latestMessage }));
+		.map((session) => ({
+			id: session.id,
+			title: session.bestNextAction?.label ?? "User input requested",
+			summary: session.needsAttentionReason ?? session.latestMessage,
+		}));
 	return { openQuestions, pendingInput, approvals, threadActions };
 }
 

@@ -87,7 +87,10 @@ describe("session entry projection", () => {
 
 	test("strips GUI context blocks from rendered user messages", () => {
 		const rows = projectSessionEntries([
-			{ ...base("message", "u-context"), message: { role: "user", content: "<gui-context>internal</gui-context> Show me status" } },
+			{
+				...base("message", "u-context"),
+				message: { role: "user", content: "<gui-context>internal</gui-context> Show me status" },
+			},
 		]);
 
 		expect(rows[0]?.summary).toBe("Show me status");

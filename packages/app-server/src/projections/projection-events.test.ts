@@ -43,13 +43,14 @@ test("agent message end uses real streaming event name and appends detail messag
 
 test("approvals update shell and detail projections", () => {
 	const projected = projectAppEventToProjectionEvents({
-		event: base("approval/requested", { approvalId: "a1", request: { summary: "Run tests", secret: "redacted from shell" } }),
+		event: base("approval/requested", {
+			approvalId: "a1",
+			request: { summary: "Run tests", secret: "redacted from shell" },
+		}),
 		seq: 9,
 	});
 
-	expect(projected.shell).toEqual([
-		expect.objectContaining({ seq: 9, type: "snapshot-invalidated", threadId: "s1" }),
-	]);
+	expect(projected.shell).toEqual([expect.objectContaining({ seq: 9, type: "snapshot-invalidated", threadId: "s1" })]);
 	expect(projected.thread.map((event) => event.type)).toEqual(["pending-actions-updated", "activity-updated"]);
 	expect(projected.thread[1]).toMatchObject({
 		activity: { id: "a1", kind: "approval", status: "running", title: "Run tests" },

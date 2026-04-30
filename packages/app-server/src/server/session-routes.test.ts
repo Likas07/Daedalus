@@ -675,12 +675,14 @@ describe("session store routes", () => {
 			.get("source-session");
 		expect(source?.worktree_id).toBeNull();
 		expect(JSON.parse(source?.runs_in_json ?? "{}")).toMatchObject({ isolationMode: "base-checkout" });
-		expect(await appRouter.handle({
-			kind: "request",
-			id: "selection",
-			method: "workspace/selection/get",
-			params: { projectId: opened.projectId },
-		})).toMatchObject({ selection: { sessionId: first.sessionId } });
+		expect(
+			await appRouter.handle({
+				kind: "request",
+				id: "selection",
+				method: "workspace/selection/get",
+				params: { projectId: opened.projectId },
+			}),
+		).toMatchObject({ selection: { sessionId: first.sessionId } });
 	});
 
 	test("continue-in-worktree rejects missing, legacy, and cross-project sources", async () => {
@@ -737,7 +739,12 @@ describe("session store routes", () => {
 				kind: "request",
 				id: "cross",
 				method: "session/continue-in-worktree",
-				params: { ...params, operationId: "invalid-op-3", sourceSessionId: "cross-session", projectId: "other-project" },
+				params: {
+					...params,
+					operationId: "invalid-op-3",
+					sourceSessionId: "cross-session",
+					projectId: "other-project",
+				},
 			}),
 		).rejects.toThrow("belongs to project");
 	});

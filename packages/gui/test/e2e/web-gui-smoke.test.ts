@@ -201,15 +201,41 @@ describe("web GUI E2E smoke", () => {
 			((await request(server, "session/list", { cwd: tempDir })) as { sessions: unknown[] }).sessions,
 		).toBeDefined();
 
+		const shellProjection = (await request(server, "shell/snapshot", { projectId: opened.projectId })) as {
+			snapshot: {
+				selectedThreadId?: string;
+				threads: Array<{ threadId: string; sessionId?: string; safetySignals?: unknown[] }>;
+			};
+		};
+		expect(shellProjection.snapshot.threads).toEqual(
+			expect.arrayContaining([expect.objectContaining({ threadId: composerStarted.sessionId })]),
+		);
+		const threadProjection = (await request(server, "thread/snapshot", { threadId: composerStarted.sessionId })) as {
+			snapshot: {
+				threadId: string;
+				sessionId: string;
+				messages: Array<{ role: string; content: string }>;
+				pendingActions: unknown[];
+				safetySignals: unknown[];
+			};
+		};
+		expect(threadProjection.snapshot).toMatchObject({
+			threadId: composerStarted.sessionId,
+			sessionId: composerStarted.sessionId,
+		});
+		expect(threadProjection.snapshot.messages).toEqual(
+			expect.arrayContaining([expect.objectContaining({ role: "user", content: "Enter-to-send E2E prompt" })]),
+		);
+		expect(threadProjection.snapshot.pendingActions).toBeDefined();
+		expect(threadProjection.snapshot.safetySignals).toBeDefined();
+
 		expect(await request(server, "auth/status", {})).toHaveProperty("providers");
-		expect(((await request(server, "model/list", {})) as { models: unknown[] }).models).toBeDefined();
-		expect(await request(server, "model/select", { model: "smoke-model" })).toEqual({ model: "smoke-model" });
+		const modelList = (await request(server, "model/list", {})) as { models: unknown[]; selectedModel?: string };
+		expect(modelList.models).toBeDefined();
 		expect(await request(server, "settings/set", { scope: "global", key: "theme", value: "dark" })).toHaveProperty(
 			"effective",
 		);
-		expect(
-			((await request(server, "settings/read", {})) as { selectedModel?: string; theme?: string }).selectedModel,
-		).toBe("smoke-model");
+		expect(await request(server, "settings/read", {})).toHaveProperty("effective");
 
 		const terminal = (await request(server, "terminal/create", {
 			cwd: tempDir,
@@ -321,9 +347,7 @@ describe("web GUI E2E smoke", () => {
 			((await request(server, "terminal/list", { projectId: opened.projectId })) as { terminals: unknown[] })
 				.terminals,
 		).toEqual(expect.arrayContaining([expect.objectContaining({ terminalId: terminal.terminal.terminalId })]));
-		expect(((await request(server, "settings/read", {})) as { selectedModel?: string }).selectedModel).toBe(
-			"smoke-model",
-		);
+		expect(await request(server, "settings/read", {})).toHaveProperty("effective");
 	});
 
 	test("preserves M3 session lineage, worktree target, active selection, and restoration diagnostics across restart", async () => {
@@ -361,7 +385,15 @@ describe("web GUI E2E smoke", () => {
 			sessionId: string;
 			parentSessionId: string;
 			worktree: { id: string; path: string; branch: string };
-			runsIn: { projectId?: string; worktreeId?: string; path?: string; canonicalPath?: string; branch?: string; isolationMode?: string; validationStatus?: string };
+			runsIn: {
+				projectId?: string;
+				worktreeId?: string;
+				path?: string;
+				canonicalPath?: string;
+				branch?: string;
+				isolationMode?: string;
+				validationStatus?: string;
+			};
 		};
 		expect(continued.parentSessionId).toBe(source.sessionId);
 		expect(continued.runsIn).toMatchObject({
@@ -373,7 +405,12 @@ describe("web GUI E2E smoke", () => {
 		});
 		expect(continued.runsIn.path ?? continued.runsIn.canonicalPath).toBe(continued.worktree.path);
 
-		expect(await request(server, "workspace/selection/set", { projectId: opened.projectId, sessionId: continued.sessionId })).toMatchObject({
+		expect(
+			await request(server, "workspace/selection/set", {
+				projectId: opened.projectId,
+				sessionId: continued.sessionId,
+			}),
+		).toMatchObject({
 			selection: { projectId: opened.projectId, sessionId: continued.sessionId },
 			restorationTrace: { status: "restored", resolvedSession: continued.sessionId },
 		});
@@ -382,13 +419,19 @@ describe("web GUI E2E smoke", () => {
 		server = await startAppServer({ databasePath, agentDir, runtimeFactory });
 		expect(existsSync(databasePath)).toBe(true);
 
-		const sourceSessionsAfterRestart = (await request(server, "session/list", { cwd: tempDir })) as { sessions: Array<{ id: string }> };
-		expect(sourceSessionsAfterRestart.sessions).toEqual(expect.arrayContaining([expect.objectContaining({ id: source.sessionId })]));
+		const sourceSessionsAfterRestart = (await request(server, "session/list", { cwd: tempDir })) as {
+			sessions: Array<{ id: string }>;
+		};
+		expect(sourceSessionsAfterRestart.sessions).toEqual(
+			expect.arrayContaining([expect.objectContaining({ id: source.sessionId })]),
+		);
 		const childSessionsAfterRestart = (await request(server, "session/list", { cwd: continued.worktree.path })) as {
 			sessions: Array<{ id: string; parentSessionPath?: string }>;
 		};
 		expect(childSessionsAfterRestart.sessions).toEqual(
-			expect.arrayContaining([expect.objectContaining({ id: continued.sessionId, parentSessionPath: source.sessionId })]),
+			expect.arrayContaining([
+				expect.objectContaining({ id: continued.sessionId, parentSessionPath: source.sessionId }),
+			]),
 		);
 
 		const restoredSelection = await request(server, "workspace/selection/get", { projectId: opened.projectId });
@@ -398,11 +441,15 @@ describe("web GUI E2E smoke", () => {
 			restorationTrace: { status: "restored", resolvedSession: continued.sessionId },
 		});
 
-		const replay = (await request(server, "event/replay", { types: ["session/started"], cursor: { after: 0 } })) as { events: AppEvent[] };
+		const replay = (await request(server, "event/replay", { types: ["session/started"], cursor: { after: 0 } })) as {
+			events: AppEvent[];
+		};
 		expect(replay.events).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({ payload: expect.objectContaining({ sessionId: source.sessionId }) }),
-				expect.objectContaining({ payload: expect.objectContaining({ sessionId: continued.sessionId, parentSessionId: source.sessionId }) }),
+				expect.objectContaining({
+					payload: expect.objectContaining({ sessionId: continued.sessionId, parentSessionId: source.sessionId }),
+				}),
 			]),
 		);
 

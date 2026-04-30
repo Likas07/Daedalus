@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { lstat, realpath } from "node:fs/promises";
-import { join, relative, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import type {
 	AppEvent,
 	AuditQuery,
@@ -19,11 +19,11 @@ import { FileSearchService } from "../composer/file-search-service";
 import type { ExtensionUiRouter } from "../extensions/extension-ui-router";
 import type { CommandRunner } from "../integrations/integration-api";
 import { IntegrationService } from "../integrations/integration-service";
+import { projectRuntimeEvents } from "../persistence/projector";
+import { listProjectSessions } from "../persistence/read-model";
 import { projectAppEventToProjectionEvents } from "../projections/projection-events";
 import { buildShellSnapshot } from "../projections/shell-projection";
 import { buildThreadDetailSnapshot } from "../projections/thread-detail-projection";
-import { projectRuntimeEvents } from "../persistence/projector";
-import { listProjectSessions } from "../persistence/read-model";
 import { AccessPolicyService } from "../runtime/access-policy-service";
 import { ApprovalService } from "../runtime/approval-service";
 import { projectAuditTrail } from "../runtime/audit-projection";
@@ -121,7 +121,9 @@ export class AppRouter {
 		this.daedalusWorkflowService = new DaedalusWorkflowService({ sessionStore: this.sessionStore });
 		this.workspaceSelectionService = new WorkspaceSelectionService({ database: options.database });
 		this.operationIdempotencyService = new OperationIdempotencyService({ database: options.database });
-		const authStorage = options.agentDir ? AuthStorage.create(join(options.agentDir, "auth.json")) : AuthStorage.create();
+		const authStorage = options.agentDir
+			? AuthStorage.create(join(options.agentDir, "auth.json"))
+			: AuthStorage.create();
 		this.modelRegistry = options.agentDir
 			? ModelRegistry.create(authStorage, join(options.agentDir, "models.json"))
 			: ModelRegistry.create(authStorage);
@@ -665,7 +667,9 @@ export class AppRouter {
 		let sessionRunsIn: WorkflowRunsInTarget | undefined;
 		if (params.sessionId) {
 			const projectId = params.projectId ?? this.projectIdForSession(params.sessionId);
-			const session = listProjectSessions(this.options.database, projectId).find((row) => row.id === params.sessionId);
+			const session = listProjectSessions(this.options.database, projectId).find(
+				(row) => row.id === params.sessionId,
+			);
 			if (!session) throw new Error(`Unknown terminal session target: ${params.sessionId}`);
 			if (!session.runsIn || session.runsIn.validationStatus !== "valid")
 				throw new Error(`Session ${params.sessionId} does not have a valid terminal target`);
@@ -674,7 +678,11 @@ export class AppRouter {
 			if ((params.worktreeId ?? session.runsIn.worktreeId) !== session.runsIn.worktreeId)
 				throw new Error(`Session ${params.sessionId} does not match worktree ${params.worktreeId}`);
 			sessionRunsIn = session.runsIn;
-			scopedTargets.push({ root: sessionRunsIn.canonicalPath, candidate: requestedCwd, projectId: sessionRunsIn.projectId });
+			scopedTargets.push({
+				root: sessionRunsIn.canonicalPath,
+				candidate: requestedCwd,
+				projectId: sessionRunsIn.projectId,
+			});
 		}
 		if (guardTarget) {
 			scopedTargets.push({
@@ -756,15 +764,6 @@ export class AppRouter {
 				createdAt: row.created_at,
 			};
 		});
-	}
-
-	private isWithin(path: string, root: string): boolean {
-		const normalizedRoot = resolve(root);
-		const relativePath = relative(normalizedRoot, path);
-		return (
-			relativePath === "" ||
-			(!relativePath.startsWith("..") && !relativePath.startsWith("/") && !relativePath.match(/^[A-Za-z]:/))
-		);
 	}
 
 	private async resolveDiffGetCwd(params: { diffId?: string; target?: DiffTarget }): Promise<string> {
@@ -868,7 +867,8 @@ export class AppRouter {
 			.query<{ project_id: string | null }, [string]>("SELECT project_id FROM sessions WHERE id = ? LIMIT 1")
 			.get(sessionId);
 		if (!row) throw new Error(`Session ${sessionId} was not durably persisted`);
-		if (row.project_id !== projectId) throw new Error(`Session ${sessionId} was not durably persisted in project ${projectId}`);
+		if (row.project_id !== projectId)
+			throw new Error(`Session ${sessionId} was not durably persisted in project ${projectId}`);
 		this.workspaceSelectionService.set({ projectId, sessionId });
 	}
 	private async validateStoredTurnTarget(sessionId: string): Promise<WorkflowRunsInTarget> {
@@ -1170,10 +1170,14 @@ function findSelectableModel(
 	if (modelId.includes("/")) return undefined;
 	const providerQualifiedMatches = available.filter((model) => {
 		const [provider, id] = model.id.split("/", 2);
-		return id === modelId && (!selectedProvider || model.provider === selectedProvider || provider === selectedProvider);
+		return (
+			id === modelId && (!selectedProvider || model.provider === selectedProvider || provider === selectedProvider)
+		);
 	});
 	if (providerQualifiedMatches.length === 1) return providerQualifiedMatches[0];
-	const bareMatches = available.filter((model) => model.id === providerQualifiedModelId(model.provider ?? "unknown", modelId));
+	const bareMatches = available.filter(
+		(model) => model.id === providerQualifiedModelId(model.provider ?? "unknown", modelId),
+	);
 	return bareMatches.length === 1 ? bareMatches[0] : undefined;
 }
 

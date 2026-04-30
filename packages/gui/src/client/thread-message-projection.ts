@@ -1,8 +1,19 @@
-import type { ThreadActivity, ThreadDetailSnapshot, ThreadMessage, ThreadPendingAction } from "@daedalus-pi/app-server-protocol";
+import type {
+	ThreadActivity,
+	ThreadDetailSnapshot,
+	ThreadMessage,
+	ThreadPendingAction,
+} from "@daedalus-pi/app-server-protocol";
 
 export type ThreadMessageRow =
 	| { kind: "message"; id: string; createdAt: string; message: ThreadMessage; streaming: boolean }
-	| { kind: "activity"; id: string; createdAt: string; activities: readonly ThreadActivity[]; status: ThreadActivity["status"] }
+	| {
+			kind: "activity";
+			id: string;
+			createdAt: string;
+			activities: readonly ThreadActivity[];
+			status: ThreadActivity["status"];
+	  }
 	| { kind: "working"; id: string; createdAt?: string; title: string }
 	| { kind: "pending-action"; id: string; createdAt?: string; action: ThreadPendingAction };
 
@@ -39,7 +50,7 @@ export function projectThreadMessages(input: ProjectThreadMessagesInput): readon
 				? "running"
 				: group.some((item) => item.status === "failed")
 					? "failed"
-					: group.at(-1)?.status ?? "completed",
+					: (group.at(-1)?.status ?? "completed"),
 		});
 	}
 
@@ -57,7 +68,11 @@ export function projectThreadMessages(input: ProjectThreadMessagesInput): readon
 
 	return [
 		...chronologicalRows,
-		...(input.pendingActions ?? []).map((action) => ({ kind: "pending-action" as const, id: `pending:${action.id}`, action })),
+		...(input.pendingActions ?? []).map((action) => ({
+			kind: "pending-action" as const,
+			id: `pending:${action.id}`,
+			action,
+		})),
 	];
 }
 

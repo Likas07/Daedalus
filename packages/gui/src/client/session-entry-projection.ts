@@ -200,20 +200,21 @@ function projectMessageEntry(
 		const stopReason = stringField(message.stopReason);
 		const errorMessage = stringField(message.errorMessage);
 		const displayText = errorMessage && (stopReason === "error" || !text) ? errorMessage : text;
-		const assistantRows = displayText || calls.length > 0
-			? [
-				{
-					...base,
-					kind: "assistant" as const,
-					title: "Assistant",
-					summary: displayText,
-					content: displayText,
-					status: stopReason || (errorMessage ? "error" : undefined),
-					messageId: stringField(message.responseId) || entry.id,
-					details: [stringField(message.model)].filter(Boolean),
-				},
-			]
-			: [];
+		const assistantRows =
+			displayText || calls.length > 0
+				? [
+						{
+							...base,
+							kind: "assistant" as const,
+							title: "Assistant",
+							summary: displayText,
+							content: displayText,
+							status: stopReason || (errorMessage ? "error" : undefined),
+							messageId: stringField(message.responseId) || entry.id,
+							details: [stringField(message.model)].filter(Boolean),
+						},
+					]
+				: [];
 		return [
 			...assistantRows,
 			...calls.map((call) => ({
@@ -224,7 +225,7 @@ function projectMessageEntry(
 				summary: summarizeUnknown(call.arguments),
 				messageId: stringField(call.id) || undefined,
 				raw: call,
-			}))
+			})),
 		];
 	}
 	return [

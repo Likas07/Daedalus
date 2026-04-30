@@ -52,4 +52,30 @@ describe("daedalus gui E2E smoke", () => {
 		expect(spawned).toContain("gui-e2e-token");
 		expect(logs.join("\n")).toContain("Daedalus GUI ready: http://0.0.0.0:4173/?token=gui-e2e-token");
 	});
+
+	test("starts the GUI package that owns shell/detail projection E2E coverage", async () => {
+		let spawned: string[] = [];
+		await runGuiCommand(["gui", "--headless", "--project", "."], {
+			stdout: { log: () => {} },
+			stderr: { error: () => {} },
+			randomToken: () => "projection-token",
+			spawn: ((cmd: string[]) => {
+				spawned = cmd;
+				return {
+					stdout: new ReadableStream({
+						start(controller) {
+							controller.enqueue(
+								new TextEncoder().encode('{"httpUrl":"http://127.0.0.1:4173","token":"<redacted>"}\n'),
+							);
+							controller.close();
+						},
+					}),
+					stderr: new ReadableStream(),
+				};
+			}) as typeof Bun.spawn,
+		});
+		expect(spawned.join(" ")).toContain("packages/app-server/src/server/main.ts");
+		expect(spawned).toContain("--gui");
+		expect(spawned).toContain("--project");
+	});
 });

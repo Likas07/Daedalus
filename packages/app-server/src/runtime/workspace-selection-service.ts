@@ -29,19 +29,35 @@ export class WorkspaceSelectionService {
 		this.requireProject(projectId);
 		let row: SelectionRow | undefined;
 		try {
-			row = this.options.database
-				.query<SelectionRow, [string]>(
-					"SELECT project_id, session_id, updated_at FROM workspace_active_selection WHERE project_id = ?",
-				)
-				.get(projectId) ?? undefined;
+			row =
+				this.options.database
+					.query<SelectionRow, [string]>(
+						"SELECT project_id, session_id, updated_at FROM workspace_active_selection WHERE project_id = ?",
+					)
+					.get(projectId) ?? undefined;
 		} catch (error) {
-			const restorationTrace = this.trace(projectId, "failed", `Failed to read workspace selection: ${messageOf(error)}`);
+			const restorationTrace = this.trace(
+				projectId,
+				"failed",
+				`Failed to read workspace selection: ${messageOf(error)}`,
+			);
 			return { degraded: true, reason: restorationTrace.reason, restorationTrace };
 		}
-		if (!row?.session_id) return { degraded: false, restorationTrace: this.trace(projectId, "missing", "No active workspace selection pointer") };
+		if (!row?.session_id)
+			return {
+				degraded: false,
+				restorationTrace: this.trace(projectId, "missing", "No active workspace selection pointer"),
+			};
 		const requestedSelection = { projectId: row.project_id, sessionId: row.session_id, updatedAt: row.updated_at };
 		const session = this.sessionProject(row.session_id);
-		if (!session) return this.degradeAndClear(projectId, row.session_id, `Selected session is stale: ${row.session_id}`, "missing", requestedSelection);
+		if (!session)
+			return this.degradeAndClear(
+				projectId,
+				row.session_id,
+				`Selected session is stale: ${row.session_id}`,
+				"missing",
+				requestedSelection,
+			);
 		if (session.project_id !== projectId)
 			return this.degradeAndClear(
 				projectId,
@@ -51,13 +67,31 @@ export class WorkspaceSelectionService {
 				requestedSelection,
 			);
 		if (!session.runs_in_json)
-			return this.degradeAndClear(projectId, row.session_id, `Selected session ${row.session_id} has no runtime target`, "degraded", requestedSelection);
+			return this.degradeAndClear(
+				projectId,
+				row.session_id,
+				`Selected session ${row.session_id} has no runtime target`,
+				"degraded",
+				requestedSelection,
+			);
 		if (session.validation_status && session.validation_status !== "valid")
-			return this.degradeAndClear(projectId, row.session_id, `Selected session ${row.session_id} target is ${session.validation_status}`, "degraded", requestedSelection);
+			return this.degradeAndClear(
+				projectId,
+				row.session_id,
+				`Selected session ${row.session_id} target is ${session.validation_status}`,
+				"degraded",
+				requestedSelection,
+			);
 		return {
 			selection: { projectId, sessionId: row.session_id, updatedAt: row.updated_at },
 			degraded: false,
-			restorationTrace: this.trace(projectId, "restored", "Restored active workspace selection", requestedSelection, row.session_id),
+			restorationTrace: this.trace(
+				projectId,
+				"restored",
+				"Restored active workspace selection",
+				requestedSelection,
+				row.session_id,
+			),
 		};
 	}
 
@@ -90,7 +124,13 @@ export class WorkspaceSelectionService {
 		return {
 			selection,
 			degraded: false,
-			restorationTrace: this.trace(projectId, "restored", "Persisted active workspace selection", selection, sessionId),
+			restorationTrace: this.trace(
+				projectId,
+				"restored",
+				"Persisted active workspace selection",
+				selection,
+				sessionId,
+			),
 		};
 	}
 
@@ -104,8 +144,6 @@ export class WorkspaceSelectionService {
 			.get(projectId);
 		if (!row) throw new Error(`Unknown project: ${projectId}`);
 	}
-
-
 
 	private requireSessionInProject(projectId: string, sessionId: string): void {
 		const session = this.sessionProject(sessionId);
@@ -141,14 +179,23 @@ export class WorkspaceSelectionService {
 		requestedSelection?: unknown,
 		resolvedSession?: string,
 	): RestorationTrace {
-		this.latestRestorationTrace = { projectId, status, reason, requestedSelection, resolvedSession, checkedAt: new Date().toISOString() };
+		this.latestRestorationTrace = {
+			projectId,
+			status,
+			reason,
+			requestedSelection,
+			resolvedSession,
+			checkedAt: new Date().toISOString(),
+		};
 		return this.latestRestorationTrace;
 	}
 
 	private sessionProject(sessionId: string): SessionProjectRow | undefined {
 		return (
 			this.options.database
-				.query<SessionProjectRow, [string]>("SELECT project_id, runs_in_json, validation_status FROM sessions WHERE id = ?")
+				.query<SessionProjectRow, [string]>(
+					"SELECT project_id, runs_in_json, validation_status FROM sessions WHERE id = ?",
+				)
 				.get(sessionId) ?? undefined
 		);
 	}

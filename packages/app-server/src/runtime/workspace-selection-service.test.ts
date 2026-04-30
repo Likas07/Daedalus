@@ -10,8 +10,16 @@ function insertProject(database: ReturnType<typeof openAppServerDatabase>, id: s
 
 function insertSession(database: ReturnType<typeof openAppServerDatabase>, id: string, projectId: string): void {
 	database
-		.query("INSERT INTO sessions (id, project_id, status, runs_in_json, validation_status, created_at, updated_at) VALUES (?, ?, 'active', ?, 'valid', ?, ?)")
-		.run(id, projectId, JSON.stringify({ projectId, path: `/tmp/${projectId}`, validationStatus: "valid" }), "2026-04-29T00:00:00.000Z", "2026-04-29T00:00:00.000Z");
+		.query(
+			"INSERT INTO sessions (id, project_id, status, runs_in_json, validation_status, created_at, updated_at) VALUES (?, ?, 'active', ?, 'valid', ?, ?)",
+		)
+		.run(
+			id,
+			projectId,
+			JSON.stringify({ projectId, path: `/tmp/${projectId}`, validationStatus: "valid" }),
+			"2026-04-29T00:00:00.000Z",
+			"2026-04-29T00:00:00.000Z",
+		);
 }
 
 test("workspace selection persists one active session per project", () => {
@@ -59,7 +67,6 @@ test("workspace selection degrades stale pointers to no selection", () => {
 	database.close();
 });
 
-
 test("setValidated requires an existing projected session", () => {
 	const database = openAppServerDatabase(":memory:");
 	runMigrations(database);
@@ -79,7 +86,9 @@ test("workspace selection traces cross-project and missing runtime target degrad
 	database
 		.query("INSERT INTO sessions (id, project_id, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)")
 		.run("session-1", "project-1", "2026-04-29T00:00:00.000Z", "2026-04-29T00:00:00.000Z");
-	database.query("INSERT INTO workspace_active_selection (project_id, session_id) VALUES (?, ?)").run("project-1", "session-1");
+	database
+		.query("INSERT INTO workspace_active_selection (project_id, session_id) VALUES (?, ?)")
+		.run("project-1", "session-1");
 	const service = new WorkspaceSelectionService({ database });
 
 	expect(service.get("project-1")).toMatchObject({
@@ -87,7 +96,9 @@ test("workspace selection traces cross-project and missing runtime target degrad
 		restorationTrace: { status: "degraded", resolvedSession: "session-1" },
 	});
 	insertSession(database, "session-2", "project-2");
-	database.query("INSERT INTO workspace_active_selection (project_id, session_id) VALUES (?, ?)").run("project-1", "session-2");
+	database
+		.query("INSERT INTO workspace_active_selection (project_id, session_id) VALUES (?, ?)")
+		.run("project-1", "session-2");
 	expect(service.get("project-1")).toMatchObject({ degraded: true, restorationTrace: { status: "mismatched" } });
 	database.close();
 });

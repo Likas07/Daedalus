@@ -274,7 +274,10 @@ function normalizeSelectedModel(
 	if (selectedModel.includes("/")) return selectedModel;
 	const matches = models.filter((model) => {
 		const [provider, id] = model.id.split("/", 2);
-		return id === selectedModel && (!selectedProvider || model.provider === selectedProvider || provider === selectedProvider);
+		return (
+			id === selectedModel &&
+			(!selectedProvider || model.provider === selectedProvider || provider === selectedProvider)
+		);
 	});
 	return matches.length === 1 ? matches[0]?.id : selectedModel;
 }

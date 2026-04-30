@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { AppEvent, DaedalusWorkflowState } from "@daedalus-pi/app-server-protocol";
-import { buildDaedalusWorkflowViewModel, threadScopedPendingActions, workflowFromTypedEvents } from "./daedalus-workflow-view-model";
+import {
+	buildDaedalusWorkflowViewModel,
+	threadScopedPendingActions,
+	workflowFromTypedEvents,
+} from "./daedalus-workflow-view-model";
 import { orchestrationFromEvents } from "./orchestration-state";
 
 const workflow: DaedalusWorkflowState = {
