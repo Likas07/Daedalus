@@ -1,9 +1,7 @@
-import type { TerminalV1NotificationClient, ThreadV1NotificationClient } from "@daedalus-pi/app-server-client";
+import type { ThreadV1NotificationClient } from "@daedalus-pi/app-server-client";
 import { ThreadWorkspace } from "@daedalus-pi/gui-components";
 import React, { type ReactNode } from "react";
-import { ApprovalPanel } from "./ApprovalPanel";
-import { DiffPanel } from "./DiffPanel";
-import { TerminalPanel } from "./TerminalPanel";
+import { ThreadSidePanels } from "./ThreadSidePanels";
 import { useThreadLoop } from "./useThreadLoop";
 
 type RefObject<T> = { current: T };
@@ -34,17 +32,6 @@ export function ThreadRoute({ client, threadId }: ThreadRouteProps): ReactNode {
 			onCancelTurn: loop.cancelActiveTurn,
 			onReconnect: loop.reconnect,
 		}),
-		React.createElement(
-			"aside",
-			{ className: "daedalus-phase3-panels", "aria-label": "Approval diff terminal panels" },
-			React.createElement(ApprovalPanel, { client, threadId, workspaceTargetId, turnId }),
-			React.createElement(DiffPanel, { client, threadId, workspaceTargetId, turnId }),
-			React.createElement(TerminalPanel, {
-				client: client as TerminalV1NotificationClient,
-				threadId,
-				workspaceTargetId,
-				turnId,
-			}),
-		),
+		React.createElement(ThreadSidePanels, { client, threadId, workspaceTargetId, turnId }),
 	);
 }

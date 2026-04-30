@@ -46,6 +46,20 @@ class FakePhase3Client {
 }
 
 describe("Phase 3 thread surface integrations", () => {
+	test("keeps route sidecar composition in ThreadSidePanels", async () => {
+		const routeSource = await Bun.file(new URL("./ThreadRoute.tsx", import.meta.url)).text();
+		const sidePanelsSource = await Bun.file(new URL("./ThreadSidePanels.tsx", import.meta.url)).text();
+
+		expect(routeSource).toContain("ThreadSidePanels");
+		expect(routeSource).toContain("ThreadWorkspace");
+		expect(routeSource).not.toContain("daedalus-phase3-panels");
+		expect(sidePanelsSource).toContain("ApprovalPanel");
+		expect(sidePanelsSource).toContain("DiffPanel");
+		expect(sidePanelsSource).toContain("TerminalPanel");
+		expect(sidePanelsSource).toContain("TerminalV1NotificationClient");
+		expect(sidePanelsSource).toContain("daedalus-side-panels");
+	});
+
 	test("keeps interleaved approval, diff, and terminal timeline entries in protocol sequence order", () => {
 		const entries: protocolV1.TimelineEntry[] = [
 			{

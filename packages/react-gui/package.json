@@ -15,7 +15,7 @@
 		"build": "vite build",
 		"check": "tsgo -p tsconfig.json",
 		"dev": "vite --host 127.0.0.1",
-		"test": "bun test --conditions browser src/App.test.tsx src/import-boundary.test.ts",
+		"test": "bun test --conditions browser src/App.test.tsx src/import-boundary.test.ts src/thread/thread-loop.test.tsx src/thread/ThreadWorkspace.integration.test.tsx",
 		"test:e2e": "bun test --conditions browser test/e2e/react-gui-smoke.test.ts"
 	},
 	"dependencies": {
