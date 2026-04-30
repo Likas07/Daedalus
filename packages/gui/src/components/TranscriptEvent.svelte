@@ -24,7 +24,7 @@
 	class="transcript-event"
 	data-tone={item.type}
 	data-testid="transcript-event"
-	aria-label={`${item.type} transcript event: ${item.title}`}
+	aria-label={`${item.type} audit transcript event: ${item.title}`}
 >
 	<div class="flex items-start justify-between gap-3">
 		<div class="min-w-0 flex-1">

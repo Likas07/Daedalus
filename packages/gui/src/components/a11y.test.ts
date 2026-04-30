@@ -160,4 +160,23 @@ describe("Projected Thread shell accessibility", () => {
 		expect(inspector).toContain("workflow");
 		expect(inspector).toContain("diagnostics");
 	});
+
+	test("audit timeline is explicitly inspector/debug only", () => {
+		const audit = source("inspector/AuditTimeline.svelte");
+		const inspector = source("Inspector.svelte");
+		const threadWorkspace = source("projection/ThreadWorkspace.svelte");
+		const sessionWorkspace = source("SessionWorkspace.svelte");
+
+		expect(audit).toContain("TranscriptTimeline");
+		expect(audit).toContain('aria-label="Audit event ledger"');
+		expect(audit).toContain("selected Thread diagnostics");
+		expect(inspector).toContain("AuditTimeline");
+		expect(inspector).toContain('sectionHeader("audit", "audit")');
+		expect(threadWorkspace).not.toContain("TranscriptTimeline");
+		expect(threadWorkspace).not.toContain("BuildTargetTrustBar");
+		expect(threadWorkspace).not.toContain("PlanBuildModePanel");
+		expect(sessionWorkspace).not.toContain("TranscriptTimeline");
+		expect(sessionWorkspace).not.toContain("BuildTargetTrustBar");
+		expect(sessionWorkspace).not.toContain("PlanBuildModePanel");
+	});
 });
