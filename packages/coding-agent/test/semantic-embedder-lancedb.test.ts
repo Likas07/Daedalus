@@ -7,6 +7,9 @@ import {
 	registerOllamaEmbeddingFunction,
 } from "../src/extensions/daedalus/tools/semantic-embedder.js";
 import { openSemanticLanceStore } from "../src/extensions/daedalus/tools/semantic-lancedb.js";
+import { isSemanticWorkspaceIndexingAvailable } from "./semantic-test-helpers.js";
+
+const semanticWorkspaceIt = it.skipIf(!(await isSemanticWorkspaceIndexingAvailable()));
 
 describe("semantic embedder LanceDB integration", () => {
 	let tempDir: string;
@@ -93,78 +96,86 @@ describe("semantic embedder LanceDB integration", () => {
 		}
 	});
 
-	it("inserts chunks with explicit raw vectors", async () => {
-		const embedder = await createOllamaSemanticEmbedder({
-			model: "embeddinggemma",
-			host: "http://127.0.0.1:11434",
-		});
-		const functionName = await registerOllamaEmbeddingFunction(embedder);
-		const store = await openSemanticLanceStore({
-			databaseDir: join(tempDir, "semantic-raw-vector-store"),
-			embeddingFunctionAlias: functionName,
-		});
+	semanticWorkspaceIt(
+		"inserts chunks with explicit raw vectors",
+		async () => {
+			const embedder = await createOllamaSemanticEmbedder({
+				model: "embeddinggemma",
+				host: "http://127.0.0.1:11434",
+			});
+			const functionName = await registerOllamaEmbeddingFunction(embedder);
+			const store = await openSemanticLanceStore({
+				databaseDir: join(tempDir, "semantic-raw-vector-store"),
+				embeddingFunctionAlias: functionName,
+			});
+			const [vector] = await embedder.embedDocuments(["export const rawVector = true;"]);
+			await store.insertEmbeddedChunks([
+				{
+					chunkId: "raw-1",
+					filePath: "src/raw-vector.ts",
+					language: "typescript",
+					content: "export const rawVector = true;",
+					startLine: 1,
+					endLine: 1,
+					contentHash: "raw-hash",
+					vector,
+				},
+			]);
 
-		const [vector] = await embedder.embedDocuments(["export const rawVector = true;"]);
-		await store.insertEmbeddedChunks([
-			{
-				chunkId: "raw-1",
-				filePath: "src/raw-vector.ts",
-				language: "typescript",
-				content: "export const rawVector = true;",
-				startLine: 1,
-				endLine: 1,
-				contentHash: "raw-hash",
-				vector,
-			},
-		]);
+			const info = await store.info();
+			expect(info.rowCount).toBe(1);
+		},
+		120_000,
+	);
 
-		const info = await store.info();
-		expect(info.rowCount).toBe(1);
-	}, 120_000);
+	semanticWorkspaceIt(
+		"registers an Ollama-backed LanceDB embedding function that auto-embeds inserts and text queries",
+		async () => {
+			const embedder = await createOllamaSemanticEmbedder({
+				model: "embeddinggemma",
+				host: "http://127.0.0.1:11434",
+			});
 
-	it("registers an Ollama-backed LanceDB embedding function that auto-embeds inserts and text queries", async () => {
-		const embedder = await createOllamaSemanticEmbedder({
-			model: "embeddinggemma",
-			host: "http://127.0.0.1:11434",
-		});
+			const functionName = await registerOllamaEmbeddingFunction(embedder);
+			const store = await openSemanticLanceStore({
+				databaseDir: join(tempDir, "semantic-store"),
+				embeddingFunctionAlias: functionName,
+			});
 
-		const functionName = await registerOllamaEmbeddingFunction(embedder);
-		const store = await openSemanticLanceStore({
-			databaseDir: join(tempDir, "semantic-store"),
-			embeddingFunctionAlias: functionName,
-		});
+			await store.replaceChunks([
+				{
+					chunkId: "chunk-1",
+					filePath: "src/refresh-token.ts",
+					language: "typescript",
+					content:
+						"export function refreshTokenFlow() {\n  const refreshToken = 'alpha';\n  return refreshToken;\n}",
+					startLine: 1,
+					endLine: 4,
+					contentHash: "hash-1",
+				},
+				{
+					chunkId: "chunk-2",
+					filePath: "src/auth.ts",
+					language: "typescript",
+					content: "export function authenticate() {\n  return 'alpha';\n}",
+					startLine: 1,
+					endLine: 3,
+					contentHash: "hash-2",
+				},
+			]);
 
-		await store.replaceChunks([
-			{
-				chunkId: "chunk-1",
-				filePath: "src/refresh-token.ts",
-				language: "typescript",
-				content: "export function refreshTokenFlow() {\n  const refreshToken = 'alpha';\n  return refreshToken;\n}",
-				startLine: 1,
-				endLine: 4,
-				contentHash: "hash-1",
-			},
-			{
-				chunkId: "chunk-2",
-				filePath: "src/auth.ts",
-				language: "typescript",
-				content: "export function authenticate() {\n  return 'alpha';\n}",
-				startLine: 1,
-				endLine: 3,
-				contentHash: "hash-2",
-			},
-		]);
+			const results = await store.search({
+				query: "token refresh flow",
+				limit: 2,
+			});
 
-		const results = await store.search({
-			query: "token refresh flow",
-			limit: 2,
-		});
-
-		expect(results.length).toBeGreaterThan(0);
-		expect(results[0]?.filePath).toBe("src/refresh-token.ts");
-		expect(results[0]?.startLine).toBe(1);
-		expect(results[0]?.endLine).toBe(4);
-		expect(results[0]?.snippet).toContain("refreshToken");
-		expect(results[0]?.relevanceScore).toBeTypeOf("number");
-	}, 120_000);
+			expect(results.length).toBeGreaterThan(0);
+			expect(results[0]?.filePath).toBe("src/refresh-token.ts");
+			expect(results[0]?.startLine).toBe(1);
+			expect(results[0]?.endLine).toBe(4);
+			expect(results[0]?.snippet).toContain("refreshToken");
+			expect(results[0]?.relevanceScore).toBeTypeOf("number");
+		},
+		120_000,
+	);
 });

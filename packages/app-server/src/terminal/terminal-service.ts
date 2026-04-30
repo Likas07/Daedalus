@@ -116,6 +116,10 @@ export class TerminalService {
 			.map((state) => this.snapshot(state));
 	}
 
+	get(terminalId: TerminalId): TerminalSessionRecord {
+		return this.snapshot(this.mustGet(terminalId));
+	}
+
 	attach(terminalId: TerminalId): TerminalSessionRecord {
 		const state = this.mustGet(terminalId);
 		state.attached = true;

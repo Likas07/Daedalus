@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
-import { Editor, type EditorTheme, Key, matchesKey, Text, truncateToWidth } from "@daedalus-pi/tui";
+import { Editor, type EditorTheme, Key, matchesKey, Text, truncateToWidth, visibleWidth } from "@daedalus-pi/tui";
 import { Type } from "@sinclair/typebox";
 import { requireUI } from "../shared/ui.js";
 
@@ -243,9 +243,17 @@ export default function questionnaire(pi: ExtensionAPI) {
 					const lines: string[] = [];
 					const q = currentQuestion();
 					const opts = currentOptions();
-					const add = (s: string) => lines.push(truncateToWidth(s, width));
+					const addChrome = (s: string) => lines.push(truncateToWidth(s, width));
+					const addWrapped = (prefix: string, text: string, continuationPrefix = " ") => {
+						const contentWidth = Math.max(1, width - visibleWidth(prefix));
+						const wrapped = new Text(text, 0, 0).render(contentWidth);
+						const continuation = " ".repeat(visibleWidth(prefix));
+						for (let i = 0; i < wrapped.length; i++) {
+							lines.push(`${i === 0 ? prefix : continuationPrefix || continuation}${wrapped[i]}`);
+						}
+					};
 
-					add(theme.fg("accent", "─".repeat(width)));
+					addChrome(theme.fg("accent", "─".repeat(width)));
 
 					if (isMulti) {
 						const tabs: string[] = ["← "];
@@ -268,7 +276,7 @@ export default function questionnaire(pi: ExtensionAPI) {
 							? theme.bg("selectedBg", theme.fg("text", submitText))
 							: theme.fg(canSubmit ? "success" : "dim", submitText);
 						tabs.push(`${submitStyled} →`);
-						add(` ${tabs.join("")}`);
+						addChrome(` ${tabs.join("")}`);
 						lines.push("");
 					}
 
@@ -279,51 +287,47 @@ export default function questionnaire(pi: ExtensionAPI) {
 							const selected = i === optionIndex;
 							const isOther = opt.isOther === true;
 							const prefix = selected ? theme.fg("accent", "> ") : "  ";
-							const color = selected ? "accent" : "text";
-							if (isOther && inputMode) {
-								add(prefix + theme.fg("accent", `${i + 1}. ${opt.label} ✎`));
-							} else {
-								add(prefix + theme.fg(color, `${i + 1}. ${opt.label}`));
-							}
+							const label = `${i + 1}. ${opt.label}${isOther && inputMode ? " ✎" : ""}`;
+							addWrapped(prefix, theme.fg(selected || (isOther && inputMode) ? "accent" : "text", label), "  ");
 							if (opt.description) {
-								add(`     ${theme.fg("muted", opt.description)}`);
+								addWrapped("     ", theme.fg("muted", opt.description), "     ");
 							}
 						}
 					}
 
 					if (inputMode && q) {
-						add(theme.fg("text", ` ${q.prompt}`));
+						addWrapped(" ", theme.fg("text", q.prompt));
 						lines.push("");
 						renderOptions();
 						lines.push("");
-						add(theme.fg("muted", " Your answer:"));
+						addChrome(theme.fg("muted", " Your answer:"));
 						for (const line of editor.render(width - 2)) {
-							add(` ${line}`);
+							addChrome(` ${line}`);
 						}
 						lines.push("");
-						add(theme.fg("dim", " Enter to submit • Esc to cancel"));
+						addChrome(theme.fg("dim", " Enter to submit • Esc to cancel"));
 					} else if (currentTab === questions.length) {
-						add(theme.fg("accent", theme.bold(" Ready to submit")));
+						addChrome(theme.fg("accent", theme.bold(" Ready to submit")));
 						lines.push("");
 						for (const question of questions) {
 							const answer = answers.get(question.id);
 							if (answer) {
-								const prefix = answer.wasCustom ? "(wrote) " : "";
-								add(`${theme.fg("muted", ` ${question.label}: `)}${theme.fg("text", prefix + answer.label)}`);
+								const prefix = `${question.label}: ${answer.wasCustom ? "(wrote) " : ""}`;
+								addWrapped(" ", theme.fg("muted", prefix) + theme.fg("text", answer.label));
 							}
 						}
 						lines.push("");
 						if (allAnswered()) {
-							add(theme.fg("success", " Press Enter to submit"));
+							addChrome(theme.fg("success", " Press Enter to submit"));
 						} else {
 							const missing = questions
 								.filter((question) => !answers.has(question.id))
 								.map((question) => question.label)
 								.join(", ");
-							add(theme.fg("warning", ` Unanswered: ${missing}`));
+							addChrome(theme.fg("warning", ` Unanswered: ${missing}`));
 						}
 					} else if (q) {
-						add(theme.fg("text", ` ${q.prompt}`));
+						addWrapped(" ", theme.fg("text", q.prompt));
 						lines.push("");
 						renderOptions();
 					}
@@ -333,9 +337,9 @@ export default function questionnaire(pi: ExtensionAPI) {
 						const help = isMulti
 							? " Tab/←→ navigate • ↑↓ select • Enter confirm • Esc cancel"
 							: " ↑↓ navigate • Enter select • Esc cancel";
-						add(theme.fg("dim", help));
+						addChrome(theme.fg("dim", help));
 					}
-					add(theme.fg("accent", "─".repeat(width)));
+					addChrome(theme.fg("accent", "─".repeat(width)));
 
 					cachedLines = lines;
 					return lines;

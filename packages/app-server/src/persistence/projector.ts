@@ -72,8 +72,16 @@ function projectEvent(database: AppServerDatabase, event: StoredEvent): void {
 			projectSessionResumeMismatch(database, payload, occurredAt);
 			break;
 		case "turn/started":
-		case "turn/completed":
 			projectTurn(database, payload, occurredAt);
+			break;
+		case "turn/completed":
+			if (hasTurnPayload(payload)) {
+				projectTurn(database, payload, occurredAt);
+			}
+			projectSessionStatus(database, payload, occurredAt, "completed");
+			break;
+		case "turn/interrupted":
+			projectSessionStatus(database, payload, occurredAt, "active");
 			break;
 		case "agent/message_end":
 			projectAgentMessage(database, event, payload, occurredAt);
@@ -179,6 +187,22 @@ function projectSessionResumeMismatch(database: AppServerDatabase, payload: Payl
 			updatedAt,
 			id,
 		);
+}
+
+function projectSessionStatus(
+	database: AppServerDatabase,
+	payload: PayloadRecord,
+	updatedAt: string,
+	fallbackStatus: string,
+): void {
+	const id = requiredText(payload, "sessionId", "session_id", "id");
+	database
+		.query("UPDATE sessions SET status = ?, updated_at = ? WHERE id = ?")
+		.run(text(payload, "sessionStatus", "status") ?? fallbackStatus, updatedAt, id);
+}
+
+function hasTurnPayload(payload: PayloadRecord): boolean {
+	return Boolean(text(payload, "turnId", "turn_id", "id") && text(payload, "sessionId", "session_id"));
 }
 
 function projectTurn(database: AppServerDatabase, payload: PayloadRecord, createdAt: string): void {

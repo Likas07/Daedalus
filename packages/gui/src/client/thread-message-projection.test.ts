@@ -70,10 +70,7 @@ describe("projectThreadMessages", () => {
 	test("suppresses gui-context-only and empty chat bubbles while running", () => {
 		const rows = projectThreadMessages({
 			status: "running",
-			messages: [
-				message("u1", "user", "<gui-context>internal</gui-context>"),
-				message("a1", "assistant", "   "),
-			],
+			messages: [message("u1", "user", "<gui-context>internal</gui-context>"), message("a1", "assistant", "   ")],
 		});
 		expect(rows.filter((row) => row.kind === "message")).toHaveLength(0);
 		expect(rows.at(-1)).toMatchObject({ kind: "working" });

@@ -6,7 +6,7 @@ const guiPortEnvVar = "DAEDALUS_GUI_DEV_PORT";
 
 const repoRoot = resolve(import.meta.dir, "../../..");
 const desktopRoot = resolve(import.meta.dir, "..");
-const guiRoot = resolve(repoRoot, "packages/gui");
+const guiRoot = resolve(repoRoot, "packages/react-gui");
 const devMainEntry = join(desktopRoot, ".daedalus", "desktop-dev", "main.js");
 
 type DevSubprocess = ReturnType<typeof Bun.spawn>;
@@ -43,7 +43,7 @@ export async function isDaedalusGuiServing(url: string, fetcher: Fetcher = fetch
 		const response = await fetcher(url, { cache: "no-store" });
 		if (!response.ok) return false;
 		const html = await response.text();
-		return html.includes("<title>Daedalus") && html.includes('src="/src/main.ts"');
+		return html.includes("<title>Daedalus") && html.includes('src="/src/main.tsx"');
 	} catch {
 		return false;
 	}

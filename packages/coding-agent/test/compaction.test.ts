@@ -7,11 +7,17 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
 	type CompactionSettings,
 	calculateContextTokens,
+	capCompactionSummary,
 	compact,
 	DEFAULT_COMPACTION_SETTINGS,
+	DEFAULT_COMPACTION_SUMMARY_TOKEN_CAP,
+	diagnoseCompaction,
+	estimatePostCompactionContext,
+	estimateTokens,
 	findCutPoint,
 	getLastAssistantUsage,
 	prepareCompaction,
+	resolveCompactionSummaryTokenCap,
 	resolveKeepRecentTokens,
 	shouldCompact,
 } from "../src/core/compaction/index.js";
@@ -271,6 +277,96 @@ describe("shouldCompact", () => {
 	});
 });
 
+describe("estimatePostCompactionContext", () => {
+	it("reports post-compaction context under the safe threshold", () => {
+		const old = createMessageEntry(createUserMessage("old history"));
+		const kept = createMessageEntry(createUserMessage("k".repeat(200)));
+		const compaction = createCompactionEntry("s".repeat(400), kept.id);
+
+		const diagnostic = estimatePostCompactionContext(
+			[old, kept, compaction],
+			{
+				...DEFAULT_COMPACTION_SETTINGS,
+				reserveTokens: 200,
+			},
+			1000,
+		);
+
+		expect(diagnostic.contextTokens).toBeLessThanOrEqual(800);
+		expect(diagnostic.summaryTokens).toBe(100);
+		expect(diagnostic.keptContextTokens).toBe(50);
+		expect(diagnostic.thresholdTokens).toBe(800);
+		expect(diagnostic.overBudget).toBe(false);
+		expect(diagnostic.willRetrigger).toBe(false);
+	});
+
+	it("reports over-threshold context caused by summary plus kept tail", () => {
+		const old = createMessageEntry(createUserMessage("old history"));
+		const kept = createMessageEntry(createUserMessage("k".repeat(1600)));
+		const compaction = createCompactionEntry("s".repeat(1600), kept.id);
+
+		const diagnostic = estimatePostCompactionContext(
+			[old, kept, compaction],
+			{
+				...DEFAULT_COMPACTION_SETTINGS,
+				reserveTokens: 500,
+			},
+			1000,
+		);
+
+		expect(diagnostic.summaryTokens).toBe(400);
+		expect(diagnostic.keptContextTokens).toBe(400);
+		expect(diagnostic.contextTokens).toBe(800);
+		expect(diagnostic.thresholdTokens).toBe(500);
+		expect(diagnostic.overBudget).toBe(true);
+		expect(diagnostic.willRetrigger).toBe(true);
+	});
+
+	it("includes summary, context, and threshold values in diagnostics", () => {
+		const old = createMessageEntry(createUserMessage("old history"));
+		const kept = createMessageEntry(createUserMessage("k".repeat(1600)));
+		const compaction = createCompactionEntry("s".repeat(1600), kept.id);
+
+		const diagnostic = estimatePostCompactionContext(
+			[old, kept, compaction],
+			{
+				...DEFAULT_COMPACTION_SETTINGS,
+				reserveTokens: 500,
+			},
+			1000,
+		);
+
+		expect(diagnostic.message).toContain("summary=400");
+		expect(diagnostic.message).toContain("context=800");
+		expect(diagnostic.message).toContain("threshold=500");
+	});
+
+	it("estimates kept assistant messages from content instead of stale usage", () => {
+		const old = createMessageEntry(createUserMessage("old history"));
+		const kept = createMessageEntry(createAssistantMessage("short kept answer", createMockUsage(50_000, 10_000)));
+		const compaction = createCompactionEntry("brief summary", kept.id);
+		const entries = [old, kept, compaction];
+
+		const expectedContextTokens = buildSessionContext(entries).messages.reduce(
+			(sum, message) => sum + estimateTokens(message),
+			0,
+		);
+		const diagnostic = estimatePostCompactionContext(
+			entries,
+			{
+				...DEFAULT_COMPACTION_SETTINGS,
+				reserveTokens: 200,
+				tokenThreshold: 1_000,
+			},
+			10_000,
+		);
+
+		expect(diagnostic.contextTokens).toBe(expectedContextTokens);
+		expect(diagnostic.contextTokens).toBeLessThan(1_000);
+		expect(diagnostic.willRetrigger).toBe(false);
+	});
+});
+
 describe("findCutPoint", () => {
 	it("should find cut point based on actual token differences", () => {
 		// Create entries with cumulative token counts
@@ -524,6 +620,86 @@ describe("prepareCompaction with previous compaction", () => {
 		expect(summarizedText).toContain("user msg 3 - kept by compaction1");
 		expect(summarizedText).not.toContain("First summary");
 		expect(preparation!.previousSummary).toBe("First summary");
+	});
+});
+
+describe("summary cap and overflow rewrite preparation", () => {
+	it("caps compaction summaries with a head/tail marker", () => {
+		const summary = `${"h".repeat(40_000)}MIDDLE${"t".repeat(40_000)}`;
+		const capped = capCompactionSummary(summary, DEFAULT_COMPACTION_SETTINGS.reserveTokens);
+
+		expect(capped.length).toBeLessThan(summary.length);
+		expect(capped).toContain("compaction summary truncated");
+		expect(capped).toContain("hhh");
+		expect(capped).toContain("ttt");
+		expect(Math.ceil(capped.length / 4)).toBeLessThanOrEqual(
+			resolveCompactionSummaryTokenCap(DEFAULT_COMPACTION_SETTINGS.reserveTokens),
+		);
+		expect(resolveCompactionSummaryTokenCap(1_000_000)).toBe(DEFAULT_COMPACTION_SUMMARY_TOKEN_CAP);
+	});
+
+	it("caps previous summary input for normal iterative compaction", () => {
+		const u1 = createMessageEntry(createUserMessage("summarized before"));
+		const u2 = createMessageEntry(createUserMessage("kept before"));
+		const compaction = createCompactionEntry("S".repeat(80_000), u2.id);
+		const u3 = createMessageEntry(createUserMessage("new message ".repeat(100)));
+		const a3 = createMessageEntry(createAssistantMessage("new answer ".repeat(100)));
+		const preparation = prepareCompaction([u1, u2, compaction, u3, a3], {
+			...DEFAULT_COMPACTION_SETTINGS,
+			keepRecentRatio: undefined,
+			keepRecentTokens: 1,
+		});
+
+		expect(preparation).toBeDefined();
+		expect(preparation!.mode).toBe("normal");
+		expect(preparation!.previousSummary).toContain("compaction summary truncated");
+		expect(Math.ceil(preparation!.previousSummary!.length / 4)).toBeLessThanOrEqual(
+			resolveCompactionSummaryTokenCap(DEFAULT_COMPACTION_SETTINGS.reserveTokens),
+		);
+	});
+
+	it("creates overflow-only summary_rewrite preparation when only the previous summary is oversized", () => {
+		const u1 = createMessageEntry(createUserMessage("old"));
+		const u2 = createMessageEntry(createUserMessage("kept"));
+		const compaction = createCompactionEntry("S".repeat(80_000), u2.id);
+		const pathEntries = [u1, u2, compaction];
+
+		expect(prepareCompaction(pathEntries, DEFAULT_COMPACTION_SETTINGS)).toBeUndefined();
+		const preparation = prepareCompaction(pathEntries, DEFAULT_COMPACTION_SETTINGS, process.cwd(), undefined, {
+			allowSummaryRewrite: true,
+			reason: "overflow",
+		});
+
+		expect(preparation).toBeDefined();
+		expect(preparation!.mode).toBe("summary_rewrite");
+		expect(preparation!.firstKeptEntryId).toBe(u2.id);
+		expect(preparation!.messagesToSummarize).toHaveLength(0);
+		expect(preparation!.turnPrefixMessages).toHaveLength(0);
+		expect(preparation!.previousSummary).toContain("compaction summary truncated");
+	});
+
+	it("diagnoses no-preparation cases with actionable summary overflow context", () => {
+		const u1 = createMessageEntry(createUserMessage("old"));
+		const u2 = createMessageEntry(createUserMessage("kept"));
+		const compaction = createCompactionEntry("S".repeat(80_000), u2.id);
+
+		const diagnostic = diagnoseCompaction([u1, u2, compaction], DEFAULT_COMPACTION_SETTINGS);
+
+		expect(diagnostic).toContain("previous compaction summary is oversized");
+		expect(diagnostic).toContain("Overflow recovery can rewrite");
+	});
+
+	it("latest superseding compaction entry replaces the older oversized summary in context", () => {
+		const u1 = createMessageEntry(createUserMessage("old"));
+		const u2 = createMessageEntry(createUserMessage("kept"));
+		const first = createCompactionEntry("oversized old summary", u2.id);
+		const second = createCompactionEntry("small rewritten summary", u2.id);
+
+		const loaded = buildSessionContext([u1, u2, first, second]);
+
+		expect(loaded.messages[0].role).toBe("compactionSummary");
+		expect((loaded.messages[0] as any).summary).toBe("small rewritten summary");
+		expect(extractText(loaded.messages)).not.toContain("oversized old summary");
 	});
 });
 

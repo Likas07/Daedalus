@@ -32,7 +32,7 @@ describe("desktop dev launcher helpers", () => {
 	});
 
 	test("Daedalus GUI index is detected", async () => {
-		const index = '<title>Daedalus — Mock Shell</title><script type="module" src="/src/main.ts"></script>';
+		const index = '<title>Daedalus</title><script type="module" src="/src/main.tsx"></script>';
 		expect(await isDaedalusGuiServing("http://example.test", async () => new Response(index))).toBe(true);
 	});
 

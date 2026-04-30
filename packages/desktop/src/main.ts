@@ -1,14 +1,17 @@
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+
 import type { AppServerBootDiagnostics } from "./boot-diagnostics";
 import { deepLinkUrl, installDaedalusMenu, openFileDialog } from "./menu";
 import { isSafeExternalUrl, toRendererServerBootstrap } from "./native-bridge";
 import { NativeCommandRouter } from "./native-command-router";
 import { showDesktopNotification } from "./notifications";
 import { addRecentProject, clearRecentProjects, listRecentProjects } from "./recent-projects";
-import { ensureAppServer } from "./server-process";
+import { appServerDatabasePath, appServerTokenFilePath, daedalusGlobalStateDir } from "./server-manifest";
+import { type AppServerEndpoint, ensureAppServer, ensureTokenFile } from "./server-process";
 
 const moduleDir = dirname(fileURLToPath(import.meta.url));
 const projectRoot = process.env.DAEDALUS_PROJECT_ROOT
@@ -17,6 +20,9 @@ const projectRoot = process.env.DAEDALUS_PROJECT_ROOT
 
 let mainWindow: BrowserWindow | undefined;
 let lastDesktopBootDiagnostics: AppServerBootDiagnostics | undefined;
+let embeddedAppServer: { readonly httpUrl: string; readonly wsUrl: string; stop(): Promise<void> } | undefined;
+let embeddedAppServerEndpoint: AppServerEndpoint | undefined;
+let embeddedAppServerPromise: Promise<AppServerEndpoint> | undefined;
 const nativeCommands = new NativeCommandRouter({
 	getMainWindow: () => mainWindow,
 	getDesktopBootDiagnostics: () => lastDesktopBootDiagnostics,
@@ -53,16 +59,57 @@ function createMainWindow(): BrowserWindow {
 		},
 	});
 	mainWindow = window;
-	const devUrl = process.env.DAEDALUS_GUI_DEV_URL ?? process.env.VITE_DEV_SERVER_URL;
-	if (devUrl) window.loadURL(devUrl);
-	else
-		window.loadFile(
-			resolve(app.isPackaged ? process.resourcesPath : join(projectRoot, "packages"), "gui", "dist", "index.html"),
-		);
+	void loadRenderer(window);
 	window.on("closed", () => {
 		if (mainWindow === window) mainWindow = undefined;
 	});
 	return window;
+}
+
+async function loadRenderer(window: BrowserWindow): Promise<void> {
+	const devUrl = process.env.DAEDALUS_GUI_DEV_URL ?? process.env.VITE_DEV_SERVER_URL;
+	if (devUrl) {
+		await window.loadURL(devUrl);
+		return;
+	}
+
+	const endpoint = await ensureDesktopGuiAppServer();
+	await window.loadURL(endpoint.endpoint);
+}
+
+async function ensureDesktopGuiAppServer(): Promise<AppServerEndpoint> {
+	if (embeddedAppServerEndpoint) return embeddedAppServerEndpoint;
+	if (embeddedAppServerPromise) return embeddedAppServerPromise;
+	embeddedAppServerPromise = startEmbeddedGuiAppServer().finally(() => {
+		embeddedAppServerPromise = undefined;
+	});
+	return embeddedAppServerPromise;
+}
+
+async function startEmbeddedGuiAppServer(): Promise<AppServerEndpoint> {
+	const appServerSpecifier = "@daedalus-pi/app-server";
+	const { startAppServer } = (await import(appServerSpecifier)) as {
+		startAppServer(options: Record<string, unknown>): Promise<NonNullable<typeof embeddedAppServer>>;
+	};
+	const stateDir = daedalusGlobalStateDir();
+	const tokenFile = ensureTokenFile(appServerTokenFilePath(stateDir));
+	const dbPath = appServerDatabasePath(stateDir);
+	const token = readFileSync(tokenFile, "utf8").trim();
+	embeddedAppServer = await startAppServer({
+		databasePath: dbPath,
+		token,
+		serveGui: true,
+		projectRoot,
+	});
+	embeddedAppServerEndpoint = {
+		endpoint: embeddedAppServer.httpUrl,
+		wsEndpoint: embeddedAppServer.wsUrl,
+		tokenFile,
+		dbPath,
+		pid: process.pid,
+		appServerVersion: "0.1.0",
+	};
+	return embeddedAppServerEndpoint;
 }
 
 function registerIpc(): void {
@@ -156,7 +203,11 @@ function registerIpc(): void {
 		},
 	);
 	ipcMain.handle("daedalus:server:bootstrap-endpoint", async () => {
-		const endpoint = await ensureAppServer({ packaged: app.isPackaged });
+		const endpoint =
+			embeddedAppServerEndpoint ??
+			(embeddedAppServerPromise
+				? await embeddedAppServerPromise
+				: await ensureAppServer({ packaged: app.isPackaged }));
 		lastDesktopBootDiagnostics = endpoint.bootDiagnostics;
 		return { ...toRendererServerBootstrap(endpoint), desktopBoot: endpoint.bootDiagnostics };
 	});

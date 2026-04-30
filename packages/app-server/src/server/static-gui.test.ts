@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createGuiBootstrap, serveStaticGui } from "./static-gui";
+import { createGuiBootstrap, defaultGuiDistDir, legacyGuiDistDir, reactGuiDistDir, serveStaticGui } from "./static-gui";
 
 describe("static gui", () => {
 	test("creates bootstrap without redacting fields in payload", () => {
@@ -30,6 +30,12 @@ describe("static gui", () => {
 		});
 		expect(asset?.headers.get("content-type")).toContain("text/javascript");
 		expect(await asset?.text()).toBe("console.log('gui')");
+	});
+
+	test("defaults to the React artifact path with a legacy GUI fallback", () => {
+		expect(reactGuiDistDir()).toContain(join("packages", "react-gui", "dist"));
+		expect(legacyGuiDistDir()).toContain(join("packages", "gui", "dist"));
+		expect([reactGuiDistDir(), legacyGuiDistDir()]).toContain(defaultGuiDistDir());
 	});
 
 	test("serves bootstrap endpoint", async () => {

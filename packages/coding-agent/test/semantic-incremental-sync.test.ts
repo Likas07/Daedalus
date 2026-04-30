@@ -6,6 +6,9 @@ import { collectLocalFileStates, createSemanticStoreRuntime } from "../src/exten
 import { buildSemanticSyncPlan } from "../src/extensions/daedalus/tools/semantic-sync-plan.js";
 import type { SemanticIndexedFile, SemanticLocalFileState } from "../src/extensions/daedalus/tools/semantic-types.js";
 import { initSemanticWorkspace, loadSemanticWorkspace } from "../src/extensions/daedalus/tools/semantic-workspace.js";
+import { isSemanticWorkspaceIndexingAvailable } from "./semantic-test-helpers.js";
+
+const semanticWorkspaceIt = it.skipIf(!(await isSemanticWorkspaceIndexingAvailable()));
 
 function indexedFile(filePath: string, fileHash: string, chunkCount = 1): SemanticIndexedFile {
 	return {
@@ -98,110 +101,139 @@ describe("semantic incremental sync", () => {
 		expect(files.map((file) => file.filePath)).toEqual(["src/app.ts"]);
 	});
 
-	it("does not reread unchanged indexed files when stat metadata matches", async () => {
-		writeFileSync(join(tempDir, "src", "a.ts"), "export const a = 'alpha';\n");
-		await initSemanticWorkspace(tempDir);
-		const workspace = loadSemanticWorkspace(tempDir)!;
-		const runtime = await createSemanticStoreRuntime({
-			databaseDir: workspace.databaseDir,
-			workspaceRoot: tempDir,
-			host: workspace.embeddingHost,
-			model: workspace.embeddingModel,
-		});
+	semanticWorkspaceIt(
+		"does not reread unchanged indexed files when stat metadata matches",
+		async () => {
+			writeFileSync(join(tempDir, "src", "a.ts"), "export const a = 'alpha';\n");
+			await initSemanticWorkspace(tempDir);
+			const workspace = loadSemanticWorkspace(tempDir)!;
+			const runtime = await createSemanticStoreRuntime({
+				databaseDir: workspace.databaseDir,
+				workspaceRoot: tempDir,
+				host: workspace.embeddingHost,
+				model: workspace.embeddingModel,
+			});
 
-		await runtime.sync();
-		const before = await runtime.listIndexedFiles();
-		const second = await runtime.sync();
+			await runtime.sync();
+			const before = await runtime.listIndexedFiles();
+			const second = await runtime.sync();
 
-		expect(second.changedFiles).toBe(0);
-		expect(second.unchangedFiles).toBe(1);
-		expect(second.statUnchangedFiles).toBe(1);
-		expect(second.hashedFiles).toBe(0);
-		expect(await runtime.listIndexedFiles()).toEqual(before);
-	});
+			expect(second.changedFiles).toBe(0);
+			expect(second.unchangedFiles).toBe(1);
+			expect(second.statUnchangedFiles).toBe(1);
+			expect(second.hashedFiles).toBe(0);
+			expect(await runtime.listIndexedFiles()).toEqual(before);
+		},
+		120_000,
+	);
 
-	it("syncs many files correctly with concurrent scanning", async () => {
-		runGit(["init"], tempDir);
-		for (let index = 0; index < 50; index += 1) {
-			writeFileSync(join(tempDir, "src", `file-${index}.ts`), `export const value${index} = ${index};\n`);
-		}
-		runGit(["add", "src"], tempDir);
-		await initSemanticWorkspace(tempDir);
-		const workspace = loadSemanticWorkspace(tempDir)!;
-		const runtime = await createSemanticStoreRuntime({ databaseDir: workspace.databaseDir, workspaceRoot: tempDir });
-		const result = await runtime.sync();
-		expect(result.changedFiles).toBe(50);
-		expect((await runtime.listIndexedFiles()).map((file) => file.filePath)).toHaveLength(50);
-	});
+	semanticWorkspaceIt(
+		"syncs many files correctly with concurrent scanning",
+		async () => {
+			runGit(["init"], tempDir);
+			for (let index = 0; index < 50; index += 1) {
+				writeFileSync(join(tempDir, "src", `file-${index}.ts`), `export const value${index} = ${index};\n`);
+			}
+			runGit(["add", "src"], tempDir);
+			await initSemanticWorkspace(tempDir);
+			const workspace = loadSemanticWorkspace(tempDir)!;
+			const runtime = await createSemanticStoreRuntime({
+				databaseDir: workspace.databaseDir,
+				workspaceRoot: tempDir,
+			});
+			const result = await runtime.sync();
+			expect(result.changedFiles).toBe(50);
+			expect((await runtime.listIndexedFiles()).map((file) => file.filePath)).toHaveLength(50);
+		},
+		120_000,
+	);
 
-	it("reports chunk batch progress while inserting changed chunks", async () => {
-		for (let index = 0; index < 3; index += 1) {
-			writeFileSync(
-				join(tempDir, "src", `file-${index}.ts`),
-				Array.from({ length: 100 }, (_, line) => `export const x${line} = ${line};`).join("\n"),
+	semanticWorkspaceIt(
+		"reports chunk batch progress while inserting changed chunks",
+		async () => {
+			for (let index = 0; index < 3; index += 1) {
+				writeFileSync(
+					join(tempDir, "src", `file-${index}.ts`),
+					Array.from({ length: 100 }, (_, line) => `export const x${line} = ${line};`).join("\n"),
+				);
+			}
+			await initSemanticWorkspace(tempDir);
+			const workspace = loadSemanticWorkspace(tempDir)!;
+			const runtime = await createSemanticStoreRuntime({
+				databaseDir: workspace.databaseDir,
+				workspaceRoot: tempDir,
+			});
+			const progress: any[] = [];
+			await runtime.sync((event) => progress.push(event));
+			expect(progress.some((event) => event.embeddingBatchesTotal && event.embeddingBatchesCompleted != null)).toBe(
+				true,
 			);
-		}
-		await initSemanticWorkspace(tempDir);
-		const workspace = loadSemanticWorkspace(tempDir)!;
-		const runtime = await createSemanticStoreRuntime({ databaseDir: workspace.databaseDir, workspaceRoot: tempDir });
-		const progress: any[] = [];
-		await runtime.sync((event) => progress.push(event));
-		expect(progress.some((event) => event.embeddingBatchesTotal && event.embeddingBatchesCompleted != null)).toBe(
-			true,
-		);
-	}, 15000);
+		},
+		120_000,
+	);
 
-	it("skips index refresh for no-op syncs when indexes already exist", async () => {
-		writeFileSync(join(tempDir, "src", "a.ts"), "export const a = 1;\n");
-		await initSemanticWorkspace(tempDir);
-		const workspace = loadSemanticWorkspace(tempDir)!;
-		const runtime = await createSemanticStoreRuntime({ databaseDir: workspace.databaseDir, workspaceRoot: tempDir });
-		await runtime.sync();
-		const progress: any[] = [];
-		await runtime.sync((event) => progress.push(event));
-		expect(progress.some((event) => event.phase === "indexing" && /skipped/i.test(event.message))).toBe(true);
-	}, 15000);
+	semanticWorkspaceIt(
+		"skips index refresh for no-op syncs when indexes already exist",
+		async () => {
+			writeFileSync(join(tempDir, "src", "a.ts"), "export const a = 1;\n");
+			await initSemanticWorkspace(tempDir);
+			const workspace = loadSemanticWorkspace(tempDir)!;
+			const runtime = await createSemanticStoreRuntime({
+				databaseDir: workspace.databaseDir,
+				workspaceRoot: tempDir,
+			});
+			await runtime.sync();
+			const progress: any[] = [];
+			await runtime.sync((event) => progress.push(event));
+			expect(progress.some((event) => event.phase === "indexing" && /skipped/i.test(event.message))).toBe(true);
+		},
+		120_000,
+	);
 
-	it("preserves unchanged indexed files across incremental syncs", async () => {
-		writeFileSync(join(tempDir, "src", "a.ts"), "export const a = 'alpha';\n");
-		writeFileSync(join(tempDir, "src", "b.ts"), "export const b = 'bravo';\n");
-		writeFileSync(join(tempDir, "src", "c.ts"), "export const c = 'charlie';\n");
+	semanticWorkspaceIt(
+		"preserves unchanged indexed files across incremental syncs",
+		async () => {
+			writeFileSync(join(tempDir, "src", "a.ts"), "export const a = 'alpha';\n");
+			writeFileSync(join(tempDir, "src", "b.ts"), "export const b = 'bravo';\n");
+			writeFileSync(join(tempDir, "src", "c.ts"), "export const c = 'charlie';\n");
 
-		await initSemanticWorkspace(tempDir);
-		const workspace = loadSemanticWorkspace(tempDir);
-		expect(workspace).toBeDefined();
-		const runtime = await createSemanticStoreRuntime({
-			databaseDir: workspace!.databaseDir,
-			workspaceRoot: tempDir,
-			host: workspace!.embeddingHost,
-			model: workspace!.embeddingModel,
-		});
+			await initSemanticWorkspace(tempDir);
+			const workspace = loadSemanticWorkspace(tempDir);
+			expect(workspace).toBeDefined();
+			const runtime = await createSemanticStoreRuntime({
+				databaseDir: workspace!.databaseDir,
+				workspaceRoot: tempDir,
+				host: workspace!.embeddingHost,
+				model: workspace!.embeddingModel,
+			});
 
-		const firstSync = await runtime.sync();
-		expect(firstSync.changedFiles).toBe(3);
-		expect(firstSync.unchangedFiles).toBe(0);
+			const firstSync = await runtime.sync();
+			expect(firstSync.changedFiles).toBe(3);
+			expect(firstSync.unchangedFiles).toBe(0);
 
-		const firstManifest = await runtime.listIndexedFiles();
-		expect(firstManifest).toHaveLength(3);
-		const firstA = firstManifest.find((file) => file.filePath === "src/a.ts");
-		const firstC = firstManifest.find((file) => file.filePath === "src/c.ts");
-		expect(firstA).toBeDefined();
-		expect(firstC).toBeDefined();
+			const firstManifest = await runtime.listIndexedFiles();
+			expect(firstManifest).toHaveLength(3);
+			const firstA = firstManifest.find((file) => file.filePath === "src/a.ts");
+			const firstC = firstManifest.find((file) => file.filePath === "src/c.ts");
+			expect(firstA).toBeDefined();
+			expect(firstC).toBeDefined();
 
-		writeFileSync(join(tempDir, "src", "b.ts"), "export const b = 'beta';\n");
+			writeFileSync(join(tempDir, "src", "b.ts"), "export const b = 'beta';\n");
 
-		const secondSync = await runtime.sync();
-		expect(secondSync.changedFiles).toBe(1);
-		expect(secondSync.deletedFiles).toBe(0);
-		expect(secondSync.unchangedFiles).toBe(2);
+			const secondSync = await runtime.sync();
+			expect(secondSync.changedFiles).toBe(1);
+			expect(secondSync.deletedFiles).toBe(0);
+			expect(secondSync.unchangedFiles).toBe(2);
 
-		const secondManifest = await runtime.listIndexedFiles();
-		expect(secondManifest).toHaveLength(3);
-		const secondA = secondManifest.find((file) => file.filePath === "src/a.ts");
-		const secondC = secondManifest.find((file) => file.filePath === "src/c.ts");
-		const secondB = secondManifest.find((file) => file.filePath === "src/b.ts");
-		expect(secondA).toEqual(firstA);
-		expect(secondC).toEqual(firstC);
-		expect(secondB?.fileHash).not.toBe(firstManifest.find((file) => file.filePath === "src/b.ts")?.fileHash);
-	});
+			const secondManifest = await runtime.listIndexedFiles();
+			expect(secondManifest).toHaveLength(3);
+			const secondA = secondManifest.find((file) => file.filePath === "src/a.ts");
+			const secondC = secondManifest.find((file) => file.filePath === "src/c.ts");
+			const secondB = secondManifest.find((file) => file.filePath === "src/b.ts");
+			expect(secondA).toEqual(firstA);
+			expect(secondC).toEqual(firstC);
+			expect(secondB?.fileHash).not.toBe(firstManifest.find((file) => file.filePath === "src/b.ts")?.fileHash);
+		},
+		120_000,
+	);
 });

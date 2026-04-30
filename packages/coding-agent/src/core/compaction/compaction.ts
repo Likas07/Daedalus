@@ -135,6 +135,22 @@ export interface CompactionResult<T = unknown> {
 	details?: T;
 }
 
+export interface PostCompactionContextDiagnostic {
+	/** Tokens estimated for the full active context after the compaction summary is appended. */
+	contextTokens: number;
+	/** Tokens estimated for the compaction summary itself. */
+	summaryTokens: number;
+	/** Tokens attributed to kept-tail/later messages in the active context. */
+	keptContextTokens: number;
+	/** Safe active-context ceiling, contextWindow - reserveTokens, when a context window is known. */
+	thresholdTokens: number | undefined;
+	contextWindow: number | undefined;
+	reserveTokens: number;
+	overBudget: boolean;
+	willRetrigger: boolean;
+	message: string;
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -163,6 +179,39 @@ export const DEFAULT_COMPACTION_SETTINGS: CompactionSettings = {
 	retentionWindow: 0,
 	evictionWindow: 1,
 };
+
+export const DEFAULT_COMPACTION_SUMMARY_TOKEN_CAP = 16384;
+const SUMMARY_TRUNCATION_MARKER = "\n\n[... compaction summary truncated to fit the summary token budget ...]\n\n";
+
+export function resolveCompactionSummaryTokenCap(reserveTokens: number): number {
+	return Math.max(1024, Math.min(DEFAULT_COMPACTION_SUMMARY_TOKEN_CAP, Math.floor(reserveTokens * 0.8)));
+}
+
+function estimateTextTokens(text: string): number {
+	return Math.ceil(text.length / 4);
+}
+
+function truncateTextToTokenCap(text: string, tokenCap: number): string {
+	if (estimateTextTokens(text) <= tokenCap) return text;
+
+	const charCap = Math.max(0, tokenCap * 4);
+	if (charCap <= SUMMARY_TRUNCATION_MARKER.length) {
+		return SUMMARY_TRUNCATION_MARKER.trim().slice(0, charCap);
+	}
+
+	const available = charCap - SUMMARY_TRUNCATION_MARKER.length;
+	const headChars = Math.ceil(available / 2);
+	const tailChars = Math.floor(available / 2);
+	return `${text.slice(0, headChars)}${SUMMARY_TRUNCATION_MARKER}${text.slice(Math.max(0, text.length - tailChars))}`;
+}
+
+export function capCompactionSummary(summary: string, reserveTokens: number): string {
+	return truncateTextToTokenCap(summary, resolveCompactionSummaryTokenCap(reserveTokens));
+}
+
+function isSummaryOversized(summary: string | undefined, reserveTokens: number): boolean {
+	return summary !== undefined && estimateTextTokens(summary) > resolveCompactionSummaryTokenCap(reserveTokens);
+}
 
 export function resolveKeepRecentTokens(settings: CompactionSettings, contextWindow?: number): number {
 	const ratio = settings.keepRecentRatio;
@@ -295,6 +344,41 @@ export function estimateContextTokens(messages: AgentMessage[]): ContextUsageEst
 		usageTokens,
 		trailingTokens,
 		lastUsageIndex: usageInfo.index,
+	};
+}
+
+export function estimatePostCompactionContext(
+	pathEntries: SessionEntry[],
+	settings: Pick<CompactionSettings, "reserveTokens" | "tokenThreshold">,
+	contextWindow?: number,
+): PostCompactionContextDiagnostic {
+	const sessionContext = buildSessionContext(pathEntries);
+	const contextTokens = sessionContext.messages.reduce((sum, message) => sum + estimateTokens(message), 0);
+	const latestCompaction = [...pathEntries]
+		.reverse()
+		.find((entry): entry is CompactionEntry => entry.type === "compaction");
+	const summaryTokens = latestCompaction ? estimateTextTokens(latestCompaction.summary) : 0;
+	const keptContextTokens = Math.max(0, contextTokens - summaryTokens);
+	const thresholdTokens =
+		contextWindow !== undefined && contextWindow > 0
+			? Math.max(0, contextWindow - settings.reserveTokens)
+			: undefined;
+	const overContextBudget = thresholdTokens !== undefined && contextTokens > thresholdTokens;
+	const overTokenThreshold = settings.tokenThreshold !== undefined && contextTokens >= settings.tokenThreshold;
+	const willRetrigger = overContextBudget || overTokenThreshold;
+	const thresholdText = thresholdTokens === undefined ? "unknown" : String(thresholdTokens);
+	const tokenThresholdText = settings.tokenThreshold === undefined ? "none" : String(settings.tokenThreshold);
+
+	return {
+		contextTokens,
+		summaryTokens,
+		keptContextTokens,
+		thresholdTokens,
+		contextWindow,
+		reserveTokens: settings.reserveTokens,
+		overBudget: overContextBudget,
+		willRetrigger,
+		message: `Post-compaction active context estimate: context=${contextTokens} tokens, summary=${summaryTokens} tokens, kept=${keptContextTokens} tokens, threshold=${thresholdText} tokens (contextWindow=${contextWindow ?? "unknown"}, reserve=${settings.reserveTokens}, tokenThreshold=${tokenThresholdText}).${willRetrigger ? " This may immediately retrigger compaction; reduce summary/tail size or use a larger-context model." : ""}`,
 	};
 }
 
@@ -784,7 +868,11 @@ export async function generateSummary(
 // Compaction Preparation (for extensions)
 // ============================================================================
 
+export type CompactionPreparationMode = "normal" | "summary_rewrite";
+
 export interface CompactionPreparation {
+	/** Preparation mode; summary_rewrite rewrites an oversized previous compaction summary without dropping more messages. */
+	mode?: CompactionPreparationMode;
 	/** UUID of first entry to keep */
 	firstKeptEntryId: string;
 	/** Messages that will be summarized and discarded */
@@ -806,13 +894,47 @@ export interface CompactionPreparation {
 	previousOperationFrame?: OperationFrame;
 }
 
+export interface PrepareCompactionOptions {
+	allowSummaryRewrite?: boolean;
+	reason?: "manual" | "threshold" | "overflow";
+}
+
+export function diagnoseCompaction(
+	pathEntries: SessionEntry[],
+	settings: CompactionSettings,
+	contextWindow?: number,
+): string {
+	if (pathEntries.length === 0) return "Nothing to compact (session is empty)";
+
+	const prevCompaction = [...pathEntries]
+		.reverse()
+		.find((entry): entry is CompactionEntry => entry.type === "compaction");
+	const summaryTokens = prevCompaction ? estimateTextTokens(prevCompaction.summary) : 0;
+	const summaryCap = resolveCompactionSummaryTokenCap(settings.reserveTokens);
+	if (prevCompaction && summaryTokens > summaryCap) {
+		return `Nothing to compact normally; previous compaction summary is oversized (${summaryTokens} tokens > ${summaryCap} cap). Overflow recovery can rewrite the summary.`;
+	}
+	if (pathEntries[pathEntries.length - 1]?.type === "compaction")
+		return "Already compacted (latest entry is a compaction)";
+	if (settings.evictionWindow === 0) return "Nothing to compact (evictionWindow is 0)";
+
+	const keepRecentTokens = resolveKeepRecentTokens(settings, contextWindow);
+	const contextTokens = estimateContextTokens(buildSessionContext(pathEntries).messages).tokens;
+	return `Nothing to compact (no eligible messages before the kept boundary; context=${contextTokens} tokens, keepRecent=${keepRecentTokens} tokens)`;
+}
+
 export function prepareCompaction(
 	pathEntries: SessionEntry[],
 	settings: CompactionSettings,
 	cwd = process.cwd(),
 	contextWindow?: number,
+	options: PrepareCompactionOptions = {},
 ): CompactionPreparation | undefined {
-	if (pathEntries.length > 0 && pathEntries[pathEntries.length - 1].type === "compaction") {
+	if (
+		pathEntries.length > 0 &&
+		pathEntries[pathEntries.length - 1].type === "compaction" &&
+		!options.allowSummaryRewrite
+	) {
 		return undefined;
 	}
 
@@ -825,11 +947,15 @@ export function prepareCompaction(
 	}
 
 	let previousSummary: string | undefined;
+	let previousSummaryWasOversized = false;
 	let previousOperationFrame: OperationFrame | undefined;
+	let previousFirstKeptEntryId: string | undefined;
 	let boundaryStart = 0;
 	if (prevCompactionIndex >= 0) {
 		const prevCompaction = pathEntries[prevCompactionIndex] as CompactionEntry;
-		previousSummary = prevCompaction.summary;
+		previousSummaryWasOversized = isSummaryOversized(prevCompaction.summary, settings.reserveTokens);
+		previousSummary = capCompactionSummary(prevCompaction.summary, settings.reserveTokens);
+		previousFirstKeptEntryId = prevCompaction.firstKeptEntryId;
 		const details = prevCompaction.details as CompactionDetails | undefined;
 		previousOperationFrame = details?.operationFrame;
 		const firstKeptEntryIndex = pathEntries.findIndex((entry) => entry.id === prevCompaction.firstKeptEntryId);
@@ -871,6 +997,21 @@ export function prepareCompaction(
 	}
 
 	if (messagesToSummarize.length === 0 && turnPrefixMessages.length === 0) {
+		if (options.allowSummaryRewrite && previousSummaryWasOversized && previousFirstKeptEntryId) {
+			return {
+				mode: "summary_rewrite",
+				firstKeptEntryId: previousFirstKeptEntryId,
+				messagesToSummarize: [],
+				turnPrefixMessages: [],
+				isSplitTurn: false,
+				tokensBefore,
+				previousSummary,
+				fileOps: createFileOps(),
+				settings,
+				cwd,
+				previousOperationFrame,
+			};
+		}
 		return undefined;
 	}
 
@@ -885,6 +1026,7 @@ export function prepareCompaction(
 	}
 
 	return {
+		mode: "normal",
 		firstKeptEntryId,
 		messagesToSummarize,
 		turnPrefixMessages,
@@ -933,6 +1075,7 @@ export async function compact(
 	signal?: AbortSignal,
 ): Promise<CompactionResult> {
 	const {
+		mode,
 		firstKeptEntryId,
 		messagesToSummarize,
 		turnPrefixMessages,
@@ -959,7 +1102,23 @@ export async function compact(
 	// Generate summaries (can be parallel if both needed) and merge into one
 	let summary: string;
 
-	if (isSplitTurn && turnPrefixMessages.length > 0) {
+	if (mode === "summary_rewrite") {
+		summary = await generateSummary(
+			[],
+			summaryModel,
+			settings.reserveTokens,
+			apiKey,
+			headers,
+			signal,
+			[
+				customInstructions,
+				"Rewrite the previous compaction summary into a smaller, equivalent checkpoint. Do not add new facts.",
+			]
+				.filter(Boolean)
+				.join("\n"),
+			previousSummary,
+		);
+	} else if (isSplitTurn && turnPrefixMessages.length > 0) {
 		// Generate both summaries in parallel
 		const [historyResult, turnPrefixResult] = await Promise.all([
 			messagesToSummarize.length > 0
@@ -996,6 +1155,7 @@ export async function compact(
 	const { readFiles, modifiedFiles } = computeFileLists(fileOps);
 	summary += formatFileOperations(readFiles, modifiedFiles);
 	summary = `${summary}\n\n${renderedOperationFrame}`;
+	summary = capCompactionSummary(summary, settings.reserveTokens);
 
 	if (!firstKeptEntryId) {
 		throw new Error("First kept entry has no UUID - session may need migration");

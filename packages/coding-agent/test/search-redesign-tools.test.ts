@@ -6,6 +6,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createAgentSession } from "../src/core/sdk.js";
 import { SessionManager } from "../src/core/session-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
+import { isSemanticWorkspaceIndexingAvailable } from "./semantic-test-helpers.js";
+
+const semanticWorkspaceIt = it.skipIf(!(await isSemanticWorkspaceIndexingAvailable()));
 
 function getText(result: any): string {
 	return result.content
@@ -152,83 +155,91 @@ describe("fs_search and sem_search tools", () => {
 		session.dispose();
 	});
 
-	it("bounds sem_search output and saves the full semantic result when snippets are huge", async () => {
-		const hugeLines = Array.from({ length: 250 }, (_, index) => `alpha huge semantic ${index} ${"z".repeat(900)}`);
-		writeFileSync(join(tempDir, "src", "huge-semantic.txt"), `${hugeLines.join("\n")}\n`);
-		const settingsManager = SettingsManager.create(tempDir, agentDir);
-		const sessionManager = SessionManager.inMemory();
-		const { session } = await createAgentSession({
-			cwd: tempDir,
-			agentDir,
-			model: getModel("anthropic", "claude-sonnet-4-5")!,
-			settingsManager,
-			sessionManager,
-		});
-		await session.bindExtensions({});
+	semanticWorkspaceIt(
+		"bounds sem_search output and saves the full semantic result when snippets are huge",
+		async () => {
+			const hugeLines = Array.from({ length: 250 }, (_, index) => `alpha huge semantic ${index} ${"z".repeat(900)}`);
+			writeFileSync(join(tempDir, "src", "huge-semantic.txt"), `${hugeLines.join("\n")}\n`);
+			const settingsManager = SettingsManager.create(tempDir, agentDir);
+			const sessionManager = SessionManager.inMemory();
+			const { session } = await createAgentSession({
+				cwd: tempDir,
+				agentDir,
+				model: getModel("anthropic", "claude-sonnet-4-5")!,
+				settingsManager,
+				sessionManager,
+			});
+			await session.bindExtensions({});
 
-		const semSearch = session.getToolDefinition("sem_search");
-		expect(semSearch).toBeDefined();
+			const semSearch = session.getToolDefinition("sem_search");
+			expect(semSearch).toBeDefined();
 
-		await session.prompt("/workspace-init");
-		await session.prompt("/workspace-sync");
+			await session.prompt("/workspace-init");
+			await session.prompt("/workspace-sync");
 
-		const result = await semSearch!.execute(
-			"sem-search-huge",
-			{
-				queries: [{ query: "alpha huge semantic", use_case: "find huge semantic test snippets", top_k: 5 }],
-				path: "src",
-				limit: 5,
-			},
-			undefined,
-			undefined,
-			{ cwd: tempDir } as any,
-		);
-		const text = getText(result);
+			const result = await semSearch!.execute(
+				"sem-search-huge",
+				{
+					queries: [{ query: "alpha huge semantic", use_case: "find huge semantic test snippets", top_k: 5 }],
+					path: "src",
+					limit: 5,
+				},
+				undefined,
+				undefined,
+				{ cwd: tempDir } as any,
+			);
+			const text = getText(result);
 
-		expect(Buffer.byteLength(text, "utf8")).toBeLessThan(60_000);
-		expect(text).toContain("... [truncated]");
-		expect(text).toContain("Full output saved to:");
-		expect(result.details?.fullOutputPath).toBeDefined();
-		expect(readFileSync(result.details.fullOutputPath, "utf8")).toContain("huge-semantic.txt");
-		expect(result.details?.linesTruncated || result.details?.truncation?.truncated).toBe(true);
+			expect(Buffer.byteLength(text, "utf8")).toBeLessThan(60_000);
+			expect(text).toContain("... [truncated]");
+			expect(text).toContain("Full output saved to:");
+			expect(result.details?.fullOutputPath).toBeDefined();
+			expect(readFileSync(result.details.fullOutputPath, "utf8")).toContain("huge-semantic.txt");
+			expect(result.details?.linesTruncated || result.details?.truncation?.truncated).toBe(true);
 
-		session.dispose();
-	});
+			session.dispose();
+		},
+		120_000,
+	);
 
-	it("ranks semantically related files ahead of weaker matches", async () => {
-		const settingsManager = SettingsManager.create(tempDir, agentDir);
-		const sessionManager = SessionManager.inMemory();
-		const { session } = await createAgentSession({
-			cwd: tempDir,
-			agentDir,
-			model: getModel("anthropic", "claude-sonnet-4-5")!,
-			settingsManager,
-			sessionManager,
-		});
-		await session.bindExtensions({});
+	semanticWorkspaceIt(
+		"ranks semantically related files ahead of weaker matches",
+		async () => {
+			const settingsManager = SettingsManager.create(tempDir, agentDir);
+			const sessionManager = SessionManager.inMemory();
+			const { session } = await createAgentSession({
+				cwd: tempDir,
+				agentDir,
+				model: getModel("anthropic", "claude-sonnet-4-5")!,
+				settingsManager,
+				sessionManager,
+			});
+			await session.bindExtensions({});
 
-		const semSearch = session.getToolDefinition("sem_search");
-		expect(semSearch).toBeDefined();
+			const semSearch = session.getToolDefinition("sem_search");
+			expect(semSearch).toBeDefined();
 
-		await session.prompt("/workspace-init");
-		await session.prompt("/workspace-sync");
+			await session.prompt("/workspace-init");
+			await session.prompt("/workspace-sync");
 
-		const result = await semSearch!.execute(
-			"sem-search-1",
-			{
-				queries: [{ query: "token refresh flow", use_case: "find token refresh implementation" }],
-				path: ".",
-				limit: 3,
-			},
-			undefined,
-			undefined,
-			{ cwd: tempDir } as any,
-		);
-		const text = getText(result);
-		expect(text).toContain("<sem_search_results>");
-		expect(text).toContain('query="token refresh flow"');
-		expect(text).toContain("refresh-token.ts");
+			const result = await semSearch!.execute(
+				"sem-search-1",
+				{
+					queries: [{ query: "token refresh flow", use_case: "find token refresh implementation" }],
+					path: ".",
+					limit: 3,
+				},
+				undefined,
+				undefined,
+				{ cwd: tempDir } as any,
+			);
+			const text = getText(result);
+			expect(text).toContain("<sem_search_results>");
+			expect(text).toContain('query="token refresh flow"');
+			expect(text).toContain("refresh-token.ts");
 
-		session.dispose();
-	});
+			session.dispose();
+		},
+		120_000,
+	);
 });
