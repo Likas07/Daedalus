@@ -13,6 +13,7 @@ export type ImportBoundaryRule =
 	| "t3-quarantine"
 	| "t3-runtime-provider-server"
 	| "shell-process-api"
+	| "browser-filesystem-api"
 	| "electron-mutation-api"
 	| "gui-core-react-free";
 
@@ -40,6 +41,46 @@ function normalizeSpecifier(specifier: string): string {
 	return specifier.replaceAll("\\", "/");
 }
 
+function isForbiddenFilesystemSpecifier(specifier: string): boolean {
+	const normalized = normalizeSpecifier(specifier);
+	return (
+		normalized === "fs" ||
+		normalized === "node:fs" ||
+		normalized.startsWith("fs/") ||
+		normalized.startsWith("node:fs/")
+	);
+}
+
+function isForbiddenShellProcessSpecifier(specifier: string): boolean {
+	const normalized = normalizeSpecifier(specifier);
+	return (
+		normalized === "child_process" ||
+		normalized === "node:child_process" ||
+		normalized.startsWith("child_process/") ||
+		normalized.startsWith("node:child_process/") ||
+		normalized === "process" ||
+		normalized === "node:process" ||
+		normalized === "execa" ||
+		normalized.startsWith("execa/") ||
+		normalized === "shelljs" ||
+		normalized.startsWith("shelljs/") ||
+		normalized === "zx" ||
+		normalized.startsWith("zx/") ||
+		normalized === "bun" ||
+		normalized.startsWith("bun:")
+	);
+}
+
+function isForbiddenElectronSpecifier(specifier: string): boolean {
+	const normalized = normalizeSpecifier(specifier);
+	return (
+		specifier === "electron" ||
+		specifier === "@electron/remote" ||
+		normalized.startsWith("electron/") ||
+		normalized.startsWith("@electron/remote/")
+	);
+}
+
 function isSourceFile(path: string): boolean {
 	for (const extension of sourceExtensions) {
 		if (path.endsWith(extension) || path.endsWith(`${extension}x`)) return true;
@@ -64,10 +105,12 @@ function hasT3RuntimeProviderServerPattern(specifier: string): boolean {
 	const normalized = normalizeSpecifier(specifier);
 	if (normalized.startsWith("@daedalus-pi/")) return false;
 	if (normalized === "server-only" || normalized === "client-only") return true;
-	if (normalized.startsWith("@trpc/server")) return true;
-	if (/^(@|~|#)?\/?(server|runtime|providers?)(\/|$)/.test(normalized)) return true;
-	if (/(^|\/)src\/(server|runtime|providers?)(\/|$)/.test(normalized)) return true;
-	if (/(^|\/)(server|runtime|providers?)\.(ts|tsx|js|jsx|mjs|cjs)$/.test(normalized)) return true;
+	if (normalized.startsWith("@trpc/")) return true;
+	if (normalized === "next/server" || normalized === "next/headers" || normalized === "next/cookies") return true;
+	if (/^(@|~|#)?\/?(server|runtime|providers?|trpc)(\/|$)/.test(normalized)) return true;
+	if (/^(\.{1,2}\/?)+(server|runtime|providers?|trpc)(\/|$)/.test(normalized)) return true;
+	if (/(^|\/)(src|app|lib)\/(server|runtime|providers?|trpc)(\/|$)/.test(normalized)) return true;
+	if (/(^|\/)(server|runtime|providers?|trpc)\.(ts|tsx|js|jsx|mjs|cjs)$/.test(normalized)) return true;
 	return false;
 }
 
@@ -96,9 +139,7 @@ function pushSpecifierViolations(
 		});
 	}
 
-	if (
-		["child_process", "node:child_process", "process", "node:process", "execa", "shelljs", "zx"].includes(specifier)
-	) {
+	if (isForbiddenShellProcessSpecifier(specifier)) {
 		violations.push({
 			packageName: input.packageName,
 			relativePath: input.relativePath,
@@ -107,7 +148,16 @@ function pushSpecifierViolations(
 		});
 	}
 
-	if (specifier === "electron" || specifier === "@electron/remote" || normalized.startsWith("electron/")) {
+	if (isForbiddenFilesystemSpecifier(specifier)) {
+		violations.push({
+			packageName: input.packageName,
+			relativePath: input.relativePath,
+			rule: "browser-filesystem-api",
+			detail: `Forbidden direct filesystem import in browser-facing GUI code: ${specifier}`,
+		});
+	}
+
+	if (isForbiddenElectronSpecifier(specifier)) {
 		violations.push({
 			packageName: input.packageName,
 			relativePath: input.relativePath,
@@ -133,13 +183,18 @@ function pushSourcePatternViolations(input: SourceCheckInput, violations: Import
 	const sourcePatterns: Array<{ rule: ImportBoundaryRule; pattern: RegExp; detail: string }> = [
 		{
 			rule: "shell-process-api",
-			pattern: /\bBun\s*\.\s*(spawn|spawnSync|\$)\b|\bprocess\s*\./,
+			pattern: /\bBun\s*\.\s*(?:spawn|spawnSync)\b|\bBun\s*\.\s*\$|\bprocess\s*\.|\bglobalThis\s*\.\s*process\b/,
 			detail: "Forbidden direct Bun/process shell API usage in browser-facing GUI code",
+		},
+		{
+			rule: "browser-filesystem-api",
+			pattern: /\bBun\s*\.\s*(?:file|write|readableStreamToBlob)\b/,
+			detail: "Forbidden direct Bun filesystem API usage in browser-facing GUI code",
 		},
 		{
 			rule: "electron-mutation-api",
 			pattern:
-				/\bipcRenderer\s*\.\s*(send|sendSync|invoke)\b|\bshell\s*\.\s*openExternal\b|\bBrowserWindow\b|\bsession\s*\.\s*defaultSession\b/,
+				/\bipcRenderer\s*\.\s*(send|sendSync|invoke)\b|\bshell\s*\.\s*openExternal\b|\bBrowserWindow\b|\bsession\s*\.\s*defaultSession\b|\bwindow\s*\.\s*require\s*\(\s*["']electron["']\s*\)/,
 			detail: "Forbidden Electron mutation API usage in browser-facing GUI code",
 		},
 	];

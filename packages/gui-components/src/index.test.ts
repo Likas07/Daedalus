@@ -10,8 +10,13 @@ describe("gui-components package contract", () => {
 		expect(manifest.exports["."].import).toBe("./src/index.ts");
 		expect(entrypoint).toContain("export function ShellFrame");
 		expect(entrypoint).toContain('export * from "./approval/ApprovalCard";');
+		expect(entrypoint).toContain('export * from "./approval/ApprovalQueue";');
+		expect(entrypoint).toContain('export * from "./diff/DiffFileView";');
 		expect(entrypoint).toContain('export * from "./diff/DiffPanel";');
+		expect(entrypoint).toContain('export * from "./terminal/TerminalDrawer";');
 		expect(entrypoint).toContain('export * from "./terminal/TerminalPane";');
+		expect(entrypoint).toContain('export * from "./thread/Composer";');
 		expect(entrypoint).toContain('export * from "./thread/ThreadWorkspace";');
+		expect(entrypoint).toContain('export * from "./ui";');
 	});
 });
