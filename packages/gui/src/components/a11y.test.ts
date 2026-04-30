@@ -102,10 +102,10 @@ describe("Safe worktree UI accessibility", () => {
 		const trustBar = source("BuildTargetTrustBar.svelte");
 		const recovery = source("NeedsAttentionRecovery.svelte");
 
-		expect(trustBar).toContain('aria-label="Build target"');
+		expect(trustBar).toContain('aria-label="Thread location and trust"');
 		expect(trustBar).toContain('aria-live="polite"');
 		expect(trustBar).toContain("aria-describedby");
-		expect(trustBar).toContain("Full path");
+		expect(trustBar).toContain("Verify full path");
 
 		expect(recovery).toContain('role={blocking ? "alertdialog" : "alert"}');
 		expect(recovery).toContain('aria-modal={blocking ? "true" : undefined}');
@@ -114,5 +114,50 @@ describe("Safe worktree UI accessibility", () => {
 		expect(recovery).toContain("Archive record");
 		expect(recovery).toContain("Continue is unavailable until validation passes");
 		expect(recovery).not.toContain(">Continue<");
+	});
+});
+
+
+describe("Projected Thread shell accessibility", () => {
+	test("compact Thread header exposes labels and avoids top-card pollution", () => {
+		const header = source("projection/ThreadHeader.svelte");
+		expect(header).toContain('aria-label="Active Thread header"');
+		expect(header).toContain("Thread actions");
+		expect(header).toContain("Cancel active turn");
+		expect(header).toContain("Stop Thread");
+		expect(header).toContain("Continue Thread in Worktree");
+		expect(header).toContain("ProjectionStatusPills");
+		expect(header).toContain("SafetySignalStrip");
+		expect(header).not.toContain("BuildTargetTrustBar");
+		expect(header).not.toContain("PlanBuildModePanel");
+	});
+
+	test("safety strip labels compact target, access, approvals, and connection state", () => {
+		const strip = source("projection/SafetySignalStrip.svelte");
+		expect(strip).toContain('aria-label="Thread safety signals"');
+		expect(strip).toContain("Target validation:");
+		expect(strip).toContain("Access mode:");
+		expect(strip).toContain("Dirty target has uncommitted changes");
+		expect(strip).toContain("pending approvals");
+		expect(strip).toContain("Connection state:");
+		expect(strip).toContain('data-tone={tone}');
+	});
+
+	test("sidebar and inspector keep shell/detail separation", () => {
+		const sidebar = source("projection/ThreadSidebar.svelte");
+		const inspector = source("projection/ThreadInspector.svelte");
+		expect(sidebar).toContain('aria-label="Thread navigation"');
+		expect(sidebar).toContain('aria-label="Projected Threads"');
+		expect(sidebar).toContain("Open Thread");
+		expect(sidebar).not.toContain("BuildTargetTrustBar");
+		expect(sidebar).not.toContain("ApprovalQueue");
+
+		expect(inspector).toContain('aria-label="Thread inspector"');
+		expect(inspector).toContain("safety");
+		expect(inspector).toContain("worktree");
+		expect(inspector).toContain("diff");
+		expect(inspector).toContain("approvals");
+		expect(inspector).toContain("workflow");
+		expect(inspector).toContain("diagnostics");
 	});
 });
