@@ -18,6 +18,7 @@ packages/*/node_modules/
 /.daedalus/gui-dev/
 /.daedalus/react-gui-agent-browser-smoke/
 /.daedalus/gui-agent-browser-smoke/
+/.daedalus/t3code-visual-qa/
 /.daedalus/app-server.sqlite*
 
 # Desktop packaging artifacts

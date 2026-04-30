@@ -21,6 +21,7 @@
 		"test:gui:e2e": "bun --cwd=packages/coding-agent run test:gui:e2e && bun --cwd=packages/gui run test:e2e && bun --cwd=packages/desktop run test:e2e",
 		"smoke:gui:agent-browser": "bash scripts/agent-browser-gui-smoke.sh",
 		"smoke:react-gui:agent-browser": "bash scripts/agent-browser-react-gui-smoke.sh",
+		"smoke:react-gui:gstack": "bash scripts/gstack-react-gui-visual-smoke.sh",
 		"check": "biome check . && bun --cwd=packages/agent run check && bun --cwd=packages/ai run check && bun --cwd=packages/tui run check && bun --cwd=packages/coding-agent run check && bun run check:gui",
 		"lint": "biome lint .",
 		"fmt": "biome format --write .",
