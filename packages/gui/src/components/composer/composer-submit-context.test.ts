@@ -57,4 +57,20 @@ describe("composer submit context", () => {
 		expect(context.attachmentIds).toEqual(["a"]);
 		expect(context.filePaths).toEqual(["one.ts"]);
 	});
+
+	test("keeps thread composer worktree and session scope together", () => {
+		const context = createComposerSubmitContext({
+			...fullContext,
+			prompt: "thread reply",
+			sessionId: "thread-session-1",
+			worktreeId: "thread-worktree-1",
+		});
+
+		expect(context).toMatchObject({
+			prompt: "thread reply",
+			sessionId: "thread-session-1",
+			worktreeId: "thread-worktree-1",
+			projectId: "project-1",
+		});
+	});
 });

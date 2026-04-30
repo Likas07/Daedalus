@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AppEvent, DaedalusWorkflowState } from "@daedalus-pi/app-server-protocol";
-import { buildDaedalusWorkflowViewModel, workflowFromTypedEvents } from "./daedalus-workflow-view-model";
+import { buildDaedalusWorkflowViewModel, threadScopedPendingActions, workflowFromTypedEvents } from "./daedalus-workflow-view-model";
 import { orchestrationFromEvents } from "./orchestration-state";
 
 const workflow: DaedalusWorkflowState = {
@@ -40,5 +40,35 @@ describe("daedalus workflow view model", () => {
 			payload: { workflow },
 		};
 		expect(workflowFromTypedEvents([unrelated, typed])?.orchestration.lanes[0]?.id).toBe("t2");
+	});
+
+	test("scopes composer pending actions to the selected thread session", () => {
+		const scoped = threadScopedPendingActions({
+			threadId: "thread-1",
+			sessionId: "s1",
+			workflow,
+			approvals: [
+				{ id: "a1", sessionId: "s1", summary: "Run command", risk: "medium", scope: "session" },
+				{ id: "a2", sessionId: "s2", summary: "Other thread", risk: "low", scope: "session" },
+			],
+			threadActions: [
+				{ id: "pa1", kind: "approval", title: "Approve", approvalId: "a1" },
+				{ id: "pa2", kind: "approval", title: "Other", approvalId: "a2", sessionId: "s2" } as never,
+			],
+			sessions: [
+				{ id: "s1", title: "One", status: "waiting", pendingUserInput: true, latestMessage: "Need input" },
+				{ id: "s2", title: "Two", status: "waiting", pendingUserInput: true },
+			],
+		});
+
+		expect(scoped.openQuestions.map((question) => question.id)).toEqual(["q1"]);
+		expect(scoped.approvals.map((approval) => approval.id)).toEqual(["a1"]);
+		expect(scoped.threadActions.map((action) => action.id)).toEqual(["pa1"]);
+		expect(scoped.pendingInput.map((input) => input.id)).toEqual(["s1"]);
+	});
+
+	test("does not surface workflow questions for a different thread", () => {
+		const scoped = threadScopedPendingActions({ threadId: "thread-2", sessionId: "s2", workflow });
+		expect(scoped.openQuestions).toEqual([]);
 	});
 });
