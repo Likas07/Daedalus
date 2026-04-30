@@ -7,9 +7,21 @@ import {
 	registerOllamaEmbeddingFunction,
 } from "../src/extensions/daedalus/tools/semantic-embedder.js";
 import { openSemanticLanceStore } from "../src/extensions/daedalus/tools/semantic-lancedb.js";
-import { isSemanticWorkspaceIndexingAvailable } from "./semantic-test-helpers.js";
+import {
+	getSemanticWorkspaceIndexingUnavailableReason,
+	isSemanticWorkspaceIndexingAvailable,
+	semanticSetupOrSkip,
+	skipSemanticTest,
+} from "./semantic-test-helpers.js";
 
-const semanticWorkspaceIt = it.skipIf(!(await isSemanticWorkspaceIndexingAvailable()));
+const semanticWorkspaceIndexingAvailable = await isSemanticWorkspaceIndexingAvailable();
+if (!semanticWorkspaceIndexingAvailable) {
+	skipSemanticTest(
+		getSemanticWorkspaceIndexingUnavailableReason() ??
+			"Semantic workspace indexing unavailable for LanceDB integration tests",
+	);
+}
+const semanticWorkspaceIt = it.skipIf(!semanticWorkspaceIndexingAvailable);
 
 describe("semantic embedder LanceDB integration", () => {
 	let tempDir: string;
@@ -99,30 +111,38 @@ describe("semantic embedder LanceDB integration", () => {
 	semanticWorkspaceIt(
 		"inserts chunks with explicit raw vectors",
 		async () => {
-			const embedder = await createOllamaSemanticEmbedder({
-				model: "embeddinggemma",
-				host: "http://127.0.0.1:11434",
-			});
-			const functionName = await registerOllamaEmbeddingFunction(embedder);
-			const store = await openSemanticLanceStore({
-				databaseDir: join(tempDir, "semantic-raw-vector-store"),
-				embeddingFunctionAlias: functionName,
-			});
-			const [vector] = await embedder.embedDocuments(["export const rawVector = true;"]);
-			await store.insertEmbeddedChunks([
-				{
-					chunkId: "raw-1",
-					filePath: "src/raw-vector.ts",
-					language: "typescript",
-					content: "export const rawVector = true;",
-					startLine: 1,
-					endLine: 1,
-					contentHash: "raw-hash",
-					vector,
+			const info = await semanticSetupOrSkip(
+				async () => {
+					const embedder = await createOllamaSemanticEmbedder({
+						model: "embeddinggemma",
+						host: "http://127.0.0.1:11434",
+					});
+					const functionName = await registerOllamaEmbeddingFunction(embedder);
+					const store = await openSemanticLanceStore({
+						databaseDir: join(tempDir, "semantic-raw-vector-store"),
+						embeddingFunctionAlias: functionName,
+					});
+					const [vector] = await embedder.embedDocuments(["export const rawVector = true;"]);
+					await store.insertEmbeddedChunks([
+						{
+							chunkId: "raw-1",
+							filePath: "src/raw-vector.ts",
+							language: "typescript",
+							content: "export const rawVector = true;",
+							startLine: 1,
+							endLine: 1,
+							contentHash: "raw-hash",
+							vector,
+						},
+					]);
+					return await store.info();
 				},
-			]);
-
-			const info = await store.info();
+				{
+					label: "raw-vector LanceDB semantic integration setup",
+					reasonPrefix: "Semantic LanceDB raw-vector integration unavailable",
+				},
+			);
+			if (!info) return;
 			expect(info.rowCount).toBe(1);
 		},
 		120_000,
@@ -131,43 +151,52 @@ describe("semantic embedder LanceDB integration", () => {
 	semanticWorkspaceIt(
 		"registers an Ollama-backed LanceDB embedding function that auto-embeds inserts and text queries",
 		async () => {
-			const embedder = await createOllamaSemanticEmbedder({
-				model: "embeddinggemma",
-				host: "http://127.0.0.1:11434",
-			});
+			const results = await semanticSetupOrSkip(
+				async () => {
+					const embedder = await createOllamaSemanticEmbedder({
+						model: "embeddinggemma",
+						host: "http://127.0.0.1:11434",
+					});
 
-			const functionName = await registerOllamaEmbeddingFunction(embedder);
-			const store = await openSemanticLanceStore({
-				databaseDir: join(tempDir, "semantic-store"),
-				embeddingFunctionAlias: functionName,
-			});
+					const functionName = await registerOllamaEmbeddingFunction(embedder);
+					const store = await openSemanticLanceStore({
+						databaseDir: join(tempDir, "semantic-store"),
+						embeddingFunctionAlias: functionName,
+					});
 
-			await store.replaceChunks([
-				{
-					chunkId: "chunk-1",
-					filePath: "src/refresh-token.ts",
-					language: "typescript",
-					content:
-						"export function refreshTokenFlow() {\n  const refreshToken = 'alpha';\n  return refreshToken;\n}",
-					startLine: 1,
-					endLine: 4,
-					contentHash: "hash-1",
+					await store.replaceChunks([
+						{
+							chunkId: "chunk-1",
+							filePath: "src/refresh-token.ts",
+							language: "typescript",
+							content:
+								"export function refreshTokenFlow() {\n  const refreshToken = 'alpha';\n  return refreshToken;\n}",
+							startLine: 1,
+							endLine: 4,
+							contentHash: "hash-1",
+						},
+						{
+							chunkId: "chunk-2",
+							filePath: "src/auth.ts",
+							language: "typescript",
+							content: "export function authenticate() {\n  return 'alpha';\n}",
+							startLine: 1,
+							endLine: 3,
+							contentHash: "hash-2",
+						},
+					]);
+
+					return await store.search({
+						query: "token refresh flow",
+						limit: 2,
+					});
 				},
 				{
-					chunkId: "chunk-2",
-					filePath: "src/auth.ts",
-					language: "typescript",
-					content: "export function authenticate() {\n  return 'alpha';\n}",
-					startLine: 1,
-					endLine: 3,
-					contentHash: "hash-2",
+					label: "Ollama-backed LanceDB semantic integration setup and search",
+					reasonPrefix: "Semantic LanceDB Ollama auto-embed integration unavailable",
 				},
-			]);
-
-			const results = await store.search({
-				query: "token refresh flow",
-				limit: 2,
-			});
+			);
+			if (!results) return;
 
 			expect(results.length).toBeGreaterThan(0);
 			expect(results[0]?.filePath).toBe("src/refresh-token.ts");

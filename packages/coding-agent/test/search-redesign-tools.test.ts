@@ -6,9 +6,21 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createAgentSession } from "../src/core/sdk.js";
 import { SessionManager } from "../src/core/session-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
-import { isSemanticWorkspaceIndexingAvailable } from "./semantic-test-helpers.js";
+import {
+	getSemanticWorkspaceIndexingUnavailableReason,
+	isSemanticWorkspaceIndexingAvailable,
+	skipSemanticTest,
+	syncSemanticWorkspaceOrSkip,
+} from "./semantic-test-helpers.js";
 
-const semanticWorkspaceIt = it.skipIf(!(await isSemanticWorkspaceIndexingAvailable()));
+const semanticWorkspaceIndexingAvailable = await isSemanticWorkspaceIndexingAvailable();
+if (!semanticWorkspaceIndexingAvailable) {
+	skipSemanticTest(
+		getSemanticWorkspaceIndexingUnavailableReason() ??
+			"Semantic workspace indexing unavailable for search-redesign tool tests",
+	);
+}
+const semanticWorkspaceIt = it.skipIf(!semanticWorkspaceIndexingAvailable);
 
 function getText(result: any): string {
 	return result.content
@@ -169,35 +181,43 @@ describe("fs_search and sem_search tools", () => {
 				settingsManager,
 				sessionManager,
 			});
-			await session.bindExtensions({});
+			try {
+				await session.bindExtensions({});
 
-			const semSearch = session.getToolDefinition("sem_search");
-			expect(semSearch).toBeDefined();
+				const semSearch = session.getToolDefinition("sem_search");
+				expect(semSearch).toBeDefined();
 
-			await session.prompt("/workspace-init");
-			await session.prompt("/workspace-sync");
+				if (
+					await syncSemanticWorkspaceOrSkip(tempDir, {
+						label: "search-redesign huge sem_search workspace sync",
+						reasonPrefix: "Semantic workspace sync unavailable for huge sem_search output test",
+					})
+				) {
+					return;
+				}
 
-			const result = await semSearch!.execute(
-				"sem-search-huge",
-				{
-					queries: [{ query: "alpha huge semantic", use_case: "find huge semantic test snippets", top_k: 5 }],
-					path: "src",
-					limit: 5,
-				},
-				undefined,
-				undefined,
-				{ cwd: tempDir } as any,
-			);
-			const text = getText(result);
+				const result = await semSearch!.execute(
+					"sem-search-huge",
+					{
+						queries: [{ query: "alpha huge semantic", use_case: "find huge semantic test snippets", top_k: 5 }],
+						path: "src",
+						limit: 5,
+					},
+					undefined,
+					undefined,
+					{ cwd: tempDir } as any,
+				);
+				const text = getText(result);
 
-			expect(Buffer.byteLength(text, "utf8")).toBeLessThan(60_000);
-			expect(text).toContain("... [truncated]");
-			expect(text).toContain("Full output saved to:");
-			expect(result.details?.fullOutputPath).toBeDefined();
-			expect(readFileSync(result.details.fullOutputPath, "utf8")).toContain("huge-semantic.txt");
-			expect(result.details?.linesTruncated || result.details?.truncation?.truncated).toBe(true);
-
-			session.dispose();
+				expect(Buffer.byteLength(text, "utf8")).toBeLessThan(60_000);
+				expect(text).toContain("... [truncated]");
+				expect(text).toContain("Full output saved to:");
+				expect(result.details?.fullOutputPath).toBeDefined();
+				expect(readFileSync(result.details.fullOutputPath, "utf8")).toContain("huge-semantic.txt");
+				expect(result.details?.linesTruncated || result.details?.truncation?.truncated).toBe(true);
+			} finally {
+				session.dispose();
+			}
 		},
 		120_000,
 	);
@@ -214,31 +234,39 @@ describe("fs_search and sem_search tools", () => {
 				settingsManager,
 				sessionManager,
 			});
-			await session.bindExtensions({});
+			try {
+				await session.bindExtensions({});
 
-			const semSearch = session.getToolDefinition("sem_search");
-			expect(semSearch).toBeDefined();
+				const semSearch = session.getToolDefinition("sem_search");
+				expect(semSearch).toBeDefined();
 
-			await session.prompt("/workspace-init");
-			await session.prompt("/workspace-sync");
+				if (
+					await syncSemanticWorkspaceOrSkip(tempDir, {
+						label: "search-redesign ranking sem_search workspace sync",
+						reasonPrefix: "Semantic workspace sync unavailable for sem_search ranking test",
+					})
+				) {
+					return;
+				}
 
-			const result = await semSearch!.execute(
-				"sem-search-1",
-				{
-					queries: [{ query: "token refresh flow", use_case: "find token refresh implementation" }],
-					path: ".",
-					limit: 3,
-				},
-				undefined,
-				undefined,
-				{ cwd: tempDir } as any,
-			);
-			const text = getText(result);
-			expect(text).toContain("<sem_search_results>");
-			expect(text).toContain('query="token refresh flow"');
-			expect(text).toContain("refresh-token.ts");
-
-			session.dispose();
+				const result = await semSearch!.execute(
+					"sem-search-1",
+					{
+						queries: [{ query: "token refresh flow", use_case: "find token refresh implementation" }],
+						path: ".",
+						limit: 3,
+					},
+					undefined,
+					undefined,
+					{ cwd: tempDir } as any,
+				);
+				const text = getText(result);
+				expect(text).toContain("<sem_search_results>");
+				expect(text).toContain('query="token refresh flow"');
+				expect(text).toContain("refresh-token.ts");
+			} finally {
+				session.dispose();
+			}
 		},
 		120_000,
 	);
