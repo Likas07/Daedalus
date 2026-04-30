@@ -1,4 +1,4 @@
-import { subscribeShell, subscribeThread, type AppServerClient, type Subscription } from "@daedalus-pi/app-server-client";
+import type { AppServerClient, Subscription } from "@daedalus-pi/app-server-client";
 import type {
 	SafetySignal,
 	ShellEvent,
@@ -15,10 +15,14 @@ export interface ProjectionShellStore {
 	threads: ShellThreadSummary[];
 	selectedThreadId?: string;
 	safetySignals: SafetySignal[];
+	loading?: boolean;
+	error?: string;
 }
 
 export interface ProjectionThreadStore extends ThreadDetailSnapshot {
 	rows: readonly ThreadMessageRow[];
+	loading?: boolean;
+	error?: string;
 }
 
 export interface ProjectionRuntimeState {
@@ -39,20 +43,32 @@ export class ProjectionRuntime {
 
 	startShell(projectId?: string): void {
 		this.#shellSubscription?.unsubscribe();
-		this.#shellSubscription = subscribeShell(this.client, { projectId }, {
-			onSnapshot: (snapshot) => {
-				this.state.shell = shellFromSnapshot(snapshot);
-				this.notify();
-			},
-			onEvent: (event) => {
-				applyShellEvent(this.state.shell, event);
-				this.notify();
-			},
+		this.state.shell = { ...this.state.shell, loading: true, error: undefined };
+		const unsubscribe = this.client.onNotification("shell/event", (event) => {
+			applyShellEvent(this.state.shell, event as ShellEvent);
+			this.notify();
 		});
+		let active = true;
+		void this.client.request("shell/snapshot", { projectId }).then((result) => {
+			if (!active) return;
+			const snapshot = (result as { snapshot?: ShellSnapshot }).snapshot;
+			if (!snapshot) throw new Error("Shell projection snapshot unavailable");
+			this.state.shell = { ...shellFromSnapshot(snapshot), selectedThreadId: this.#activeThreadId ?? snapshot.selectedThreadId, loading: false };
+			this.notify();
+		}).catch((error) => {
+			if (!active) return;
+			this.state.shell = { ...this.state.shell, loading: false, error: error instanceof Error ? error.message : String(error) };
+			this.notify();
+		});
+		this.#shellSubscription = { unsubscribe: () => { active = false; unsubscribe(); } };
 	}
 
 	selectThread(threadId?: string): void {
-		if (threadId === this.#activeThreadId) return;
+		this.state.shell = { ...this.state.shell, selectedThreadId: threadId };
+		if (threadId === this.#activeThreadId) {
+			this.notify();
+			return;
+		}
 		this.#activeThreadId = threadId;
 		this.#threadSubscription?.unsubscribe();
 		this.#threadSubscription = undefined;
@@ -61,18 +77,26 @@ export class ProjectionRuntime {
 			this.notify();
 			return;
 		}
-		this.#threadSubscription = subscribeThread(this.client, { threadId }, {
-			onSnapshot: (snapshot) => {
-				if (snapshot.threadId !== this.#activeThreadId) return;
-				this.state.thread = threadFromSnapshot(snapshot);
-				this.notify();
-			},
-			onEvent: (event) => {
-				if (event.threadId !== this.#activeThreadId || !this.state.thread) return;
-				applyThreadEvent(this.state.thread, event);
-				this.notify();
-			},
+		let active = true;
+		const unsubscribe = this.client.onNotification("thread/event", (event) => {
+			const typed = event as ThreadDetailEvent;
+			if (!active || typed.threadId !== this.#activeThreadId || !this.state.thread) return;
+			applyThreadEvent(this.state.thread, typed);
+			this.notify();
 		});
+		void this.client.request("thread/snapshot", { threadId }).then((result) => {
+			if (!active) return;
+			const snapshot = (result as { snapshot?: ThreadDetailSnapshot }).snapshot;
+			if (!snapshot) throw new Error("Thread projection snapshot unavailable");
+			if (snapshot.threadId !== this.#activeThreadId) return;
+			this.state.thread = threadFromSnapshot(snapshot);
+			this.notify();
+		}).catch((error) => {
+			if (!active) return;
+			this.state.thread = { threadId, sessionId: threadId, title: "Thread", status: "idle", messages: [], activity: [], pendingActions: [], safetySignals: [], diffIds: [], rows: [], error: error instanceof Error ? error.message : String(error), cursor: { seq: 0, updatedAt: new Date(0).toISOString() } } as ProjectionThreadStore;
+			this.notify();
+		});
+		this.#threadSubscription = { unsubscribe: () => { active = false; unsubscribe(); } };
 	}
 
 	close(): void {

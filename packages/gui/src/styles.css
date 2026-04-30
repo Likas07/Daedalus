@@ -1343,3 +1343,63 @@
 	.build-target-zone:last-child { border-bottom: 0; padding-bottom: 0; }
 	.setup-preview-grid { grid-template-columns: 1fr; }
 }
+
+/* Projection-backed active Thread workspace (Task 9) */
+.thread-workspace {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	height: 100%;
+	min-height: 0;
+	background: var(--ink-1);
+}
+
+.thread-workspace:has(.thread-workspace__sidebar) {
+	grid-template-columns: minmax(14rem, 17rem) minmax(0, 1fr);
+}
+
+.thread-workspace:has(.thread-workspace__inspector) {
+	grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem);
+}
+
+.thread-workspace:has(.thread-workspace__sidebar):has(.thread-workspace__inspector) {
+	grid-template-columns: minmax(14rem, 17rem) minmax(0, 1fr) minmax(18rem, 22rem);
+}
+
+.thread-workspace__sidebar,
+.thread-workspace__inspector {
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+	background: var(--ink-2);
+}
+
+.thread-workspace__sidebar { border-right: 1px solid var(--rule); }
+.thread-workspace__inspector { border-left: 1px solid var(--rule); }
+
+.thread-workspace__main {
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr) auto;
+	min-width: 0;
+	min-height: 0;
+}
+
+.thread-workspace__timeline {
+	min-height: 0;
+	overflow: hidden;
+}
+
+.thread-workspace__composer {
+	border-top: 1px solid var(--rule);
+	padding: 0.75rem 1.25rem 1rem;
+	background: linear-gradient(180deg, rgba(10, 13, 18, 0.78), var(--ink-1));
+}
+
+.thread-workspace__state {
+	display: grid;
+	min-height: 100%;
+	place-items: center;
+	padding: 2rem;
+	color: var(--bone-muted);
+	font: 11px var(--font-mono);
+	letter-spacing: 0.04em;
+}

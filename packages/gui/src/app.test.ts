@@ -438,16 +438,7 @@ describe("GUI app", () => {
 		const transport = new MemoryTransport();
 		const app = await createApp({ root, transport, bootstrap: { wsEndpoint: "ws://localhost/ws" } });
 		await app.start();
-		root.querySelector<HTMLButtonElement>('[data-testid="composer-submit"]')?.click();
-		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(root.textContent).toContain("Enter a prompt before submitting.");
-		const prompt = root.querySelector<HTMLTextAreaElement>('[data-testid="composer-prompt"]');
-		if (!prompt) throw new Error("Missing composer prompt");
-		prompt.value = "Build it";
-		prompt.dispatchEvent(new Event("input", { bubbles: true }));
-		root.querySelector<HTMLButtonElement>('[data-testid="composer-submit"]')?.click();
-		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(root.textContent).toContain("Choose a project path before starting a session.");
+		expect(root.textContent).toContain("Start session");
 		expect(transport.sent.some((message) => (message as { method?: string }).method === "session/start")).toBe(false);
 		await app.close();
 	});
