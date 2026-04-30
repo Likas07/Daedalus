@@ -19,6 +19,8 @@ import { FileSearchService } from "../composer/file-search-service";
 import type { ExtensionUiRouter } from "../extensions/extension-ui-router";
 import type { CommandRunner } from "../integrations/integration-api";
 import { IntegrationService } from "../integrations/integration-service";
+import { buildShellSnapshot } from "../projections/shell-projection";
+import { buildThreadDetailSnapshot } from "../projections/thread-detail-projection";
 import { projectRuntimeEvents } from "../persistence/projector";
 import { listProjectSessions } from "../persistence/read-model";
 import { AccessPolicyService } from "../runtime/access-policy-service";
@@ -166,6 +168,18 @@ export class AppRouter {
 					protocolVersion: request.params.protocolVersion,
 					server: { name: "daedalus-app-server", version: "0.1.0" },
 					capabilities: { events: true, sessions: true, extensions: true, gitMutations: true },
+				};
+			case "shell/snapshot":
+				return {
+					snapshot: buildShellSnapshot({ database: this.options.database, projectId: request.params.projectId }),
+				};
+			case "thread/snapshot":
+				return {
+					snapshot: buildThreadDetailSnapshot({
+						database: this.options.database,
+						threadId: request.params.threadId,
+						sessionId: request.params.sessionId,
+					}),
 				};
 			case "project/open": {
 				const result = this.projectService.open({ path: request.params.path });
