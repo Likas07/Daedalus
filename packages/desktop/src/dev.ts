@@ -20,8 +20,22 @@ export interface WaitForUrlOptions {
 	fetcher?: Fetcher;
 }
 
-export function electronDevCommand(entry = devMainEntry): string[] {
-	return ["electron", entry];
+export const linuxElectronChromiumFlags = [
+	"--disable-gpu",
+	"--disable-gpu-compositing",
+	"--disable-gpu-rasterization",
+	"--disable-accelerated-video-decode",
+	"--disable-accelerated-video-encode",
+	"--disable-features=VaapiVideoDecoder,VaapiVideoEncoder,Vulkan",
+	"--ozone-platform=x11",
+] as const;
+
+export function electronChromiumFlags(platform: NodeJS.Platform = process.platform): string[] {
+	return platform === "linux" ? [...linuxElectronChromiumFlags] : [];
+}
+
+export function electronDevCommand(entry = devMainEntry, platform: NodeJS.Platform = process.platform): string[] {
+	return ["electron", ...electronChromiumFlags(platform), entry];
 }
 
 export function guiDevPort(env: Pick<NodeJS.ProcessEnv, string> = Bun.env): number {

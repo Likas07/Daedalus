@@ -4,11 +4,13 @@ import { resolve } from "node:path";
 import { $ } from "bun";
 import {
 	defaultGuiDevPort,
+	electronChromiumFlags,
 	electronDevCommand,
 	guiDevPort,
 	guiDevUrl,
 	isDaedalusGuiServing,
 	isUrlServing,
+	linuxElectronChromiumFlags,
 	waitForUrl,
 } from "./dev";
 
@@ -68,8 +70,21 @@ describe("desktop dev launcher helpers", () => {
 		).rejects.toThrow("Timed out waiting for http://example.test: HTTP 503");
 	});
 
-	test("launches Electron from the freshly built dev main entry", () => {
-		expect(electronDevCommand("/repo/packages/desktop/.daedalus/desktop-dev/main.js")).toEqual([
+	test("adds Linux Chromium compatibility flags before the Electron dev main entry", () => {
+		expect(electronChromiumFlags("linux")).toEqual([...linuxElectronChromiumFlags]);
+		expect(electronDevCommand("/repo/packages/desktop/.daedalus/desktop-dev/main.js", "linux")).toEqual([
+			"electron",
+			...linuxElectronChromiumFlags,
+			"/repo/packages/desktop/.daedalus/desktop-dev/main.js",
+		]);
+		expect(linuxElectronChromiumFlags).toContain("--disable-gpu");
+		expect(linuxElectronChromiumFlags).toContain("--disable-accelerated-video-decode");
+		expect(linuxElectronChromiumFlags).toContain("--ozone-platform=x11");
+	});
+
+	test("leaves non-Linux Electron dev launches unchanged", () => {
+		expect(electronChromiumFlags("darwin")).toEqual([]);
+		expect(electronDevCommand("/repo/packages/desktop/.daedalus/desktop-dev/main.js", "darwin")).toEqual([
 			"electron",
 			"/repo/packages/desktop/.daedalus/desktop-dev/main.js",
 		]);
