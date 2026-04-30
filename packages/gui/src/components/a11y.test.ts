@@ -117,7 +117,6 @@ describe("Safe worktree UI accessibility", () => {
 	});
 });
 
-
 describe("Projected Thread shell accessibility", () => {
 	test("compact Thread header exposes labels and avoids top-card pollution", () => {
 		const header = source("projection/ThreadHeader.svelte");
@@ -140,7 +139,7 @@ describe("Projected Thread shell accessibility", () => {
 		expect(strip).toContain("Dirty target has uncommitted changes");
 		expect(strip).toContain("pending approvals");
 		expect(strip).toContain("Connection state:");
-		expect(strip).toContain('data-tone={tone}');
+		expect(strip).toContain("data-tone={tone}");
 	});
 
 	test("sidebar and inspector keep shell/detail separation", () => {

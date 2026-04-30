@@ -1,4 +1,10 @@
-import type { AppEvent, ProjectionCursor, ShellEvent, ThreadDetailEvent, ThreadMessage } from "@daedalus-pi/app-server-protocol";
+import type {
+	AppEvent,
+	ProjectionCursor,
+	ShellEvent,
+	ThreadDetailEvent,
+	ThreadMessage,
+} from "@daedalus-pi/app-server-protocol";
 
 export interface ProjectionEvents {
 	readonly shell: readonly ShellEvent[];
@@ -45,7 +51,9 @@ export function projectAppEventToProjectionEvents(options: ProjectAppEventOption
 				threadId,
 				sessionId,
 				type: event.type === "agent/message_end" ? "message-appended" : "activity-updated",
-				...(event.type === "agent/message_end" ? { message: messageFromEvent(event, seq) } : { activity: messageActivityFromEvent(event) }),
+				...(event.type === "agent/message_end"
+					? { message: messageFromEvent(event, seq) }
+					: { activity: messageActivityFromEvent(event) }),
 			});
 			break;
 		}
@@ -75,7 +83,11 @@ export function projectAppEventToProjectionEvents(options: ProjectAppEventOption
 			safetySignal();
 			break;
 		default:
-			if (event.type.includes("target") || event.type.includes("diagnostic") || event.type.includes("needs-attention")) {
+			if (
+				event.type.includes("target") ||
+				event.type.includes("diagnostic") ||
+				event.type.includes("needs-attention")
+			) {
 				invalidateShell();
 				safetySignal();
 			}
@@ -84,7 +96,7 @@ export function projectAppEventToProjectionEvents(options: ProjectAppEventOption
 	return { shell, thread };
 }
 
-function messageFromEvent(event: AppEvent, seq: number): ThreadMessage {
+function messageFromEvent(event: AppEvent, _seq: number): ThreadMessage {
 	const payload = payloadRecord(event.payload);
 	return {
 		id: text(payload, "messageId", "message_id", "id") ?? event.id,
@@ -116,7 +128,11 @@ function approvalActivityFromEvent(event: AppEvent) {
 	return {
 		id: text(payload, "approvalId", "approval_id", "id") ?? event.id,
 		kind: "approval" as const,
-		status: resolved ? (text(payload, "decision") === "denied" ? "cancelled" as const : "completed" as const) : "running" as const,
+		status: resolved
+			? text(payload, "decision") === "denied"
+				? ("cancelled" as const)
+				: ("completed" as const)
+			: ("running" as const),
 		title,
 		detail: typeof payload.request === "string" ? payload.request : undefined,
 		startedAt: event.ts,
@@ -127,7 +143,11 @@ function approvalActivityFromEvent(event: AppEvent) {
 function safetySignalFromEvent(event: AppEvent) {
 	const payload = payloadRecord(event.payload);
 	const message = text(payload, "reason", "message", "diagnostic", "needsAttentionReason") ?? "Target state changed";
-	return { level: "warning" as const, message, code: event.type.includes("diagnostic") ? "diagnostic" : "target-validation" };
+	return {
+		level: "warning" as const,
+		message,
+		code: event.type.includes("diagnostic") ? "diagnostic" : "target-validation",
+	};
 }
 
 function payloadRecord(value: unknown): Record<string, unknown> {

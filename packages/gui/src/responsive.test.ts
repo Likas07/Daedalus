@@ -154,6 +154,21 @@ describe("GUI responsive policy", () => {
 		expect(root.textContent).not.toContain("Project overview");
 		await app.close();
 	});
+
+	test("projection shell collapses side panes without moving safety cards into chat timeline", () => {
+		const fs = require("node:fs");
+		const path = require("node:path");
+		const root = path.join(import.meta.dir, "components");
+		const workspace = fs.readFileSync(path.join(root, "projection/ThreadWorkspace.svelte"), "utf8");
+		const header = fs.readFileSync(path.join(root, "projection/ThreadHeader.svelte"), "utf8");
+		const inspector = fs.readFileSync(path.join(root, "projection/ThreadInspector.svelte"), "utf8");
+		const timeline = fs.readFileSync(path.join(root, "messages/MessagesTimeline.svelte"), "utf8");
+		expect(workspace).toContain("ui.leftOpen");
+		expect(workspace).toContain("ui.rightOpen");
+		expect(header).toMatch(/safety|access|validation/i);
+		expect(inspector).toMatch(/safety|access|validation/i);
+		expect(timeline).not.toMatch(/safety card|BuildTargetTrustBar|AuditTrailPanel|TranscriptTimeline/i);
+	});
 });
 
 describe("Safe worktree responsive policy", () => {

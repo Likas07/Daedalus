@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import type { ClientRequest, ShellEvent, ShellSnapshot, ThreadDetailEvent, ThreadDetailSnapshot } from "@daedalus-pi/app-server-protocol";
+import type {
+	ClientRequest,
+	ShellEvent,
+	ShellSnapshot,
+	ThreadDetailEvent,
+	ThreadDetailSnapshot,
+} from "@daedalus-pi/app-server-protocol";
 import { AppServerClient } from "./client";
 import { createInProcessTransport } from "./in-process-transport";
 import { subscribeShell, subscribeThread } from "./projections";
@@ -50,10 +56,14 @@ test("subscribeShell emits snapshot before buffered events and suppresses stale 
 	});
 
 	const delivered: string[] = [];
-	subscribeShell(client, {}, {
-		onSnapshot: (snapshot) => delivered.push(`snapshot:${snapshot.cursor.seq}`),
-		onEvent: (event) => delivered.push(`event:${event.seq}`),
-	});
+	subscribeShell(
+		client,
+		{},
+		{
+			onSnapshot: (snapshot) => delivered.push(`snapshot:${snapshot.cursor.seq}`),
+			onEvent: (event) => delivered.push(`event:${event.seq}`),
+		},
+	);
 	await Promise.resolve();
 	expect(delivered).toEqual([]);
 	resolveSnapshot?.();
@@ -85,10 +95,14 @@ test("subscribeThread suppresses wrong-thread, duplicate, and stale events", asy
 	});
 
 	const delivered: string[] = [];
-	subscribeThread(client, { threadId: "thread-1" }, {
-		onSnapshot: (snapshot) => delivered.push(`snapshot:${snapshot.cursor.seq}`),
-		onEvent: (event) => delivered.push(`${event.threadId}:${event.seq}`),
-	});
+	subscribeThread(
+		client,
+		{ threadId: "thread-1" },
+		{
+			onSnapshot: (snapshot) => delivered.push(`snapshot:${snapshot.cursor.seq}`),
+			onEvent: (event) => delivered.push(`${event.threadId}:${event.seq}`),
+		},
+	);
 	await Promise.resolve();
 	resolveSnapshot?.();
 	await flush();
@@ -118,10 +132,14 @@ test("subscription unsubscribe cleans up listeners and buffered events", async (
 	});
 
 	const delivered: string[] = [];
-	const subscription = subscribeShell(client, {}, {
-		onSnapshot: (snapshot) => delivered.push(`snapshot:${snapshot.cursor.seq}`),
-		onEvent: (event) => delivered.push(`event:${event.seq}`),
-	});
+	const subscription = subscribeShell(
+		client,
+		{},
+		{
+			onSnapshot: (snapshot) => delivered.push(`snapshot:${snapshot.cursor.seq}`),
+			onEvent: (event) => delivered.push(`event:${event.seq}`),
+		},
+	);
 	await Promise.resolve();
 	subscription.unsubscribe();
 	resolveSnapshot?.();

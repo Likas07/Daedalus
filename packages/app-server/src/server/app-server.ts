@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Server } from "bun";
 import { getAgentDir } from "@daedalus-pi/coding-agent";
+import type { Server } from "bun";
 import { openAppServerDatabase, runMigrations } from "..";
 import { PromptContextService } from "../composer/prompt-context-service";
 import { ExtensionUiRouter } from "../extensions/extension-ui-router";

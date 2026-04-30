@@ -18,7 +18,11 @@ export function createGuiStateStore(runtime: GuiRuntime): GuiStateStore {
 			models: [...state.models],
 			projections: state.projections
 				? {
-						shell: { ...state.projections.shell, threads: [...state.projections.shell.threads], safetySignals: [...state.projections.shell.safetySignals] },
+						shell: {
+							...state.projections.shell,
+							threads: [...state.projections.shell.threads],
+							safetySignals: [...state.projections.shell.safetySignals],
+						},
 						thread: state.projections.thread
 							? {
 									...state.projections.thread,

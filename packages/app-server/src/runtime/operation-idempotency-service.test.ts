@@ -108,7 +108,9 @@ test("failed operations preserve current rejection semantics", () => {
 	if (started.status !== "started") throw new Error("expected attempt to start");
 	service.fail("op-1", started.leaseOwner, new Error("boom"));
 
-	expect(() => service.begin({ operationId: "op-1", method: "turn/start", payload: { prompt: "one" } })).toThrow("boom");
+	expect(() => service.begin({ operationId: "op-1", method: "turn/start", payload: { prompt: "one" } })).toThrow(
+		"boom",
+	);
 	expect(() => service.begin({ operationId: "op-1", method: "turn/start", payload: { prompt: "two" } })).toThrow(
 		"Operation id conflict",
 	);

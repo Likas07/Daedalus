@@ -103,9 +103,20 @@ describe("createThreadTabsViewModel", () => {
 			state({
 				selectedSessionId: "selected",
 				sessions: [
-					session({ id: "selected", title: "Selected", projectId: "project-1", worktreeId: "wt-shared", branch: "feat/a" }),
+					session({
+						id: "selected",
+						title: "Selected",
+						projectId: "project-1",
+						worktreeId: "wt-shared",
+						branch: "feat/a",
+					}),
 					session({ id: "same-target", title: "Same target", projectId: "project-1", worktreeId: "wt-shared" }),
-					session({ id: "other-project", title: "Other project", projectId: "project-2", worktreeId: "wt-shared" }),
+					session({
+						id: "other-project",
+						title: "Other project",
+						projectId: "project-2",
+						worktreeId: "wt-shared",
+					}),
 				],
 			}),
 		);
@@ -142,6 +153,10 @@ describe("createThreadTabsViewModel", () => {
 		);
 
 		expect(model.attentionCount).toBe(1);
-		expect(model.tabs[0]).toMatchObject({ needsAttention: true, attentionLabel: "2 approvals pending", pendingApprovalCount: 2 });
+		expect(model.tabs[0]).toMatchObject({
+			needsAttention: true,
+			attentionLabel: "2 approvals pending",
+			pendingApprovalCount: 2,
+		});
 	});
 });

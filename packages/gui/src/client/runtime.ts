@@ -15,8 +15,8 @@ import {
 	type ExtensionUiRequest,
 	type ExtensionUiResponse,
 	type OrchestrationProjection,
-	type TerminalSnapshot,
 	type SessionContinueInWorktreeResult,
+	type TerminalSnapshot,
 	type WorkflowRunsInTarget,
 	type WorkflowValidationStatus,
 	type WorkflowWorktreeMetadata,
@@ -45,6 +45,7 @@ import type {
 	RendererTerminal,
 } from "./gui-state-types";
 import { createNewBuildStateMachine } from "./new-build-state-machine";
+import { ProjectionRuntime, type ProjectionRuntimeState } from "./projection-runtime";
 import {
 	type ConnectionStatus,
 	createReconnectState,
@@ -57,7 +58,6 @@ import {
 	shouldAcceptEvent,
 } from "./reconnect-state";
 import { type ApprovalItem, approvalItemFromPayload, type DisplayDensity, type ProviderStatus } from "./view-model";
-import { ProjectionRuntime, type ProjectionRuntimeState } from "./projection-runtime";
 
 export interface GuiBootstrap {
 	readonly wsEndpoint?: string;
@@ -1102,7 +1102,11 @@ function upsertSession(state: GuiState, session: SessionSummary): void {
 }
 
 function stripGuiContextBlocks(value: string): string {
-	return value.replace(/<gui-context>[\s\S]*?<\/gui-context>/gi, " ").replace(/<gui-context>[\s\S]*$/gi, " ").replace(/\s+/g, " ").trim();
+	return value
+		.replace(/<gui-context>[\s\S]*?<\/gui-context>/gi, " ")
+		.replace(/<gui-context>[\s\S]*$/gi, " ")
+		.replace(/\s+/g, " ")
+		.trim();
 }
 
 function sanitizeSessionSummary(session: SessionSummary): SessionSummary {
@@ -1147,19 +1151,34 @@ function upsertSessionFromEvent(state: GuiState, event: AppEvent): void {
 	});
 }
 
-function selectedPanelTarget(state: GuiState): { diffTarget: DiffTarget; diffId: string; terminal: CreateTerminalInput } | undefined {
+function selectedPanelTarget(
+	state: GuiState,
+): { diffTarget: DiffTarget; diffId: string; terminal: CreateTerminalInput } | undefined {
 	const selected = state.sessions.find((session) => session.id === state.selectedSessionId);
 	const runsIn = selected?.runsIn;
 	if (!selected || !runsIn || runsIn.validationStatus !== "valid") return undefined;
 	const projectId = runsIn.projectId;
 	const rootPath = runsIn.path;
 	const canonicalRootPath = runsIn.canonicalPath;
-	const guardTarget = { projectId, rootPath, canonicalRootPath, targetPath: rootPath, canonicalTargetPath: canonicalRootPath };
+	const guardTarget = {
+		projectId,
+		rootPath,
+		canonicalRootPath,
+		targetPath: rootPath,
+		canonicalTargetPath: canonicalRootPath,
+	};
 	if (runsIn.worktreeId) {
 		return {
 			diffTarget: { kind: "worktree", projectId, worktreeId: runsIn.worktreeId },
 			diffId: runsIn.worktreeId,
-			terminal: { projectId, worktreeId: runsIn.worktreeId, sessionId: selected.id, cwd: rootPath, guardTarget, requireRootBoundary: true },
+			terminal: {
+				projectId,
+				worktreeId: runsIn.worktreeId,
+				sessionId: selected.id,
+				cwd: rootPath,
+				guardTarget,
+				requireRootBoundary: true,
+			},
 		};
 	}
 	return {
@@ -1177,10 +1196,19 @@ function defaultGitDiffId(state: GuiState): string | undefined {
 	return selectedPanelTarget(state)?.diffId;
 }
 
-export function selectedTerminalCreateInput(state: GuiState, input: Partial<CreateTerminalInput> = {}): CreateTerminalInput | undefined {
+export function selectedTerminalCreateInput(
+	state: GuiState,
+	input: Partial<CreateTerminalInput> = {},
+): CreateTerminalInput | undefined {
 	const target = selectedPanelTarget(state)?.terminal;
 	if (!target) return undefined;
-	return { ...target, ...input, cwd: input.cwd ?? target.cwd, guardTarget: input.guardTarget ?? target.guardTarget, requireRootBoundary: true };
+	return {
+		...target,
+		...input,
+		cwd: input.cwd ?? target.cwd,
+		guardTarget: input.guardTarget ?? target.guardTarget,
+		requireRootBoundary: true,
+	};
 }
 
 function bestNextActionForRunsIn(runsIn?: WorkflowRunsInTarget): SessionBestNextAction | undefined {
@@ -1234,7 +1262,8 @@ async function hydrateWorkspaceSelection(
 
 function applyWorkspaceSelectionResult(state: GuiState, result: WorkspaceSelectionResult): void {
 	if (result.degraded && result.reason) state.diagnostics.push(`workspace selection degraded: ${result.reason}`);
-	if (result.restorationTrace) state.diagnostics.push(`workspace restoration trace: ${JSON.stringify(result.restorationTrace)}`);
+	if (result.restorationTrace)
+		state.diagnostics.push(`workspace restoration trace: ${JSON.stringify(result.restorationTrace)}`);
 	selectSession(state, result.degraded ? undefined : result.selection?.sessionId);
 }
 

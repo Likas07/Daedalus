@@ -358,7 +358,9 @@ describe("GUI app", () => {
 		expect(activeChat?.textContent).toContain("bun test");
 		expect(activeChat?.textContent).toContain("Approval · Requested");
 		expect(activeChat?.textContent).not.toContain("RAW_SECRET_TRANSCRIPT_PAYLOAD");
-		expect(activeChat?.textContent).not.toMatch(/transcript · ledger|Messages Tools Approvals Diffs Terminal Errors Debug|001|top trust|build mode/i);
+		expect(activeChat?.textContent).not.toMatch(
+			/transcript · ledger|Messages Tools Approvals Diffs Terminal Errors Debug|001|top trust|build mode/i,
+		);
 		expect(root.textContent).toContain("Target validation:");
 		[...root.querySelectorAll<HTMLButtonElement>("button")]
 			.find((button) => button.textContent?.trim().startsWith("audit"))
@@ -758,7 +760,6 @@ describe("GUI app", () => {
 		);
 		await app.close();
 	});
-
 });
 
 describe("Safe worktree build setup UI", () => {
@@ -804,5 +805,27 @@ describe("Safe worktree build setup UI", () => {
 			expect(text).not.toContain("BuildTargetTrustBar");
 			expect(text).not.toContain("PlanBuildModePanel");
 		}
+	});
+
+	test("Thread projection UX source renders chat bubbles, streaming text, safety pills, and composer actions without ledger pollution", () => {
+		const fs = require("node:fs");
+		const path = require("node:path");
+		const components = path.join(import.meta.dir, "components");
+		const timeline = fs.readFileSync(path.join(components, "messages/MessagesTimeline.svelte"), "utf8");
+		const bubble = fs.readFileSync(path.join(components, "messages/MessageBubble.svelte"), "utf8");
+		const header = fs.readFileSync(path.join(components, "projection/ThreadHeader.svelte"), "utf8");
+		const composer = fs.readFileSync(path.join(components, "projection/ThreadComposer.svelte"), "utf8");
+		const pending = fs.readFileSync(path.join(components, "composer/ComposerPendingActions.svelte"), "utf8");
+		expect(timeline).toContain("messages-timeline");
+		expect(bubble).toContain("user-row");
+		expect(bubble).toContain("assistant-row");
+		expect(bubble).toContain("streaming-indicator");
+		expect(header).toContain("ProjectionStatusPills");
+		expect(header).toContain("SafetySignalStrip");
+		expect(composer).toContain("ComposerPendingActions");
+		expect(pending).toContain("composer-pending-actions");
+		expect(`${timeline}\n${bubble}\n${header}\n${composer}`).not.toMatch(
+			/TranscriptTimeline|BuildTargetTrustBar|PlanBuildModePanel|audit ledger|top trust/i,
+		);
 	});
 });

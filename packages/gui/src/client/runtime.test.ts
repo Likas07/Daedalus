@@ -9,7 +9,10 @@ class MockTransport implements AppServerTransport {
 	readonly sent: unknown[] = [];
 	readonly lifecycle = new Map<string, Set<(event?: unknown) => void>>();
 	readonly responseOverride?: (method: string | undefined, params?: unknown) => unknown | undefined;
-	constructor(replayEvents: AppEvent[] = [], responseOverride?: (method: string | undefined, params?: unknown) => unknown | undefined) {
+	constructor(
+		replayEvents: AppEvent[] = [],
+		responseOverride?: (method: string | undefined, params?: unknown) => unknown | undefined,
+	) {
 		this.replayEvents = replayEvents;
 		this.responseOverride = responseOverride;
 	}
@@ -28,7 +31,8 @@ class MockTransport implements AppServerTransport {
 			result:
 				request.method === "event/replay"
 					? { events: this.replayEvents }
-					: (this.responseOverride?.(request.method, request.params) ?? responseFor(request.method, request.params)),
+					: (this.responseOverride?.(request.method, request.params) ??
+						responseFor(request.method, request.params)),
 		});
 	}
 
@@ -474,7 +478,9 @@ describe("GUI runtime state model", () => {
 
 		expect(result.sessionId).toBe("session-child");
 		expect(runtime.state.sessions.find((session) => session.id === "session-1")).toMatchObject(sourceBefore);
-		expect(runtime.state.worktrees.find((worktree) => worktree.id === "wt-child")).toMatchObject({ path: "/repo-child" });
+		expect(runtime.state.worktrees.find((worktree) => worktree.id === "wt-child")).toMatchObject({
+			path: "/repo-child",
+		});
 		expect(runtime.state.sessions.find((session) => session.id === "session-child")).toMatchObject({
 			id: "session-child",
 			parentSessionId: "session-1",
@@ -626,13 +632,23 @@ describe("GUI runtime expanded APIs", () => {
 			},
 		});
 		expect(transport.sent).toContainEqual(
-			expect.objectContaining({ method: "diff/get", params: { target: { kind: "worktree", projectId: "project-1", worktreeId: "wt-1" } } }),
+			expect.objectContaining({
+				method: "diff/get",
+				params: { target: { kind: "worktree", projectId: "project-1", worktreeId: "wt-1" } },
+			}),
 		);
-		expect(transport.sent).toContainEqual(expect.objectContaining({ method: "git/stage", params: { diffId: "wt-1", paths: ["src/index.ts"] } }));
+		expect(transport.sent).toContainEqual(
+			expect.objectContaining({ method: "git/stage", params: { diffId: "wt-1", paths: ["src/index.ts"] } }),
+		);
 		expect(transport.sent).toContainEqual(
 			expect.objectContaining({
 				method: "terminal/create",
-				params: expect.objectContaining({ projectId: "project-1", worktreeId: "wt-1", sessionId: "session-1", requireRootBoundary: true }),
+				params: expect.objectContaining({
+					projectId: "project-1",
+					worktreeId: "wt-1",
+					sessionId: "session-1",
+					requireRootBoundary: true,
+				}),
 			}),
 		);
 	});

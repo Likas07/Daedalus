@@ -67,6 +67,11 @@ export {
 	type TurnReadModel,
 	type WorktreeReadModel,
 } from "./persistence/read-model";
+export { type BuildShellSnapshotOptions, buildShellSnapshot } from "./projections/shell-projection";
+export {
+	type BuildThreadDetailSnapshotOptions,
+	buildThreadDetailSnapshot,
+} from "./projections/thread-detail-projection";
 export { type AccessPolicy, AccessPolicyService, toPolicy } from "./runtime/access-policy-service";
 export { type ApprovalRequestInput, ApprovalService } from "./runtime/approval-service";
 export { createCodingAgentRuntimeFactory } from "./runtime/coding-agent-runtime";
@@ -78,7 +83,6 @@ export {
 } from "./runtime/event-mapper";
 export { GuiConfigService } from "./runtime/gui-config-service";
 export { type OperationBeginResult, OperationIdempotencyService } from "./runtime/operation-idempotency-service";
-
 export {
 	createSessionRuntimeFactory,
 	type SessionRuntime,
@@ -103,7 +107,6 @@ export {
 	type StartSessionInput,
 	type StartTurnInput,
 } from "./runtime/session-controller";
-
 export {
 	classifyToolRisk,
 	ToolApprovalGate,
@@ -168,5 +171,3 @@ export {
 export { type DiffFileSummary, type DiffResult, DiffService, parseNameStatus } from "./workspaces/diff-service";
 export { type OpenProjectInput, ProjectService, type ProjectServiceOptions } from "./workspaces/project-service";
 export { type CreateWorktreeInput, WorktreeService, type WorktreeServiceOptions } from "./workspaces/worktree-service";
-export { buildShellSnapshot, type BuildShellSnapshotOptions } from "./projections/shell-projection";
-export { buildThreadDetailSnapshot, type BuildThreadDetailSnapshotOptions } from "./projections/thread-detail-projection";

@@ -204,4 +204,20 @@ describe("safeguard GUI flow regressions", () => {
 		expect(recoverySource).toContain("needsAttention");
 		expect(recoverySource).toContain("Continue is unavailable until validation passes");
 	});
+
+	test("Thread-first safety signals remain compact in header/composer and detailed in inspector", () => {
+		const header = readFileSync(join(import.meta.dir, "components/projection/ThreadHeader.svelte"), "utf8");
+		const composerActions = readFileSync(
+			join(import.meta.dir, "components/composer/ComposerPendingActions.svelte"),
+			"utf8",
+		);
+		const inspector = readFileSync(join(import.meta.dir, "components/projection/ThreadInspector.svelte"), "utf8");
+		const workspace = readFileSync(join(import.meta.dir, "components/projection/ThreadWorkspace.svelte"), "utf8");
+		expect(header).toContain("continue in worktree");
+		expect(workspace).toContain("getContinueDisabledReason");
+		expect(workspace).toContain("selectedSession.runsIn");
+		expect(composerActions).toContain("composer-pending-actions");
+		expect(inspector).toMatch(/Unrestricted|accessMode|Target validation/i);
+		expect(`${header}\n${workspace}`).toMatch(/unrestricted|validation|dirty/i);
+	});
 });

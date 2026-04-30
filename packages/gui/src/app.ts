@@ -401,12 +401,17 @@ function appendFallbackAuditSection(section: HTMLElement, runtime: GuiRuntime): 
 	button.addEventListener("click", () => {
 		const audit = document.createElement("section");
 		audit.dataset.testid = "audit-timeline";
-		audit.textContent = JSON.stringify(runtime.state.events.filter((item) => !runtime.state.selectedSessionId || item.sessionId === runtime.state.selectedSessionId), null, 2);
+		audit.textContent = JSON.stringify(
+			runtime.state.events.filter(
+				(item) => !runtime.state.selectedSessionId || item.sessionId === runtime.state.selectedSessionId,
+			),
+			null,
+			2,
+		);
 		section.append(audit);
 	});
 	section.append(button);
 }
-
 
 function fallbackPayloadSummary(payload: unknown): string {
 	if (!payload || typeof payload !== "object") return typeof payload === "string" ? payload : "";
