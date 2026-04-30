@@ -152,7 +152,7 @@ export function projectStoredEventToTimelineEntry(
 	event: StoredEvent,
 	threadId?: string,
 ): protocolV1.TimelineEntry | undefined {
-	const payload = asRecord(event.payload);
+	const payload = storedEventPayload(event);
 	const legacySessionId = text(payload, "sessionId", "session_id") ?? event.streamId;
 	if (!legacySessionId || legacySessionId === "app") return undefined;
 	if (threadId && legacySessionId !== threadId) return undefined;
@@ -418,7 +418,7 @@ function buildThreadEventIndex(
 	>();
 	const turnOrder: string[] = [];
 	for (const event of readEvents(database, { streamId: threadId, limit: 10000 })) {
-		const payload = asRecord(event.payload);
+		const payload = storedEventPayload(event);
 		const turnId = text(payload, "turnId", "turn_id", "id");
 		if (!turnId) continue;
 		const timestamp = text(payload, "createdAt", "created_at", "occurredAt", "occurred_at", "ts") ?? event.createdAt;
@@ -494,6 +494,43 @@ function titleFromTurns(database: AppServerDatabase, threadId: string): string |
 	return listSessionTurns(database, threadId)
 		.find((turn) => turn.role === "user" && turn.content.trim())
 		?.content.slice(0, 80);
+}
+
+function storedEventPayload(event: StoredEvent): JsonRecord {
+	const envelope = asRecord(event.payload);
+	const nestedPayload = asRecord(envelope.payload);
+	if (!isAppEventEnvelope(envelope) || Object.keys(nestedPayload).length === 0) return envelope;
+	return { ...appEventEnvelopeFields(envelope), ...nestedPayload };
+}
+
+function isAppEventEnvelope(payload: JsonRecord): boolean {
+	return typeof payload.type === "string" && payload.payload !== undefined && typeof payload.ts === "string";
+}
+
+function appEventEnvelopeFields(envelope: JsonRecord): JsonRecord {
+	const fields: JsonRecord = {};
+	for (const key of [
+		"sessionId",
+		"session_id",
+		"projectId",
+		"project_id",
+		"worktreeId",
+		"worktree_id",
+		"terminalId",
+		"terminal_id",
+		"approvalId",
+		"approval_id",
+		"checkpointId",
+		"checkpoint_id",
+		"ts",
+		"createdAt",
+		"created_at",
+		"occurredAt",
+		"occurred_at",
+	] as const) {
+		if (envelope[key] !== undefined) fields[key] = envelope[key];
+	}
+	return fields;
 }
 
 function asRecord(value: unknown): JsonRecord {
