@@ -165,7 +165,7 @@ describe("GUI responsive policy", () => {
 		const timeline = fs.readFileSync(path.join(root, "messages/MessagesTimeline.svelte"), "utf8");
 		expect(workspace).toContain("ui.leftOpen");
 		expect(workspace).toContain("ui.rightOpen");
-		expect(header).toMatch(/safety|access|validation/i);
+		expect(header).not.toContain("SafetySignalStrip");
 		expect(inspector).toMatch(/safety|access|validation/i);
 		expect(timeline).not.toMatch(/safety card|BuildTargetTrustBar|AuditTrailPanel|TranscriptTimeline/i);
 	});

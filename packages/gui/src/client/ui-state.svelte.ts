@@ -34,7 +34,7 @@ export function createUiState(): UiState {
 		paletteMode: "commands" as PaletteMode,
 		terminalOpen: false,
 		leftOpen: true,
-		rightOpen: true,
+		rightOpen: false,
 		leftWidth: 248,
 		rightWidth: 328,
 		popoverKind: null as PopoverKind,

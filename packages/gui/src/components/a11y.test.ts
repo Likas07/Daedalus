@@ -126,7 +126,7 @@ describe("Projected Thread shell accessibility", () => {
 		expect(header).toContain("Stop Thread");
 		expect(header).toContain("Continue Thread in Worktree");
 		expect(header).toContain("ProjectionStatusPills");
-		expect(header).toContain("SafetySignalStrip");
+		expect(header).not.toContain("SafetySignalStrip");
 		expect(header).not.toContain("BuildTargetTrustBar");
 		expect(header).not.toContain("PlanBuildModePanel");
 	});
