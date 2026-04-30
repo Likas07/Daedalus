@@ -81,6 +81,23 @@ function responseFor(method: string | undefined, params?: unknown): unknown {
 	switch (method) {
 		case "initialize":
 			return { protocolVersion: "test" };
+		case "shell/snapshot":
+			return { snapshot: { cursor: { seq: 0, updatedAt: "now" }, selectedThreadId: "session-1", threads: [] } };
+		case "thread/snapshot":
+			return {
+				snapshot: {
+					cursor: { seq: 0, updatedAt: "now" },
+					threadId: (params as { threadId?: string })?.threadId ?? "session-1",
+					sessionId: (params as { threadId?: string })?.threadId ?? "session-1",
+					title: "Thread",
+					status: "idle",
+					messages: [],
+					activity: [],
+					pendingActions: [],
+					safetySignals: [],
+					diffIds: [],
+				},
+			};
 		case "project/list":
 			return { projects: [{ id: "project-1", path: "/repo", name: "repo" }] };
 		case "project/open":

@@ -57,6 +57,7 @@ import {
 	shouldAcceptEvent,
 } from "./reconnect-state";
 import { type ApprovalItem, approvalItemFromPayload, type DisplayDensity, type ProviderStatus } from "./view-model";
+import { ProjectionRuntime, type ProjectionRuntimeState } from "./projection-runtime";
 
 export interface GuiBootstrap {
 	readonly wsEndpoint?: string;
@@ -226,6 +227,7 @@ export interface GuiState {
 	_reconnectState?: ReconnectState;
 	recentProjects?: readonly RecentProject[];
 	newBuild?: import("./new-build-state-machine").NewBuildState;
+	projections?: ProjectionRuntimeState;
 }
 export interface SessionBestNextAction {
 	label: string;
@@ -444,10 +446,13 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 	bindTransportLifecycle(currentTransport);
 	syncConnectionState();
 	state._reconnectState = reconnectState;
+
 	const listeners = new Set<GuiStateListener>();
 	const notify = (): void => {
 		for (const listener of listeners) listener(state);
 	};
+	const projectionRuntime = new ProjectionRuntime(client, notify);
+	state.projections = projectionRuntime.state;
 	return {
 		client,
 		state,
@@ -497,7 +502,10 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 				if (state.accessPolicy) state.accessPolicy = { ...state.accessPolicy, mode: params.mode };
 				notify();
 			});
+
 			await hydrateGuiState(client, state, threadFirstRoute);
+			projectionRuntime.startShell(state.lastProjectId);
+			projectionRuntime.selectThread(state.selectedSessionId);
 			await hydrateDesktopNativeBridge(state, {
 				openProject: (path) => openProjectPath(client, state, path, notify, threadFirstRoute),
 				notify,
@@ -511,7 +519,9 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 		},
 		notify,
 		async openProject(path) {
-			return openProjectPath(client, state, path, notify, threadFirstRoute);
+			const result = await openProjectPath(client, state, path, notify, threadFirstRoute);
+			projectionRuntime.startShell(result.projectId);
+			return result;
 		},
 		async startSessionFromPrompt(input) {
 			const project = input.projectId
@@ -580,10 +590,12 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 				bestNextAction: bestNextActionForRunsIn(session.runsIn),
 			});
 			await selectSessionPersistently(client, state, sessionId, notify, threadFirstRoute);
+			projectionRuntime.selectThread(sessionId);
 			return result;
 		},
 		async selectSession(sessionId) {
 			await selectSessionPersistently(client, state, sessionId, notify, threadFirstRoute);
+			projectionRuntime.selectThread(sessionId);
 		},
 		async resumeSession(sessionId, prompt) {
 			const result = await client.request("session/resume", { sessionId, prompt });
@@ -593,6 +605,7 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 				status: "active",
 			});
 			selectSession(state, sessionId);
+			projectionRuntime.selectThread(sessionId);
 			notify();
 			return result;
 		},
@@ -601,6 +614,7 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 			if (result.sessionId) {
 				upsertSession(state, { id: result.sessionId, title: `Fork of ${sessionId}`, status: "active" });
 				selectSession(state, result.sessionId);
+				projectionRuntime.selectThread(result.sessionId);
 			}
 			notify();
 			return result;
@@ -622,7 +636,10 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 		async deleteSession(sessionId) {
 			const result = await client.request("session/delete", { sessionId });
 			state.sessions = state.sessions.filter((item) => item.id !== sessionId);
-			if (state.selectedSessionId === sessionId) selectSession(state, undefined);
+			if (state.selectedSessionId === sessionId) {
+				selectSession(state, undefined);
+				projectionRuntime.selectThread(undefined);
+			}
 			notify();
 			return result;
 		},
@@ -924,7 +941,10 @@ export async function createGuiRuntime(options: GuiRuntimeOptions = {}): Promise
 				includeToolLogs: input.includeToolLogs,
 				recentEventLimit: input.recentEventLimit ?? 50,
 			}),
-		close: () => client.close(),
+		close: async () => {
+			projectionRuntime.close();
+			await client.close();
+		},
 	};
 }
 
