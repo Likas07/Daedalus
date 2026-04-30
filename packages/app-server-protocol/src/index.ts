@@ -9,6 +9,7 @@ export * from "./ids";
 export * from "./integration-messages";
 export * from "./messages";
 export * from "./orchestration";
+export * from "./projections";
 export * from "./runtime-control";
 export * from "./session-store";
 export * from "./terminal";

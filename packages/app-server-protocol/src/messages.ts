@@ -39,6 +39,14 @@ import {
 } from "./integration-messages";
 import { OrchestrationProjectionSchema } from "./orchestration";
 import {
+	ShellEventSchema,
+	ShellSnapshotParamsSchema,
+	ShellSnapshotResultSchema,
+	ThreadDetailEventSchema,
+	ThreadSnapshotParamsSchema,
+	ThreadSnapshotResultSchema,
+} from "./projections";
+import {
 	RuntimeAbortParamsSchema,
 	RuntimeCommandsParamsSchema,
 	RuntimeCompactParamsSchema,
@@ -720,6 +728,8 @@ export const ClientRequestSchema = Type.Union([
 	request("daedalus/workflow/read", StrictObject({ sessionId: SessionIdSchema })),
 	request("audit/query", AuditQuerySchema),
 	request("automation/read", EmptyParamsSchema),
+	request("shell/snapshot", ShellSnapshotParamsSchema),
+	request("thread/snapshot", ThreadSnapshotParamsSchema),
 	request("event/replay", EventReplayParamsSchema),
 ]);
 export type ClientRequest = Static<typeof ClientRequestSchema>;
@@ -808,6 +818,8 @@ export const ClientRequestResultSchemas = {
 	"daedalus/workflow/read": DaedalusWorkflowStateSchema,
 	"audit/query": AuditTrailProjectionSchema,
 	"automation/read": AutomationProjectionSchema,
+	"shell/snapshot": ShellSnapshotResultSchema,
+	"thread/snapshot": ThreadSnapshotResultSchema,
 	"event/replay": EventReplayResultSchema,
 } as const;
 
@@ -883,6 +895,8 @@ export const ServerNotificationSchema = Type.Union([
 		"runtime/changed",
 		StrictObject({ sessionId: SessionIdSchema, control: Type.String(), payload: Type.Unknown() }),
 	),
+	notification("shell/event", ShellEventSchema),
+	notification("thread/event", ThreadDetailEventSchema),
 ]);
 export type ServerNotification = Static<typeof ServerNotificationSchema>;
 

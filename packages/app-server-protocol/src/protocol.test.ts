@@ -762,4 +762,142 @@ describe("app-server protocol schemas", () => {
 		);
 		expect(Value.Check(TerminalSnapshotSchema, { terminalId: "terminal-1", cwd: "/tmp/project" })).toBe(false);
 	});
+
+	test("validates shell/detail projection contracts", () => {
+		const cursor = { seq: 7, updatedAt: "2026-04-30T00:00:00.000Z" };
+		const shellThread = {
+			threadId: "thread-1",
+			sessionId: "session-1",
+			projectId: "project-1",
+			worktreeId: "worktree-1",
+			title: "Implement projections",
+			status: "running",
+			lastMessage: "Working on protocol contracts",
+			updatedAt: "2026-04-30T00:00:00.000Z",
+			pendingActionCount: 1,
+			safetySignals: [{ level: "warning", message: "Base checkout requires confirmation", code: "base-checkout" }],
+		};
+		const message = {
+			id: "message-1",
+			turnId: "turn-1",
+			role: "assistant",
+			content: "Done",
+			createdAt: "2026-04-30T00:00:01.000Z",
+		};
+		const activity = {
+			id: "activity-1",
+			kind: "tool",
+			status: "running",
+			title: "Editing protocol",
+			startedAt: "2026-04-30T00:00:01.000Z",
+		};
+		const pendingAction = {
+			id: "pending-1",
+			kind: "approval",
+			title: "Approve command",
+			summary: "Run verification",
+			approvalId: "approval-1",
+		};
+		const detailSnapshot = {
+			cursor,
+			threadId: "thread-1",
+			sessionId: "session-1",
+			projectId: "project-1",
+			worktreeId: "worktree-1",
+			title: "Implement projections",
+			status: "running",
+			messages: [message],
+			activity: [activity],
+			pendingActions: [pendingAction],
+			safetySignals: [{ level: "info", message: "Within isolated worktree" }],
+			diffIds: ["diff-1"],
+		};
+
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
+				id: "req-shell-snapshot",
+				method: "shell/snapshot",
+				params: { projectId: "project-1", cursor },
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestResultSchemas["shell/snapshot"], { snapshot: { cursor, threads: [shellThread] } }),
+		).toBe(true);
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
+				id: "req-thread-snapshot",
+				method: "thread/snapshot",
+				params: { threadId: "thread-1", sessionId: "session-1", cursor },
+			}),
+		).toBe(true);
+		expect(Value.Check(ClientRequestResultSchemas["thread/snapshot"], { snapshot: detailSnapshot })).toBe(true);
+		expect(
+			Value.Check(ServerNotificationSchema, {
+				kind: "notification",
+				method: "shell/event",
+				params: {
+					seq: 8,
+					cursor: { seq: 8, updatedAt: "2026-04-30T00:00:02.000Z" },
+					type: "thread-upserted",
+					thread: shellThread,
+				},
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ServerNotificationSchema, {
+				kind: "notification",
+				method: "thread/event",
+				params: {
+					seq: 9,
+					cursor: { seq: 9, updatedAt: "2026-04-30T00:00:03.000Z" },
+					threadId: "thread-1",
+					sessionId: "session-1",
+					type: "message-appended",
+					message,
+				},
+			}),
+		).toBe(true);
+	});
+
+	test("rejects invalid projection payloads missing stale-event or thread fields", () => {
+		const cursor = { seq: 1, updatedAt: "2026-04-30T00:00:00.000Z" };
+		const shellThread = {
+			threadId: "thread-1",
+			sessionId: "session-1",
+			title: "Implement projections",
+			status: "idle",
+			updatedAt: "2026-04-30T00:00:00.000Z",
+			pendingActionCount: 0,
+			safetySignals: [],
+		};
+		expect(
+			Value.Check(ServerNotificationSchema, {
+				kind: "notification",
+				method: "shell/event",
+				params: { cursor, type: "thread-upserted", thread: shellThread },
+			}),
+		).toBe(false);
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
+				id: "req-thread-missing-id",
+				method: "thread/snapshot",
+				params: { sessionId: "session-1" },
+			}),
+		).toBe(false);
+		expect(
+			Value.Check(ClientRequestResultSchemas["shell/snapshot"], {
+				snapshot: { cursor, threads: [{ ...shellThread, pendingActionCount: undefined }] },
+			}),
+		).toBe(false);
+		expect(
+			Value.Check(ServerNotificationSchema, {
+				kind: "notification",
+				method: "thread/event",
+				params: { seq: 2, cursor, sessionId: "session-1", type: "message-appended" },
+			}),
+		).toBe(false);
+	});
 });
