@@ -14,6 +14,23 @@ import { appServerDatabasePath, appServerTokenFilePath, daedalusGlobalStateDir }
 import { type AppServerEndpoint, ensureAppServer, ensureTokenFile } from "./server-process";
 
 const moduleDir = dirname(fileURLToPath(import.meta.url));
+
+const linuxRenderingDisabledFeatures = ["VaapiVideoDecoder", "VaapiVideoEncoder", "Vulkan"] as const;
+
+function configureLinuxRenderingForCompatibility(): void {
+	if (process.platform !== "linux") return;
+
+	app.disableHardwareAcceleration();
+	app.commandLine.appendSwitch("disable-gpu");
+	app.commandLine.appendSwitch("disable-gpu-compositing");
+	app.commandLine.appendSwitch("disable-gpu-rasterization");
+	app.commandLine.appendSwitch("disable-accelerated-video-decode");
+	app.commandLine.appendSwitch("disable-accelerated-video-encode");
+	app.commandLine.appendSwitch("disable-features", linuxRenderingDisabledFeatures.join(","));
+	app.commandLine.appendSwitch("ozone-platform", "x11");
+}
+
+configureLinuxRenderingForCompatibility();
 const projectRoot = process.env.DAEDALUS_PROJECT_ROOT
 	? resolve(process.cwd(), process.env.DAEDALUS_PROJECT_ROOT)
 	: resolve(moduleDir, "..", "..", "..");
