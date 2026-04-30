@@ -34,3 +34,4 @@ export function formatProjectDisplayName(project: Pick<GuiProjectSummary, "name"
 export * from "./thread/reducer";
 export * from "./thread/selectors";
 export * from "./thread/view-model";
+export * from "./thread/presentation";
