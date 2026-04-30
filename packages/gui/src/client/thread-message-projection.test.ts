@@ -1,10 +1,12 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "bun:test";
 import type { ThreadActivity, ThreadMessage } from "@daedalus-pi/app-server-protocol";
 import { projectThreadMessages } from "./thread-message-projection";
 
 const now = "2026-04-30T00:00:00.000Z";
-const message = (id: string, role: ThreadMessage["role"], content: string): ThreadMessage => ({ id, role, content, createdAt: now });
-const tool = (id: string, title: string): ThreadActivity => ({ id, kind: "tool", status: "completed", title, startedAt: now });
+const message = (id: string, role: ThreadMessage["role"], content: string, createdAt = now): ThreadMessage => ({ id, role, content, createdAt });
+const tool = (id: string, title: string, startedAt = now, status: ThreadActivity["status"] = "completed"): ThreadActivity => ({ id, kind: "tool", status, title, startedAt });
+
 
 describe("projectThreadMessages", () => {
 	test("projects user bubbles and live assistant text growth from latest update", () => {
@@ -27,8 +29,40 @@ describe("projectThreadMessages", () => {
 		expect(rows.at(-1)).toMatchObject({ kind: "pending-action", action: { title: "Approve" } });
 	});
 
+	test("orders activity groups between chat messages by time", () => {
+		const rows = projectThreadMessages({
+			status: "waiting",
+			messages: [
+				message("u1", "user", "ship it", "2026-04-30T00:00:01.000Z"),
+				message("a1", "assistant", "done", "2026-04-30T00:00:04.000Z"),
+			],
+			activity: [tool("t1", "Read", "2026-04-30T00:00:02.000Z"), tool("t2", "Write", "2026-04-30T00:00:03.000Z")],
+		});
+		expect(rows.map((row) => row.kind)).toEqual(["message", "activity", "message"]);
+	});
+
 	test("adds working indicator when running without assistant streaming row", () => {
 		const rows = projectThreadMessages({ status: "running", messages: [message("u1", "user", "go")] });
 		expect(rows.at(-1)).toMatchObject({ kind: "working" });
+	});
+
+	test("message components expose chat semantics without ledger affordances", async () => {
+		const [timeline, bubble, activity, markdown] = await Promise.all([
+			readFile(new URL("../components/messages/MessagesTimeline.svelte", import.meta.url), "utf8"),
+			readFile(new URL("../components/messages/MessageBubble.svelte", import.meta.url), "utf8"),
+			readFile(new URL("../components/messages/CompactActivityGroup.svelte", import.meta.url), "utf8"),
+			readFile(new URL("../components/messages/AssistantMarkdown.svelte", import.meta.url), "utf8"),
+		]);
+		const combined = `${timeline}\n${bubble}\n${activity}`;
+
+		expect(combined).toContain("messages-timeline");
+		expect(bubble).toContain("user-row");
+		expect(bubble).toContain("assistant-row");
+		expect(bubble).toContain("streaming-indicator");
+		expect(activity).toContain("Details hidden");
+		expect(markdown).toContain("escapeHtml");
+		expect(timeline).toContain("isAtBottom");
+		expect(timeline).toContain("activeAssistantId");
+		expect(combined).not.toMatch(/ledger|raw event|event count|numbered row|vertical rule/i);
 	});
 });

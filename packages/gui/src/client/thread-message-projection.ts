@@ -14,13 +14,13 @@ export interface ProjectThreadMessagesInput {
 }
 
 export function projectThreadMessages(input: ProjectThreadMessagesInput): readonly ThreadMessageRow[] {
-	const rows: ThreadMessageRow[] = [];
+	const chronologicalRows: ThreadMessageRow[] = [];
 	const messages = coalesceAssistantUpdates(input.messages);
 	const latestAssistantId = findLatestAssistantId(messages);
 
 	for (const message of messages) {
 		if (message.role === "system" || message.role === "tool") continue;
-		rows.push({
+		chronologicalRows.push({
 			kind: "message",
 			id: `message:${message.id}`,
 			createdAt: message.createdAt,
@@ -30,25 +30,35 @@ export function projectThreadMessages(input: ProjectThreadMessagesInput): readon
 	}
 
 	for (const group of compactActivities(input.activity ?? [])) {
-		rows.push({
+		chronologicalRows.push({
 			kind: "activity",
 			id: `activity:${group.map((item) => item.id).join("+")}`,
 			createdAt: group[0]?.startedAt ?? "",
 			activities: group,
-			status: group.some((item) => item.status === "running") ? "running" : group.at(-1)?.status ?? "completed",
+			status: group.some((item) => item.status === "running")
+				? "running"
+				: group.some((item) => item.status === "failed")
+					? "failed"
+					: group.at(-1)?.status ?? "completed",
 		});
 	}
 
-	if (input.status === "running" && !rows.some((row) => row.kind === "message" && row.streaming)) {
+	chronologicalRows.sort((left, right) => (left.createdAt || "").localeCompare(right.createdAt || ""));
+
+	if (input.status === "running" && !chronologicalRows.some((row) => row.kind === "message" && row.streaming)) {
 		const running = (input.activity ?? []).find((item) => item.status === "running");
-		rows.push({ kind: "working", id: "working-indicator-row", createdAt: running?.startedAt, title: running?.title ?? "Working" });
+		chronologicalRows.push({
+			kind: "working",
+			id: "working-indicator-row",
+			createdAt: running?.startedAt,
+			title: running?.title ?? "Working",
+		});
 	}
 
-	for (const action of input.pendingActions ?? []) {
-		rows.push({ kind: "pending-action", id: `pending:${action.id}`, action });
-	}
-
-	return rows;
+	return [
+		...chronologicalRows,
+		...(input.pendingActions ?? []).map((action) => ({ kind: "pending-action" as const, id: `pending:${action.id}`, action })),
+	];
 }
 
 function coalesceAssistantUpdates(messages: readonly ThreadMessage[]): ThreadMessage[] {
