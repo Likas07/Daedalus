@@ -526,7 +526,7 @@ function getEffectiveToolTimeoutMs(toolName: string, config: AgentLoopConfig): n
 	if (toolName === "subagent" || toolName === "task") {
 		return config.subagentToolTimeoutMs;
 	}
-	if (toolName === "bash") {
+	if (toolName === "bash" || toolName === "questionnaire") {
 		return undefined;
 	}
 	return config.toolTimeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS;

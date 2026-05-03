@@ -168,6 +168,27 @@ describe("agent tool timeout", () => {
 		}
 	});
 
+	it("does not apply the normal timeout to questionnaire because it may wait for user input", async () => {
+		const questionnaire = makeTool("questionnaire", async () => {
+			await new Promise((resolve) => setTimeout(resolve, 50));
+			return { content: [{ type: "text", text: "questionnaire ok" }], details: {} };
+		});
+		const agent = makeAgent(
+			questionnaire,
+			assistant([{ type: "toolCall", id: "call-1", name: "questionnaire", arguments: {} }]),
+			{ toolTimeoutMs: 10 },
+		);
+
+		await agent.prompt("ask user");
+
+		const result = agent.state.messages.find((message) => message.role === "toolResult");
+		expect(result?.role).toBe("toolResult");
+		if (result?.role === "toolResult") {
+			expect(result.isError).toBe(false);
+			expect(result.content[0]).toMatchObject({ type: "text", text: "questionnaire ok" });
+		}
+	});
+
 	it("aborts default-infinite subagent tools even if the tool ignores the signal", async () => {
 		let markToolStarted!: () => void;
 		const toolStarted = new Promise<void>((resolve) => {
