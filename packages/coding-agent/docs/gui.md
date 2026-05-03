@@ -58,6 +58,14 @@ The renderer is unprivileged. Filesystem, terminal, provider auth, extension UI,
 
 Provider auth is resolved server-side from environment keys, OAuth storage, and runtime state. The GUI should show auth status and login/logout actions without exposing raw credentials.
 
+## Workspace and worktree behavior
+
+The GUI/app-server surface follows the core workspace target model used by CLI/TUI/RPC/SDK. The app-server should select, store, and display targets; coding-agent core owns filesystem-root/session target behavior.
+
+Current implementation note: `packages/app-server/src/workspaces/worktree-service.ts` keeps GUI-specific worktree allocation, create/adopt idempotency, and custom path policy. Destructive removal is delegated to core `WorkspaceService.removeTarget()` through an adapter `WorkspaceTarget`. There is currently no `packages/app-server/src/server/workspace-target-v1-routes.ts`; use the existing app-server worktree/project protocol instead of documenting a non-existent route.
+
+GUI recovery should surface the same choices as core resume diagnostics: resume when safe, switch to the stored target, adopt into the current target, recreate a missing worktree, perform manual merge-back, or start a new session.
+
 ## Further reading
 
 - `packages/gui/README.md`
@@ -65,3 +73,5 @@ Provider auth is resolved server-side from environment keys, OAuth storage, and 
 - `packages/gui/docs/security.md`
 - `packages/gui/docs/protocol.md`
 - `packages/gui/docs/troubleshooting.md`
+- `docs/architecture/core-workspace-targets.md`
+- `docs/architecture/delegated-worktree-isolation.md`

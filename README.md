@@ -22,6 +22,8 @@ daedalus "your prompt"      # Non-interactive mode
 daedalus gui                # Start the local web GUI
 ```
 
+Workspace-aware startup options are available across CLI/TUI/RPC/SDK surfaces: `--project <path>`, `--worktree <path>`, `--workspace-target <id-or-path>`, and `--new-worktree <branch>`. Inside the TUI, use `/workspace` and `/worktree` commands to inspect, enter, create, or exit workspace targets.
+
 ## Packages
 
 | Package | Description |
@@ -38,6 +40,8 @@ daedalus gui                # Start the local web GUI
 The desktop app is the primary Daedalus GUI entrypoint. For browser-based local use, run `daedalus gui`; it starts or reuses the local app-server, stores GUI sessions in SQLite, and supports JSONL import/export compatibility with CLI/TUI sessions.
 
 GUI documentation: [packages/gui/README.md](packages/gui/README.md), [SQLite persistence](packages/gui/docs/sqlite-persistence.md), [security](packages/gui/docs/security.md), [protocol](packages/gui/docs/protocol.md), and [troubleshooting](packages/gui/docs/troubleshooting.md).
+
+Architecture notes: [core workspace targets](docs/architecture/core-workspace-targets.md) and [delegated worktree isolation](docs/architecture/delegated-worktree-isolation.md).
 
 ## Development
 

@@ -154,6 +154,29 @@ const runtime = await createAgentSessionRuntime(createRuntime, {
 });
 ```
 
+Workspace-aware callers may pass a core `WorkspaceTarget`. When present, `workspaceTarget.cwd` becomes the effective runtime cwd and the same target is persisted into session identity:
+
+```typescript
+const workspaceTarget = {
+  id: "feature",
+  cwd: "/repo/.daedalus/worktrees/feature",
+  projectRoot: "/repo",
+  isolationMode: "dedicated_worktree" as const,
+  branch: "feature",
+  validationStatus: "valid" as const,
+};
+
+const runtime = await createAgentSessionRuntime(createRuntime, {
+  cwd: "/repo",
+  agentDir: getAgentDir(),
+  sessionManager: SessionManager.create(workspaceTarget.cwd),
+  workspaceTarget,
+});
+
+await runtime.switchWorkspaceTarget({ id: "main" });
+await runtime.switchWorkspaceTarget({ mode: "create", branch: "next", baseRef: "main" });
+```
+
 `AgentSessionRuntime` owns replacement of the active runtime across:
 
 - `newSession()`
@@ -168,6 +191,8 @@ Important behavior:
 - if you use extensions, call `runtime.session.bindExtensions(...)` again for the new session
 - creation returns diagnostics on `runtime.diagnostics`
 - if runtime creation or replacement fails, the method throws and the caller decides how to handle it
+- workspace switching is rejected while the current session is streaming or has pending messages
+- `switchWorkspaceTarget()` returns `{ workspaceTarget, previousWorkspaceTarget }` and recreates cwd-bound services
 
 ```typescript
 let session = runtime.session;
