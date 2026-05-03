@@ -7,15 +7,14 @@ import protectedPaths from "./safety/protected-paths.js";
 import contextProfile from "./tools/context-profile/index.js";
 import dynamicTools from "./tools/dynamic-tools.js";
 import fsSearch from "./tools/fs-search.js";
-import question from "./tools/question.js";
 import questionnaire from "./tools/questionnaire.js";
 import readAgentResultOutput from "./tools/read-agent-result-output.js";
 import semSearch from "./tools/sem-search.js";
 import semanticWorkspaceTools from "./tools/semantic-workspace-tools.js";
 import skill from "./tools/skill.js";
+import subagentMergeBackTool from "./tools/subagent-merge-back.js";
 import todo from "./tools/todo.js";
 import tools from "./tools/tools.js";
-import truncatedTool from "./tools/truncated-tool.js";
 import statusDashboard from "./ui/status-dashboard.js";
 import statusLine from "./ui/status-line.js";
 import handoff from "./workflow/handoff.js";
@@ -24,6 +23,7 @@ import planMode from "./workflow/plan-mode/index.js";
 import primaryRoleMode from "./workflow/primary-role/index.js";
 import qna from "./workflow/qna.js";
 import subagents from "./workflow/subagents/index.js";
+import workspaces from "./workflow/workspaces/index.js";
 
 // Excluded from default bundle (environment-sensitive or strongly opinionated):
 //   ssh, interactive-shell, file-trigger, modal-editor, notify
@@ -34,21 +34,21 @@ export default function daedalusBundle(pi: ExtensionAPI) {
 	confirmDestructive(pi);
 	dirtyRepoGuard(pi);
 	todo(pi);
-	question(pi);
 	questionnaire(pi);
 	readAgentResultOutput(pi);
 	dynamicTools(pi);
 	fsSearch(pi);
 	semSearch(pi);
 	semanticWorkspaceTools(pi);
-	truncatedTool(pi);
 	tools(pi);
 	contextProfile(pi);
+	subagentMergeBackTool(pi);
 
 	skill(pi);
 	statusDashboard(pi);
 	qna(pi);
 	handoff(pi);
+	workspaces(pi);
 	planExecution(pi);
 	planMode(pi);
 	primaryRoleMode(pi);

@@ -39,7 +39,10 @@ export function buildInspectorOptions(
 export function formatInspectorLabel(run: InspectableSubagentRun): string {
 	const icon = run.status === "running" ? "⋯" : run.status === "completed" ? "✓" : "✗";
 	const detail = run.status === "running" ? (run.activity ?? run.summary) : run.summary;
-	return `${icon} ${formatAgentLabel({ name: run.agent, displayName: run.displayName })} · ${detail}`;
+	const workspace = (run as { workspaceTarget?: { cwd?: string; branch?: string; isolationMode?: string } })
+		.workspaceTarget;
+	const workspaceLabel = workspace ? ` · ${workspace.branch ?? workspace.isolationMode ?? workspace.cwd}` : "";
+	return `${icon} ${formatAgentLabel({ name: run.agent, displayName: run.displayName })}${workspaceLabel} · ${detail}`;
 }
 
 export async function openSubagentInspector(ctx: ExtensionCommandContext, run: InspectableSubagentRun): Promise<void> {

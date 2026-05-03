@@ -3,9 +3,22 @@ import { dirname, join } from "node:path";
 import { getSubagentArtifactPaths } from "./artifacts.js";
 import type { SubagentResultSidecarRecord, SubagentRunResult } from "./types.js";
 
+function withMergeBackMetadata(metaFile: string, run: SubagentRunResult): SubagentRunResult {
+	if (!run.workspaceMetadata?.workspaceTarget) return run;
+	return {
+		...run,
+		workspaceMetadata: {
+			...run.workspaceMetadata,
+			mergeBackArtifactPath:
+				run.workspaceMetadata.mergeBackArtifactPath ?? metaFile.replace(/\.meta\.json$/, ".merge-back.patch"),
+			mergeBackTarget: run.workspaceMetadata.mergeBackTarget ?? run.workspaceMetadata.workspaceTarget,
+		},
+	};
+}
+
 export async function writePersistedSubagentRun(metaFile: string, run: SubagentRunResult): Promise<void> {
 	await fs.mkdir(dirname(metaFile), { recursive: true });
-	await fs.writeFile(metaFile, `${JSON.stringify(run, null, 2)}\n`, "utf8");
+	await fs.writeFile(metaFile, `${JSON.stringify(withMergeBackMetadata(metaFile, run), null, 2)}\n`, "utf8");
 }
 
 export async function listPersistedSubagentRuns(parentSessionFile: string | undefined): Promise<SubagentRunResult[]> {
@@ -17,7 +30,7 @@ export async function listPersistedSubagentRuns(parentSessionFile: string | unde
 	const runs = await Promise.all(
 		metaFiles.map(async (entry) => {
 			const content = await fs.readFile(join(directory, entry), "utf8");
-			return JSON.parse(content) as SubagentRunResult;
+			return withMergeBackMetadata(join(directory, entry), JSON.parse(content) as SubagentRunResult);
 		}),
 	);
 

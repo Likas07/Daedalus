@@ -63,7 +63,11 @@ import { createCompactionSummaryMessage } from "../../core/messages.js";
 import { findExactModelReferenceMatch, resolveModelScope } from "../../core/model-resolver.js";
 import { DefaultPackageManager } from "../../core/package-manager.js";
 import type { ResourceDiagnostic } from "../../core/resource-loader.js";
-import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.js";
+import {
+	formatMissingSessionCwdPrompt,
+	MissingSessionCwdError,
+	WorkspaceResumeSafetyError,
+} from "../../core/session-cwd.js";
 import { type SessionContext, SessionManager } from "../../core/session-manager.js";
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.js";
 import type { SourceInfo } from "../../core/source-info.js";
@@ -1325,6 +1329,14 @@ export class InteractiveMode {
 					await this.handleResumeSession(sessionPath);
 					return { cancelled: false };
 				},
+				getWorkspaceTarget: () => this.runtimeHost.workspaceTarget,
+				switchWorkspaceTarget: async (input) => {
+					const result = await this.runtimeHost.switchWorkspaceTarget(input);
+					await this.handleRuntimeSessionChange();
+					this.renderCurrentSessionState();
+					this.ui.requestRender();
+					return result;
+				},
 				reload: async () => {
 					await this.handleReloadCommand();
 				},
@@ -1859,6 +1871,21 @@ export class InteractiveMode {
 	}
 
 	private async promptForMissingSessionCwd(error: MissingSessionCwdError): Promise<string | undefined> {
+		if (error instanceof WorkspaceResumeSafetyError) {
+			const recoverableMissingCwdOnly = error.diagnostic.issues.every((issue) => issue.code === "missing_cwd");
+			const details = error.diagnostic.issues
+				.map(
+					(issue) => `${issue.code}: ${issue.message ?? "unsafe workspace resume"} (recovery: ${issue.recovery})`,
+				)
+				.join("\n");
+			const confirmed = recoverableMissingCwdOnly
+				? await this.showExtensionConfirm(
+						"Workspace resume safety",
+						`${details}\n\ncontinue in current cwd\n${error.issue.fallbackCwd}`,
+					)
+				: false;
+			return confirmed ? error.issue.fallbackCwd : undefined;
+		}
 		const confirmed = await this.showExtensionConfirm(
 			"Session cwd not found",
 			formatMissingSessionCwdPrompt(error.issue),

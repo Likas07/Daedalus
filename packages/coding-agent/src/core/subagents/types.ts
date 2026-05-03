@@ -4,12 +4,24 @@ import type {
 	SubagentIsolationPreference,
 	SubagentRoleOverride,
 } from "../settings-schema.js";
+import type { WorkspaceTarget } from "../workspaces/types.js";
 import type { BranchIsolationMetadata } from "./branch-isolation.js";
 
 export type SubagentSource = "bundled" | "user" | "project";
 export type SubagentRunStatus = "running" | "completed" | "partial" | "blocked" | "failed" | "aborted";
 
 export type SubagentEnvelopeStatus = "completed" | "partial" | "blocked";
+export type SubagentWorkspaceIsolation = "inherit" | "shared" | "worktree";
+export type SubagentMergeBackPolicy = "manual" | "merge" | "rebase" | "squash";
+
+export interface SubagentWorkspaceMetadata {
+	isolation: SubagentWorkspaceIsolation;
+	workspaceTarget?: WorkspaceTarget;
+	baseBranch?: string;
+	mergeBack?: SubagentMergeBackPolicy;
+	mergeBackArtifactPath?: string;
+	mergeBackTarget?: WorkspaceTarget;
+}
 
 export interface SubagentResultEnvelope {
 	task: string;
@@ -81,6 +93,7 @@ export interface SubagentSessionContext {
 	depth: number;
 	spawns: readonly string[] | "*";
 	maxDepth?: number;
+	workspaceTarget?: WorkspaceTarget;
 }
 
 export interface SubagentRunProgress {
@@ -92,6 +105,7 @@ export interface SubagentRunProgress {
 	contextArtifactPath?: string;
 	activity?: string;
 	recentActivity?: string[];
+	workspaceTarget?: WorkspaceTarget;
 }
 
 export interface SubagentRunRequest {
@@ -106,6 +120,14 @@ export interface SubagentRunRequest {
 	taskLabel?: string;
 	metadata?: SubagentRunMetadata;
 	onProgress?: (progress: SubagentRunProgress) => void;
+	/** New workspace target policy. Defaults to inherit; legacy child-branch maps to worktree. */
+	isolation?: SubagentWorkspaceIsolation;
+	mergeBack?: SubagentMergeBackPolicy;
+	baseBranch?: string;
+	workspaceTarget?: WorkspaceTarget;
+	/** Legacy branch isolation inputs retained for compatibility. */
+	isolationMode?: "shared-branch" | "child-branch";
+	branchTemplate?: string;
 }
 
 export interface SubagentRunResult {
@@ -129,6 +151,11 @@ export interface SubagentRunResult {
 	contextArtifactPath?: string;
 	isolationMode?: "shared-branch" | "child-branch";
 	branchMetadata?: BranchIsolationMetadata;
+	isolation?: SubagentWorkspaceIsolation;
+	workspaceTarget?: WorkspaceTarget;
+	workspaceMetadata?: SubagentWorkspaceMetadata;
+	baseBranch?: string;
+	mergeBack?: SubagentMergeBackPolicy;
 	data?: unknown;
 	error?: string;
 	usage?: {
@@ -154,4 +181,7 @@ export interface ActiveSubagentRun {
 	contextArtifactPath?: string;
 	isolationMode?: "shared-branch" | "child-branch";
 	branchMetadata?: BranchIsolationMetadata;
+	isolation?: SubagentWorkspaceIsolation;
+	workspaceTarget?: WorkspaceTarget;
+	workspaceMetadata?: SubagentWorkspaceMetadata;
 }

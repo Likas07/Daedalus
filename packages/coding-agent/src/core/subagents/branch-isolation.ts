@@ -1,3 +1,5 @@
+import type { WorkspaceTarget } from "../workspaces/types.js";
+
 export interface ChildBranchInput {
 	parentBranch: string;
 	agent: string;
@@ -17,4 +19,5 @@ export interface BranchIsolationMetadata {
 	parentBranch: string;
 	childBranch: string;
 	adoptionStrategy: "inspect" | "cherry-pick" | "merge" | "discard";
+	workspaceTarget?: WorkspaceTarget;
 }
