@@ -38,6 +38,14 @@ function chunkArray<T>(items: T[], size: number): T[][] {
 	return chunks;
 }
 
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
+function wrapEmbeddingError(message: string, error: unknown): Error {
+	return new Error(`${message}: ${errorMessage(error)}`, { cause: error });
+}
+
 async function mapWithConcurrency<T, R>(
 	items: T[],
 	concurrency: number,
@@ -147,10 +155,19 @@ class OllamaSemanticEmbedderImpl implements SemanticEmbedder {
 		let completedTexts = 0;
 		const results = await mapWithConcurrency(batches, this.concurrency, async (batch, batchIndex) => {
 			const batchStartedAt = Date.now();
-			const embeddings = await this.embedBatch(batch, batchIndex);
+			let embeddings: number[][];
+			try {
+				embeddings = await this.embedBatch(batch, batchIndex);
+			} catch (error) {
+				throw wrapEmbeddingError(
+					`Ollama embedding batch ${batchIndex + 1}/${batches.length} failed for ${batch.length} text${batch.length === 1 ? "" : "s"}`,
+					error,
+				);
+			}
 			completedTexts += batch.length;
 			options.onBatch?.({
 				batchIndex,
+				totalBatches: batches.length,
 				batchSize: batch.length,
 				elapsedMs: Date.now() - batchStartedAt,
 				completedTexts,

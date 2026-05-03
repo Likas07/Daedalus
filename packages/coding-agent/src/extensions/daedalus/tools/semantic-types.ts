@@ -1,6 +1,7 @@
 export interface SemanticEmbedBatchMetrics {
 	batchIndex: number;
 	batchSize: number;
+	totalBatches: number;
 	elapsedMs: number;
 	completedTexts: number;
 	totalTexts: number;

@@ -10,8 +10,13 @@ type SearchableWorkspaceState = Pick<SemanticWorkspaceStatus, "state" | "initial
 
 interface ControllerDeps {
 	getStatus?: (cwd: string) => SearchableWorkspaceState;
-	syncWorkspace?: (cwd: string) => Promise<unknown>;
+	syncWorkspace?: (cwd: string, options?: { restartEmbeddingModel?: boolean }) => Promise<unknown>;
 	onStateChange?: (cwd: string, phase: "queued" | "started" | "finished" | "failed", error?: unknown) => void;
+}
+
+export interface SemanticBackgroundSyncSnapshot {
+	running: boolean;
+	lastAttemptAt?: number;
 }
 
 interface WorkspaceRuntimeState {
@@ -23,7 +28,10 @@ interface WorkspaceRuntimeState {
 export function createSemanticBackgroundSyncController(deps: ControllerDeps = {}) {
 	const states = new Map<string, WorkspaceRuntimeState>();
 	const getStatus = deps.getStatus ?? ((cwd: string) => getSemanticWorkspaceStatus(cwd));
-	const syncWorkspace = deps.syncWorkspace ?? ((cwd: string) => syncSemanticWorkspace(cwd).then(() => undefined));
+	const syncWorkspace =
+		deps.syncWorkspace ??
+		((cwd: string, options?: { restartEmbeddingModel?: boolean }) =>
+			syncSemanticWorkspace(cwd, undefined, options).then(() => undefined));
 
 	function getWorkspaceState(cwd: string): WorkspaceRuntimeState {
 		const existing = states.get(cwd);
@@ -38,15 +46,16 @@ export function createSemanticBackgroundSyncController(deps: ControllerDeps = {}
 		return status.state === "ready" || status.state === "stale_soft";
 	}
 
-	async function run(cwd: string): Promise<void> {
+	function start(cwd: string, options: { requireEligible?: boolean; restartEmbeddingModel?: boolean } = {}): boolean {
 		const state = getWorkspaceState(cwd);
-		if (state.inFlight || !isEligible(cwd)) return;
+		if (state.inFlight) return false;
+		if (options.requireEligible && !isEligible(cwd)) return false;
 		state.lastAttemptAt = Date.now();
 		deps.onStateChange?.(cwd, "queued");
 		state.inFlight = (async () => {
 			deps.onStateChange?.(cwd, "started");
 			try {
-				await syncWorkspace(cwd);
+				await syncWorkspace(cwd, { restartEmbeddingModel: options.restartEmbeddingModel });
 				deps.onStateChange?.(cwd, "finished");
 			} catch (error) {
 				deps.onStateChange?.(cwd, "failed", error);
@@ -54,20 +63,28 @@ export function createSemanticBackgroundSyncController(deps: ControllerDeps = {}
 				state.inFlight = undefined;
 			}
 		})();
-		await state.inFlight;
+		void state.inFlight;
+		return true;
 	}
 
 	return {
-		async maybeStartForSession(cwd: string): Promise<void> {
+		maybeStartForSession(cwd: string): void {
 			const state = getWorkspaceState(cwd);
 			if (state.hasRunStartupSync) return;
 			state.hasRunStartupSync = true;
-			await run(cwd);
+			start(cwd, { requireEligible: true });
 		},
-		async maybeStartAfterTurn(cwd: string): Promise<void> {
+		maybeStartAfterTurn(cwd: string): void {
 			const state = getWorkspaceState(cwd);
 			if (state.lastAttemptAt && Date.now() - state.lastAttemptAt < BACKGROUND_SYNC_COOLDOWN_MS) return;
-			await run(cwd);
+			start(cwd, { requireEligible: true });
+		},
+		startExplicit(cwd: string, options: { restartEmbeddingModel?: boolean } = {}): boolean {
+			return start(cwd, options);
+		},
+		getSnapshot(cwd: string): SemanticBackgroundSyncSnapshot {
+			const state = getWorkspaceState(cwd);
+			return { running: Boolean(state.inFlight), lastAttemptAt: state.lastAttemptAt };
 		},
 	};
 }

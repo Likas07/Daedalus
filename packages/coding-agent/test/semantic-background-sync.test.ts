@@ -46,4 +46,16 @@ describe("semantic background sync", () => {
 		await controller.maybeStartAfterTurn("/repo");
 		expect(sync).not.toHaveBeenCalled();
 	});
+
+	it("passes restart flag only for explicit sync", async () => {
+		const sync = vi.fn(async () => {});
+		const getStatus = vi.fn(() => ({ state: "stale_soft", initialized: true, ready: true }));
+		const controller = createSemanticBackgroundSyncController({ syncWorkspace: sync, getStatus });
+
+		controller.startExplicit("/repo", { restartEmbeddingModel: true });
+		controller.maybeStartAfterTurn("/other-repo");
+
+		expect(sync).toHaveBeenNthCalledWith(1, "/repo", { restartEmbeddingModel: true });
+		expect(sync).toHaveBeenNthCalledWith(2, "/other-repo", { restartEmbeddingModel: undefined });
+	});
 });
