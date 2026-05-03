@@ -17,8 +17,6 @@ import {
 	type TodoChange,
 	type TodoItem,
 	type TodoSnapshot,
-	toggleLegacyTodo,
-	toLegacyView,
 	validateTodoList,
 } from "./todo-state.js";
 
@@ -35,18 +33,13 @@ const TodoWriteParams = Type.Object({
 		Type.Boolean({ description: "When true, merge by id. When false or omitted, replace the whole list" }),
 	),
 });
-const LegacyTodoParams = Type.Object({
-	action: StringEnum(["list", "add", "toggle", "clear"] as const),
-	text: Type.Optional(Type.String({ description: "Todo text (legacy add action)" })),
-	id: Type.Optional(Type.Number({ description: "Legacy numeric todo id (1-based current list position)" })),
-});
 
 interface TodoReadDetails extends TodoSnapshot {
 	action: "read";
 }
 
 interface TodoWriteDetails extends TodoSnapshot {
-	action: "write" | "legacy";
+	action: "write";
 	mode: "merge" | "replace";
 	changes: TodoChange[];
 	migratedFromLegacy?: boolean;
@@ -328,81 +321,6 @@ export default function todoExtension(pi: ExtensionAPI) {
 			return new Text(output, 0, 0);
 		},
 	});
-
-	pi.registerTool({
-		name: "todo",
-		label: "Todo (legacy)",
-		description:
-			"Legacy compatibility wrapper for todo_read/todo_write. Prefer the structured todo_read/todo_write tools.",
-		parameters: LegacyTodoParams,
-		async execute(_toolCallId, params) {
-			switch (params.action) {
-				case "list": {
-					const legacyTodos = toLegacyView(snapshot.todos);
-					return {
-						content: [
-							{
-								type: "text",
-								text: legacyTodos.length
-									? legacyTodos
-											.map((todo) => `[${todo.done ? "x" : " "}] #${todo.id}: ${todo.text}`)
-											.join("\n")
-									: "No todos",
-							},
-						],
-						details: { ...snapshotToWriteDetails(snapshot, "merge", []), action: "legacy" },
-					};
-				}
-				case "add": {
-					if (!params.text?.trim()) {
-						throw new Error("text required for add");
-					}
-					const nextId = `legacy-${Date.now()}-${snapshot.todos.length + 1}`;
-					const result = mergeTodoLists(snapshot.todos, [
-						{ id: nextId, content: params.text.trim(), status: "pending" },
-					]);
-					snapshot = createTodoSnapshot(result.todos);
-					return {
-						content: [{ type: "text", text: `Added todo #${snapshot.todos.length}: ${params.text.trim()}` }],
-						details: { action: "legacy", ...result },
-					};
-				}
-				case "toggle": {
-					if (params.id === undefined) {
-						throw new Error("id required for toggle");
-					}
-					const result = toggleLegacyTodo(snapshot.todos, params.id);
-					snapshot = createTodoSnapshot(result.todos);
-					const toggled = toLegacyView(snapshot.todos)[params.id - 1];
-					return {
-						content: [
-							{ type: "text", text: `Todo #${params.id} ${toggled?.done ? "completed" : "uncompleted"}` },
-						],
-						details: { action: "legacy", ...result },
-					};
-				}
-				case "clear": {
-					const result = replaceTodoList(snapshot.todos, []);
-					snapshot = createTodoSnapshot([]);
-					return {
-						content: [{ type: "text", text: `Cleared ${result.changes.length} todos` }],
-						details: { action: "legacy", ...result },
-					};
-				}
-			}
-		},
-		renderCall(args, theme) {
-			let text = theme.fg("toolTitle", theme.bold("todo ")) + theme.fg("muted", args.action);
-			if (args.text) text += ` ${theme.fg("dim", `"${args.text}"`)}`;
-			if (args.id !== undefined) text += ` ${theme.fg("accent", `#${args.id}`)}`;
-			return new Text(text, 0, 0);
-		},
-		renderResult(result, _options, theme) {
-			const text = result.content[0];
-			return new Text(text?.type === "text" ? theme.fg("muted", text.text) : "", 0, 0);
-		},
-	});
-
 	pi.registerCommand("todos", {
 		description: "Show all todos on the current branch",
 		handler: async (_args, ctx) => {
