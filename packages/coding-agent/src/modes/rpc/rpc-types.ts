@@ -10,7 +10,9 @@ import type { ImageContent, Model } from "@daedalus-pi/ai";
 import type { SessionStats } from "../../core/agent-session.js";
 import type { BashResult } from "../../core/bash-executor.js";
 import type { CompactionResult } from "../../core/compaction/index.js";
+import type { WorkspaceResumeSafetyDiagnostic } from "../../core/session-cwd.js";
 import type { SourceInfo } from "../../core/source-info.js";
+import type { WorkspaceCleanupRisk, WorkspaceTarget } from "../../core/workspaces/types.js";
 
 // ============================================================================
 // RPC Commands (stdin)
@@ -26,6 +28,11 @@ export type RpcCommand =
 
 	// State
 	| { id?: string; type: "get_state" }
+	| { id?: string; type: "workspace_status" }
+	| { id?: string; type: "workspace_list" }
+	| { id?: string; type: "workspace_switch"; cwd?: string; branch?: string; idOrName?: string }
+	| { id?: string; type: "workspace_create"; branch: string; baseRef?: string; slug?: string }
+	| { id?: string; type: "workspace_cleanup_risk" }
 
 	// Model
 	| { id?: string; type: "set_model"; provider: string; modelId: string }
@@ -100,6 +107,7 @@ export interface RpcSessionState {
 	autoCompactionEnabled: boolean;
 	messageCount: number;
 	pendingMessageCount: number;
+	workspaceTarget?: WorkspaceTarget;
 }
 
 // ============================================================================
@@ -117,6 +125,29 @@ export type RpcResponse =
 
 	// State
 	| { id?: string; type: "response"; command: "get_state"; success: true; data: RpcSessionState }
+	| {
+			id?: string;
+			type: "response";
+			command: "workspace_status";
+			success: true;
+			data: { workspaceTarget?: WorkspaceTarget };
+	  }
+	| { id?: string; type: "response"; command: "workspace_list"; success: true; data: { targets: WorkspaceTarget[] } }
+	| {
+			id?: string;
+			type: "response";
+			command: "workspace_switch";
+			success: true;
+			data: { workspaceTarget: WorkspaceTarget; previousWorkspaceTarget?: WorkspaceTarget };
+	  }
+	| {
+			id?: string;
+			type: "response";
+			command: "workspace_create";
+			success: true;
+			data: { workspaceTarget: WorkspaceTarget; previousWorkspaceTarget?: WorkspaceTarget };
+	  }
+	| { id?: string; type: "response"; command: "workspace_cleanup_risk"; success: true; data: WorkspaceCleanupRisk }
 
 	// Model
 	| {
@@ -201,7 +232,15 @@ export type RpcResponse =
 	  }
 
 	// Error response (any command can fail)
-	| { id?: string; type: "response"; command: string; success: false; error: string };
+	| {
+			id?: string;
+			type: "response";
+			command: string;
+			success: false;
+			error: string;
+			errorCode?: string;
+			diagnostic?: WorkspaceResumeSafetyDiagnostic;
+	  };
 
 // ============================================================================
 // Extension UI Events (stdout)

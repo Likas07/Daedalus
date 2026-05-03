@@ -39,6 +39,8 @@ import { SessionManager } from "./core/session-manager.js";
 import { SettingsManager } from "./core/settings-manager.js";
 import { printTimings, resetTimings, time } from "./core/timings.js";
 import { allTools } from "./core/tools/index.js";
+import type { WorkspaceTarget } from "./core/workspaces/types.js";
+import { WorkspaceService } from "./core/workspaces/workspace-service.js";
 import { isGuiCommand, runGuiCommand } from "./gui/gui-command.js";
 import { runMigrations, showDeprecationWarnings } from "./migrations.js";
 import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.js";
@@ -110,6 +112,33 @@ function resolveAppMode(parsed: Args, stdinIsTTY: boolean): AppMode {
 
 function toPrintOutputMode(appMode: AppMode): Exclude<Mode, "rpc"> {
 	return appMode === "json" ? "json" : "text";
+}
+
+async function resolveStartupWorkspaceTarget(
+	parsed: Args,
+	cwd: string,
+	appMode: AppMode,
+): Promise<WorkspaceTarget | undefined> {
+	if (!parsed.project && !parsed.worktree && !parsed.workspaceTarget && !parsed.newWorktree) return undefined;
+	const projectRoot = parsed.project ? resolve(cwd, parsed.project) : cwd;
+	const service = new WorkspaceService({ projectRoot });
+	if (parsed.newWorktree) {
+		if (!parsed.confirmBaseCheckout && appMode !== "interactive") {
+			throw new Error("--new-worktree requires --confirm-base-checkout in non-interactive modes");
+		}
+		if (!parsed.confirmBaseCheckout) {
+			const confirmed = await promptConfirm(`Create worktree ${parsed.newWorktree} from the current base checkout?`);
+			if (!confirmed) process.exit(0);
+		}
+		return service.createIsolatedTarget({ branch: parsed.newWorktree });
+	}
+	if (parsed.worktree) return service.openTarget({ cwd: resolve(cwd, parsed.worktree) });
+	if (parsed.workspaceTarget) {
+		const value = parsed.workspaceTarget;
+		if (value.startsWith("/") || value.startsWith(".")) return service.openTarget({ cwd: resolve(cwd, value) });
+		return service.openTarget({ branch: value });
+	}
+	return service.resolveCurrentTarget(projectRoot);
 }
 
 async function prepareInitialMessage(
@@ -505,7 +534,13 @@ export async function main(args: string[]) {
 	// the target session cwd is known. The startup-cwd settings manager is used only for
 	// sessionDir lookup during session selection.
 	const sessionDir = parsed.sessionDir ?? startupSettingsManager.getSessionDir();
-	let sessionManager = await createSessionManager(parsed, cwd, sessionDir, startupSettingsManager);
+	const startupWorkspaceTarget = await resolveStartupWorkspaceTarget(parsed, cwd, appMode);
+	let sessionManager = await createSessionManager(
+		parsed,
+		startupWorkspaceTarget?.cwd ?? cwd,
+		sessionDir,
+		startupSettingsManager,
+	);
 	const missingSessionCwdIssue = getMissingSessionCwdIssue(sessionManager, cwd);
 	if (missingSessionCwdIssue) {
 		if (appMode === "interactive") {
@@ -531,11 +566,13 @@ export async function main(args: string[]) {
 		agentDir,
 		sessionManager,
 		sessionStartEvent,
+		workspaceTarget,
 	}) => {
 		const services = await createAgentSessionServices({
 			cwd,
 			agentDir,
 			authStorage,
+			workspaceTarget,
 			extensionFlagValues: parsed.unknownFlags,
 			resourceLoaderOptions: {
 				additionalExtensionPaths: resolvedExtensionPaths,
@@ -621,6 +658,7 @@ export async function main(args: string[]) {
 		cwd: sessionManager.getCwd(),
 		agentDir,
 		sessionManager,
+		workspaceTarget: startupWorkspaceTarget,
 	});
 	const { services, session, modelFallbackMessage } = runtime;
 	const { settingsManager, modelRegistry, resourceLoader } = services;

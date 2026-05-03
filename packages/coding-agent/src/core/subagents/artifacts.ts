@@ -8,6 +8,7 @@ export interface SubagentArtifactPaths {
 	resultFile: string;
 	contextFile: string;
 	metaFile: string;
+	mergeBackPatchFile: string;
 }
 
 export function getSubagentArtifactPaths(parentSessionFile: string, runId: string): SubagentArtifactPaths {
@@ -19,6 +20,7 @@ export function getSubagentArtifactPaths(parentSessionFile: string, runId: strin
 		resultFile: join(directory, `${runId}.result.json`),
 		contextFile: join(directory, `${runId}.context.md`),
 		metaFile: join(directory, `${runId}.meta.json`),
+		mergeBackPatchFile: join(directory, `${runId}.merge-back.patch`),
 	};
 }
 

@@ -44,6 +44,11 @@ export interface Args {
 	listModels?: string | true;
 	offline?: boolean;
 	verbose?: boolean;
+	project?: string;
+	worktree?: string;
+	workspaceTarget?: string;
+	newWorktree?: string;
+	confirmBaseCheckout?: boolean;
 	messages: string[];
 	fileArgs: string[];
 	/** Unknown flags (potentially extension flags) - map of flag name to value */
@@ -101,6 +106,16 @@ export function parseArgs(args: string[]): Args {
 			result.sessionDir = args[++i];
 		} else if (arg === "--models" && i + 1 < args.length) {
 			result.models = args[++i].split(",").map((s) => s.trim());
+		} else if (arg === "--project" && i + 1 < args.length) {
+			result.project = args[++i];
+		} else if (arg === "--worktree" && i + 1 < args.length) {
+			result.worktree = args[++i];
+		} else if (arg === "--workspace-target" && i + 1 < args.length) {
+			result.workspaceTarget = args[++i];
+		} else if (arg === "--new-worktree" && i + 1 < args.length) {
+			result.newWorktree = args[++i];
+		} else if (arg === "--confirm-base-checkout") {
+			result.confirmBaseCheckout = true;
 		} else if (arg === "--no-tools") {
 			result.noTools = true;
 		} else if (arg === "--tools" && i + 1 < args.length) {

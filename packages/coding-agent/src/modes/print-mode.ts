@@ -9,6 +9,7 @@
 import type { AssistantMessage, ImageContent } from "@daedalus-pi/ai";
 import type { AgentSessionRuntime } from "../core/agent-session-runtime.js";
 import { flushRawStdout, writeRawStdout } from "../core/output-guard.js";
+import { WorkspaceResumeSafetyError } from "../core/session-cwd.js";
 
 /**
  * Options for print mode.
@@ -69,6 +70,12 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 					}
 					return result;
 				},
+				getWorkspaceTarget: () => runtimeHost.workspaceTarget,
+				switchWorkspaceTarget: async (input) => {
+					const result = await runtimeHost.switchWorkspaceTarget(input);
+					await rebindSession();
+					return result;
+				},
 				reload: async () => {
 					await session.reload();
 				},
@@ -90,7 +97,7 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 		if (mode === "json") {
 			const header = session.sessionManager.getHeader();
 			if (header) {
-				writeRawStdout(`${JSON.stringify(header)}\n`);
+				writeRawStdout(`${JSON.stringify({ ...header, workspaceTarget: runtimeHost.workspaceTarget })}\n`);
 			}
 		}
 
@@ -125,7 +132,13 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 
 		return exitCode;
 	} catch (error: unknown) {
-		console.error(error instanceof Error ? error.message : String(error));
+		if (mode === "json" && error instanceof WorkspaceResumeSafetyError) {
+			writeRawStdout(
+				`${JSON.stringify({ type: "error", errorCode: "workspace_resume_safety", error: error.message, diagnostic: error.diagnostic })}\n`,
+			);
+		} else {
+			console.error(error instanceof Error ? error.message : String(error));
+		}
 		return 1;
 	} finally {
 		unsubscribe?.();

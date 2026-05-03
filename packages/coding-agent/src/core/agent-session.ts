@@ -2496,8 +2496,10 @@ export class AgentSession {
 			registry: subagentRegistry,
 			maxDepth: subagentSettings.maxDepth,
 			maxConcurrency: subagentSettings.maxConcurrency,
-			createSession: async ({ runId, childSessionFile, packetText, request, onSubmit }) => {
-				const sessionManager = SessionManager.create(this._cwd, dirname(childSessionFile));
+			cwd: this._cwd,
+			createSession: async ({ runId, childSessionFile, packetText, request, onSubmit, workspace }) => {
+				const workspaceCwd = workspace.cwd;
+				const sessionManager = SessionManager.create(workspaceCwd, dirname(childSessionFile));
 				sessionManager.setSessionFile(childSessionFile);
 				const isResume = existsSync(childSessionFile);
 				const runtime = resolveSubagentRuntimeConfig({
@@ -2508,12 +2510,12 @@ export class AgentSession {
 				});
 				const resourceLoader = createSubagentResourceLoader(this._resourceLoader, runtime.appendPrompts);
 				const { session } = await createNestedAgentSession({
-					cwd: this._cwd,
+					cwd: workspaceCwd,
 					modelRegistry: this._modelRegistry,
 					settingsManager: this.settingsManager,
 					sessionManager,
 					resourceLoader,
-					tools: createSubagentTools(this._cwd, runtime.policy),
+					tools: createSubagentTools(workspaceCwd, runtime.policy),
 					customTools: [createSubmitResultTool(onSubmit)],
 					model: runtime.model,
 					thinkingLevel: runtime.thinkingLevel,
@@ -2523,6 +2525,7 @@ export class AgentSession {
 						depth: request.metadata?.depth ?? 1,
 						spawns: runtime.policy.spawns,
 						maxDepth: runtime.policy.maxDepth,
+						workspaceTarget: workspace.workspaceTarget,
 					},
 					sessionStartEvent: {
 						type: "session_start",
@@ -2536,6 +2539,7 @@ export class AgentSession {
 					runId,
 					agent: request.agent.name,
 					goal: request.goal,
+					workspace: workspace.metadata,
 				});
 
 				return {

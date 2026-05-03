@@ -19,6 +19,8 @@ import type {
 	ExtensionWidgetOptions,
 } from "../../core/extensions/index.js";
 import { takeOverStdout, writeRawStdout } from "../../core/output-guard.js";
+import { WorkspaceResumeSafetyError } from "../../core/session-cwd.js";
+import { gitWorktreeList } from "../../core/workspaces/git.js";
 import { type Theme, theme } from "../interactive/theme/theme.js";
 import { attachJsonlLineReader, serializeJsonLine } from "./jsonl.js";
 import type {
@@ -63,7 +65,19 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 		return { id, type: "response", command, success: true, data } as RpcResponse;
 	};
 
-	const error = (id: string | undefined, command: string, message: string): RpcResponse => {
+	const error = (id: string | undefined, command: string, cause: unknown): RpcResponse => {
+		const message = cause instanceof Error ? cause.message : String(cause);
+		if (cause instanceof WorkspaceResumeSafetyError) {
+			return {
+				id,
+				type: "response",
+				command,
+				success: false,
+				error: message,
+				errorCode: "workspace_resume_safety",
+				diagnostic: cause.diagnostic,
+			} as RpcResponse;
+		}
 		return { id, type: "response", command, success: false, error: message };
 	};
 
@@ -318,6 +332,12 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 					}
 					return result;
 				},
+				getWorkspaceTarget: () => runtimeHost.workspaceTarget,
+				switchWorkspaceTarget: async (input) => {
+					const result = await runtimeHost.switchWorkspaceTarget(input);
+					await rebindSession();
+					return result;
+				},
 				reload: async () => {
 					await session.reload();
 				},
@@ -403,8 +423,47 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 					autoCompactionEnabled: session.autoCompactionEnabled,
 					messageCount: session.messages.length,
 					pendingMessageCount: session.pendingMessageCount,
+					workspaceTarget: runtimeHost.workspaceTarget,
 				};
 				return success(id, "get_state", state);
+			}
+			case "workspace_status": {
+				return success(id, "workspace_status", { workspaceTarget: runtimeHost.workspaceTarget });
+			}
+			case "workspace_list": {
+				const service = runtimeHost.services.workspaceService;
+				if (!service) return success(id, "workspace_list", { targets: [] });
+				const targets = gitWorktreeList(service.projectRoot).map((entry) =>
+					service.openTarget({ cwd: entry.path }),
+				);
+				return success(id, "workspace_list", { targets });
+			}
+			case "workspace_switch": {
+				const target = command.cwd
+					? { cwd: command.cwd }
+					: command.branch
+						? { branch: command.branch }
+						: { id: command.idOrName };
+				const result = await runtimeHost.switchWorkspaceTarget(target);
+				await rebindSession();
+				return success(id, "workspace_switch", result);
+			}
+			case "workspace_create": {
+				const result = await runtimeHost.switchWorkspaceTarget({
+					mode: "create",
+					branch: command.branch,
+					baseRef: command.baseRef,
+					slug: command.slug,
+				});
+				await rebindSession();
+				return success(id, "workspace_create", result);
+			}
+			case "workspace_cleanup_risk": {
+				const service = runtimeHost.services.workspaceService;
+				const target = runtimeHost.workspaceTarget;
+				if (!service || !target)
+					return error(id, "workspace_cleanup_risk", "Workspace cleanup risk is unavailable");
+				return success(id, "workspace_cleanup_risk", service.cleanupTargetRisk(target));
 			}
 
 			// =================================================================
@@ -664,13 +723,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			output(response);
 			await checkShutdownRequested();
 		} catch (commandError: unknown) {
-			output(
-				error(
-					command.id,
-					command.type,
-					commandError instanceof Error ? commandError.message : String(commandError),
-				),
-			);
+			output(error(command.id, command.type, commandError));
 		}
 	};
 

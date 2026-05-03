@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import type { AgentSessionEvent } from "../agent-session.js";
+import type { WorkspaceService } from "../workspaces/workspace-service.js";
 import { getSubagentArtifactPaths } from "./artifacts.js";
 import { writePersistedSubagentRun } from "./persisted-runs.js";
 import { resolveSubagentPolicy } from "./policy.js";
@@ -18,6 +19,7 @@ import type {
 	SubagentRunResult,
 	SubagentRunStatus,
 } from "./types.js";
+import { type PreparedSubagentWorkspace, prepareSubagentWorkspace } from "./workspace-isolation.js";
 
 const MAX_SUBMIT_REMINDERS = 2;
 const SUBMIT_REMINDER = [
@@ -41,6 +43,7 @@ export interface CreateSubagentSessionOptions {
 	contextArtifactPath?: string;
 	request: SubagentRunRequest;
 	onSubmit: (payload: SubmitResultPayload) => void;
+	workspace: PreparedSubagentWorkspace;
 }
 
 export type CreateSubagentSession = (options: CreateSubagentSessionOptions) => Promise<SubagentSessionHandle>;
@@ -131,17 +134,23 @@ export class SubagentRunner {
 	#registry: SubagentRegistry;
 	#maxConcurrency: number;
 	#maxDepth: number;
+	#cwd: string;
+	#workspaceService?: WorkspaceService;
 
 	constructor(input: {
 		createSession: CreateSubagentSession;
 		registry?: SubagentRegistry;
 		maxConcurrency?: number;
 		maxDepth?: number;
+		cwd?: string;
+		workspaceService?: WorkspaceService;
 	}) {
 		this.#createSession = input.createSession;
 		this.#registry = input.registry ?? new SubagentRegistry();
 		this.#maxConcurrency = input.maxConcurrency ?? 4;
 		this.#maxDepth = input.maxDepth ?? 2;
+		this.#cwd = input.cwd ?? process.cwd();
+		this.#workspaceService = input.workspaceService;
 	}
 
 	get registry(): SubagentRegistry {
@@ -192,6 +201,12 @@ export class SubagentRunner {
 			packetText = builtPacket.packetText.replace("{contextArtifactPath}", paths.contextFile);
 		}
 
+		const workspace = await prepareSubagentWorkspace({
+			request,
+			runId,
+			cwd: request.workspaceTarget?.cwd ?? this.#cwd,
+			workspaceService: this.#workspaceService,
+		});
 		let submitPayload: SubmitResultPayload | undefined;
 		const handle = await this.#createSession({
 			runId,
@@ -199,6 +214,7 @@ export class SubagentRunner {
 			packetText,
 			contextArtifactPath,
 			request,
+			workspace,
 			onSubmit: (payload) => {
 				submitPayload = payload;
 			},
@@ -221,6 +237,11 @@ export class SubagentRunner {
 			recentActivity,
 			childSessionFile: paths.sessionFile,
 			contextArtifactPath,
+			isolation: workspace.metadata?.isolation,
+			workspaceTarget: workspace.workspaceTarget,
+			workspaceMetadata: workspace.metadata,
+			baseBranch: workspace.metadata?.baseBranch,
+			mergeBack: workspace.metadata?.mergeBack,
 		};
 		let persistQueue = Promise.resolve();
 		const queuePersist = (update: Partial<SubagentRunResult>): Promise<void> => {
@@ -267,6 +288,7 @@ export class SubagentRunner {
 				contextArtifactPath,
 				activity,
 				recentActivity,
+				workspaceTarget: workspace.workspaceTarget,
 			};
 			request.onProgress?.(progress);
 		};
@@ -280,6 +302,9 @@ export class SubagentRunner {
 			parentSessionFile: request.parentSessionFile,
 			childSessionFile: paths.sessionFile,
 			contextArtifactPath,
+			workspaceTarget: workspace.workspaceTarget,
+			workspaceMetadata: workspace.metadata,
+			isolation: workspace.metadata?.isolation,
 			startedAt,
 		});
 		await queuePersist({});
@@ -442,6 +467,11 @@ export class SubagentRunner {
 				activity: lastActivity,
 				recentActivity,
 				resultArtifactPath: paths.resultFile,
+				isolation: workspace.metadata?.isolation,
+				workspaceTarget: workspace.workspaceTarget,
+				workspaceMetadata: workspace.metadata,
+				baseBranch: workspace.metadata?.baseBranch,
+				mergeBack: workspace.metadata?.mergeBack,
 				data: sidecar,
 			});
 			return {
@@ -462,6 +492,11 @@ export class SubagentRunner {
 				childSessionFile: paths.sessionFile,
 				contextArtifactPath,
 				resultArtifactPath: paths.resultFile,
+				isolation: workspace.metadata?.isolation,
+				workspaceTarget: workspace.workspaceTarget,
+				workspaceMetadata: workspace.metadata,
+				baseBranch: workspace.metadata?.baseBranch,
+				mergeBack: workspace.metadata?.mergeBack,
 				data: sidecar,
 			};
 		} finally {

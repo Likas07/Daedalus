@@ -10,6 +10,7 @@ import type { ImageContent } from "@daedalus-pi/ai";
 import type { SessionStats } from "../../core/agent-session.js";
 import type { BashResult } from "../../core/bash-executor.js";
 import type { CompactionResult } from "../../core/compaction/index.js";
+import type { WorkspaceCleanupRisk, WorkspaceTarget } from "../../core/workspaces/types.js";
 import { attachJsonlLineReader, serializeJsonLine } from "./jsonl.js";
 import type { RpcCommand, RpcResponse, RpcSessionState, RpcSlashCommand } from "./rpc-types.js";
 
@@ -204,6 +205,39 @@ export class RpcClient {
 	 */
 	async getState(): Promise<RpcSessionState> {
 		const response = await this.send({ type: "get_state" });
+		return this.getData(response);
+	}
+
+	async workspaceStatus(): Promise<{ workspaceTarget?: WorkspaceTarget }> {
+		const response = await this.send({ type: "workspace_status" });
+		return this.getData(response);
+	}
+
+	async listWorkspaces(): Promise<WorkspaceTarget[]> {
+		const response = await this.send({ type: "workspace_list" });
+		return this.getData<{ targets: WorkspaceTarget[] }>(response).targets;
+	}
+
+	async switchWorkspace(input: {
+		cwd?: string;
+		branch?: string;
+		idOrName?: string;
+	}): Promise<{ workspaceTarget: WorkspaceTarget; previousWorkspaceTarget?: WorkspaceTarget }> {
+		const response = await this.send({ type: "workspace_switch", ...input });
+		return this.getData(response);
+	}
+
+	async createWorkspace(input: {
+		branch: string;
+		baseRef?: string;
+		slug?: string;
+	}): Promise<{ workspaceTarget: WorkspaceTarget; previousWorkspaceTarget?: WorkspaceTarget }> {
+		const response = await this.send({ type: "workspace_create", ...input });
+		return this.getData(response);
+	}
+
+	async workspaceCleanupRisk(): Promise<WorkspaceCleanupRisk> {
+		const response = await this.send({ type: "workspace_cleanup_risk" });
 		return this.getData(response);
 	}
 
