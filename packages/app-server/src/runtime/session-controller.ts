@@ -8,6 +8,7 @@ import type {
 	TurnId,
 	WorkflowRunsInTarget,
 } from "@daedalus-pi/app-server-protocol";
+import type { WorkspaceTarget } from "@daedalus-pi/coding-agent";
 export type RuntimeSessionManager = unknown;
 
 import { createSessionIdentitySnapshot } from "../sessions/session-identity";
@@ -25,6 +26,7 @@ export interface ControlledSessionRuntime {
 		abort(): Promise<void>;
 	};
 	readonly control?: unknown;
+	readonly workspaceTarget?: WorkspaceTarget;
 	applyRuntimeOptions?(context?: PromptContextInput): Promise<void>;
 	dispose(): Promise<void>;
 }
@@ -36,6 +38,7 @@ export interface RuntimeFactoryInput {
 	readonly sessionManager: RuntimeSessionManager;
 	readonly applyProcessCwd?: boolean;
 	readonly context?: PromptContextInput;
+	readonly workspaceTarget?: WorkspaceTarget;
 }
 
 export type RuntimeFactory = (input: RuntimeFactoryInput) => Promise<ControlledSessionRuntime>;
@@ -85,6 +88,7 @@ export interface StartSessionInput {
 	readonly worktreeId?: string;
 	readonly runsIn?: WorkflowRunsInTarget;
 	readonly parentSessionId?: SessionId;
+	readonly workspaceTarget?: WorkspaceTarget;
 }
 
 export interface ResumeSessionInput {
@@ -92,6 +96,7 @@ export interface ResumeSessionInput {
 	readonly sessionPath: string;
 	readonly sessionId?: SessionId;
 	readonly identity?: SessionResumeIdentity;
+	readonly workspaceTarget?: WorkspaceTarget;
 }
 
 export interface StartTurnInput {
@@ -140,6 +145,7 @@ export class SessionController {
 			sessionId,
 			applyProcessCwd: false,
 			context: input.context,
+			workspaceTarget: input.workspaceTarget,
 		});
 		this.register(sessionId, runtime);
 		await this.emit({
@@ -151,9 +157,14 @@ export class SessionController {
 				sessionId,
 				cwd: runtime.cwd,
 				sessionFile: runtime.session.sessionFile,
-				projectId: input.projectId,
-				worktreeId: input.worktreeId,
-				runsIn: input.runsIn,
+				projectId:
+					input.projectId ??
+					runsInFromWorkspaceTarget(input.workspaceTarget ?? runtime.workspaceTarget)?.projectId,
+				worktreeId:
+					input.worktreeId ??
+					runsInFromWorkspaceTarget(input.workspaceTarget ?? runtime.workspaceTarget)?.worktreeId,
+				runsIn: input.runsIn ?? runsInFromWorkspaceTarget(input.workspaceTarget ?? runtime.workspaceTarget),
+				workspaceTarget: input.workspaceTarget ?? runtime.workspaceTarget,
 				parentSessionId: input.parentSessionId,
 				sourceSessionId: input.parentSessionId,
 				identity: await createSessionIdentitySnapshot({
@@ -163,6 +174,7 @@ export class SessionController {
 					projectId: input.projectId,
 					worktreeId: input.worktreeId,
 					runsIn: input.runsIn,
+					workspaceTarget: input.workspaceTarget ?? runtime.workspaceTarget,
 				}),
 			},
 		});
@@ -366,4 +378,21 @@ export class SessionController {
 	private nowIso(): string {
 		return (this.options.now?.() ?? new Date()).toISOString();
 	}
+}
+function runsInFromWorkspaceTarget(target: WorkspaceTarget | undefined): WorkflowRunsInTarget | undefined {
+	if (!target) return undefined;
+	return {
+		projectId: target.projectRoot ?? target.cwd,
+		worktreeId: target.id,
+		path: target.cwd,
+		canonicalPath: target.cwd,
+		branch: target.branch ?? null,
+		isolationMode:
+			target.isolationMode === "dedicated_worktree" || target.isolationMode === "external_worktree"
+				? "isolated-worktree"
+				: "base-checkout",
+		validationStatus:
+			target.validationStatus === "valid" ? "valid" : target.validationStatus ? "needs-attention" : "valid",
+		reason: target.validationMessage,
+	};
 }

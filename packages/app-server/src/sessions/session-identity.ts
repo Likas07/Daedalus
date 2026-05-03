@@ -1,6 +1,7 @@
 import { lstat, realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { SessionResumeIdentity, WorkflowRunsInTarget } from "@daedalus-pi/app-server-protocol";
+import type { WorkspaceTarget } from "@daedalus-pi/coding-agent";
 import type { AppServerDatabase } from "../persistence/database";
 import { readEvents } from "../persistence/event-store";
 import { projectRuntimeEvents } from "../persistence/projector";
@@ -18,6 +19,7 @@ export interface SessionIdentitySnapshot {
 	readonly branch?: string | null;
 	readonly isolationMode?: string;
 	readonly sessionFile?: string;
+	readonly workspaceTarget?: WorkspaceTarget;
 }
 
 export interface VerifySessionResumeIdentityInput {
@@ -34,16 +36,19 @@ export async function createSessionIdentitySnapshot(input: {
 	readonly runsIn?: WorkflowRunsInTarget;
 	readonly projectId?: string;
 	readonly worktreeId?: string;
+	readonly workspaceTarget?: WorkspaceTarget;
 }): Promise<SessionIdentitySnapshot> {
 	return {
 		sessionId: input.sessionId,
 		cwd: input.cwd,
 		canonicalPath: await canonicalPath(input.cwd, { allowMissing: true }),
-		projectId: input.projectId ?? input.runsIn?.projectId,
-		worktreeId: input.worktreeId ?? input.runsIn?.worktreeId,
-		branch: input.runsIn?.branch,
-		isolationMode: input.runsIn?.isolationMode,
+		projectId:
+			input.projectId ?? input.runsIn?.projectId ?? input.workspaceTarget?.projectRoot ?? input.workspaceTarget?.cwd,
+		worktreeId: input.worktreeId ?? input.runsIn?.worktreeId ?? input.workspaceTarget?.id,
+		branch: input.runsIn?.branch ?? input.workspaceTarget?.branch,
+		isolationMode: input.runsIn?.isolationMode ?? appIsolationMode(input.workspaceTarget),
 		sessionFile: input.sessionFile,
+		workspaceTarget: input.workspaceTarget,
 	};
 }
 
@@ -233,6 +238,12 @@ function stringOrUndefined(value: unknown): string | undefined {
 	return typeof value === "string" ? value : undefined;
 }
 
+function appIsolationMode(target: WorkspaceTarget | undefined): string | undefined {
+	if (!target) return undefined;
+	return target.isolationMode === "dedicated_worktree" || target.isolationMode === "external_worktree"
+		? "isolated-worktree"
+		: "base-checkout";
+}
 function message(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }

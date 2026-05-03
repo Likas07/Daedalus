@@ -78,6 +78,31 @@ describe("session resume identity", () => {
 		expect(result.storedWorktreeId).toBe("w1");
 	});
 
+	test("projects core workspaceTarget metadata into resume identity snapshots", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "dae-core-target-"));
+		const identity = await createSessionIdentitySnapshot({
+			sessionId: "s-core",
+			cwd,
+			sessionFile: "sqlite://s-core",
+			workspaceTarget: {
+				id: "core-target",
+				cwd,
+				projectRoot: "project-core",
+				branch: "feature/core",
+				isolationMode: "dedicated_worktree",
+				validationStatus: "valid",
+			},
+		});
+
+		expect(identity).toMatchObject({
+			projectId: "project-core",
+			worktreeId: "core-target",
+			branch: "feature/core",
+			isolationMode: "isolated-worktree",
+			workspaceTarget: expect.objectContaining({ id: "core-target", isolationMode: "dedicated_worktree" }),
+		});
+	});
+
 	test("blocks missing identity before runtime resume", async () => {
 		const database = db();
 		const cwd = await mkdtemp(join(tmpdir(), "dae-wt-"));

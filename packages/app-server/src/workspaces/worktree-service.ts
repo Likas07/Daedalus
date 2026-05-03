@@ -1,6 +1,7 @@
 import { access } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { WorktreeConflictReason, WorktreeCreateOutcome } from "@daedalus-pi/app-server-protocol";
+import { WorkspaceService, type WorkspaceTarget } from "@daedalus-pi/coding-agent";
 import { type AppServerDatabase, appendEvent, type EventPayload, readEvents } from "..";
 import { projectRuntimeEvents } from "../persistence/projector";
 import { listWorktrees, type WorktreeReadModel } from "../persistence/read-model";
@@ -98,6 +99,8 @@ export class WorktreeService {
 			}
 		}
 
+		// Keep app-server allocation/idempotency here: core WorkspaceService.createIsolatedTarget owns
+		// its .daedalus/worktrees path policy and cannot yet accept app-server custom paths/operation IDs.
 		const target = await this.allocateTarget(project.path, input);
 		const result = await createWorktreeInTransaction({
 			projectPath: project.path,
@@ -189,7 +192,9 @@ export class WorktreeService {
 		if (!worktree) throw new Error(`Unknown worktree: ${worktreeId}`);
 		const project = this.projects.get(worktree.projectId);
 		if (!project) throw new Error(`Unknown project: ${worktree.projectId}`);
-		await git(project.path, ["worktree", "remove", ...(options.force ? ["--force"] : []), worktree.path]);
+		this.coreWorkspaceService(project.path).removeTarget(this.toCoreTarget(worktree, project.path), {
+			force: options.force,
+		});
 	}
 
 	list(projectId?: string): WorktreeReadModel[] {
@@ -368,6 +373,23 @@ export class WorktreeService {
 	private async localBranches(projectPath: string): Promise<Set<string>> {
 		const result = await git(projectPath, ["for-each-ref", "--format=%(refname:short)", "refs/heads"]);
 		return new Set(result.stdout.split("\n").filter(Boolean));
+	}
+
+	private coreWorkspaceService(projectPath: string): WorkspaceService {
+		return new WorkspaceService({ projectRoot: projectPath });
+	}
+
+	private toCoreTarget(worktree: WorktreeReadModel, projectPath: string): WorkspaceTarget {
+		return {
+			id: worktree.id,
+			cwd: worktree.path,
+			projectRoot: projectPath,
+			isolationMode: worktree.path === projectPath ? "shared_cwd" : "external_worktree",
+			branch: worktree.branch ?? undefined,
+			worktreePath: worktree.path,
+			baseBranch: worktree.baseBranch ?? undefined,
+			validationStatus: "valid",
+		};
 	}
 
 	private async withMetadata(worktree: WorktreeReadModel): Promise<WorktreeLifecycleMetadata> {

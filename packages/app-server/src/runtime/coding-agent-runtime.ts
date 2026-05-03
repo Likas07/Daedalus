@@ -22,7 +22,7 @@ export interface CodingAgentRuntimeFactoryOptions {
 }
 
 export function createCodingAgentRuntimeFactory(options: CodingAgentRuntimeFactoryOptions = {}): RuntimeFactory {
-	return async ({ cwd, agentDir, sessionManager, applyProcessCwd, context, sessionId }) => {
+	return async ({ cwd, agentDir, sessionManager, applyProcessCwd, context, sessionId, workspaceTarget }) => {
 		const resolvedAgentDir = agentDir || getAgentDir();
 		let currentServices: Awaited<ReturnType<typeof createAgentSessionServices>> | undefined;
 		const applyOptions = async (session: unknown, nextContext = context) => {
@@ -46,8 +46,13 @@ export function createCodingAgentRuntimeFactory(options: CodingAgentRuntimeFacto
 			cwd: runtimeCwd,
 			sessionManager,
 			sessionStartEvent,
+			workspaceTarget: runtimeWorkspaceTarget,
 		}) => {
-			const services = await createAgentSessionServices({ cwd: runtimeCwd, agentDir: resolvedAgentDir });
+			const services = await createAgentSessionServices({
+				cwd: runtimeCwd,
+				agentDir: resolvedAgentDir,
+				workspaceTarget: runtimeWorkspaceTarget,
+			});
 			currentServices = services;
 			const resolved = await resolveRuntimeOptions({ services, sessionManager, context });
 			services.diagnostics.push(...resolved.diagnostics);
@@ -87,10 +92,12 @@ export function createCodingAgentRuntimeFactory(options: CodingAgentRuntimeFacto
 			agentDir: resolvedAgentDir,
 			sessionManager: (sessionManager ?? SessionManager.create(cwd)) as SessionManager,
 			applyProcessCwd: applyProcessCwd ?? false,
+			workspaceTarget,
 		});
 		return {
 			cwd: runtime.cwd,
 			session: runtime.session,
+			workspaceTarget: runtime.workspaceTarget,
 			applyRuntimeOptions: (nextContext?: typeof context) => applyOptions(runtime.session, nextContext),
 			control: {
 				reload: async () => {
@@ -99,6 +106,11 @@ export function createCodingAgentRuntimeFactory(options: CodingAgentRuntimeFacto
 				get diagnostics() {
 					return runtime.diagnostics;
 				},
+				get workspaceTarget() {
+					return runtime.workspaceTarget;
+				},
+				switchWorkspaceTarget: (input: Parameters<typeof runtime.switchWorkspaceTarget>[0]) =>
+					runtime.switchWorkspaceTarget(input),
 			},
 			dispose: async () => {
 				(runtime.session as { __approvalGate?: ToolApprovalGate }).__approvalGate?.dispose();
