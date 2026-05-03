@@ -11,6 +11,8 @@ import { type CreateAgentSessionResult, createAgentSession } from "./sdk.js";
 import type { SessionManager } from "./session-manager.js";
 import { SettingsManager } from "./settings-manager.js";
 import type { Tool } from "./tools/index.js";
+import type { WorkspaceTarget } from "./workspaces/types.js";
+import { WorkspaceService } from "./workspaces/workspace-service.js";
 
 /**
  * Non-fatal issues collected while creating services or sessions.
@@ -39,6 +41,7 @@ export interface CreateAgentSessionServicesOptions {
 	modelRegistry?: ModelRegistry;
 	extensionFlagValues?: Map<string, boolean | string>;
 	resourceLoaderOptions?: Omit<DefaultResourceLoaderOptions, "cwd" | "agentDir" | "settingsManager">;
+	workspaceTarget?: WorkspaceTarget;
 }
 
 /**
@@ -72,6 +75,8 @@ export interface AgentSessionServices {
 	modelRegistry: ModelRegistry;
 	resourceLoader: ResourceLoader;
 	diagnostics: AgentSessionRuntimeDiagnostic[];
+	workspaceService?: WorkspaceService;
+	workspaceTarget?: WorkspaceTarget;
 }
 
 function applyExtensionFlagValues(
@@ -131,6 +136,14 @@ export async function createAgentSessionServices(
 	options: CreateAgentSessionServicesOptions,
 ): Promise<AgentSessionServices> {
 	const cwd = options.cwd;
+	let workspaceService: WorkspaceService | undefined;
+	let workspaceTarget = options.workspaceTarget;
+	try {
+		workspaceService = new WorkspaceService({ projectRoot: workspaceTarget?.projectRoot ?? cwd });
+		workspaceTarget ??= workspaceService.resolveCurrentTarget(cwd);
+	} catch {
+		workspaceTarget ??= { cwd, isolationMode: "shared_cwd" };
+	}
 	const agentDir = options.agentDir ?? getAgentDir();
 	const authStorage = options.authStorage ?? AuthStorage.create(join(agentDir, "auth.json"));
 	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
@@ -169,6 +182,8 @@ export async function createAgentSessionServices(
 		modelRegistry,
 		resourceLoader,
 		diagnostics,
+		workspaceService,
+		workspaceTarget,
 	};
 }
 
@@ -196,5 +211,6 @@ export async function createAgentSessionFromServices(
 		tools: options.tools,
 		customTools: options.customTools,
 		sessionStartEvent: options.sessionStartEvent,
+		workspaceTarget: options.services.workspaceTarget,
 	});
 }

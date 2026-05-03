@@ -24,6 +24,9 @@ import {
 	createCompactionSummaryMessage,
 	createCustomMessage,
 } from "./messages.js";
+import { getWorkspaceResumeSafetyDiagnostic, type WorkspaceResumeSafetyDiagnostic } from "./session-cwd.js";
+import { normalizeWorkspaceSessionIdentity, type WorkspaceSessionIdentity } from "./workspaces/session-identity.js";
+import type { WorkspaceService } from "./workspaces/workspace-service.js";
 
 export const CURRENT_SESSION_VERSION = 3;
 
@@ -34,11 +37,13 @@ export interface SessionHeader {
 	timestamp: string;
 	cwd: string;
 	parentSession?: string;
+	workspaceIdentity?: WorkspaceSessionIdentity;
 }
 
 export interface NewSessionOptions {
 	id?: string;
 	parentSession?: string;
+	workspaceIdentity?: WorkspaceSessionIdentity;
 }
 
 export interface SessionEntryBase {
@@ -786,6 +791,13 @@ export class SessionManager {
 			timestamp,
 			cwd: this.cwd,
 			parentSession: options?.parentSession,
+			workspaceIdentity: options?.workspaceIdentity
+				? normalizeWorkspaceSessionIdentity(options.workspaceIdentity, {
+						cwd: this.cwd,
+						sessionId: this.sessionId,
+						now: timestamp,
+					})
+				: undefined,
 		};
 		this.fileEntries = [header];
 		this.byId.clear();
@@ -845,6 +857,26 @@ export class SessionManager {
 
 	getSessionFile(): string | undefined {
 		return this.sessionFile;
+	}
+
+	getWorkspaceIdentity(): WorkspaceSessionIdentity | undefined {
+		return this.getHeader()?.workspaceIdentity;
+	}
+
+	getWorkspaceResumeSafetyDiagnostic(
+		fallbackCwd: string,
+		workspaceService?: WorkspaceService,
+	): WorkspaceResumeSafetyDiagnostic | undefined {
+		return getWorkspaceResumeSafetyDiagnostic(this, fallbackCwd, workspaceService);
+	}
+
+	setWorkspaceIdentity(identity: WorkspaceSessionIdentity | undefined): void {
+		const header = this.getHeader();
+		if (!header) return;
+		header.workspaceIdentity = identity
+			? normalizeWorkspaceSessionIdentity(identity, { cwd: this.cwd, sessionId: this.sessionId })
+			: undefined;
+		this._rewriteFile();
 	}
 
 	_persist(entry: SessionEntry): void {
@@ -1253,6 +1285,17 @@ export class SessionManager {
 			timestamp,
 			cwd: this.cwd,
 			parentSession: this.persist ? previousSessionFile : undefined,
+			workspaceIdentity: this.getWorkspaceIdentity()
+				? normalizeWorkspaceSessionIdentity(this.getWorkspaceIdentity(), {
+						cwd: this.cwd,
+						sessionId: newSessionId,
+						lineage: {
+							parentSessionId: this.sessionId,
+							parentSessionPath: this.persist ? previousSessionFile : undefined,
+						},
+						now: timestamp,
+					})
+				: undefined,
 		};
 
 		// Collect labels for entries in the path
@@ -1407,6 +1450,20 @@ export class SessionManager {
 			timestamp,
 			cwd: targetCwd,
 			parentSession: sourcePath,
+			workspaceIdentity: sourceHeader.workspaceIdentity
+				? normalizeWorkspaceSessionIdentity(sourceHeader.workspaceIdentity, {
+						cwd: targetCwd,
+						sessionId: newSessionId,
+						lineage: {
+							parentSessionId: sourceHeader.id,
+							parentSessionPath: sourcePath,
+							sourceSessionId: sourceHeader.id,
+							sourceSessionPath: sourcePath,
+							forkedAt: timestamp,
+						},
+						now: timestamp,
+					})
+				: undefined,
 		};
 		appendFileSync(newSessionFile, `${JSON.stringify(newHeader)}\n`);
 

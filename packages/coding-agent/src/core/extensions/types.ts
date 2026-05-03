@@ -34,6 +34,7 @@ import type {
 } from "@daedalus-pi/tui";
 import type { Static, TSchema } from "@sinclair/typebox";
 import type { Theme } from "../../modes/interactive/theme/theme.js";
+import type { SwitchWorkspaceTargetInput } from "../agent-session-runtime.js";
 import type { BashResult } from "../bash-executor.js";
 import type { CompactionPreparation, CompactionResult } from "../compaction/index.js";
 import type { TaskRecord } from "../control-plane/index.js";
@@ -71,6 +72,7 @@ import type {
 	WriteToolInput,
 } from "../tools/index.js";
 import type { ReadLedgerLike } from "../tools/read-ledger.js";
+import type { WorkspaceTarget } from "../workspaces/types.js";
 
 export type { ExecOptions, ExecResult } from "../exec.js";
 export type { AppKeybinding, KeybindingsManager } from "../keybindings.js";
@@ -268,6 +270,8 @@ export interface ExtensionContext {
 	hasUI: boolean;
 	/** Current working directory */
 	cwd: string;
+	/** Current workspace target, when workspace identity is available. */
+	workspaceTarget?: WorkspaceTarget;
 	/** Per-session ledger of files successfully read with the read tool. */
 	readLedger?: ReadLedgerLike;
 	/** Session manager (read-only) */
@@ -322,6 +326,12 @@ export interface ExtensionCommandContext extends ExtensionContext {
 
 	/** Switch to a different session file. */
 	switchSession(sessionPath: string): Promise<{ cancelled: boolean }>;
+
+	/** Get or switch the current workspace target. */
+	getWorkspaceTarget?(): WorkspaceTarget | undefined;
+	switchWorkspaceTarget?(
+		input: SwitchWorkspaceTargetInput,
+	): Promise<{ workspaceTarget: WorkspaceTarget; previousWorkspaceTarget?: WorkspaceTarget }>;
 
 	/** Reload extensions, skills, prompts, and themes. */
 	reload(): Promise<void>;
@@ -1440,6 +1450,7 @@ export interface ExtensionContextActions {
 	getContextUsage: () => ContextUsage | undefined;
 	compact: (options?: CompactOptions) => void;
 	getSystemPrompt: () => string;
+	getWorkspaceTarget?: () => WorkspaceTarget | undefined;
 
 	getSkills: () => Skill[];
 }
@@ -1460,6 +1471,10 @@ export interface ExtensionCommandContextActions {
 		options?: { summarize?: boolean; customInstructions?: string; replaceInstructions?: boolean; label?: string },
 	) => Promise<{ cancelled: boolean }>;
 	switchSession: (sessionPath: string) => Promise<{ cancelled: boolean }>;
+	getWorkspaceTarget?: () => WorkspaceTarget | undefined;
+	switchWorkspaceTarget?: (
+		input: SwitchWorkspaceTargetInput,
+	) => Promise<{ workspaceTarget: WorkspaceTarget; previousWorkspaceTarget?: WorkspaceTarget }>;
 	reload: () => Promise<void>;
 }
 
