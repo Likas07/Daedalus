@@ -57,10 +57,10 @@ Extended messages from [`packages/coding-agent/src/core/messages.ts`](https://gi
 
 ## Output Format
 
-Each line is a JSON object. The first line is the session header:
+Each line is a JSON object. The first line is the session header. When a workspace target is available, startup metadata includes the same core `WorkspaceTarget` exposed by the runtime/RPC/SDK surfaces:
 
 ```json
-{"type":"session","version":3,"id":"uuid","timestamp":"...","cwd":"/path"}
+{"type":"session","version":3,"id":"uuid","timestamp":"...","cwd":"/path","workspaceTarget":{"cwd":"/path","isolationMode":"shared_cwd","validationStatus":"valid"}}
 ```
 
 Followed by events as they occur:

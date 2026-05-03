@@ -10,6 +10,14 @@ Sessions are stored as JSONL (JSON Lines) files. Each line is a JSON object with
 
 Where `<path>` is the working directory with `/` replaced by `-`.
 
+## Workspace identity
+
+New sessions also carry normalized workspace identity when Daedalus can resolve it. The core `WorkspaceTarget` records the effective `cwd`, optional `projectRoot`, isolation mode (`shared_cwd`, `dedicated_worktree`, `external_worktree`, or `detached`), branch/worktree metadata, and validation status.
+
+Legacy cwd-only sessions are still loadable. On resume, Daedalus derives a `shared_cwd` target from the stored cwd and reports resume diagnostics when the stored target is missing, mismatched, or needs adoption into the current workspace.
+
+Recovery choices are: resume in the stored target when safe, switch/open the stored target, adopt the session into the current target, recreate a missing worktree, or start a new session. See `docs/architecture/core-workspace-targets.md` for the cross-surface model.
+
 ## Deleting Sessions
 
 Sessions can be removed by deleting their `.jsonl` files under `~/.daedalus/agent/sessions/`.
