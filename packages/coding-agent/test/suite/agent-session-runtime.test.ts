@@ -102,6 +102,7 @@ describe("AgentSessionRuntime characterization", () => {
 			cwd: tempDir,
 			agentDir: tempDir,
 			sessionManager: SessionManager.create(tempDir),
+			workspaceTarget: { cwd: tempDir, isolationMode: "shared_cwd" },
 		});
 		await runtime.session.bindExtensions({});
 
@@ -292,6 +293,7 @@ describe("AgentSessionRuntime characterization", () => {
 			cwd: secondDir,
 			agentDir: tempDir,
 			sessionManager: SessionManager.create(secondDir),
+			workspaceTarget: { cwd: secondDir, isolationMode: "shared_cwd" },
 		});
 		cleanups.push(async () => {
 			await otherRuntime.dispose();
@@ -365,6 +367,7 @@ describe("AgentSessionRuntime characterization", () => {
 			cwd: otherDir,
 			agentDir: tempDir,
 			sessionManager: SessionManager.create(otherDir),
+			workspaceTarget: { cwd: otherDir, isolationMode: "shared_cwd" },
 		});
 		cleanups.push(async () => {
 			await otherRuntime.dispose();

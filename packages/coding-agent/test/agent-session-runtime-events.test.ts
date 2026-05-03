@@ -70,6 +70,7 @@ describe("AgentSessionRuntime session lifecycle events", () => {
 			cwd: tempDir,
 			agentDir: tempDir,
 			sessionManager: SessionManager.create(tempDir),
+			workspaceTarget: { cwd: tempDir, isolationMode: "shared_cwd" },
 		});
 		await runtimeHost.session.bindExtensions({});
 

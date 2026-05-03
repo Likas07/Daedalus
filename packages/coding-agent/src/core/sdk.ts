@@ -48,10 +48,15 @@ import {
 	withFileMutationQueue,
 	writeTool,
 } from "./tools/index.js";
+import { gitWorktreeList } from "./workspaces/git.js";
+import type { WorkspaceTarget } from "./workspaces/types.js";
+import { WorkspaceService } from "./workspaces/workspace-service.js";
 
 export interface CreateAgentSessionOptions {
 	/** Working directory for project-local discovery. Default: process.cwd() */
 	cwd?: string;
+	/** Explicit workspace target. Its cwd is used as the effective session cwd. */
+	workspaceTarget?: WorkspaceTarget;
 	/** Global config directory. Default: ~/.daedalus/agent */
 	agentDir?: string;
 
@@ -115,6 +120,44 @@ export type { PromptTemplate } from "./prompt-templates.js";
 export type { Skill } from "./skills.js";
 export * from "./subagents/index.js";
 export type { Tool } from "./tools/index.js";
+export * from "./workspaces/session-identity.js";
+export type * from "./workspaces/types.js";
+export { WorkspaceService } from "./workspaces/workspace-service.js";
+
+export function getWorkspaceStatus(cwd = process.cwd(), projectRoot = cwd): WorkspaceTarget {
+	return new WorkspaceService({ projectRoot }).resolveCurrentTarget(cwd);
+}
+
+export function listWorkspaceTargets(projectRoot = process.cwd()): WorkspaceTarget[] {
+	const service = new WorkspaceService({ projectRoot });
+	return gitWorktreeList(service.projectRoot).map((entry) => service.openTarget({ cwd: entry.path }));
+}
+
+export function createWorkspaceTarget(options: {
+	projectRoot?: string;
+	branch: string;
+	baseRef?: string;
+	slug?: string;
+	id?: string;
+	name?: string;
+}): WorkspaceTarget {
+	const { projectRoot, ...rest } = options;
+	return new WorkspaceService({ projectRoot }).createIsolatedTarget(rest);
+}
+
+export function openWorkspaceTarget(options: {
+	projectRoot?: string;
+	cwd?: string;
+	branch?: string;
+	id?: string;
+}): WorkspaceTarget {
+	const { projectRoot, ...rest } = options;
+	return new WorkspaceService({ projectRoot }).openTarget(rest);
+}
+
+export function getWorkspaceCleanupRisk(target: WorkspaceTarget, projectRoot = target.projectRoot ?? process.cwd()) {
+	return new WorkspaceService({ projectRoot }).cleanupTargetRisk(target);
+}
 
 export {
 	allTools as allBuiltInTools,
@@ -191,7 +234,7 @@ function getDefaultAgentDir(): string {
  * ```
  */
 export async function createAgentSession(options: CreateAgentSessionOptions = {}): Promise<CreateAgentSessionResult> {
-	const cwd = options.cwd ?? process.cwd();
+	const cwd = options.workspaceTarget?.cwd ?? options.cwd ?? process.cwd();
 	const agentDir = options.agentDir ?? getDefaultAgentDir();
 	let resourceLoader = options.resourceLoader;
 
@@ -203,6 +246,13 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
 	const sessionManager = options.sessionManager ?? SessionManager.create(cwd, getDefaultSessionDir(cwd, agentDir));
+	if (!options.sessionManager && options.workspaceTarget) {
+		sessionManager.setWorkspaceIdentity({
+			version: 1,
+			sessionId: sessionManager.getSessionId(),
+			workspace: options.workspaceTarget,
+		});
+	}
 
 	if (!resourceLoader) {
 		resourceLoader = new DefaultResourceLoader({

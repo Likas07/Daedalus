@@ -344,6 +344,7 @@ export {
 	writeTool,
 	writeToolDefinition,
 } from "./core/tools/index.js";
+export * from "./core/workspaces/index.js";
 // Main entry point
 export { main } from "./main.js";
 // Run modes for programmatic SDK usage

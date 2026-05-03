@@ -5,8 +5,11 @@ import type { AgentSessionRuntimeDiagnostic, AgentSessionServices } from "./agen
 import type { SessionStartEvent } from "./extensions/index.js";
 import { emitSessionShutdownEvent } from "./extensions/runner.js";
 import type { CreateAgentSessionResult } from "./sdk.js";
-import { assertSessionCwdExists } from "./session-cwd.js";
+import { assertSessionCwdExists, assertWorkspaceResumeSafe } from "./session-cwd.js";
 import { SessionManager } from "./session-manager.js";
+import { normalizeWorkspaceSessionIdentity } from "./workspaces/session-identity.js";
+import type { WorkspaceTarget } from "./workspaces/types.js";
+import type { CreateIsolatedWorkspaceOptions, OpenWorkspaceTargetOptions } from "./workspaces/workspace-service.js";
 
 /**
  * Result returned by runtime creation.
@@ -24,6 +27,10 @@ export interface AgentSessionRuntimeOptions {
 	applyProcessCwd?: boolean;
 }
 
+export type SwitchWorkspaceTargetInput =
+	| ({ mode?: "open" } & OpenWorkspaceTargetOptions & { workspaceTarget?: WorkspaceTarget })
+	| ({ mode: "create" } & CreateIsolatedWorkspaceOptions);
+
 /**
  * Creates a full runtime for a target cwd and session manager.
  *
@@ -36,6 +43,7 @@ export type CreateAgentSessionRuntimeFactory = (options: {
 	agentDir: string;
 	sessionManager: SessionManager;
 	sessionStartEvent?: SessionStartEvent;
+	workspaceTarget?: WorkspaceTarget;
 }) => Promise<CreateAgentSessionRuntimeResult>;
 
 function extractUserMessageText(content: string | Array<{ type: string; text?: string }>): string {
@@ -76,6 +84,10 @@ export class AgentSessionRuntime {
 
 	get cwd(): string {
 		return this._services.cwd;
+	}
+
+	get workspaceTarget(): WorkspaceTarget | undefined {
+		return this._services.workspaceTarget;
 	}
 
 	get diagnostics(): readonly AgentSessionRuntimeDiagnostic[] {
@@ -139,7 +151,7 @@ export class AgentSessionRuntime {
 
 		const previousSessionFile = this.session.sessionFile;
 		const sessionManager = SessionManager.open(sessionPath, undefined, cwdOverride);
-		assertSessionCwdExists(sessionManager, this.cwd);
+		assertWorkspaceResumeSafe(sessionManager, this.cwd, this.services.workspaceService);
 		await this.teardownCurrent();
 		this.apply(
 			await this.createRuntime({
@@ -277,7 +289,7 @@ export class AgentSessionRuntime {
 		}
 
 		const sessionManager = SessionManager.open(destinationPath, sessionDir, cwdOverride);
-		assertSessionCwdExists(sessionManager, this.cwd);
+		assertWorkspaceResumeSafe(sessionManager, this.cwd, this.services.workspaceService);
 		await this.teardownCurrent();
 		this.apply(
 			await this.createRuntime({
@@ -288,6 +300,48 @@ export class AgentSessionRuntime {
 			}),
 		);
 		return { cancelled: false };
+	}
+
+	async switchWorkspaceTarget(
+		input: SwitchWorkspaceTargetInput,
+	): Promise<{ workspaceTarget: WorkspaceTarget; previousWorkspaceTarget?: WorkspaceTarget }> {
+		if (this.session.isStreaming || this.session.pendingMessageCount > 0) {
+			throw new Error("Cannot switch workspace target while a turn is running or messages are pending");
+		}
+		const workspaceService = this.services.workspaceService;
+		if (!workspaceService) {
+			throw new Error("Workspace switching is unavailable for this runtime");
+		}
+
+		const previousWorkspaceTarget = this.workspaceTarget;
+		const workspaceTarget =
+			input.mode === "create"
+				? workspaceService.createIsolatedTarget(input)
+				: (input.workspaceTarget ?? workspaceService.openTarget(input));
+		const sessionDir = this.session.sessionManager.getSessionDir();
+		const sessionManager = SessionManager.create(workspaceTarget.cwd, sessionDir);
+		sessionManager.setWorkspaceIdentity(
+			normalizeWorkspaceSessionIdentity(
+				{ workspace: workspaceTarget },
+				{
+					cwd: workspaceTarget.cwd,
+					sessionId: sessionManager.getSessionId(),
+				},
+			),
+		);
+
+		const previousSessionFile = this.session.sessionFile;
+		await this.teardownCurrent();
+		this.apply(
+			await this.createRuntime({
+				cwd: workspaceTarget.cwd,
+				agentDir: this.services.agentDir,
+				sessionManager,
+				workspaceTarget,
+				sessionStartEvent: { type: "session_start", reason: "new", previousSessionFile },
+			}),
+		);
+		return { workspaceTarget, previousWorkspaceTarget };
 	}
 
 	async dispose(): Promise<void> {
@@ -309,10 +363,20 @@ export async function createAgentSessionRuntime(
 		agentDir: string;
 		sessionManager: SessionManager;
 		sessionStartEvent?: SessionStartEvent;
+		workspaceTarget?: WorkspaceTarget;
 	} & AgentSessionRuntimeOptions,
 ): Promise<AgentSessionRuntime> {
-	assertSessionCwdExists(options.sessionManager, options.cwd);
-	const result = await createRuntime(options);
+	const effectiveTarget = options.workspaceTarget;
+	const effectiveCwd = effectiveTarget?.cwd ?? options.cwd;
+	assertSessionCwdExists(options.sessionManager, effectiveCwd);
+	if (effectiveTarget) {
+		options.sessionManager.setWorkspaceIdentity({
+			version: 1,
+			sessionId: options.sessionManager.getSessionId(),
+			workspace: effectiveTarget,
+		});
+	}
+	const result = await createRuntime({ ...options, cwd: effectiveCwd, workspaceTarget: effectiveTarget });
 	if ((options.applyProcessCwd ?? true) && process.cwd() !== result.services.cwd) {
 		process.chdir(result.services.cwd);
 	}
