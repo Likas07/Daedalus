@@ -23,7 +23,6 @@ const SAGE_TOOLS = [
 	"read_agent_result_output",
 	"todo_read",
 	"status_overview",
-	"question",
 	"questionnaire",
 ] as const;
 
@@ -41,7 +40,6 @@ const MUSE_TOOLS = [
 	"plan_validate",
 	"status_overview",
 	"subagent",
-	"question",
 	"questionnaire",
 	"write",
 	"hashline_edit",

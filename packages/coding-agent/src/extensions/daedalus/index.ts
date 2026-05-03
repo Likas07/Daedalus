@@ -12,7 +12,6 @@ export { default as interactiveShell } from "./terminal/interactive-shell.js";
 export { default as contextProfile } from "./tools/context-profile/index.js";
 export { default as dynamicTools } from "./tools/dynamic-tools.js";
 export { default as fsSearch } from "./tools/fs-search.js";
-export { default as question } from "./tools/question.js";
 export { default as questionnaire } from "./tools/questionnaire.js";
 export { default as readAgentResultOutput } from "./tools/read-agent-result-output.js";
 export { default as semSearch } from "./tools/sem-search.js";
@@ -21,7 +20,6 @@ export { default as ssh } from "./tools/ssh.js";
 // Tool extensions
 export { default as todo } from "./tools/todo.js";
 export { default as tools } from "./tools/tools.js";
-export { default as truncatedTool } from "./tools/truncated-tool.js";
 export { default as modalEditor } from "./ui/modal-editor.js";
 export { default as notify } from "./ui/notify.js";
 export { default as statusDashboard } from "./ui/status-dashboard.js";
