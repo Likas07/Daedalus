@@ -108,6 +108,32 @@ describe("semantic embedder LanceDB integration", () => {
 		}
 	});
 
+	it("adds batch context when embedding fails", async () => {
+		const originalFetch = globalThis.fetch;
+		globalThis.fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+			const body = JSON.parse(String(init?.body)) as { input: string[] };
+			if (body.input.includes("c")) throw new Error("The operation timed out");
+			return new Response(JSON.stringify({ embeddings: body.input.map(() => [1, 2, 3]) }), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			});
+		}) as typeof fetch;
+
+		try {
+			const embedder = await createOllamaSemanticEmbedder({
+				model: "embeddinggemma",
+				host: "http://127.0.0.1:11434",
+				batchSize: 2,
+				concurrency: 1,
+			});
+			await expect(embedder.embedDocuments(["a", "b", "c"])).rejects.toThrow(
+				"Ollama embedding batch 2/2 failed for 1 text: The operation timed out",
+			);
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+	});
+
 	semanticWorkspaceIt(
 		"inserts chunks with explicit raw vectors",
 		async () => {

@@ -94,6 +94,10 @@ export interface SemanticWorkspaceProgress extends SemanticStoreProgress {}
 
 export interface SemanticBootstrapOptions extends SemanticSettings {}
 
+export interface SemanticWorkspaceSyncOptions extends SemanticBootstrapOptions {
+	restartEmbeddingModel?: boolean;
+}
+
 function semanticSettingsFor(cwd: string): SettingsManager {
 	return SettingsManager.create(cwd);
 }
@@ -109,6 +113,20 @@ function resolveSemanticSettings(cwd: string, overrides: SemanticBootstrapOption
 			resolveSemanticIndexProfile() ??
 			DEFAULT_SEMANTIC_INDEX_PROFILE,
 	};
+}
+
+function bestEffortStopOllamaModel(model: string): void {
+	try {
+		const result = Bun.spawnSync(["ollama", "stop", model], { stdout: "pipe", stderr: "pipe" });
+		if (result.exitCode !== 0) {
+			semanticDebug("semantic-workspace.sync", "ollama stop failed", { model, exitCode: result.exitCode });
+		}
+	} catch (error) {
+		semanticDebug("semantic-workspace.sync", "ollama stop failed", {
+			model,
+			error: error instanceof Error ? error.message : String(error),
+		});
+	}
 }
 
 async function persistSemanticSettings(cwd: string, settings: Required<SemanticSettings>): Promise<void> {
@@ -219,17 +237,30 @@ export async function initSemanticWorkspace(
 export async function syncSemanticWorkspace(
 	cwd: string,
 	onProgress?: (progress: SemanticWorkspaceProgress) => void,
+	options: SemanticWorkspaceSyncOptions = {},
 ): Promise<SemanticWorkspacePersistedState> {
 	const startedAt = Date.now();
+	let lastProgress: SemanticWorkspaceProgress | undefined;
 	const emitProgress = (progress: Omit<SemanticWorkspaceProgress, "elapsedMs">): void => {
-		onProgress?.({ ...progress, elapsedMs: Date.now() - startedAt });
+		lastProgress = { ...progress, elapsedMs: Date.now() - startedAt };
+		onProgress?.(lastProgress);
 	};
 	semanticDebug("semantic-workspace.sync", "starting workspace sync", {
 		cwd,
 	});
 	ensureWorkspaceDir(cwd);
-	const configured = resolveSemanticSettings(cwd);
-	const current = loadSemanticWorkspace(cwd) ?? (await initSemanticWorkspace(cwd, onProgress, configured));
+	const configured = resolveSemanticSettings(cwd, options);
+	const persisted = loadSemanticWorkspace(cwd);
+	const backendChanged =
+		persisted &&
+		(persisted.embeddingHost !== configured.embeddingHost ||
+			persisted.embeddingModel !== configured.embeddingModel ||
+			(persisted.lastDiscoverySummary != null &&
+				persisted.lastDiscoverySummary.indexProfile !== configured.indexProfile));
+	const current = backendChanged || !persisted ? await initSemanticWorkspace(cwd, onProgress, configured) : persisted;
+	if (options.restartEmbeddingModel) {
+		bestEffortStopOllamaModel(current.embeddingModel ?? configured.embeddingModel);
+	}
 	const runtime = await createSemanticStoreRuntime({
 		databaseDir: current.databaseDir,
 		workspaceRoot: cwd,
@@ -293,9 +324,14 @@ export async function syncSemanticWorkspace(
 	};
 	writeSemanticWorkspace(cwd, next);
 	emitProgress({
+		...lastProgress,
 		phase: "complete",
 		message: `Semantic workspace ready with ${syncInfo.chunks} chunk${syncInfo.chunks === 1 ? "" : "s"}`,
 		chunks: syncInfo.chunks,
+		totalChunksPlanned: syncInfo.insertedChunks,
+		embeddingEtaMs: 0,
+		embeddingTextsCompleted: syncInfo.insertedChunks,
+		embeddingTextsTotal: syncInfo.insertedChunks,
 		changedFiles: syncInfo.changedFiles,
 		deletedFiles: syncInfo.deletedFiles,
 		unchangedFiles: syncInfo.unchangedFiles,

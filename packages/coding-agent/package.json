@@ -9,7 +9,8 @@
 	},
 	"bin": {
 		"daedalus": "src/cli.ts",
-		"dae": "src/cli.ts"
+		"dae": "src/cli.ts",
+		"workspace-sync": "src/bun/workspace-sync.ts"
 	},
 	"main": "./src/index.ts",
 	"types": "./src/index.ts",
@@ -32,6 +33,7 @@
 		"test": "bun test",
 		"test:gui:e2e": "bun test src/gui/gui-e2e.test.ts",
 		"benchmark:hashline": "bun scripts/hashline-benchmark.ts",
+		"workspace-sync": "bun src/bun/workspace-sync.ts",
 		"generate-template": "bun scripts/generate-template.ts",
 		"build:binary": "bun run generate-template && bun build --compile --external mupdf --root ../.. ./src/bun/cli.ts --outfile dist/daedalus",
 		"test:binary:smoke": "bun run build:binary && DAEDALUS_BINARY_SMOKE=1 bun test test/daedalus-binary-smoke.test.ts"

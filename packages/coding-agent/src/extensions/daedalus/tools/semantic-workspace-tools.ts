@@ -14,8 +14,6 @@ import {
 	syncSemanticWorkspace,
 } from "./semantic-workspace.js";
 
-const backgroundSync = createSemanticBackgroundSyncController();
-
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
 
 type WorkspaceCommandKind = "init" | "sync";
@@ -333,6 +331,26 @@ async function runWorkspaceCommand(
 }
 
 export default function semanticWorkspaceExtension(pi: ExtensionAPI): void {
+	const backgroundSync = createSemanticBackgroundSyncController({
+		onStateChange: (cwd, phase, error) => {
+			if (phase === "finished") {
+				syncExposure(pi, cwd);
+				emitWorkspaceSummary(pi, `Semantic workspace background sync complete for ${cwd}.`, {
+					kind: "sync",
+					background: true,
+				});
+				emitWorkspaceStatus(pi, cwd);
+			}
+			if (phase === "failed") {
+				const message = error instanceof Error ? error.message : String(error);
+				emitWorkspaceSummary(pi, `Semantic workspace background sync failed for ${cwd}: ${message}`, {
+					kind: "sync",
+					background: true,
+					error: message,
+				});
+			}
+		},
+	});
 	pi.on("session_start", async (_event, ctx) => {
 		const active = pi.getActiveTools();
 		const allToolNames = pi.getAllTools().map((tool) => tool.name);
@@ -379,13 +397,23 @@ export default function semanticWorkspaceExtension(pi: ExtensionAPI): void {
 
 	pi.registerCommand("workspace-sync", {
 		description: "Build or refresh the semantic workspace index for the current project",
-		handler: async (_args, ctx) =>
-			runWorkspaceCommand(pi, ctx, "sync", (onProgress) => syncSemanticWorkspace(ctx.cwd, onProgress)),
+		handler: async (args, ctx) =>
+			runWorkspaceCommand(pi, ctx, "sync", (onProgress) =>
+				syncSemanticWorkspace(ctx.cwd, onProgress, {
+					...parseWorkspaceInitArgs(args),
+					restartEmbeddingModel: true,
+				}),
+			),
 	});
 	pi.registerCommand("sync", {
 		description: "Alias for /workspace-sync",
-		handler: async (_args, ctx) =>
-			runWorkspaceCommand(pi, ctx, "sync", (onProgress) => syncSemanticWorkspace(ctx.cwd, onProgress)),
+		handler: async (args, ctx) =>
+			runWorkspaceCommand(pi, ctx, "sync", (onProgress) =>
+				syncSemanticWorkspace(ctx.cwd, onProgress, {
+					...parseWorkspaceInitArgs(args),
+					restartEmbeddingModel: true,
+				}),
+			),
 	});
 
 	pi.registerCommand("workspace-status", {
