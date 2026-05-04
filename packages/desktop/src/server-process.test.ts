@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -77,6 +77,14 @@ describe("server process", () => {
 		ensureTokenFile(tokenFile);
 		expect(existsSync(tokenFile)).toBe(true);
 	});
+});
+
+test("builds the canonical packages/gui renderer", () => {
+	const packageJson = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"), "utf8")) as {
+		scripts: Record<string, string>;
+	};
+	expect(packageJson.scripts["build:gui"]).toBe("bun --cwd=../gui run build");
+	expect(packageJson.scripts["build:gui"]).toContain("../gui");
 });
 
 describe("native bridge server bootstrap", () => {

@@ -6,13 +6,14 @@ const guiPortEnvVar = "DAEDALUS_GUI_DEV_PORT";
 
 const repoRoot = resolve(import.meta.dir, "../../..");
 const desktopRoot = resolve(import.meta.dir, "..");
-const guiRoot = resolve(repoRoot, "packages/react-gui");
+const guiRoot = resolve(repoRoot, "packages/gui");
 const devMainEntry = join(desktopRoot, ".daedalus", "desktop-dev", "main.js");
 
 type DevSubprocess = ReturnType<typeof Bun.spawn>;
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 const children = new Set<DevSubprocess>();
+let shuttingDown = false;
 
 export interface WaitForUrlOptions {
 	timeoutMs?: number;
@@ -57,7 +58,12 @@ export async function isDaedalusGuiServing(url: string, fetcher: Fetcher = fetch
 		const response = await fetcher(url, { cache: "no-store" });
 		if (!response.ok) return false;
 		const html = await response.text();
-		return html.includes("<title>Daedalus") && html.includes('src="/src/main.tsx"');
+		return (
+			html.includes('name="daedalus-app"') &&
+			html.includes('content="gui"') &&
+			html.includes('id="root"') &&
+			html.includes('src="/src/main.tsx"')
+		);
 	} catch {
 		return false;
 	}
@@ -116,7 +122,9 @@ async function main(): Promise<void> {
 		);
 	} else {
 		console.log(`Starting Vite at ${devUrl}`);
-		spawn("vite", ["bun", "x", "vite", "--host", host, "--port", String(port), "--strictPort"], { cwd: guiRoot });
+		spawn("vite", ["bun", "run", "dev", "--", "--host", host, "--port", String(port), "--strictPort"], {
+			cwd: guiRoot,
+		});
 		spawnedVite = true;
 	}
 
@@ -127,6 +135,7 @@ async function main(): Promise<void> {
 		return;
 	}
 
+	console.log(`Launching Electron with Daedalus GUI at ${devUrl}`);
 	const electron = spawn("electron", electronDevCommand(), {
 		cwd: desktopRoot,
 		env: {
@@ -148,6 +157,7 @@ function spawn(name: string, cmd: string[], options: { cwd: string; env?: Record
 	children.add(child);
 	child.exited.then((code) => {
 		children.delete(child);
+		if (shuttingDown) return;
 		if (code !== 0 && name !== "electron") {
 			console.error(`${name} exited with code ${code}`);
 			shutdown(code ?? 1);
@@ -163,6 +173,7 @@ async function run(name: string, cmd: string[], options: { cwd: string }): Promi
 }
 
 function shutdown(code = 0): never {
+	shuttingDown = true;
 	for (const child of children) child.kill();
 	process.exit(code);
 }
