@@ -287,6 +287,7 @@ For v1, the behavior must be:
 - if the child still fails to submit, the run is marked failed and the parent receives a system warning in the result
 
 This makes child runs reliable workers rather than unstructured chats.
+Role-specific handoff fields are nested in the existing result text fields rather than changing the universal envelope. For example, a Muse planning run can include `plan_path`, `validated`, `recommended_parent_action`, and `risks_or_blockers` as labeled content in `summary`/`output`; the outer `submit_result` shape remains `task`, `status`, `summary`, and `output`.
 
 ## 6. Subagent system prompt structure
 
