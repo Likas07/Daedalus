@@ -12,7 +12,6 @@ import readAgentResultOutput from "./tools/read-agent-result-output.js";
 import semSearch from "./tools/sem-search.js";
 import semanticWorkspaceTools from "./tools/semantic-workspace-tools.js";
 import skill from "./tools/skill.js";
-import subagentMergeBackTool from "./tools/subagent-merge-back.js";
 import todo from "./tools/todo.js";
 import tools from "./tools/tools.js";
 import statusDashboard from "./ui/status-dashboard.js";
@@ -42,7 +41,6 @@ export default function daedalusBundle(pi: ExtensionAPI) {
 	semanticWorkspaceTools(pi);
 	tools(pi);
 	contextProfile(pi);
-	subagentMergeBackTool(pi);
 
 	skill(pi);
 	statusDashboard(pi);
