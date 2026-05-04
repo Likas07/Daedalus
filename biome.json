@@ -35,6 +35,8 @@
 			"scripts/**/*.ts",
 			"!**/node_modules/**/*",
 			"!third_party/**/*",
+			"!packages/gui/src/**/*",
+			"!packages/gui/test/**/*",
 			"!**/test-sessions.ts",
 			"!**/models.generated.ts",
 			"!**/template.generated.ts",
