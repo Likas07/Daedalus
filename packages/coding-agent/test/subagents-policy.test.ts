@@ -77,7 +77,7 @@ describe("createSubagentTools", () => {
 });
 
 describe("bundled starter agent policies", () => {
-	it("grants skill to muse and worker only", () => {
+	it("grants skill to muse and worker only while letting sage write markdown evidence", () => {
 		const policies = new Map(
 			getBundledStarterAgents().map((agent) => [agent.name, agent.toolPolicy?.allowedTools ?? []]),
 		);
@@ -85,11 +85,11 @@ describe("bundled starter agent policies", () => {
 		expect(policies.get("muse")).toContain("skill");
 		expect(policies.get("worker")).toContain("skill");
 		expect(policies.get("sage")).not.toContain("skill");
-		expect(policies.get("sage")).not.toContain("write");
-		expect(policies.get("sage")).not.toContain("hashline_edit");
+		expect(policies.get("sage")).toContain("write");
+		expect(policies.get("sage")).toContain("hashline_edit");
 	});
 
-	it("keeps sage read-only with no writable globs", () => {
+	it("keeps sage source-read-only with markdown-only writable globs", () => {
 		const sage = getBundledStarterAgents().find((agent) => agent.name === "sage");
 
 		expect(sage?.toolPolicy?.allowedTools).toEqual([
@@ -100,8 +100,37 @@ describe("bundled starter agent policies", () => {
 			"fs_search",
 			"sem_search",
 			"todo_read",
+			"write",
+			"hashline_edit",
 		]);
-		expect(sage?.toolPolicy?.writableGlobs).toEqual([]);
+		expect(sage?.toolPolicy?.writableGlobs).toEqual(["**/*.md"]);
+		expect(sage?.toolPolicy?.allowedTools).not.toEqual(
+			expect.arrayContaining(["todo_write", "plan_create", "plan_validate", "skill", "bash"]),
+		);
+	});
+
+	it("allows sage markdown evidence writes but blocks source writes", async () => {
+		const cwd = createTempRepo();
+		const sage = getBundledStarterAgents().find((agent) => agent.name === "sage");
+		const tools = createSubagentTools(cwd, sage!.toolPolicy!);
+		const write = tools.find((tool) => tool.name === "write");
+		const hashlineEdit = tools.find((tool) => tool.name === "hashline_edit");
+
+		await expect(
+			write!.execute("tool-md", { path: "evidence/findings.md", content: "# Findings\n" }, undefined, undefined),
+		).resolves.toBeDefined();
+		expect(fs.readFileSync(path.join(cwd, "evidence", "findings.md"), "utf8")).toBe("# Findings\n");
+		await expect(
+			write!.execute("tool-src", { path: "src/file.ts", content: "export {};\n" }, undefined, undefined),
+		).rejects.toThrow("Writes to");
+		await expect(
+			hashlineEdit!.execute(
+				"tool-hashline-src",
+				{ edits: [{ path: "src/file.ts", op: "append", lines: "export {};\n" }] },
+				undefined,
+				undefined,
+			),
+		).rejects.toThrow("Writes to");
 	});
 });
 

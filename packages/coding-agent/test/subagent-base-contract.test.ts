@@ -37,5 +37,8 @@ describe("subagent base contract", () => {
 		expect(SUBAGENT_BASE_CONTRACT).toContain(
 			"Do not duplicate another lane's work or broaden scope to adjacent tasks.",
 		);
+		expect(SUBAGENT_BASE_CONTRACT).toContain("Role-specific handoff details belong inside summary/output");
+		expect(SUBAGENT_BASE_CONTRACT).toContain("plan_path");
+		expect(SUBAGENT_BASE_CONTRACT).toContain("universal submit_result envelope");
 	});
 });

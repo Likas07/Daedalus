@@ -12,6 +12,7 @@ import type { ModelRegistry } from "../model-registry.js";
 import type { SessionManager } from "../session-manager.js";
 import type { Skill } from "../skills.js";
 import type { ReadLedgerLike } from "../tools/read-ledger.js";
+import type { WorkspaceTarget } from "../workspaces/types.js";
 import type {
 	BeforeAgentStartEvent,
 	BeforeAgentStartEventResult,
@@ -220,6 +221,9 @@ export class ExtensionRunner {
 	private compactFn: (options?: CompactOptions) => void = () => {};
 	private getSystemPromptFn: () => string = () => "";
 
+	private contextWorkspaceTargetFn: (() => WorkspaceTarget | undefined) | undefined;
+	private commandWorkspaceTargetFn: (() => WorkspaceTarget | undefined) | undefined;
+	private switchWorkspaceTargetFn: ExtensionCommandContextActions["switchWorkspaceTarget"] | undefined;
 	private getSkillsFn: () => Skill[] = () => [];
 	private newSessionHandler: NewSessionHandler = async () => ({ cancelled: false });
 	private forkHandler: ForkHandler = async () => ({ cancelled: false });
@@ -287,6 +291,7 @@ export class ExtensionRunner {
 		this.getContextUsageFn = contextActions.getContextUsage;
 		this.compactFn = contextActions.compact;
 		this.getSystemPromptFn = contextActions.getSystemPrompt;
+		this.contextWorkspaceTargetFn = contextActions.getWorkspaceTarget;
 
 		this.getSkillsFn = contextActions.getSkills;
 
@@ -334,6 +339,8 @@ export class ExtensionRunner {
 			this.forkHandler = actions.fork;
 			this.navigateTreeHandler = actions.navigateTree;
 			this.switchSessionHandler = actions.switchSession;
+			this.commandWorkspaceTargetFn = actions.getWorkspaceTarget;
+			this.switchWorkspaceTargetFn = actions.switchWorkspaceTarget;
 			this.reloadHandler = actions.reload;
 			return;
 		}
@@ -344,6 +351,8 @@ export class ExtensionRunner {
 		this.navigateTreeHandler = async () => ({ cancelled: false });
 		this.switchSessionHandler = async () => ({ cancelled: false });
 		this.reloadHandler = async () => {};
+		this.commandWorkspaceTargetFn = undefined;
+		this.switchWorkspaceTargetFn = undefined;
 	}
 
 	setUIContext(uiContext?: ExtensionUIContext): void {
@@ -549,10 +558,14 @@ export class ExtensionRunner {
 	 */
 	createContext(): ExtensionContext {
 		const getModel = this.getModel;
+		const getWorkspaceTarget = this.contextWorkspaceTargetFn;
 		return {
 			ui: this.uiContext,
 			hasUI: this.hasUI(),
 			cwd: this.cwd,
+			get workspaceTarget() {
+				return getWorkspaceTarget?.();
+			},
 			readLedger: this.readLedger,
 			sessionManager: this.sessionManager,
 			modelRegistry: this.modelRegistry,
@@ -573,13 +586,21 @@ export class ExtensionRunner {
 	}
 
 	createCommandContext(): ExtensionCommandContext {
+		const getWorkspaceTarget = this.commandWorkspaceTargetFn ?? this.contextWorkspaceTargetFn;
 		return {
 			...this.createContext(),
+			get workspaceTarget() {
+				return getWorkspaceTarget?.();
+			},
 			waitForIdle: () => this.waitForIdleFn(),
 			newSession: (options) => this.newSessionHandler(options),
 			fork: (entryId) => this.forkHandler(entryId),
 			navigateTree: (targetId, options) => this.navigateTreeHandler(targetId, options),
 			switchSession: (sessionPath) => this.switchSessionHandler(sessionPath),
+			getWorkspaceTarget: () => getWorkspaceTarget?.(),
+			switchWorkspaceTarget: this.switchWorkspaceTargetFn
+				? (input) => this.switchWorkspaceTargetFn!(input)
+				: undefined,
 			reload: () => this.reloadHandler(),
 		};
 	}
