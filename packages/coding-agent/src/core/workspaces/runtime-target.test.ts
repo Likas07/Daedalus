@@ -57,12 +57,45 @@ describe("AgentSessionRuntime workspace targets", () => {
 		expect(sessionManager.getWorkspaceIdentity()?.workspace.cwd).toBe(targetCwd);
 	});
 
-	test("services resolve current target when safe and degrade for legacy non-git cwd", async () => {
+	test("runtime creation stores workspaceTarget resolved by services", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "daedalus-runtime-resolved-"));
+		const workspaceTarget = target(cwd, "resolved");
+		const seen: Array<{ cwd: string; workspaceTarget?: WorkspaceTarget }> = [];
+		const factory: CreateAgentSessionRuntimeFactory = async (options) => {
+			seen.push({ cwd: options.cwd, workspaceTarget: options.workspaceTarget });
+			return {
+				session: makeSession(options.sessionManager),
+				services: {
+					cwd: options.cwd,
+					agentDir: options.agentDir,
+					workspaceTarget,
+					diagnostics: [],
+				} as never,
+				diagnostics: [],
+				extensionsResult: {} as never,
+			};
+		};
+		const sessionManager = SessionManager.create(cwd, join(cwd, ".daedalus", "sessions"));
+		const runtime = await createAgentSessionRuntime(factory, {
+			cwd,
+			agentDir: join(cwd, ".daedalus"),
+			sessionManager,
+			applyProcessCwd: false,
+		});
+
+		expect(runtime.workspaceTarget).toEqual(workspaceTarget);
+		expect(seen[0]).toEqual({ cwd, workspaceTarget: undefined });
+		expect(sessionManager.getHeader()?.workspaceIdentity?.workspace).toEqual(workspaceTarget);
+		expect(sessionManager.getHeader()?.workspaceIdentity?.sessionId).toBe(sessionManager.getSessionId());
+	});
+
+	test("services resolve non-git current targets as detached", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "daedalus-runtime-legacy-"));
 		const services = await createAgentSessionServices({ cwd, agentDir: join(cwd, ".daedalus") });
 		expect(services.cwd).toBe(cwd);
 		expect(services.workspaceTarget?.cwd).toBe(cwd);
-		expect(services.workspaceTarget?.isolationMode).toBe("shared_cwd");
+		expect(services.workspaceTarget?.projectRoot).toBe(cwd);
+		expect(services.workspaceTarget?.isolationMode).toBe("detached");
 	});
 
 	test("switchWorkspaceTarget rejects non-idle sessions", async () => {

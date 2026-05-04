@@ -34,11 +34,31 @@ describe("WorkspaceService", () => {
 		const service = new WorkspaceService({ projectRoot: repo });
 		const current = service.resolveCurrentTarget(repo);
 		expect(current.cwd).toBe(repo);
+		expect(current.projectRoot).toBe(repo);
+		expect(current.isolationMode).toBe("shared_cwd");
+		expect(current.repositoryRoot).toBe(repo);
 		expect(current.branch).toBe("main");
+		expect(current.worktreePath).toBe(repo);
+		expect(current.baseCommit).toHaveLength(40);
 		expect(current.validationStatus).toBe("valid");
 		const base = service.resolveBaseTarget("main");
 		expect(base.baseBranch).toBe("main");
 		expect(base.baseCommit).toHaveLength(40);
+	});
+
+	test("resolves non-git current targets as detached", () => {
+		const serviceRoot = mkdtempSync(join(tmpdir(), "daedalus-workspace-service-root-"));
+		const dir = mkdtempSync(join(tmpdir(), "daedalus-workspace-nongit-current-"));
+		tempDirs.push(serviceRoot, dir);
+		const actualDir = realpathSync(dir);
+		const service = new WorkspaceService({ projectRoot: serviceRoot });
+
+		expect(service.resolveCurrentTarget(dir)).toEqual({
+			cwd: actualDir,
+			projectRoot: actualDir,
+			isolationMode: "detached",
+			validationStatus: "valid",
+		});
 	});
 
 	test("creates isolated worktrees under .daedalus/worktrees/<slug>", () => {
@@ -58,6 +78,41 @@ describe("WorkspaceService", () => {
 		expect(service.openTarget({ cwd: created.cwd }).cwd).toBe(created.cwd);
 		expect(service.openTarget({ branch: "agent/adopt" }).branch).toBe("agent/adopt");
 		expect(service.openTarget({ id: "agent-adopt" }).adoption?.adoptedFromPath).toBe(created.cwd);
+	});
+
+	test("lists worktrees with canonical paths branch head and detached state", () => {
+		const repo = tempRepo();
+		const service = new WorkspaceService({ projectRoot: repo });
+		const branchTarget = service.createIsolatedTarget({ branch: "agent/listed", slug: "listed" });
+		const detachedPath = join(repo, ".daedalus", "worktrees", "detached");
+		sh(repo, ["git", "worktree", "add", "--detach", detachedPath, "HEAD"]);
+		const entries = service.listWorktrees();
+		const main = entries.find((entry) => entry.path === repo);
+		const branch = entries.find((entry) => entry.path === branchTarget.cwd);
+		const detached = entries.find((entry) => entry.path === realpathSync(detachedPath));
+		expect(main?.branch).toBe("main");
+		expect(main?.head).toHaveLength(40);
+		expect(branch?.branch).toBe("agent/listed");
+		expect(branch?.head).toHaveLength(40);
+		expect(detached?.detached).toBe(true);
+		expect(detached?.branch).toBeUndefined();
+		expect(detached?.head).toHaveLength(40);
+	});
+
+	test("tolerates stale prunable worktree paths when listing and creating", () => {
+		const repo = tempRepo();
+		const service = new WorkspaceService({ projectRoot: repo });
+		const stalePath = `${repo}-stale`;
+		tempDirs.push(stalePath);
+		sh(repo, ["git", "worktree", "add", "-b", "agent/stale", stalePath, "HEAD"]);
+		rmSync(stalePath, { recursive: true, force: true });
+
+		const entries = service.listWorktrees();
+		expect(entries.find((entry) => entry.path === stalePath)?.branch).toBe("agent/stale");
+
+		const created = service.createIsolatedTarget({ branch: "agent/after-stale", slug: "after-stale" });
+		expect(created.cwd).toBe(join(repo, ".daedalus", "worktrees", "after-stale"));
+		expect(existsSync(join(created.cwd, "README.md"))).toBe(true);
 	});
 
 	test("rejects duplicate branch and path conflicts", () => {
@@ -123,5 +178,12 @@ describe("WorkspaceService", () => {
 		expect(() => service.removeTarget(dirty)).toThrow(/Refusing/);
 		service.removeTarget(dirty, { force: true });
 		expect(existsSync(dirty.cwd)).toBe(false);
+	});
+
+	test("reports clearly when listing from a non-git cwd", () => {
+		const dir = mkdtempSync(join(tmpdir(), "daedalus-workspace-nongit-"));
+		tempDirs.push(dir);
+		const service = new WorkspaceService({ projectRoot: dir });
+		expect(() => service.listWorktrees()).toThrow(/not a git repository|not a git worktree|rev-parse|fatal/i);
 	});
 });

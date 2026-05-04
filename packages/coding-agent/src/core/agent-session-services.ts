@@ -142,7 +142,7 @@ export async function createAgentSessionServices(
 		workspaceService = new WorkspaceService({ projectRoot: workspaceTarget?.projectRoot ?? cwd });
 		workspaceTarget ??= workspaceService.resolveCurrentTarget(cwd);
 	} catch {
-		workspaceTarget ??= { cwd, isolationMode: "shared_cwd" };
+		workspaceTarget ??= { cwd, projectRoot: cwd, isolationMode: "detached", validationStatus: "valid" };
 	}
 	const agentDir = options.agentDir ?? getAgentDir();
 	const authStorage = options.authStorage ?? AuthStorage.create(join(agentDir, "auth.json"));
