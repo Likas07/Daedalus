@@ -89,7 +89,8 @@ export async function startAppServer(options: CreateAppServerOptions): Promise<A
 		async fetch(request, server) {
 			const url = new URL(request.url);
 			if (url.pathname === "/ws") {
-				if (!authenticateRequest(request, { token, host })) return new Response("Unauthorized", { status: 401 });
+				if (!authenticateRequest(request, { token, host, allowSameOriginWebSocket: true }))
+					return new Response("Unauthorized", { status: 401 });
 				if (server.upgrade(request, { data: { client: undefined as unknown as WebSocketClient } }))
 					return undefined;
 				return new Response("Upgrade failed", { status: 400 });

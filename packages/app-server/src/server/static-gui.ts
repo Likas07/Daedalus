@@ -19,11 +19,7 @@ const CONTENT_TYPES: Record<string, string> = {
 	".ico": "image/x-icon",
 };
 
-export function reactGuiDistDir(): string {
-	return resolve(dirname(fileURLToPath(import.meta.url)), "../../../react-gui/dist");
-}
-
-export function legacyGuiDistDir(): string {
+export function guiDistDir(): string {
 	return resolve(dirname(fileURLToPath(import.meta.url)), "../../../gui/dist");
 }
 
@@ -32,10 +28,7 @@ function configuredGuiDistDir(): string | undefined {
 	return distDir ? resolve(distDir) : undefined;
 }
 export function defaultGuiDistDir(): string {
-	const configuredDist = configuredGuiDistDir();
-	if (configuredDist) return configuredDist;
-	const reactDist = reactGuiDistDir();
-	return existsSync(join(reactDist, "index.html")) ? reactDist : legacyGuiDistDir();
+	return configuredGuiDistDir() ?? guiDistDir();
 }
 
 export function createGuiBootstrap(options: StaticGuiOptions): Record<string, string | undefined> {
@@ -46,9 +39,38 @@ export function createGuiBootstrap(options: StaticGuiOptions): Record<string, st
 	};
 }
 
+export function createGuiEnvironmentDescriptor() {
+	return {
+		environmentId: "local-daedalus",
+		label: "Daedalus Local",
+		platform: {
+			os: process.platform === "darwin" ? "darwin" : process.platform === "win32" ? "windows" : "linux",
+			arch: process.arch === "arm64" ? "arm64" : process.arch === "x64" ? "x64" : "other",
+		},
+		serverVersion: "daedalus-app-server",
+		capabilities: { repositoryIdentity: true },
+	};
+}
+
+export function createGuiAuthSessionState() {
+	return {
+		authenticated: true,
+		auth: {
+			policy: "unsafe-no-auth",
+			bootstrapMethods: [],
+			sessionMethods: ["bearer-session-token"],
+			sessionCookieName: "daedalus_gui_session",
+		},
+		role: "owner",
+		sessionMethod: "bearer-session-token",
+	};
+}
+
 export async function serveStaticGui(request: Request, options: StaticGuiOptions): Promise<Response | undefined> {
 	const url = new URL(request.url);
 	if (url.pathname === "/api/gui/bootstrap") return Response.json(createGuiBootstrap(options));
+	if (url.pathname === "/.well-known/t3/environment") return Response.json(createGuiEnvironmentDescriptor());
+	if (url.pathname === "/api/auth/session") return Response.json(createGuiAuthSessionState());
 	const distDir = options.distDir ?? defaultGuiDistDir();
 	let pathname = decodeURIComponent(url.pathname);
 	if (pathname === "/") pathname = "/index.html";
