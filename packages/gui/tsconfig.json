@@ -1,19 +1,23 @@
 {
-	"extends": "../../tsconfig.base.json",
-	"compilerOptions": {
-		"noEmit": true,
-		"allowArbitraryExtensions": true,
-		"lib": [
-			"ES2024",
-			"DOM",
-			"DOM.Iterable"
-		],
-		"types": [
-			"bun",
-			"svelte"
-		]
-	},
-	"include": [
-		"src/**/*"
-	]
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "erasableSyntaxOnly": false,
+    "verbatimModuleSyntax": false,
+    "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "~/*": ["./src/*"],
+      "@t3tools/contracts": ["./src/vendor/t3/contracts/index.ts"],
+      "@t3tools/contracts/*": ["./src/vendor/t3/contracts/*"],
+      "@t3tools/shared/*": ["./src/vendor/t3/shared/*"],
+      "@t3tools/client-runtime": ["./src/vendor/t3/client-runtime/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/**/*.browser.ts", "src/**/*.browser.tsx", "test"]
 }
