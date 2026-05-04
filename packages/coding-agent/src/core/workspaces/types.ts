@@ -3,12 +3,17 @@ export type WorkspaceIsolationMode = "shared_cwd" | "dedicated_worktree" | "exte
 export type WorkspaceValidationStatus = "unknown" | "valid" | "missing" | "dirty" | "conflict" | "invalid";
 
 export interface WorkspaceMergeBackMetadata {
-	strategy?: "manual" | "merge" | "rebase" | "squash";
+	strategy?: "patch" | "branch";
 	baseBranch?: string;
 	targetBranch?: string;
 	baseCommit?: string;
 	lastMergedCommit?: string;
-	status?: "not_started" | "ready" | "merged" | "blocked" | "abandoned";
+	artifactPath?: string;
+	branchName?: string;
+	status?: "not_started" | "ready" | "merged" | "blocked" | "abandoned" | "applied";
+	/** Patch representing the parent's dirty baseline already applied to the child worktree. */
+	parentBaselinePatch?: string;
+	parentBaselineFiles?: string[];
 }
 
 export interface WorkspaceAdoptionMetadata {

@@ -102,6 +102,15 @@ export function gitApply(cwd: string, patch: string): void {
 	}
 }
 
+function realpathIfExists(path: string): string {
+	try {
+		return realpathSync(path);
+	} catch (error) {
+		if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return path;
+		throw error;
+	}
+}
+
 export function gitWorktreeList(cwd: string): GitWorktreeEntry[] {
 	const output = runGit(["worktree", "list", "--porcelain"], { cwd });
 	const entries: GitWorktreeEntry[] = [];

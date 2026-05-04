@@ -2515,7 +2515,7 @@ export class AgentSession {
 					settingsManager: this.settingsManager,
 					sessionManager,
 					resourceLoader,
-					tools: createSubagentTools(workspaceCwd, runtime.policy),
+					tools: createSubagentTools(workspaceCwd, runtime.policy, Array.from(this._toolRegistry.values())),
 					customTools: [createSubmitResultTool(onSubmit)],
 					model: runtime.model,
 					thinkingLevel: runtime.thinkingLevel,

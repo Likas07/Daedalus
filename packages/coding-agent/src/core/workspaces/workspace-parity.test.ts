@@ -161,7 +161,7 @@ describe("workspace target cross-surface parity", () => {
 				assignment: "a",
 				isolation: "worktree",
 				baseBranch: "main",
-				mergeBack: "manual",
+				mergeBack: "patch",
 			},
 		});
 
@@ -170,6 +170,6 @@ describe("workspace target cross-surface parity", () => {
 		expect(prepared.workspaceTarget?.projectRoot).toBe(parent);
 		expect(prepared.workspaceTarget?.isolationMode).toBe("dedicated_worktree");
 		expect(prepared.metadata?.workspaceTarget).toEqual(prepared.workspaceTarget);
-		expect(prepared.metadata?.mergeBack).toBe("manual");
+		expect(prepared.metadata?.mergeBack).toBe("patch");
 	});
 });
