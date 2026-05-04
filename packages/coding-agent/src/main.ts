@@ -119,7 +119,6 @@ async function resolveStartupWorkspaceTarget(
 	cwd: string,
 	appMode: AppMode,
 ): Promise<WorkspaceTarget | undefined> {
-	if (!parsed.project && !parsed.worktree && !parsed.workspaceTarget && !parsed.newWorktree) return undefined;
 	const projectRoot = parsed.project ? resolve(cwd, parsed.project) : cwd;
 	const service = new WorkspaceService({ projectRoot });
 	if (parsed.newWorktree) {

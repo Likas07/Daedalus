@@ -369,14 +369,15 @@ export async function createAgentSessionRuntime(
 	const effectiveTarget = options.workspaceTarget;
 	const effectiveCwd = effectiveTarget?.cwd ?? options.cwd;
 	assertSessionCwdExists(options.sessionManager, effectiveCwd);
-	if (effectiveTarget) {
+	const result = await createRuntime({ ...options, cwd: effectiveCwd, workspaceTarget: effectiveTarget });
+	const resolvedTarget = result.services.workspaceTarget ?? effectiveTarget;
+	if (resolvedTarget) {
 		options.sessionManager.setWorkspaceIdentity({
 			version: 1,
 			sessionId: options.sessionManager.getSessionId(),
-			workspace: effectiveTarget,
+			workspace: resolvedTarget,
 		});
 	}
-	const result = await createRuntime({ ...options, cwd: effectiveCwd, workspaceTarget: effectiveTarget });
 	if ((options.applyProcessCwd ?? true) && process.cwd() !== result.services.cwd) {
 		process.chdir(result.services.cwd);
 	}

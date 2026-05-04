@@ -73,15 +73,17 @@ export function getWorkspaceResumeSafetyDiagnostic(
 	}
 
 	if (!workspaceIdentity) {
-		issues.push({
-			code: "legacy_unknown",
-			status: "legacy_unknown",
-			message: "Session has no workspace identity; resume requires explicit adoption",
-			expectedCwd: sessionCwd,
-			actualCwd: fallbackCwd,
-			sessionFile,
-			recovery: "adopt_workspace",
-		});
+		if (sessionReal && fallbackReal && sessionReal !== fallbackReal) {
+			issues.push({
+				code: "legacy_unknown",
+				status: "legacy_unknown",
+				message: "Session has no workspace identity; resume requires explicit adoption",
+				expectedCwd: sessionCwd,
+				actualCwd: fallbackCwd,
+				sessionFile,
+				recovery: "adopt_workspace",
+			});
+		}
 	} else {
 		const target = workspaceIdentity.workspace;
 		if (sessionReal && target.cwd && canonicalIfExists(target.cwd) && canonicalIfExists(target.cwd) !== sessionReal) {
@@ -97,6 +99,7 @@ export function getWorkspaceResumeSafetyDiagnostic(
 			});
 		}
 		if (
+			target.isolationMode !== "detached" &&
 			target.projectRoot &&
 			workspaceService?.projectRoot &&
 			canonicalIfExists(target.projectRoot) !== canonicalIfExists(workspaceService.projectRoot)
@@ -133,10 +136,6 @@ export function getWorkspaceResumeSafetyDiagnostic(
 				});
 			}
 		}
-	}
-
-	if (sessionReal && fallbackReal && sessionReal !== fallbackReal && !workspaceIdentity) {
-		// Legacy sessions cannot prove whether this cwd mismatch is safe.
 	}
 
 	return { ok: issues.length === 0, sessionFile, sessionCwd, fallbackCwd, workspaceIdentity, issues };

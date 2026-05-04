@@ -67,13 +67,60 @@ describe("workspace resume safety", () => {
 		expect(() => assertWorkspaceResumeSafe(session, tmp("fallback"))).toThrow(MissingSessionCwdError);
 	});
 
-	test("legacy cwd-only sessions are legacy_unknown", () => {
+	test("cwd-only sessions resume safely from the same cwd", () => {
 		const cwd = tmp("legacy");
 		const diagnostic = getWorkspaceResumeSafetyDiagnostic(manager(cwd), cwd);
+		expect(diagnostic?.ok).toBe(true);
+		expect(diagnostic?.issues).toEqual([]);
+		expect(() => assertWorkspaceResumeSafe(manager(cwd), cwd)).not.toThrow();
+	});
+
+	test("cwd-only sessions with a different cwd still require adoption", () => {
+		const cwd = tmp("legacy");
+		const fallback = tmp("fallback");
+		const diagnostic = getWorkspaceResumeSafetyDiagnostic(manager(cwd), fallback);
 		expect(diagnostic?.ok).toBe(false);
 		expect(diagnostic?.issues).toContainEqual(
 			expect.objectContaining({ code: "legacy_unknown", recovery: "adopt_workspace" }),
 		);
+	});
+
+	test("detached workspace identity resumes without git metadata", () => {
+		const cwd = tmp("detached-resume");
+		const session = manager(
+			cwd,
+			identity({ cwd, projectRoot: cwd, isolationMode: "detached", validationStatus: "valid" }),
+		);
+		const diagnostic = getWorkspaceResumeSafetyDiagnostic(session, cwd, new WorkspaceService({ projectRoot: cwd }));
+		expect(diagnostic?.ok).toBe(true);
+		expect(diagnostic?.issues).toEqual([]);
+		expect(() => assertWorkspaceResumeSafe(session, cwd, new WorkspaceService({ projectRoot: cwd }))).not.toThrow();
+	});
+
+	test("detached workspace identity ignores current projectRoot mismatches", () => {
+		const cwd = tmp("detached-cross-project");
+		const otherProject = tmp("detached-other-project");
+		const session = manager(
+			cwd,
+			identity({ cwd, projectRoot: cwd, isolationMode: "detached", validationStatus: "valid" }),
+		);
+		const service = new WorkspaceService({ projectRoot: otherProject });
+		const diagnostic = getWorkspaceResumeSafetyDiagnostic(session, otherProject, service);
+		expect(diagnostic?.ok).toBe(true);
+		expect(diagnostic?.issues).toEqual([]);
+		expect(() => assertWorkspaceResumeSafe(session, otherProject, service)).not.toThrow();
+	});
+
+	test("detached workspace identity is unsafe when cwd is missing", () => {
+		const cwd = tmp("detached-missing");
+		const session = manager(
+			cwd,
+			identity({ cwd, projectRoot: cwd, isolationMode: "detached", validationStatus: "valid" }),
+		);
+		rmSync(cwd, { recursive: true, force: true });
+		const diagnostic = getWorkspaceResumeSafetyDiagnostic(session, tmp("fallback"));
+		expect(diagnostic?.issues.map((issue) => issue.code)).toContain("missing_cwd");
+		expect(() => assertWorkspaceResumeSafe(session, tmp("fallback"))).toThrow(WorkspaceResumeSafetyError);
 	});
 
 	test("canonical path mismatch is unsafe", () => {

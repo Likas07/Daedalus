@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, realpathSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import {
+	GitError,
+	type GitWorktreeEntry,
 	gitCurrentBranch,
 	gitRepositoryRoot,
 	gitRevParse,
@@ -42,6 +44,12 @@ function slugify(value: string): string {
 	);
 }
 
+const notGitRepositoryPattern = /not a git repository|not a git worktree|rev-parse|fatal/i;
+
+function isNotGitRepositoryError(error: unknown): boolean {
+	return error instanceof GitError && notGitRepositoryPattern.test(error.stderr || error.message);
+}
+
 export class WorkspaceService {
 	readonly projectRoot: string;
 
@@ -51,7 +59,18 @@ export class WorkspaceService {
 
 	resolveCurrentTarget(cwd = process.cwd()): WorkspaceTarget {
 		const actualCwd = canonical(cwd);
-		const repositoryRoot = gitRepositoryRoot(actualCwd);
+		let repositoryRoot: string;
+		try {
+			repositoryRoot = gitRepositoryRoot(actualCwd);
+		} catch (error) {
+			if (!isNotGitRepositoryError(error)) throw error;
+			return {
+				cwd: actualCwd,
+				projectRoot: actualCwd,
+				isolationMode: "detached",
+				validationStatus: "valid",
+			};
+		}
 		const branch = gitCurrentBranch(actualCwd);
 		return {
 			cwd: actualCwd,
@@ -71,6 +90,10 @@ export class WorkspaceService {
 			baseBranch,
 			baseCommit: gitRevParse(this.projectRoot, baseBranch),
 		};
+	}
+
+	listWorktrees(): GitWorktreeEntry[] {
+		return gitWorktreeList(this.projectRoot);
 	}
 
 	openTarget(options: OpenWorkspaceTargetOptions): WorkspaceTarget {
