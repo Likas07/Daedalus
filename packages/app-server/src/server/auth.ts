@@ -2,6 +2,7 @@ export interface AuthOptions {
 	readonly token?: string;
 	readonly allowedOrigins?: readonly string[];
 	readonly host?: string;
+	readonly allowSameOriginWebSocket?: boolean;
 }
 
 export function createCapabilityToken(): string {
@@ -25,7 +26,15 @@ export function isAllowedOrigin(request: Request, options: AuthOptions): boolean
 	}
 }
 
+export function isSameOriginWebSocketRequest(request: Request): boolean {
+	const origin = request.headers.get("origin");
+	if (!origin) return false;
+	const url = new URL(request.url);
+	return url.pathname === "/ws" && origin === url.origin;
+}
+
 export function authenticateRequest(request: Request, options: AuthOptions): boolean {
+	if (options.allowSameOriginWebSocket && isSameOriginWebSocketRequest(request)) return true;
 	if (!isAllowedOrigin(request, options)) return false;
 	if (!options.token) return true;
 	const header = request.headers.get("authorization");
