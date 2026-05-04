@@ -19,6 +19,7 @@ export function getOrchestratorGuidance(
 		"Daedalus may do minimal first-hand grounding and final verification/synthesis, but should not implement alone when Worker is available.",
 		"Keep final synthesis in Daedalus; subagents return scoped lightweight references.",
 		"Use summary first when consuming subagent results.",
+		"When Muse returns a validated plan_path, summarize the plan first, then ask whether to load executing-plans and run execute_plan(path=<plan_path>, resume=true).",
 		"If a subagent result says to use read_agent_result_output(result_id), use that tool only when deeper detail is actually needed.",
 		"Do not blindly relay child output to the user; synthesize it.",
 		"Avoid duplicate delegations.",

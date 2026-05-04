@@ -3,14 +3,6 @@ import { Text } from "@daedalus-pi/tui";
 import { Type } from "@sinclair/typebox";
 import { getAgentDir } from "../../../../config.js";
 import { discoverSubagents } from "../../../../core/subagents/index.js";
-import {
-	applyMergeBackPatch,
-	discardChildTarget,
-	dryRunApplyMergeBack,
-	inspectMergeBack,
-	keepChildTarget,
-} from "../../../../core/workspaces/merge-back.js";
-import type { WorkspaceTarget } from "../../../../core/workspaces/types.js";
 import { getBundledStarterAgents } from "./bundled.js";
 import { buildInspectorOptions, formatInspectorLabel, openSubagentInspector } from "./inspect.js";
 import { getOrchestratorGuidance } from "./orchestrator-prompt.js";
@@ -34,7 +26,20 @@ interface SubagentToolDetails {
 	resultArtifactPath?: string;
 	error?: string;
 	isolation?: string;
-	workspaceTarget?: { cwd?: string; branch?: string; isolationMode?: string };
+	workspaceTarget?: {
+		cwd?: string;
+		branch?: string;
+		isolationMode?: string;
+		baseBranch?: string;
+		baseCommit?: string;
+	};
+	workspaceMetadata?: {
+		baseBranch?: string;
+		baseCommit?: string;
+		mergeBackArtifactPath?: string;
+		mergeBackBranch?: string;
+	};
+	mergeBackResult?: { artifactPath?: string; branchName?: string; status?: string; message?: string };
 }
 
 function truncate(text: string, max = 72): string {
@@ -138,9 +143,7 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 			isolation: Type.Optional(
 				Type.Union([Type.Literal("inherit"), Type.Literal("shared"), Type.Literal("worktree")]),
 			),
-			merge_back: Type.Optional(
-				Type.Union([Type.Literal("manual"), Type.Literal("merge"), Type.Literal("rebase"), Type.Literal("squash")]),
-			),
+			merge_back: Type.Optional(Type.Union([Type.Literal("patch"), Type.Literal("branch")])),
 			base_branch: Type.Optional(Type.String()),
 		}),
 		renderCall: (args, theme) => renderSubagentCall(args, theme),
@@ -232,6 +235,8 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 					error: result.error,
 					workspaceTarget: result.workspaceTarget,
 					isolation: result.isolation,
+					workspaceMetadata: result.workspaceMetadata,
+					mergeBackResult: result.mergeBackResult,
 				} satisfies SubagentToolDetails,
 			};
 		},
@@ -262,54 +267,6 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 			if (selected) {
 				await openSubagentInspector(ctx, selected);
 			}
-		},
-	});
-
-	pi.registerCommand("subagent_merge_back", {
-		description: "Inspect, dry-run, apply, discard, or keep a subagent child workspace target",
-		handler: async (args, ctx) => {
-			const action = (args[0] ?? "inspect") as "inspect" | "dry-run" | "apply" | "discard" | "keep";
-			const runs = buildInspectorOptions(pi.getActiveSubagentRuns(), await pi.listSubagentRuns()).filter(
-				(run) => (run as { workspaceTarget?: { cwd?: string } }).workspaceTarget?.cwd,
-			);
-			if (runs.length === 0) {
-				ctx.ui.notify("No subagent workspace targets recorded yet.", "info");
-				return;
-			}
-			const selectedLabel = await ctx.ui.select("Select subagent workspace", runs.map(formatInspectorLabel));
-			const selected = runs.find((run) => formatInspectorLabel(run) === selectedLabel) as
-				| {
-						workspaceTarget?: NonNullable<SubagentToolDetails["workspaceTarget"]> & {
-							baseBranch?: string;
-							baseCommit?: string;
-						};
-						baseBranch?: string;
-				  }
-				| undefined;
-			if (!selected?.workspaceTarget?.cwd) return;
-			const input = {
-				parent: ctx.workspaceTarget ?? { cwd: ctx.cwd, isolationMode: "shared_cwd" as const },
-				child: {
-					...selected.workspaceTarget,
-					cwd: selected.workspaceTarget.cwd,
-					isolationMode: selected.workspaceTarget.isolationMode ?? "dedicated_worktree",
-				} as WorkspaceTarget,
-				baseRef: selected.baseBranch ?? selected.workspaceTarget.baseBranch ?? selected.workspaceTarget.baseCommit,
-			};
-			const result =
-				action === "dry-run"
-					? await dryRunApplyMergeBack(input)
-					: action === "apply"
-						? await applyMergeBackPatch(input)
-						: action === "discard"
-							? discardChildTarget(input)
-							: action === "keep"
-								? keepChildTarget(input)
-								: inspectMergeBack(input);
-			ctx.ui.notify(
-				`${result.status}: ${result.message}`,
-				result.status === "failed" || result.status === "conflict" ? "error" : "info",
-			);
 		},
 	});
 

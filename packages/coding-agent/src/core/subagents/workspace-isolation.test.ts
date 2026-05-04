@@ -66,7 +66,7 @@ describe("subagent workspace isolation", () => {
 				assignment: "a",
 				isolation: "worktree",
 				baseBranch: "main",
-				mergeBack: "manual",
+				mergeBack: "branch",
 			},
 		});
 
@@ -74,7 +74,27 @@ describe("subagent workspace isolation", () => {
 		expect(prepared.workspaceTarget?.cwd).toBe(child);
 		expect(prepared.workspaceTarget?.isolationMode).toBe("dedicated_worktree");
 		expect(prepared.metadata?.isolation).toBe("worktree");
-		expect(prepared.metadata?.mergeBack).toBe("manual");
+		expect(prepared.metadata?.mergeBack).toBe("branch");
+	});
+
+	test("worktree isolation defaults omitted mergeBack to patch", async () => {
+		const parent = tempDir("default-parent");
+		const child = tempDir("default-child");
+		const prepared = await prepareSubagentWorkspace({
+			cwd: parent,
+			runId: "def123",
+			workspaceService: fakeWorkspaceService(parent, child),
+			request: {
+				agent,
+				parentSessionFile: join(parent, "parent.jsonl"),
+				goal: "g",
+				assignment: "a",
+				isolation: "worktree",
+			},
+		});
+
+		expect(prepared.metadata?.mergeBack).toBe("patch");
+		expect(prepared.workspaceTarget?.mergeBack?.strategy).toBe("patch");
 	});
 
 	test("worktree target is passed to child SessionManager cwd, nested agent cwd, and tool cwd", async () => {
@@ -112,6 +132,7 @@ describe("subagent workspace isolation", () => {
 			goal: "g",
 			assignment: "a",
 			isolation: "worktree",
+			mergeBack: "patch",
 		});
 		expect(result.workspaceTarget?.cwd).toBe(child);
 		expect(seen.workspaceCwd).toBe(child);

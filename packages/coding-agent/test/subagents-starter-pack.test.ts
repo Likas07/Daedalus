@@ -215,6 +215,8 @@ describe("starter-pack subagent extension", () => {
 			"Keep final synthesis in Daedalus; subagents return scoped lightweight references.",
 		);
 		expect(systemPrompt).toContain("Use summary first when consuming subagent results.");
+		expect(systemPrompt).toContain("When Muse returns a validated plan_path, summarize the plan first");
+		expect(systemPrompt).toContain("execute_plan(path=<plan_path>, resume=true)");
 		expect(systemPrompt).toContain("read_agent_result_output(result_id)");
 		expect(systemPrompt).toContain("Avoid duplicate delegations.");
 		expect(systemPrompt).toContain("Use compact task packets and inspectable task results.");

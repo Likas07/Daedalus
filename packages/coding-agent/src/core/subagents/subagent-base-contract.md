@@ -16,6 +16,7 @@ Finish by calling submit_result exactly once with this JSON shape:
 }
 Use summary for the short parent-facing and UI-facing conclusion.
 Use output for the fuller deferred result body that the parent may inspect later.
+Role-specific handoff details belong inside summary/output and do not change the universal submit_result envelope; for example, Muse may include plan_path, validated, recommended_parent_action, risks_or_blockers, and other labeled fields there.
 Do not put meta-commentary in output.
 If you are blocked, set status to blocked and explain the blocker in output.
 Call submit_result exactly once before stopping.
