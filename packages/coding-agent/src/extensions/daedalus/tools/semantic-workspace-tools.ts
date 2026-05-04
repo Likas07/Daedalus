@@ -1,6 +1,5 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@daedalus-pi/coding-agent";
 import { Text } from "@daedalus-pi/tui";
-import { createSemanticBackgroundSyncController } from "./semantic-background-sync.js";
 import {
 	applySemanticToolExposure,
 	getRememberedSemanticDesiredTools,
@@ -331,26 +330,6 @@ async function runWorkspaceCommand(
 }
 
 export default function semanticWorkspaceExtension(pi: ExtensionAPI): void {
-	const backgroundSync = createSemanticBackgroundSyncController({
-		onStateChange: (cwd, phase, error) => {
-			if (phase === "finished") {
-				syncExposure(pi, cwd);
-				emitWorkspaceSummary(pi, `Semantic workspace background sync complete for ${cwd}.`, {
-					kind: "sync",
-					background: true,
-				});
-				emitWorkspaceStatus(pi, cwd);
-			}
-			if (phase === "failed") {
-				const message = error instanceof Error ? error.message : String(error);
-				emitWorkspaceSummary(pi, `Semantic workspace background sync failed for ${cwd}: ${message}`, {
-					kind: "sync",
-					background: true,
-					error: message,
-				});
-			}
-		},
-	});
 	pi.on("session_start", async (_event, ctx) => {
 		const active = pi.getActiveTools();
 		const allToolNames = pi.getAllTools().map((tool) => tool.name);
@@ -358,16 +337,12 @@ export default function semanticWorkspaceExtension(pi: ExtensionAPI): void {
 			active.includes("sem_search") || !allToolNames.includes("sem_search") ? active : [...active, "sem_search"];
 		rememberSemanticDesiredTools(desired);
 		syncExposure(pi, ctx.cwd);
-		void backgroundSync.maybeStartForSession(ctx.cwd);
 	});
 	pi.on("session_tree", async (_event, ctx) => {
 		syncExposure(pi, ctx.cwd);
 	});
 	pi.on("before_agent_start", async (_event, ctx) => {
 		syncExposure(pi, ctx.cwd);
-	});
-	pi.on("turn_end", async (_event, ctx) => {
-		void backgroundSync.maybeStartAfterTurn(ctx.cwd);
 	});
 
 	pi.registerMessageRenderer("semantic-workspace-status", (message, _options, theme) => {

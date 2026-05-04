@@ -1,4 +1,5 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@daedalus-pi/coding-agent";
+import { WorkspaceService } from "../../../../core/workspaces/workspace-service.js";
 
 function notify(ctx: ExtensionCommandContext, message: string, type: "info" | "warning" | "error" = "info"): void {
 	ctx.ui.notify(message, type);
@@ -13,6 +14,17 @@ function formatTarget(target: NonNullable<ExtensionCommandContext["workspaceTarg
 		target.projectRoot ? `project: ${target.projectRoot}` : undefined,
 	]
 		.filter(Boolean)
+		.join("\n");
+}
+
+function formatWorktreeList(entries: ReturnType<WorkspaceService["listWorktrees"]>): string {
+	if (entries.length === 0) return "No git worktrees found";
+	return entries
+		.map((entry) => {
+			const branch = entry.branch ?? (entry.detached ? "(detached)" : "(unknown)");
+			const head = entry.head ? entry.head.slice(0, 12) : "unknown";
+			return `${entry.path}\n  branch: ${branch}\n  head: ${head}`;
+		})
 		.join("\n");
 }
 
@@ -36,16 +48,30 @@ export default function workspaceCommands(pi: ExtensionAPI) {
 
 	pi.registerCommand("worktree", {
 		description:
-			"Worktree commands: /worktree enter <id|branch|path>, create <branch> [base], exit, cleanup [--force]",
+			"Worktree commands: /worktree list, enter <id|branch|path>, create <branch> [base], exit, cleanup [--force]",
 		handler: async (args, ctx) => {
 			const [subcommand, ...rest] = args.trim().split(/\s+/).filter(Boolean);
-			if (!ctx.switchWorkspaceTarget) {
-				notify(ctx, "Workspace switching is unavailable", "error");
+			if (subcommand === "list") {
+				const current = ctx.getWorkspaceTarget?.() ?? ctx.workspaceTarget;
+				const projectRoot = current?.projectRoot ?? current?.repositoryRoot ?? current?.cwd;
+				if (!projectRoot) {
+					notify(ctx, "No workspace target or project root is available for listing worktrees", "warning");
+					return;
+				}
+				try {
+					const entries = new WorkspaceService({ projectRoot }).listWorktrees();
+					notify(ctx, `Git worktrees\n${formatWorktreeList(entries)}`);
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					notify(ctx, `Unable to list git worktrees for ${projectRoot}: ${message}`, "error");
+				}
 				return;
 			}
+
 			if (subcommand === "enter") {
 				const target = rest.join(" ");
 				if (!target) return notify(ctx, "Usage: /worktree enter <id|branch|path>", "error");
+				if (!ctx.switchWorkspaceTarget) return notify(ctx, "Workspace switching is unavailable", "error");
 				const input = target.startsWith("/") || target.startsWith(".") ? { cwd: target } : { branch: target };
 				const result = await ctx.switchWorkspaceTarget(input);
 				notify(ctx, `Entered workspace\n${formatTarget(result.workspaceTarget)}`);
@@ -54,6 +80,7 @@ export default function workspaceCommands(pi: ExtensionAPI) {
 			if (subcommand === "create") {
 				const branch = rest[0];
 				if (!branch) return notify(ctx, "Usage: /worktree create <branch> [base-ref]", "error");
+				if (!ctx.switchWorkspaceTarget) return notify(ctx, "Workspace switching is unavailable", "error");
 				const result = await ctx.switchWorkspaceTarget({ mode: "create", branch, baseRef: rest[1] });
 				notify(ctx, `Created workspace\n${formatTarget(result.workspaceTarget)}`);
 				return;
@@ -62,6 +89,7 @@ export default function workspaceCommands(pi: ExtensionAPI) {
 				const current = ctx.getWorkspaceTarget?.() ?? ctx.workspaceTarget;
 				const projectRoot = current?.projectRoot;
 				if (!projectRoot) return notify(ctx, "No base project root recorded for this workspace", "error");
+				if (!ctx.switchWorkspaceTarget) return notify(ctx, "Workspace switching is unavailable", "error");
 				const result = await ctx.switchWorkspaceTarget({ cwd: projectRoot });
 				notify(ctx, `Exited workspace\n${formatTarget(result.workspaceTarget)}`);
 				return;
@@ -78,7 +106,7 @@ export default function workspaceCommands(pi: ExtensionAPI) {
 				);
 				return;
 			}
-			notify(ctx, "Usage: /worktree enter|create|exit|cleanup", "error");
+			notify(ctx, "Usage: /worktree list|enter|create|exit|cleanup", "error");
 		},
 	});
 }

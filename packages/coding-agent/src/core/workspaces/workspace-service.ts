@@ -57,6 +57,10 @@ export class WorkspaceService {
 		this.projectRoot = canonical(options.projectRoot ?? process.cwd());
 	}
 
+	listWorktrees(): GitWorktreeEntry[] {
+		return gitWorktreeList(this.projectRoot);
+	}
+
 	resolveCurrentTarget(cwd = process.cwd()): WorkspaceTarget {
 		const actualCwd = canonical(cwd);
 		let repositoryRoot: string;
