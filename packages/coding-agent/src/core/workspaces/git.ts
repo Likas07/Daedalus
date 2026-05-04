@@ -47,6 +47,17 @@ function runGit(args: string[], options: GitRunOptions): string {
 	return stdout;
 }
 
+function realpathIfExists(path: string): string {
+	try {
+		return realpathSync(path);
+	} catch (error) {
+		if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+			return path;
+		}
+		throw error;
+	}
+}
+
 export function gitRevParse(cwd: string, ref: string): string {
 	return runGit(["rev-parse", ref], { cwd });
 }
@@ -103,7 +114,7 @@ export function gitWorktreeList(cwd: string): GitWorktreeEntry[] {
 		}
 		const [key, ...rest] = line.split(" ");
 		const value = rest.join(" ");
-		if (key === "worktree") current = { path: realpathSync(value) };
+		if (key === "worktree") current = { path: realpathIfExists(value) };
 		else if (current && key === "HEAD") current.head = value;
 		else if (current && key === "branch") current.branch = value.replace(/^refs\/heads\//, "");
 		else if (current && key === "detached") current.detached = true;
