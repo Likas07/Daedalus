@@ -96,10 +96,6 @@ export class WorkspaceService {
 		};
 	}
 
-	listWorktrees(): GitWorktreeEntry[] {
-		return gitWorktreeList(this.projectRoot);
-	}
-
 	openTarget(options: OpenWorkspaceTargetOptions): WorkspaceTarget {
 		const worktrees = gitWorktreeList(this.projectRoot);
 		const expectedPath = options.cwd ? canonical(options.cwd) : undefined;
