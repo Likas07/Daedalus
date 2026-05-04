@@ -16,10 +16,17 @@ import { type AppServerEndpoint, ensureAppServer, ensureTokenFile } from "./serv
 const moduleDir = dirname(fileURLToPath(import.meta.url));
 
 const linuxRenderingDisabledFeatures = ["VaapiVideoDecoder", "VaapiVideoEncoder", "Vulkan"] as const;
+const linuxDesktopEntryName = "daedalus.desktop";
+const linuxWmClass = "daedalus";
+
+type LinuxDesktopNamedApp = Electron.App & {
+	setDesktopName?: (desktopName: string) => void;
+};
 
 function configureLinuxRenderingForCompatibility(): void {
 	if (process.platform !== "linux") return;
 
+	process.env.ELECTRON_OZONE_PLATFORM_HINT = "x11";
 	app.disableHardwareAcceleration();
 	app.commandLine.appendSwitch("disable-gpu");
 	app.commandLine.appendSwitch("disable-gpu-compositing");
@@ -28,6 +35,8 @@ function configureLinuxRenderingForCompatibility(): void {
 	app.commandLine.appendSwitch("disable-accelerated-video-encode");
 	app.commandLine.appendSwitch("disable-features", linuxRenderingDisabledFeatures.join(","));
 	app.commandLine.appendSwitch("ozone-platform", "x11");
+	app.commandLine.appendSwitch("ozone-platform-hint", "x11");
+	app.commandLine.appendSwitch("class", linuxWmClass);
 }
 
 configureLinuxRenderingForCompatibility();
@@ -63,10 +72,30 @@ function dispatchDeepLink(url: string): void {
 	});
 }
 
+function revealWindow(window: BrowserWindow): void {
+	if (window.isDestroyed()) return;
+	if (window.isMinimized()) window.restore();
+	if (!window.isVisible()) window.show();
+	window.focus();
+}
+
+function configureAppIdentity(): void {
+	app.setName("Daedalus");
+	app.setAboutPanelOptions({
+		applicationName: "Daedalus",
+		applicationVersion: app.getVersion(),
+	});
+	if (process.platform === "linux") {
+		(app as LinuxDesktopNamedApp).setDesktopName?.(linuxDesktopEntryName);
+	}
+}
+
+
 function createMainWindow(): BrowserWindow {
 	const window = new BrowserWindow({
 		width: 1280,
 		height: 840,
+		show: true,
 		title: "Daedalus",
 		webPreferences: {
 			preload: join(moduleDir, "preload.cjs"),
@@ -77,6 +106,11 @@ function createMainWindow(): BrowserWindow {
 	});
 	mainWindow = window;
 	void loadRenderer(window);
+	window.show();
+	window.focus();
+	const revealOnce = (): void => revealWindow(window);
+	window.once("ready-to-show", revealOnce);
+	if (process.platform === "linux") window.webContents.once("did-finish-load", revealOnce);
 	window.on("closed", () => {
 		if (mainWindow === window) mainWindow = undefined;
 	});
@@ -97,6 +131,14 @@ async function loadRenderer(window: BrowserWindow): Promise<void> {
 async function ensureDesktopGuiAppServer(): Promise<AppServerEndpoint> {
 	if (embeddedAppServerEndpoint) return embeddedAppServerEndpoint;
 	if (embeddedAppServerPromise) return embeddedAppServerPromise;
+	if (app.isPackaged) {
+		embeddedAppServerPromise = ensureAppServer({ packaged: true }).finally(() => {
+			embeddedAppServerPromise = undefined;
+		});
+		embeddedAppServerEndpoint = await embeddedAppServerPromise;
+		lastDesktopBootDiagnostics = embeddedAppServerEndpoint.bootDiagnostics;
+		return embeddedAppServerEndpoint;
+	}
 	embeddedAppServerPromise = startEmbeddedGuiAppServer().finally(() => {
 		embeddedAppServerPromise = undefined;
 	});
@@ -232,14 +274,16 @@ function registerIpc(): void {
 }
 
 registerIpc();
-app.setAsDefaultProtocolClient("daedalus");
+if (!app.isPackaged) app.setAsDefaultProtocolClient("daedalus");
 app.on("open-url", (event, url) => {
 	event.preventDefault();
 	dispatchDeepLink(url);
 });
 const argvDeepLink = process.argv.find((arg) => arg.startsWith("daedalus://"));
 if (argvDeepLink) app.whenReady().then(() => dispatchDeepLink(argvDeepLink));
+configureAppIdentity();
 app.whenReady().then(() => {
+	configureAppIdentity();
 	if (!mainWindow) createMainWindow();
 	refreshMenu();
 	app.on("activate", () => {
