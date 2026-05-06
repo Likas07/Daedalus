@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { WorkspaceService } from "./workspace-service.js";
+import { finalizeManagedWorktree, WorkspaceService } from "./workspace-service.js";
+import { readWorktreeMetadata } from "./worktree-metadata.js";
 
 const tempDirs: string[] = [];
 
@@ -64,11 +65,87 @@ describe("WorkspaceService", () => {
 	test("creates isolated worktrees under .daedalus/worktrees/<slug>", () => {
 		const repo = tempRepo();
 		const service = new WorkspaceService({ projectRoot: repo });
-		const target = service.createIsolatedTarget({ branch: "agent/task-2", slug: "task-2" });
+		const baseCommit = sh(repo, ["git", "rev-parse", "HEAD"]);
+		const target = service.createIsolatedTarget({
+			branch: "agent/task-2",
+			slug: "task-2",
+			baseRef: "main",
+			mergeTarget: "main",
+		});
 		expect(target.cwd).toBe(join(repo, ".daedalus", "worktrees", "task-2"));
 		expect(target.isolationMode).toBe("dedicated_worktree");
 		expect(target.branch).toBe("agent/task-2");
+		expect(target.baseBranch).toBe("main");
+		expect(target.baseCommit).toBe(baseCommit);
+		expect(target.mergeBack).toMatchObject({
+			baseBranch: "main",
+			baseCommit,
+			targetBranch: "main",
+			status: "not_started",
+		});
+		expect(target.setup?.status).toBe("setup_complete");
 		expect(existsSync(join(target.cwd, "README.md"))).toBe(true);
+		expect(readWorktreeMetadata(target.cwd)).toMatchObject({
+			version: 1,
+			branch: "agent/task-2",
+			baseRef: "main",
+			baseCommit,
+			mergeTarget: "main",
+			setup: { status: "setup_complete" },
+		});
+		expect(sh(target.cwd, ["git", "config", "--get", "push.autoSetupRemote"])).toBe("true");
+	});
+
+	test("can skip setup for fast isolated worktree creation", () => {
+		const repo = tempRepo();
+		writeFileSync(join(repo, ".worktreeinclude"), ".env.local\n");
+		writeFileSync(join(repo, ".env.local"), "secret\n");
+		const service = new WorkspaceService({ projectRoot: repo });
+		const target = service.createIsolatedTarget({ branch: "agent/no-setup", slug: "no-setup", setup: false });
+		expect(target.setup?.status).toBe("created");
+		expect(existsSync(join(target.cwd, ".env.local"))).toBe(false);
+		expect(readWorktreeMetadata(target.cwd)?.setup.status).toBe("created");
+	});
+
+	test("finalizes a manually created managed worktree without setup", () => {
+		const repo = tempRepo();
+		const worktreePath = join(repo, ".daedalus", "worktrees", "manual-finalize");
+		const baseCommit = sh(repo, ["git", "rev-parse", "HEAD"]);
+		sh(repo, ["git", "worktree", "add", "-b", "agent/manual-finalize", worktreePath, "main"]);
+
+		const target = finalizeManagedWorktree({
+			projectRoot: repo,
+			worktreePath,
+			branch: "agent/manual-finalize",
+			baseRef: "main",
+			baseCommit,
+			mergeTarget: "main",
+			id: "manual-finalize",
+			setup: false,
+		});
+
+		expect(target).toMatchObject({
+			id: "manual-finalize",
+			cwd: realpathSync(worktreePath),
+			projectRoot: repo,
+			isolationMode: "dedicated_worktree",
+			branch: "agent/manual-finalize",
+			worktreePath: realpathSync(worktreePath),
+			baseBranch: "main",
+			baseCommit,
+			mergeBack: { baseBranch: "main", baseCommit, targetBranch: "main", status: "not_started" },
+			setup: { status: "created" },
+			validationStatus: "valid",
+		});
+		expect(readWorktreeMetadata(target.cwd)).toMatchObject({
+			version: 1,
+			branch: "agent/manual-finalize",
+			baseRef: "main",
+			baseCommit,
+			mergeTarget: "main",
+			setup: { status: "created" },
+		});
+		expect(sh(target.cwd, ["git", "config", "--get", "push.autoSetupRemote"])).toBe("true");
 	});
 
 	test("opens/adopts existing worktree by path branch and id", () => {

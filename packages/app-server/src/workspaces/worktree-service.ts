@@ -1,7 +1,7 @@
 import { access } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { WorktreeConflictReason, WorktreeCreateOutcome } from "@daedalus-pi/app-server-protocol";
-import { WorkspaceService, type WorkspaceTarget } from "@daedalus-pi/coding-agent";
+import { finalizeManagedWorktree, WorkspaceService, type WorkspaceTarget } from "@daedalus-pi/coding-agent";
 import { type AppServerDatabase, appendEvent, type EventPayload, readEvents } from "..";
 import { projectRuntimeEvents } from "../persistence/projector";
 import { listWorktrees, type WorktreeReadModel } from "../persistence/read-model";
@@ -31,6 +31,8 @@ export interface CreateWorktreeInput {
 	readonly path?: string;
 	readonly baseBranch?: string;
 	readonly operationId?: string;
+	readonly setup?: boolean;
+	readonly includeIgnored?: boolean;
 }
 
 export interface WorktreeLifecycleMetadata extends WorktreeReadModel {
@@ -119,6 +121,18 @@ export class WorktreeService {
 				rollbackPath: result.rollbackPath,
 			};
 		}
+
+		const baseRef = input.baseBranch ?? "HEAD";
+		const baseCommit = (await git(project.path, ["rev-parse", baseRef])).stdout.trim();
+		finalizeManagedWorktree({
+			projectRoot: project.path,
+			worktreePath: target.path,
+			branch: target.branch,
+			baseRef,
+			baseCommit,
+			setup: input.setup ?? true,
+			includeIgnored: input.includeIgnored ?? true,
+		});
 
 		return { outcome: "created", worktree: await this.registerWorktree(input, target, operationId), operationId };
 	}
@@ -438,7 +452,16 @@ export class WorktreeService {
 }
 
 function defaultWorktreePath(projectPath: string, branch: string): string {
-	return `${projectPath.replace(/[\\/]$/, "")}-${branch.replace(/[^A-Za-z0-9._-]/g, "-")}`;
+	return resolve(projectPath, ".daedalus", "worktrees", slugify(branch));
+}
+
+function slugify(value: string): string {
+	return (
+		value
+			.toLowerCase()
+			.replace(/[^a-z0-9._-]+/g, "-")
+			.replace(/^-+|-+$/g, "") || "workspace"
+	);
 }
 
 function suffixName(value: string, suffix: number): string {

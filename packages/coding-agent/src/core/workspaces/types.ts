@@ -2,6 +2,13 @@ export type WorkspaceIsolationMode = "shared_cwd" | "dedicated_worktree" | "exte
 
 export type WorkspaceValidationStatus = "unknown" | "valid" | "missing" | "dirty" | "conflict" | "invalid";
 
+export type WorkspaceSetupStatus = "created" | "setup_pending" | "setup_complete" | "setup_failed";
+
+export interface WorkspaceSetupMetadata {
+	status: WorkspaceSetupStatus;
+	updatedAt?: string;
+}
+
 export interface WorkspaceMergeBackMetadata {
 	strategy?: "patch" | "branch";
 	baseBranch?: string;
@@ -42,6 +49,7 @@ export interface WorkspaceTarget {
 	baseCommit?: string;
 	validationStatus?: WorkspaceValidationStatus;
 	validationMessage?: string;
+	setup?: WorkspaceSetupMetadata;
 	mergeBack?: WorkspaceMergeBackMetadata;
 	adoption?: WorkspaceAdoptionMetadata;
 }

@@ -136,8 +136,8 @@ describe("worktree create outcomes", () => {
 		if (first.outcome !== "created" || second.outcome !== "created") throw new Error("expected created outcomes");
 		expect(first.worktree.branch).toBe("build/hello");
 		expect(second.worktree.branch).toBe("build/hello-2");
-		expect(first.worktree.path).toBe(`${repo}-build-hello`);
-		expect(second.worktree.path).toBe(`${repo}-build-hello-2`);
+		expect(first.worktree.path).toBe(join(repo, ".daedalus", "worktrees", "build-hello"));
+		expect(second.worktree.path).toBe(join(repo, ".daedalus", "worktrees", "build-hello-2"));
 	});
 
 	test("adopts retry by operationId", async () => {

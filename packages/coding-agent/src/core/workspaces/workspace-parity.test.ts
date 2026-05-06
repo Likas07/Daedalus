@@ -132,7 +132,14 @@ describe("workspace target cross-surface parity", () => {
 		expect(rpcMode).toContain('case "workspace_create"');
 		expect(appServerWorktreeService).toContain("WorkspaceService");
 		expect(appServerWorktreeService).toContain("removeTarget(this.toCoreTarget");
+		expect(appServerWorktreeService).toContain("finalizeManagedWorktree");
+		expect(appServerWorktreeService).toContain("setup: input.setup ?? true");
+		expect(appServerWorktreeService).toContain("includeIgnored: input.includeIgnored ?? true");
 		expect(appServerWorktreeService).toContain("Keep app-server allocation/idempotency here");
+		expect(appServerWorktreeService).toContain('resolve(projectPath, ".daedalus", "worktrees", slugify(branch))');
+		expect(appServerWorktreeService).toContain(
+			"const path = input.path ? suffixPath(input.path, suffix) : defaultWorktreePath(projectPath, branch)",
+		);
 	});
 
 	test("subagent isolation carries core WorkspaceTarget identity into isolated runs", async () => {
