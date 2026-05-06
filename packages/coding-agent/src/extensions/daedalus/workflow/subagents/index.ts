@@ -5,6 +5,7 @@ import { getAgentDir } from "../../../../config.js";
 import { discoverSubagents } from "../../../../core/subagents/index.js";
 import { getBundledStarterAgents } from "./bundled.js";
 import { buildInspectorOptions, formatInspectorLabel, openSubagentInspector } from "./inspect.js";
+import { buildSubagentNavigationModel, formatSubagentNavigationStatus } from "./navigation.js";
 import { getOrchestratorGuidance } from "./orchestrator-prompt.js";
 import { formatTaskProgress } from "./task-progress-renderer.js";
 
@@ -34,12 +35,14 @@ interface SubagentToolDetails {
 		baseCommit?: string;
 	};
 	workspaceMetadata?: {
+		isolation?: string;
 		baseBranch?: string;
 		baseCommit?: string;
+		mergeBack?: string;
 		mergeBackArtifactPath?: string;
 		mergeBackBranch?: string;
 	};
-	mergeBackResult?: { artifactPath?: string; branchName?: string; status?: string; message?: string };
+	mergeBackResult?: { artifactPath?: string; branchName?: string; policy?: string; status?: string; message?: string };
 }
 
 function truncate(text: string, max = 72): string {
@@ -49,11 +52,61 @@ function truncate(text: string, max = 72): string {
 	return `${clean.slice(0, Math.max(0, max - 3)).trimEnd()}...`;
 }
 
-function renderSubagentCall(args: { agent?: string; goal?: string; assignment?: string }, theme: any): Text {
+function formatPathTail(value: string): string {
+	const parts = value.split("/").filter(Boolean);
+	return parts.length > 2 ? parts.slice(-2).join("/") : value;
+}
+
+function formatCallMetadata(args: { isolation?: string; merge_back?: string; base_branch?: string }): string[] {
+	const parts: string[] = [];
+	if (args.isolation) parts.push(`isolation ${args.isolation}`);
+	if (args.merge_back) parts.push(`merge_back ${args.merge_back}`);
+	if (args.base_branch) parts.push(`base ${args.base_branch}`);
+	return parts;
+}
+
+function formatResultMetadata(details: SubagentToolDetails): { inline: string[]; detail: string[] } {
+	const requestedIsolation = details.isolation;
+	const effectiveIsolation = details.workspaceMetadata?.isolation ?? details.workspaceTarget?.isolationMode;
+	const mergeBackPolicy = details.mergeBackResult?.policy ?? details.workspaceMetadata?.mergeBack;
+	const mergeBackStatus = details.mergeBackResult?.status;
+	const inline: string[] = [];
+	const detail: string[] = [];
+
+	if (requestedIsolation) inline.push(`isolation ${requestedIsolation}`);
+	if (effectiveIsolation && effectiveIsolation !== requestedIsolation) inline.push(`effective ${effectiveIsolation}`);
+	if (mergeBackPolicy) {
+		inline.push(`merge_back ${mergeBackStatus ? `${mergeBackPolicy} · ${mergeBackStatus}` : mergeBackPolicy}`);
+	} else if (mergeBackStatus) {
+		inline.push(`merge_back ${mergeBackStatus}`);
+	}
+
+	const branchName = details.mergeBackResult?.branchName ?? details.workspaceMetadata?.mergeBackBranch;
+	if (branchName) detail.push(`branch ${branchName}`);
+	const artifactPath = details.mergeBackResult?.artifactPath ?? details.workspaceMetadata?.mergeBackArtifactPath;
+	if (artifactPath) detail.push(`artifact ${formatPathTail(artifactPath)}`);
+	return { inline, detail };
+}
+
+function renderSubagentCall(
+	args: {
+		agent?: string;
+		goal?: string;
+		assignment?: string;
+		isolation?: string;
+		merge_back?: string;
+		base_branch?: string;
+	},
+	theme: any,
+): Text {
 	const agent = args.agent || "subagent";
 	let text = theme.fg("toolTitle", theme.bold("subagent ")) + theme.fg("accent", agent);
 	if (args.goal) {
 		text += theme.fg("muted", ` · ${truncate(args.goal, 56)}`);
+	}
+	const metadata = formatCallMetadata(args);
+	if (metadata.length > 0) {
+		text += theme.fg("muted", ` · ${metadata.join(" · ")}`);
 	}
 	if (args.assignment) {
 		text += `\n  ${theme.fg("dim", truncate(args.assignment, 88))}`;
@@ -86,8 +139,9 @@ function renderSubagentResult(
 				: theme.fg("error", "✗");
 	let text = `${icon} ${theme.fg("accent", details.agent)}`;
 	text += theme.fg("muted", ` · ${truncate(details.goal, 64)}`);
-	if (details.workspaceTarget?.cwd) {
-		text += theme.fg("muted", ` · ${details.workspaceTarget.isolationMode ?? "workspace"}`);
+	const metadata = formatResultMetadata(details);
+	if (metadata.inline.length > 0) {
+		text += theme.fg("muted", ` · ${metadata.inline.join(" · ")}`);
 	}
 
 	if (running) {
@@ -114,6 +168,9 @@ function renderSubagentResult(
 	if (details.error) {
 		text += `\n  ${theme.fg("error", truncate(details.error, 92))}`;
 	}
+	for (const line of metadata.detail) {
+		text += `\n  ${theme.fg("dim", truncate(line, 92))}`;
+	}
 	if (details.childSessionFile || details.runId) {
 		context.state.primaryActionData = { toolName: "subagent", details };
 		context.state.primaryActionLabel = "Inspect";
@@ -133,6 +190,10 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 			"This exploration limit does not override role routing: use Muse for plans and always use Worker for implementation after minimal grounding.",
 			"When launching multiple independent tasks, call subagent once per independent task in parallel (single assistant message, multiple tool calls).",
 			"Keep Daedalus summary-first result semantics: inspect the returned summary/reference first and read deferred full output only when needed.",
+			`Use isolation:"inherit" for the parent cwd without child workspace metadata; isolation:"shared" for the parent cwd with shared workspace metadata; isolation:"worktree" for a dedicated managed worktree.`,
+			`Use isolation:"worktree" for implementation, risky edits, or parallel mutations that should not touch the parent checkout.`,
+			`For worktree isolation, merge_back defaults to "patch"; use merge_back:"patch" to apply a clean child diff back to the parent, or merge_back:"branch" to create a task branch for review.`,
+			`Use base_branch with worktree isolation to choose the base branch/ref; omit it to let Daedalus resolve the current/base target.`,
 		],
 		parameters: Type.Object({
 			agent: Type.String(),
@@ -141,10 +202,21 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 			context: Type.Optional(Type.String()),
 			conversation_id: Type.Optional(Type.String()),
 			isolation: Type.Optional(
-				Type.Union([Type.Literal("inherit"), Type.Literal("shared"), Type.Literal("worktree")]),
+				Type.Union([Type.Literal("inherit"), Type.Literal("shared"), Type.Literal("worktree")], {
+					description: `Use "inherit" for the parent cwd without child workspace metadata, "shared" for parent cwd with shared workspace metadata, or "worktree" for a dedicated managed worktree.`,
+				}),
 			),
-			merge_back: Type.Optional(Type.Union([Type.Literal("patch"), Type.Literal("branch")])),
-			base_branch: Type.Optional(Type.String()),
+			merge_back: Type.Optional(
+				Type.Union([Type.Literal("patch"), Type.Literal("branch")], {
+					description: `Worktree merge-back policy. Defaults to "patch" for worktree isolation; use "patch" for a clean diff apply-back or "branch" to create a task branch for review.`,
+				}),
+			),
+			base_branch: Type.Optional(
+				Type.String({
+					description:
+						"With worktree isolation, choose the base branch/ref; omit it to let Daedalus resolve the current/base target.",
+				}),
+			),
 		}),
 		renderCall: (args, theme) => renderSubagentCall(args, theme),
 		renderResult: (result, options, theme, context) => renderSubagentResult(result, options, theme, context),
@@ -268,6 +340,34 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 				await openSubagentInspector(ctx, selected);
 			}
 		},
+	});
+
+	async function navigateSubagent(kind: "parent" | "previous" | "next", ctx: any): Promise<void> {
+		const model = buildSubagentNavigationModel({
+			runs: buildInspectorOptions(pi.getActiveSubagentRuns(), await pi.listSubagentRuns()),
+			currentSessionFile: ctx.sessionManager.getSessionFile(),
+			currentEntries: ctx.sessionManager.getEntries?.(),
+		});
+		ctx.ui.setStatus?.("subagents", formatSubagentNavigationStatus(model));
+		const target = kind === "parent" ? model.parent : kind === "previous" ? model.previous : model.next;
+		if (!target) {
+			ctx.ui.notify(`No subagent ${kind} session available.`, "info");
+			return;
+		}
+		await ctx.switchSession(target.sessionFile);
+	}
+
+	pi.registerCommand("subagent_parent", {
+		description: "Switch from a child subagent session back to its parent",
+		handler: async (_args, ctx) => navigateSubagent("parent", ctx),
+	});
+	pi.registerCommand("subagent_prev", {
+		description: "Switch to the previous sibling subagent session",
+		handler: async (_args, ctx) => navigateSubagent("previous", ctx),
+	});
+	pi.registerCommand("subagent_next", {
+		description: "Switch to the next sibling subagent session",
+		handler: async (_args, ctx) => navigateSubagent("next", ctx),
 	});
 
 	pi.on("session_start", async () => {

@@ -3,6 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { getSubagentArtifactPaths } from "./artifacts.js";
 import { SubagentRunner } from "./runner.js";
 import type { SubagentDefinition } from "./types.js";
 
@@ -39,6 +40,39 @@ describe("SubagentRunner", () => {
 		expect(result.status).toBe("completed");
 		expect(result.summary).toBe("done");
 		expect(result.output).toBe("output");
+		expect(result.reference).toMatchObject({
+			resultId: result.resultId,
+			agentId: "worker",
+			status: "completed",
+			summary: "done",
+			note: `If you want the full output, use read_agent_result_output(${result.resultId}).`,
+		});
+		expect(JSON.stringify(result.reference)).not.toContain('"output"');
+	});
+
+	test("persists parent session lineage in returned result and run meta", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "daedalus-runner-lineage-"));
+		const parentSessionFile = join(cwd, "parent.jsonl");
+		const runner = new SubagentRunner({
+			cwd,
+			createSession: async (options) => {
+				options.onSubmit({ task: "task", status: "completed", summary: "done", output: "output" });
+				return { prompt: async () => {}, waitForIdle: async () => {}, abort: async () => {}, dispose: () => {} };
+			},
+		});
+
+		const result = await runner.run({
+			agent,
+			parentSessionFile,
+			goal: "goal",
+			assignment: "assignment",
+		});
+		const meta = JSON.parse(
+			await readFile(getSubagentArtifactPaths(parentSessionFile, result.runId).metaFile, "utf8"),
+		);
+
+		expect(result.parentSessionFile).toBe(parentSessionFile);
+		expect(meta.parentSessionFile).toBe(parentSessionFile);
 	});
 
 	test("auto-applies patch merge-back for completed worktree subagents", async () => {

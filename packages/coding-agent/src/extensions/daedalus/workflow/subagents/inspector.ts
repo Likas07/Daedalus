@@ -1,8 +1,18 @@
 import type { SubagentRunStatus } from "../../../../core/subagents/index.js";
+import type { SubagentNavigationModel } from "./navigation.js";
 import { createSubagentSessionLink } from "./session-link.js";
 import { formatAgentLabel } from "./task-progress-renderer.js";
 
-export type InspectorActionKind = "transcript" | "context" | "result" | "meta" | "open-child" | "back-to-parent";
+export type InspectorActionKind =
+	| "transcript"
+	| "context"
+	| "result"
+	| "meta"
+	| "open-child"
+	| "back-to-parent"
+	| "parent"
+	| "previous"
+	| "next";
 
 export interface InspectorAction {
 	label: string;
@@ -21,6 +31,7 @@ export interface RunInspectorModel {
 	recentActivity?: string[];
 	startedAt?: number;
 	updatedAt?: number;
+	navigation?: SubagentNavigationModel;
 	actions: InspectorAction[];
 }
 
@@ -41,12 +52,16 @@ export type InspectorRunSource = {
 	resultArtifactPath?: string;
 };
 
-export function buildRunInspectorModel(run: InspectorRunSource): RunInspectorModel {
+export function buildRunInspectorModel(
+	run: InspectorRunSource,
+	navigation?: SubagentNavigationModel,
+): RunInspectorModel {
 	const link = createSubagentSessionLink({
 		childSessionFile: run.childSessionFile,
 		parentSessionFile: run.parentSessionFile,
 	});
 	const actions: InspectorAction[] = [];
+
 	if (run.childSessionFile) actions.push({ label: "Transcript", kind: "transcript", path: run.childSessionFile });
 	if (run.contextArtifactPath)
 		actions.push({ label: "Context packet", kind: "context", path: run.contextArtifactPath });
@@ -56,6 +71,15 @@ export function buildRunInspectorModel(run: InspectorRunSource): RunInspectorMod
 		actions.push({ label: "Open child session", kind: "open-child", path: run.childSessionFile });
 	if (link.parentSessionFile)
 		actions.push({ label: "Back to parent", kind: "back-to-parent", path: link.parentSessionFile });
+	if (navigation?.parent) actions.push({ label: "Parent", kind: "parent", path: navigation.parent.sessionFile });
+	if (navigation?.previous)
+		actions.push({
+			label: `Prev: ${navigation.previous.label}`,
+			kind: "previous",
+			path: navigation.previous.sessionFile,
+		});
+	if (navigation?.next)
+		actions.push({ label: `Next: ${navigation.next.label}`, kind: "next", path: navigation.next.sessionFile });
 
 	return {
 		runId: run.runId,
@@ -68,6 +92,7 @@ export function buildRunInspectorModel(run: InspectorRunSource): RunInspectorMod
 		recentActivity: run.recentActivity,
 		startedAt: run.startedAt,
 		updatedAt: run.updatedAt,
+		navigation,
 		actions,
 	};
 }

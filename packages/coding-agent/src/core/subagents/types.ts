@@ -140,6 +140,10 @@ export interface SubagentRunRequest {
 	mergeBack?: SubagentMergeBackPolicy;
 	baseBranch?: string;
 	workspaceTarget?: WorkspaceTarget;
+	/** Worktree setup defaults to true for worktree isolation; false skips bootstrap. */
+	setupWorktree?: boolean;
+	/** Include ignored files during worktree setup; defaults to true for worktree isolation. */
+	includeIgnored?: boolean;
 	/** Legacy branch isolation inputs retained for compatibility. */
 	isolationMode?: "shared-branch" | "child-branch";
 	branchTemplate?: string;
@@ -149,6 +153,7 @@ export interface SubagentRunResult {
 	runId: string;
 	resultId?: string;
 	agent: string;
+	parentSessionFile?: string;
 	status: SubagentRunStatus;
 	summary: string;
 	task?: string;

@@ -52,6 +52,7 @@ import { createToolHtmlRenderer } from "./export-html/tool-renderer.js";
 import {
 	type ContextUsage,
 	type ExtensionCommandContextActions,
+	type ExtensionContext,
 	type ExtensionErrorListener,
 	ExtensionRunner,
 	type ExtensionUIContext,
@@ -73,6 +74,7 @@ import {
 	type TurnStartEvent,
 	wrapRegisteredTools,
 } from "./extensions/index.js";
+import { noOpUIContext } from "./extensions/runner.js";
 import type { BashExecutionMessage, CustomMessage } from "./messages.js";
 import type { ModelRegistry } from "./model-registry.js";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.js";
@@ -96,6 +98,7 @@ import {
 	createSubmitResultTool,
 	isSubagentSpawnAllowed,
 	listPersistedSubagentRuns,
+	SubagentInteractionBroker,
 	SubagentRegistry,
 	SubagentRunner,
 } from "./subagents/index.js";
@@ -191,6 +194,8 @@ export interface AgentSessionConfig {
 	extensionRunnerRef?: { current?: ExtensionRunner };
 	/** Nested subagent runtime metadata when this session is itself a child run. */
 	subagentContext?: SubagentSessionContext;
+	/** Parent UI broker used by nested child sessions. */
+	subagentInteractionBroker?: SubagentInteractionBroker;
 	/** Session start event metadata emitted when extensions bind to this runtime. */
 	sessionStartEvent?: SessionStartEvent;
 }
@@ -325,6 +330,7 @@ export class AgentSession {
 	private _baseToolsOverride?: Record<string, AgentTool>;
 	private _sessionStartEvent: SessionStartEvent;
 	private _subagentContext?: SubagentSessionContext;
+	private _subagentInteractionBroker?: SubagentInteractionBroker;
 	private _extensionUIContext?: ExtensionUIContext;
 	private _extensionCommandContextActions?: ExtensionCommandContextActions;
 	private _extensionShutdownHandler?: ShutdownHandler;
@@ -358,6 +364,7 @@ export class AgentSession {
 		this._initialActiveToolNames = config.initialActiveToolNames;
 		this._baseToolsOverride = config.baseToolsOverride;
 		this._subagentContext = config.subagentContext;
+		this._subagentInteractionBroker = config.subagentInteractionBroker;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
 		this._readLedger = new ReadLedger(this._cwd, this.sessionManager.getEntries());
 
@@ -980,6 +987,7 @@ export class AgentSession {
 			this._postRunContinuationTimer = undefined;
 		}
 		this._pendingPostRunContinuations = [];
+		this._subagentInteractionBroker?.dispose();
 		this._eventListeners = [];
 	}
 
@@ -2367,6 +2375,7 @@ export class AgentSession {
 	async bindExtensions(bindings: ExtensionBindings): Promise<void> {
 		if (bindings.uiContext !== undefined) {
 			this._extensionUIContext = bindings.uiContext;
+			this._subagentInteractionBroker ??= new SubagentInteractionBroker(bindings.uiContext);
 		}
 		if (bindings.commandContextActions !== undefined) {
 			this._extensionCommandContextActions = bindings.commandContextActions;
@@ -2462,6 +2471,47 @@ export class AgentSession {
 		this.agent.state.model = refreshedModel;
 	}
 
+	private _createToolExecutionContext(): ExtensionContext {
+		if (this._extensionRunner) {
+			return this._extensionRunner.createContext();
+		}
+
+		const session = this;
+		const ui = this._extensionUIContext ?? noOpUIContext;
+		return {
+			ui,
+			hasUI: ui !== noOpUIContext,
+			cwd: this._cwd,
+			readLedger: this._readLedger,
+			sessionManager: this.sessionManager,
+			modelRegistry: this._modelRegistry,
+			get model() {
+				return session.model;
+			},
+			isIdle: () => !this.isStreaming,
+			signal: this.agent.signal,
+			abort: () => this.abort(),
+			hasPendingMessages: () => this.pendingMessageCount > 0,
+			shutdown: () => {
+				this._extensionShutdownHandler?.();
+			},
+			getContextUsage: () => this.getContextUsage(),
+			compact: (options) => {
+				void (async () => {
+					try {
+						const result = await this.compact(options?.customInstructions);
+						options?.onComplete?.(result);
+					} catch (error) {
+						const err = error instanceof Error ? error : new Error(String(error));
+						options?.onError?.(err);
+					}
+				})();
+			},
+			getSystemPrompt: () => this.systemPrompt,
+			getSkills: () => this._resourceLoader.getSkills().skills,
+		};
+	}
+
 	private _bindExtensionCore(runner: ExtensionRunner): void {
 		const getCommands = (): SlashCommandInfo[] => {
 			const extensionCommands: SlashCommandInfo[] = runner.getRegisteredCommands().map((command) => ({
@@ -2527,12 +2577,20 @@ export class AgentSession {
 						maxDepth: runtime.policy.maxDepth,
 						workspaceTarget: workspace.workspaceTarget,
 					},
+					subagentInteractionBroker: this._subagentInteractionBroker,
 					sessionStartEvent: {
 						type: "session_start",
 						reason: isResume ? "resume" : "startup",
 						previousSessionFile: isResume ? childSessionFile : undefined,
 					},
 				});
+
+				const brokeredUI = this._subagentInteractionBroker?.createUIContext({
+					runId,
+					agent: request.agent.name,
+					goal: request.goal,
+				});
+				if (brokeredUI) await session.bindExtensions({ uiContext: brokeredUI });
 
 				session.sessionManager.appendCustomEntry("subagent-run", {
 					parentSessionFile: request.parentSessionFile,
@@ -2715,7 +2773,7 @@ export class AgentSession {
 		const toolRegistry = new Map(
 			Array.from(this._baseToolDefinitions.values()).map((definition) => [
 				definition.name,
-				wrapToolDefinition(definition),
+				wrapToolDefinition(definition, () => this._createToolExecutionContext()),
 			]),
 		);
 		for (const tool of wrappedExtensionTools as AgentTool[]) {

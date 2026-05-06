@@ -173,7 +173,7 @@ export async function emitSessionShutdownEvent(extensionRunner: ExtensionRunner 
 	return false;
 }
 
-const noOpUIContext: ExtensionUIContext = {
+export const noOpUIContext: ExtensionUIContext = {
 	select: async () => undefined,
 	confirm: async () => false,
 	input: async () => undefined,

@@ -1,6 +1,7 @@
 export * from "./artifacts.js";
 export * from "./branch-isolation.js";
 export * from "./discovery.js";
+export * from "./interaction-broker.js";
 export * from "./persisted-runs.js";
 export * from "./policy.js";
 export * from "./registry.js";

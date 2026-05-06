@@ -63,9 +63,10 @@ async function runInspectorAction(
 			if (action.path) await showJsonArtifact(ctx, `${model.agentLabel} metadata`, action.path);
 			return;
 		case "open-child":
-			if (action.path) await ctx.switchSession(action.path);
-			return;
 		case "back-to-parent":
+		case "parent":
+		case "previous":
+		case "next":
 			if (action.path) await ctx.switchSession(action.path);
 			return;
 	}
@@ -92,7 +93,7 @@ function createInspectorComponent(
 		const action = model.actions[index];
 		if (!action) return;
 		await runInspectorAction(ctx, model, action);
-		if (action.kind === "open-child" || action.kind === "back-to-parent") {
+		if (["open-child", "back-to-parent", "parent", "previous", "next"].includes(action.kind)) {
 			done(undefined);
 			return;
 		}
@@ -137,6 +138,7 @@ function createInspectorComponent(
 			if (model.goal) push(`Goal: ${model.goal}`);
 			push(`Summary: ${model.summary}`);
 			if (model.activity) push(`Activity: ${model.activity}`);
+			if (model.navigation) push(`Navigation: ${model.navigation.statusText}`);
 			for (const line of [
 				formatTimestamp("Started", model.startedAt),
 				formatTimestamp("Updated", model.updatedAt),

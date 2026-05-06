@@ -327,6 +327,7 @@ export class SubagentRunner {
 			runId,
 			resultId,
 			agent: request.agent.name,
+			parentSessionFile: request.parentSessionFile,
 			status: "running",
 			summary: request.goal,
 			task: request.goal,
@@ -370,6 +371,7 @@ export class SubagentRunner {
 				recentActivity,
 				childSessionFile: paths.sessionFile,
 				contextArtifactPath,
+				parentSessionFile: request.parentSessionFile,
 			});
 			void queuePersist({
 				summary: request.goal,
@@ -379,6 +381,7 @@ export class SubagentRunner {
 				childSessionFile: paths.sessionFile,
 				conversationId: paths.sessionFile,
 				contextArtifactPath,
+				parentSessionFile: request.parentSessionFile,
 			});
 			const progress: SubagentRunProgress = {
 				runId,
@@ -447,6 +450,7 @@ export class SubagentRunner {
 					runId,
 					resultId,
 					agent: request.agent.name,
+					parentSessionFile: request.parentSessionFile,
 					status: "failed",
 					summary: "Subagent exited without submit_result.",
 					task: request.goal,
@@ -481,6 +485,7 @@ export class SubagentRunner {
 					runId,
 					resultId,
 					agent: request.agent.name,
+					parentSessionFile: request.parentSessionFile,
 					status: "failed",
 					summary: "Subagent returned invalid result envelope.",
 					task: request.goal,
@@ -525,6 +530,7 @@ export class SubagentRunner {
 					runId,
 					resultId,
 					agent: request.agent.name,
+					parentSessionFile: request.parentSessionFile,
 					status: "failed",
 					summary: "Subagent returned invalid structured output.",
 					task: submitPayload.task,
@@ -609,6 +615,7 @@ export class SubagentRunner {
 				status,
 				summary: finalEnvelope.summary,
 				task: finalEnvelope.task,
+				parentSessionFile: request.parentSessionFile,
 				conversationId: paths.sessionFile,
 				output: finalEnvelope.output,
 				reference,
@@ -631,6 +638,7 @@ export class SubagentRunner {
 				status,
 				summary: finalEnvelope.summary,
 				task: finalEnvelope.task,
+				parentSessionFile: request.parentSessionFile,
 				goal: request.goal,
 				conversationId: paths.sessionFile,
 				output: finalEnvelope.output,

@@ -30,6 +30,28 @@ describe("subagent prompt doctrine", () => {
 		);
 	});
 
+	it("documents current subagent isolation and merge-back contract", () => {
+		const tool = getRegisteredTool();
+		const guidance = tool.promptGuidelines.join("\n");
+
+		expect(guidance).toContain('isolation:"inherit"');
+		expect(guidance).toContain('isolation:"shared"');
+		expect(guidance).toContain('isolation:"worktree"');
+		expect(guidance).toContain("base_branch");
+		expect(guidance).toContain('merge_back defaults to "patch"');
+		expect(guidance).toContain('merge_back:"patch"');
+		expect(guidance).toContain('merge_back:"branch"');
+
+		const parameterSchema = JSON.stringify(tool.parameters);
+		expect(parameterSchema).toContain("inherit");
+		expect(parameterSchema).toContain("shared");
+		expect(parameterSchema).toContain("worktree");
+		expect(parameterSchema).toContain("base_branch");
+		expect(parameterSchema).toContain("patch");
+		expect(parameterSchema).toContain("branch");
+		expect(parameterSchema).toContain('Defaults to \\"patch\\" for worktree isolation');
+	});
+
 	it("adds Daedalus orchestration guidance to the system prompt instead of a hidden custom message", async () => {
 		const beforeAgentStartHandlers: any[] = [];
 		subagentStarterPack({

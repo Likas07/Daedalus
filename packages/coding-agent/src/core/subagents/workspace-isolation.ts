@@ -121,6 +121,8 @@ export async function prepareSubagentWorkspace(
 			baseRef,
 			slug: `subagent-${input.request.agent.name}-${input.runId}`,
 			name: `Subagent ${input.request.agent.name} ${input.runId}`,
+			setup: input.request.setupWorktree ?? true,
+			includeIgnored: input.request.includeIgnored ?? true,
 		});
 		applyParentBaseline(target.cwd, baseline);
 		const workspaceTarget: WorkspaceTarget = {

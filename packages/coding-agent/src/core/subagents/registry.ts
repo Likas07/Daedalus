@@ -20,7 +20,7 @@ export class SubagentRegistry {
 		runId: string,
 		update: Pick<
 			ActiveSubagentRun,
-			"summary" | "activity" | "recentActivity" | "childSessionFile" | "contextArtifactPath"
+			"summary" | "activity" | "recentActivity" | "childSessionFile" | "contextArtifactPath" | "parentSessionFile"
 		>,
 	): void {
 		const current = this.#runs.get(runId);
