@@ -21,6 +21,11 @@ packages/*/node_modules/
 /.daedalus/t3code-visual-qa/
 /.daedalus/app-server.sqlite*
 
+# Local Daedalus runtime/worktree state
+/.daedalus/worktree.json
+/.daedalus/worktree.json.*
+/.daedalus/worktrees/
+
 # Desktop packaging artifacts
 /release/desktop/
 packages/desktop/release/
