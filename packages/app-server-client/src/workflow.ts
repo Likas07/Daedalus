@@ -8,7 +8,14 @@ export class WorkflowClient {
 		return this.client.request("worktree/list", { projectId });
 	}
 
-	createWorktree(input: { projectId: string; branch: string; path?: string; baseBranch?: string }) {
+	createWorktree(input: {
+		projectId: string;
+		branch: string;
+		path?: string;
+		baseBranch?: string;
+		setup?: boolean;
+		includeIgnored?: boolean;
+	}) {
 		return this.client.request("worktree/create", input);
 	}
 

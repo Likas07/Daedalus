@@ -308,6 +308,8 @@ export const WorktreeCreateParamsSchema = StrictObject({
 	path: Type.Optional(Type.String({ minLength: 1 })),
 	baseBranch: Type.Optional(Type.String({ minLength: 1 })),
 	operationId: Type.Optional(OperationIdSchema),
+	setup: Type.Optional(Type.Boolean()),
+	includeIgnored: Type.Optional(Type.Boolean()),
 });
 export type WorktreeCreateParams = Static<typeof WorktreeCreateParamsSchema>;
 
