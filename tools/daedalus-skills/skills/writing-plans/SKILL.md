@@ -26,7 +26,7 @@ Workflow:
 4. Maximize safe parallelization: tasks in the same `parallel_group` should be runnable by separate worker subagents without touching the same files.
 5. Mark serialization boundaries explicitly with dependencies or conflicts when tasks share files, schemas, or runtime state.
 6. Build structured `plan_create` input with title, goal, architecture, tech_stack, and tasks.
-7. Call `plan_create` with `path=docs/plans/YYYY-MM-DD-feature-name.md`.
+7. Call `plan_create` with `path=docs/plans/YYYY_MM_DD/<slug>.md`.
 8. Report the path returned by `plan_create` and summarize the first ready parallel group.
 
 Do not rely on freeform markdown shape for executable plans. `plan_create` is the canonical formatter, validator, and parallel-safety checker.

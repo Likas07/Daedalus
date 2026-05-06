@@ -34,7 +34,9 @@ const PlanTaskReadParams = Type.Object({
 });
 
 const PlanCreateParams = Type.Object({
-	path: Type.String({ description: "Output markdown path under docs/plans, ending in .md" }),
+	path: Type.String({
+		description: "Output markdown path under docs/plans, preferably docs/plans/YYYY_MM_DD/<slug>.md, ending in .md",
+	}),
 	title: Type.String(),
 	goal: Type.String(),
 	architecture: Type.String(),
@@ -136,6 +138,8 @@ export default function planExecutionExtension(pi: ExtensionAPI): void {
 		promptSnippet: "Create validated executable plan artifacts from structured task input",
 		promptGuidelines: [
 			"Use plan_create when writing implementation plans that should later be executed with execute_plan.",
+			"Use local-only dated plan paths under the canonical docs/plans root: docs/plans/YYYY_MM_DD/<slug>.md.",
+			"Keep each .plan.json sidecar adjacent to its markdown plan; do not use docs/plan/.",
 			"Decompose work into the smallest safe independent tasks and provide parallel_group/conflicts_with metadata for worker dispatch.",
 		],
 		parameters: PlanCreateParams,

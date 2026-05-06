@@ -23,6 +23,7 @@
 
 		"check": "biome check . && bun --cwd=packages/agent run check && bun --cwd=packages/ai run check && bun --cwd=packages/tui run check && bun --cwd=packages/coding-agent run check && bun run check:gui",
 		"lint": "biome lint .",
+		"plans:organize": "bun scripts/organize-local-plans.ts",
 		"fmt": "biome format --write .",
 		"check:gui": "bun run check:gui:boundaries && bun --cwd=packages/app-server-protocol run check && bun --cwd=packages/app-server-client run check && bun --cwd=packages/app-server run check && bun --cwd=packages/gui run check && bun --cwd=packages/desktop run check",
 		"check:gui:boundaries": "bun scripts/check-gui-import-boundaries.ts",

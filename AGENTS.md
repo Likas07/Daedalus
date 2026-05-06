@@ -29,3 +29,16 @@ Chat is the center of gravity. Cockpit controls, project canvas/overview, diff/r
 Use Bun for dependency management in this repository. The root `bun.lock` is the source-of-truth lockfile and should be updated with `bun install`. Do not add or regenerate a root `package-lock.json`; npm lockfiles are stale for this workspace. Preserve example lockfiles outside the root unless a task explicitly targets them.
 
 When dependency manifests or lockfiles change, verify with `bun install --frozen-lockfile --dry-run` from the repository root before reporting completion.
+
+## Local executable plan artifacts
+
+Executable implementation plans are local-only working artifacts. Keep them under
+`docs/plans/`, which is intentionally gitignored, and prefer the dated layout:
+
+```text
+docs/plans/YYYY_MM_DD/<slug>.md
+docs/plans/YYYY_MM_DD/<slug>.plan.json
+```
+
+Do not switch to `docs/plan/`; Daedalus tooling treats `docs/plans/` as the
+canonical root. Keep each `.plan.json` sidecar adjacent to its markdown plan.

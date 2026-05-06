@@ -218,6 +218,56 @@ describe("execute_plan primitive", () => {
 		);
 		expect(getText(validateResult)).toContain("Valid executable plan v1");
 
+		const nestedCreateResult = await planCreate!.execute(
+			"plan-create-nested",
+			{
+				path: "docs/plans/2026_05_06/generated.md",
+				title: "Nested Generated Plan",
+				goal: "Generate a valid executable plan in a dated subdirectory.",
+				architecture: "Use the plan_create renderer with the nested docs/plans convention.",
+				tech_stack: ["TypeScript", "Bun test"],
+				tasks: [
+					{
+						id: "task-nested-generated",
+						title: "Generate nested fixture",
+						dependencies: [],
+						parallel_group: "docs",
+						can_run_parallel: true,
+						conflicts_with: [],
+						files: { create: ["docs/generated.md"], modify: [], test: [] },
+						steps: [{ title: "Write file", body: "Create docs/generated.md." }],
+						verification: [{ command: "test -f docs/generated.md", expected: "PASS" }],
+					},
+				],
+			},
+			undefined,
+			undefined,
+			{ cwd: tempDir } as any,
+		);
+		expect(getText(nestedCreateResult)).toContain("Created executable plan");
+		expect(existsSync(join(tempDir, "docs", "plans", "2026_05_06", "generated.md"))).toBe(true);
+		expect(existsSync(join(tempDir, "docs", "plans", "2026_05_06", "generated.plan.json"))).toBe(true);
+
+		const nestedValidateResult = await planValidate!.execute(
+			"plan-validate-nested",
+			{ path: "docs/plans/2026_05_06/generated.md" },
+			undefined,
+			undefined,
+			{ cwd: tempDir } as any,
+		);
+		expect(getText(nestedValidateResult)).toContain("Valid executable plan v1");
+
+		const executePlan = session.getToolDefinition("execute_plan")!;
+		const nestedExecuteResult = await executePlan.execute(
+			"execute-nested-plan",
+			{ path: "docs/plans/2026_05_06/generated.md" },
+			undefined,
+			undefined,
+			{ cwd: tempDir } as any,
+		);
+		expect(nestedExecuteResult.details.plan.format).toBe("executable-plan-v1");
+		expect(nestedExecuteResult.details.todos[0]).toMatchObject({ id: "task-nested-generated" });
+
 		session.dispose();
 	});
 
