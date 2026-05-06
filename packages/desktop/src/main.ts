@@ -90,7 +90,6 @@ function configureAppIdentity(): void {
 	}
 }
 
-
 function createMainWindow(): BrowserWindow {
 	const window = new BrowserWindow({
 		width: 1280,

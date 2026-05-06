@@ -102,7 +102,12 @@ export async function ensureAppServer(options: EnsureAppServerOptions = {}): Pro
 			pidHealthy ? "ok" : "failed",
 			`PID ${manifest.pid} ${pidHealthy ? "is running" : "is not running"}`,
 		);
-		if (pidHealthy && (options.packaged ? await isGuiServerHealthy(manifest.endpoint, manifest.tokenFile) : await isServerHealthy(manifest.endpoint, manifest.tokenFile))) {
+		if (
+			pidHealthy &&
+			(options.packaged
+				? await isGuiServerHealthy(manifest.endpoint, manifest.tokenFile)
+				: await isServerHealthy(manifest.endpoint, manifest.tokenFile))
+		) {
 			diagnostics.manifestReused = true;
 			recordBootStage(diagnostics, "manifest-reuse", "ok", "Reusing healthy app-server manifest");
 			return {
@@ -212,7 +217,19 @@ export function resolveAppServerSpawnCommand(
 ): PackagedAppServerRuntime {
 	const moduleDir = dirname(fileURLToPath(import.meta.url));
 	const projectRoot = options.projectRoot ?? process.env.DAEDALUS_PROJECT_ROOT ?? resolve(moduleDir, "..", "..", "..");
-	const args = ["--db", options.dbPath, "--host", "127.0.0.1", "--port", "0", "--token-file", options.tokenFile, "--gui", "--project", projectRoot];
+	const args = [
+		"--db",
+		options.dbPath,
+		"--host",
+		"127.0.0.1",
+		"--port",
+		"0",
+		"--token-file",
+		options.tokenFile,
+		"--gui",
+		"--project",
+		projectRoot,
+	];
 	if (options.packaged) {
 		const runtime = resolvePackagedAppServerRuntime({
 			appServerBinary: options.appServerBinary,

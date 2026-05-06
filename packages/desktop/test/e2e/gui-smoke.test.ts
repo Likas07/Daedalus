@@ -43,6 +43,10 @@ class TestElement {
 				| undefined) ?? null
 		);
 	}
+	querySelectorAll<T>(selector: string): T[] {
+		if (selector !== "input, textarea, select") return [];
+		return this.walk().filter((node) => ["input", "textarea", "select"].includes(node.tagName)) as T[];
+	}
 	get elements(): { namedItem(name: string): TestElement | null } {
 		return { namedItem: (name) => this.walk().find((node) => node.name === name) ?? null };
 	}
