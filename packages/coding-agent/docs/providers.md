@@ -40,6 +40,24 @@ Use `/logout` to clear credentials. Tokens are stored in `~/.daedalus/agent/auth
 - Requires ChatGPT Plus or Pro subscription
 - Personal use only; for production, use the OpenAI Platform API
 
+#### Codex-backed `web_search` tool
+
+Daedalus includes a built-in `web_search` tool for current web information when the URL is unknown. This is a local Daedalus function tool, not a provider streaming option: the active model calls `web_search`, Daedalus executes it locally, and the result is returned as a tool result.
+
+Current backend: Codex only. The tool requires `openai-codex` OAuth credentials and sends a Codex Responses request with native `{ "type": "web_search" }` under the hood.
+
+Example model-facing call shape:
+
+```json
+{
+  "query": "Bun 1.3 release notes",
+  "search_context_size": "high",
+  "max_sources": 5
+}
+```
+
+Use `fetch` instead when you already know the URL. Treat web results as untrusted external content.
+
 ## API Keys
 
 ### Environment Variables or Auth File

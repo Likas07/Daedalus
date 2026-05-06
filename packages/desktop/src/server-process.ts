@@ -63,6 +63,21 @@ export async function isServerHealthy(endpoint: string, tokenFile?: string): Pro
 	}
 }
 
+export async function isGuiServerHealthy(endpoint: string, tokenFile?: string): Promise<boolean> {
+	if (!(await isServerHealthy(endpoint, tokenFile))) return false;
+	try {
+		const headers: Record<string, string> = {};
+		if (tokenFile && existsSync(tokenFile))
+			headers.authorization = `Bearer ${readFileSync(tokenFile, "utf8").trim()}`;
+		const response = await fetch(new URL("/", endpoint), { headers });
+		if (!response.ok) return false;
+		const html = await response.text();
+		return html.includes('name="daedalus-app"') && html.includes('content="gui"');
+	} catch {
+		return false;
+	}
+}
+
 export async function ensureAppServer(options: EnsureAppServerOptions = {}): Promise<AppServerEndpoint> {
 	const startedAt = Date.now();
 	const diagnostics = createBootDiagnostics("Ensuring desktop app server");
@@ -87,7 +102,12 @@ export async function ensureAppServer(options: EnsureAppServerOptions = {}): Pro
 			pidHealthy ? "ok" : "failed",
 			`PID ${manifest.pid} ${pidHealthy ? "is running" : "is not running"}`,
 		);
-		if (pidHealthy && (await isServerHealthy(manifest.endpoint, manifest.tokenFile))) {
+		if (
+			pidHealthy &&
+			(options.packaged
+				? await isGuiServerHealthy(manifest.endpoint, manifest.tokenFile)
+				: await isServerHealthy(manifest.endpoint, manifest.tokenFile))
+		) {
 			diagnostics.manifestReused = true;
 			recordBootStage(diagnostics, "manifest-reuse", "ok", "Reusing healthy app-server manifest");
 			return {
@@ -185,7 +205,11 @@ export function spawnAppServer(
 		recordBootStage(diagnostics, "app-server-spawning", "ok", "Spawned app server process");
 		recordBootStage(diagnostics, "spawn-command", "ok", redactedSpawnCommand.join(" "));
 	}
-	return spawn(spawnCommand.command, [...spawnCommand.args], { env: options.env ?? process.env });
+	const env = { ...process.env, ...(options.env ?? {}) };
+	if (options.packaged && process.resourcesPath) {
+		env.DAEDALUS_GUI_DIST_DIR ??= join(process.resourcesPath, "gui", "dist");
+	}
+	return spawn(spawnCommand.command, [...spawnCommand.args], { env });
 }
 
 export function resolveAppServerSpawnCommand(
@@ -193,7 +217,19 @@ export function resolveAppServerSpawnCommand(
 ): PackagedAppServerRuntime {
 	const moduleDir = dirname(fileURLToPath(import.meta.url));
 	const projectRoot = options.projectRoot ?? process.env.DAEDALUS_PROJECT_ROOT ?? resolve(moduleDir, "..", "..", "..");
-	const args = ["--db", options.dbPath, "--host", "127.0.0.1", "--port", "0", "--token-file", options.tokenFile];
+	const args = [
+		"--db",
+		options.dbPath,
+		"--host",
+		"127.0.0.1",
+		"--port",
+		"0",
+		"--token-file",
+		options.tokenFile,
+		"--gui",
+		"--project",
+		projectRoot,
+	];
 	if (options.packaged) {
 		const runtime = resolvePackagedAppServerRuntime({
 			appServerBinary: options.appServerBinary,

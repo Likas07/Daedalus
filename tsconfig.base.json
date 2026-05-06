@@ -56,24 +56,7 @@
 			"@daedalus-pi/app-server/*": [
 				"./packages/app-server/src/*"
 			],
-			"@daedalus-pi/gui-core": [
-				"./packages/gui-core/src/index.ts"
-			],
-			"@daedalus-pi/gui-core/*": [
-				"./packages/gui-core/src/*"
-			],
-			"@daedalus-pi/gui-components": [
-				"./packages/gui-components/src/index.ts"
-			],
-			"@daedalus-pi/gui-components/*": [
-				"./packages/gui-components/src/*"
-			],
-			"@daedalus-pi/react-gui": [
-				"./packages/react-gui/src/index.ts"
-			],
-			"@daedalus-pi/react-gui/*": [
-				"./packages/react-gui/src/*"
-			],
+
 			"@daedalus-pi/gui": [
 				"./packages/gui/src/index.ts"
 			],

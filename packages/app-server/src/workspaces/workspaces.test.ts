@@ -74,8 +74,8 @@ describe("worktree service", () => {
 
 		expect(first.branch).toBe("build/hello");
 		expect(second.branch).toBe("build/hello-2");
-		expect(first.path).toBe(`${repo}-build-hello`);
-		expect(second.path).toBe(`${repo}-build-hello-2`);
+		expect(first.path).toBe(join(repo, ".daedalus", "worktrees", "build-hello"));
+		expect(second.path).toBe(join(repo, ".daedalus", "worktrees", "build-hello-2"));
 		expect(first.path).not.toBe(second.path);
 		expect((await service.gitList(project.projectId)).map((entry) => entry.branch)).toContain("build/hello-2");
 	});

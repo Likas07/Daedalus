@@ -129,7 +129,7 @@ async function resolveStartupWorkspaceTarget(
 			const confirmed = await promptConfirm(`Create worktree ${parsed.newWorktree} from the current base checkout?`);
 			if (!confirmed) process.exit(0);
 		}
-		return service.createIsolatedTarget({ branch: parsed.newWorktree });
+		return service.createIsolatedTarget({ branch: parsed.newWorktree, setup: true, includeIgnored: true });
 	}
 	if (parsed.worktree) return service.openTarget({ cwd: resolve(cwd, parsed.worktree) });
 	if (parsed.workspaceTarget) {

@@ -33,7 +33,13 @@ const config: Configuration = {
 	afterPack: "./scripts/validate-packaged-runtime.ts",
 	linux: {
 		category: "Development",
+		executableName: "daedalus",
 		target: ["AppImage", "dir"],
+		desktop: {
+			entry: {
+				StartupWMClass: "daedalus",
+			},
+		},
 	},
 	mac: {
 		category: "public.app-category.developer-tools",

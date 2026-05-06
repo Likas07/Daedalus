@@ -3,15 +3,19 @@ import { dirname, join, resolve } from "node:path";
 import {
 	GitError,
 	type GitWorktreeEntry,
+	gitConfigSet,
 	gitCurrentBranch,
 	gitRepositoryRoot,
 	gitRevParse,
 	gitStatus,
 	gitWorktreeAdd,
 	gitWorktreeList,
+	gitWorktreePrune,
 	gitWorktreeRemove,
 } from "./git.js";
 import type { WorkspaceCleanupRisk, WorkspaceResumeValidation, WorkspaceTarget } from "./types.js";
+import { runWorktreeSetup } from "./worktree-bootstrap.js";
+import { createWorktreeMetadata, worktreeMetadataPath, writeWorktreeMetadata } from "./worktree-metadata.js";
 
 export interface WorkspaceServiceOptions {
 	projectRoot?: string;
@@ -26,9 +30,25 @@ export interface OpenWorkspaceTargetOptions {
 export interface CreateIsolatedWorkspaceOptions {
 	branch: string;
 	baseRef?: string;
+	mergeTarget?: string;
 	slug?: string;
 	id?: string;
 	name?: string;
+	setup?: boolean;
+	includeIgnored?: boolean;
+}
+
+export interface FinalizeManagedWorktreeOptions {
+	projectRoot: string;
+	worktreePath: string;
+	branch: string;
+	baseRef: string;
+	baseCommit: string;
+	mergeTarget?: string;
+	id?: string;
+	name?: string;
+	setup?: boolean;
+	includeIgnored?: boolean;
 }
 
 function canonical(path: string): string {
@@ -50,11 +70,71 @@ function isNotGitRepositoryError(error: unknown): boolean {
 	return error instanceof GitError && notGitRepositoryPattern.test(error.stderr || error.message);
 }
 
+function workspaceDirtyStatus(porcelain: string): string {
+	return porcelain
+		.split("\n")
+		.filter((line) => line && line !== "?? .daedalus/" && !line.endsWith(" .daedalus/worktree.json"))
+		.join("\n");
+}
+
+export function finalizeManagedWorktree(options: FinalizeManagedWorktreeOptions): WorkspaceTarget {
+	const projectRoot = canonical(options.projectRoot);
+	const canonicalWorktreePath = canonical(options.worktreePath);
+	gitConfigSet(canonicalWorktreePath, "push.autoSetupRemote", "true");
+	writeWorktreeMetadata(
+		canonicalWorktreePath,
+		createWorktreeMetadata({
+			branch: options.branch,
+			baseRef: options.baseRef,
+			baseCommit: options.baseCommit,
+			mergeTarget: options.mergeTarget,
+			setupStatus: options.setup === false ? "created" : "setup_pending",
+		}),
+	);
+	if (options.setup !== false) {
+		runWorktreeSetup({
+			projectRoot,
+			worktreePath: canonicalWorktreePath,
+			includeIgnored: options.includeIgnored,
+		});
+	}
+	return {
+		id: options.id,
+		name: options.name,
+		cwd: canonicalWorktreePath,
+		projectRoot,
+		isolationMode: "dedicated_worktree",
+		repositoryRoot: gitRepositoryRoot(canonicalWorktreePath),
+		branch: options.branch,
+		worktreePath: canonicalWorktreePath,
+		baseBranch: options.baseRef,
+		baseCommit: options.baseCommit,
+		mergeBack: options.mergeTarget
+			? {
+					baseBranch: options.baseRef,
+					baseCommit: options.baseCommit,
+					targetBranch: options.mergeTarget,
+					status: "not_started",
+				}
+			: undefined,
+		setup: { status: options.setup === false ? "created" : "setup_complete" },
+		validationStatus: "valid",
+	};
+}
+
 export class WorkspaceService {
 	readonly projectRoot: string;
 
 	constructor(options: WorkspaceServiceOptions = {}) {
 		this.projectRoot = canonical(options.projectRoot ?? process.cwd());
+	}
+
+	listWorktrees(): GitWorktreeEntry[] {
+		return gitWorktreeList(this.projectRoot);
+	}
+
+	pruneStaleWorktrees(): void {
+		gitWorktreePrune(this.projectRoot);
 	}
 
 	resolveCurrentTarget(cwd = process.cwd()): WorkspaceTarget {
@@ -90,10 +170,6 @@ export class WorkspaceService {
 			baseBranch,
 			baseCommit: gitRevParse(this.projectRoot, baseBranch),
 		};
-	}
-
-	listWorktrees(): GitWorktreeEntry[] {
-		return gitWorktreeList(this.projectRoot);
 	}
 
 	openTarget(options: OpenWorkspaceTargetOptions): WorkspaceTarget {
@@ -132,20 +208,23 @@ export class WorkspaceService {
 			throw new Error(`Worktree path already exists: ${worktreePath}`);
 		if (existing.some((entry) => entry.branch === options.branch))
 			throw new Error(`Worktree branch already exists: ${options.branch}`);
+		const baseRef = options.baseRef ?? "HEAD";
+		const baseCommit = gitRevParse(this.projectRoot, baseRef);
 		mkdirSync(dirname(worktreePath), { recursive: true });
-		gitWorktreeAdd(this.projectRoot, worktreePath, options.branch, options.baseRef ?? "HEAD");
+		gitWorktreeAdd(this.projectRoot, worktreePath, options.branch, baseRef);
 		return {
-			id: options.id ?? slug,
-			name: options.name,
-			cwd: canonical(worktreePath),
-			projectRoot: this.projectRoot,
-			isolationMode: "dedicated_worktree",
-			repositoryRoot: gitRepositoryRoot(worktreePath),
-			branch: options.branch,
-			worktreePath: canonical(worktreePath),
-			baseBranch: options.baseRef,
-			baseCommit: gitRevParse(worktreePath, "HEAD"),
-			validationStatus: "valid",
+			...finalizeManagedWorktree({
+				projectRoot: this.projectRoot,
+				worktreePath,
+				branch: options.branch,
+				baseRef,
+				baseCommit,
+				mergeTarget: options.mergeTarget,
+				id: options.id ?? slug,
+				name: options.name,
+				setup: options.setup,
+				includeIgnored: options.includeIgnored,
+			}),
 		};
 	}
 
@@ -176,12 +255,13 @@ export class WorkspaceService {
 	cleanupTargetRisk(target: WorkspaceTarget): WorkspaceCleanupRisk {
 		if (!existsSync(target.cwd)) return { safe: true, level: "none", reasons: ["workspace missing"] };
 		const status = gitStatus(target.cwd);
-		if (!status.clean)
+		const dirtyStatus = workspaceDirtyStatus(status.porcelain);
+		if (dirtyStatus)
 			return {
 				safe: false,
 				level: "dirty",
 				reasons: ["workspace has uncommitted changes"],
-				dirtyStatus: status.porcelain,
+				dirtyStatus,
 			};
 		const insideDaedalus = canonical(target.cwd).startsWith(join(this.projectRoot, ".daedalus", "worktrees"));
 		return {
@@ -194,8 +274,10 @@ export class WorkspaceService {
 	removeTarget(target: WorkspaceTarget, options: { force?: boolean } = {}): void {
 		const risk = this.cleanupTargetRisk(target);
 		if (!risk.safe && !options.force) throw new Error(`Refusing to remove workspace: ${risk.reasons.join(", ")}`);
-		if (existsSync(target.cwd)) gitWorktreeRemove(this.projectRoot, target.cwd, options.force);
-		else if (target.worktreePath?.startsWith(join(this.projectRoot, ".daedalus", "worktrees")))
+		if (existsSync(target.cwd)) {
+			rmSync(worktreeMetadataPath(target.cwd), { force: true });
+			gitWorktreeRemove(this.projectRoot, target.cwd, options.force);
+		} else if (target.worktreePath?.startsWith(join(this.projectRoot, ".daedalus", "worktrees")))
 			rmSync(target.worktreePath, { recursive: true, force: true });
 	}
 }

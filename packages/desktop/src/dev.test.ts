@@ -34,8 +34,13 @@ describe("desktop dev launcher helpers", () => {
 	});
 
 	test("Daedalus GUI index is detected", async () => {
-		const index = '<title>Daedalus</title><script type="module" src="/src/main.tsx"></script>';
+		const index = await readFile(resolve(import.meta.dir, "../../gui/index.html"), "utf8");
 		expect(await isDaedalusGuiServing("http://example.test", async () => new Response(index))).toBe(true);
+	});
+
+	test("T3-derived GUI shell without the Daedalus app marker is not detected", async () => {
+		const index = '<div id="root"></div><script type="module" src="/src/main.tsx"></script>';
+		expect(await isDaedalusGuiServing("http://example.test", async () => new Response(index))).toBe(false);
 	});
 
 	test("desktop dev URL uses the high default GUI dev port and env override", () => {

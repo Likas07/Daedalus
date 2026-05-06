@@ -115,6 +115,14 @@ export {
 } from "./truncate.js";
 export { formatVisiblePath } from "./visible-path.js";
 export {
+	createWebSearchTool,
+	createWebSearchToolDefinition,
+	type WebSearchToolDetails,
+	type WebSearchToolInput,
+	webSearchTool,
+	webSearchToolDefinition,
+} from "./web-search.js";
+export {
 	createWriteTool,
 	createWriteToolDefinition,
 	type WriteOperations,
@@ -175,6 +183,12 @@ import {
 } from "./read.js";
 import type { ReadLedgerLike } from "./read-ledger.js";
 import {
+	createWebSearchTool,
+	createWebSearchToolDefinition,
+	webSearchTool,
+	webSearchToolDefinition,
+} from "./web-search.js";
+import {
 	createWriteTool,
 	createWriteToolDefinition,
 	type WriteToolOptions,
@@ -195,6 +209,7 @@ export const allTools: Record<ToolName, Tool> = {
 	edit: editTool,
 	hashline_edit: hashlineEditTool,
 	fetch: fetchTool,
+	web_search: webSearchTool,
 	ast_grep: astGrepTool,
 	ast_edit: astEditTool,
 	write: writeTool,
@@ -209,6 +224,7 @@ export const allToolDefinitions: Record<ToolName, ToolDef> = {
 	edit: editToolDefinition,
 	hashline_edit: hashlineEditToolDefinition,
 	fetch: fetchToolDefinition,
+	web_search: webSearchToolDefinition,
 	ast_grep: astGrepToolDefinition,
 	ast_edit: astEditToolDefinition,
 	write: writeToolDefinition,
@@ -250,6 +266,7 @@ export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): R
 			readLedger: options?.hashlineEdit?.readLedger ?? ledger,
 		}),
 		fetch: createFetchToolDefinition(cwd, options?.fetch),
+		web_search: createWebSearchToolDefinition(cwd),
 		ast_grep: createAstGrepToolDefinition(cwd),
 		ast_edit: createAstEditToolDefinition(cwd, {
 			...options?.astEdit,
@@ -281,6 +298,7 @@ export function createAllTools(cwd: string, options?: ToolsOptions): Record<Tool
 			readLedger: options?.hashlineEdit?.readLedger ?? ledger,
 		}),
 		fetch: createFetchTool(cwd, options?.fetch),
+		web_search: createWebSearchTool(cwd),
 		ast_grep: createAstGrepTool(cwd),
 		ast_edit: createAstEditTool(cwd, { ...options?.astEdit, readLedger: options?.astEdit?.readLedger ?? ledger }),
 		write: createWriteTool(cwd, { ...options?.write, readLedger: options?.write?.readLedger ?? ledger }),

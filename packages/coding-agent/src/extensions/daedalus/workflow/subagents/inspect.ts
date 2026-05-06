@@ -1,6 +1,7 @@
 import type { ExtensionCommandContext } from "@daedalus-pi/coding-agent";
 import type { ActiveSubagentRun, SubagentRunResult, SubagentRunStatus } from "../../../../core/subagents/index.js";
 import { buildRunInspectorModel, type InspectorRunSource } from "./inspector.js";
+import { buildSubagentNavigationModel } from "./navigation.js";
 import { formatAgentLabel } from "./task-progress-renderer.js";
 import { showSubagentInspector } from "./viewer.js";
 
@@ -19,7 +20,7 @@ export function buildInspectorOptions(
 	const byRunId = new Map<string, InspectableSubagentRun>();
 
 	for (const run of persisted) {
-		byRunId.set(run.runId, { ...run, parentSessionFile: undefined });
+		byRunId.set(run.runId, { ...run });
 	}
 	for (const run of active) {
 		byRunId.set(run.runId, {
@@ -48,10 +49,17 @@ export function formatInspectorLabel(run: InspectableSubagentRun): string {
 export async function openSubagentInspector(ctx: ExtensionCommandContext, run: InspectableSubagentRun): Promise<void> {
 	await showSubagentInspector(
 		ctx,
-		buildRunInspectorModel({
-			...run,
-			parentSessionFile: run.parentSessionFile ?? ctx.sessionManager.getSessionFile(),
-		}),
+		buildRunInspectorModel(
+			{
+				...run,
+				parentSessionFile: run.parentSessionFile ?? ctx.sessionManager.getSessionFile(),
+			},
+			buildSubagentNavigationModel({
+				runs: [run],
+				currentSessionFile: run.childSessionFile,
+				parentSessionFile: run.parentSessionFile ?? ctx.sessionManager.getSessionFile(),
+			}),
+		),
 	);
 }
 

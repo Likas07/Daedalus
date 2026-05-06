@@ -2,6 +2,13 @@ import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
 import { Editor, type EditorTheme, Key, matchesKey, Text, truncateToWidth, visibleWidth } from "@daedalus-pi/tui";
 import { Type } from "@sinclair/typebox";
 import { requireUI } from "../shared/ui.js";
+import {
+	clampScrollOffset,
+	defaultScrollableRenderHeight,
+	ensureRangeVisible,
+	type LineRange,
+	renderScrollPanel,
+} from "./scroll-panel.js";
 
 interface OptionWithDesc {
 	label: string;
@@ -59,8 +66,10 @@ export default function question(pi: ExtensionAPI) {
 				(tui, theme, _kb, done) => {
 					let optionIndex = 0;
 					let editMode = false;
+					let scrollOffset = 0;
+					let lastBodyViewportHeight = 0;
+					let optionLineRanges: LineRange[] = [];
 					let cachedLines: string[] | undefined;
-
 					const editorTheme: EditorTheme = {
 						borderColor: (s) => theme.fg("accent", s),
 						selectList: {
@@ -89,11 +98,22 @@ export default function question(pi: ExtensionAPI) {
 						tui.requestRender();
 					}
 
+					function keepSelectedVisible() {
+						if (lastBodyViewportHeight <= 0) return;
+						scrollOffset = ensureRangeVisible(
+							scrollOffset,
+							lastBodyViewportHeight,
+							optionLineRanges[optionIndex],
+							optionLineRanges.at(-1)?.end ?? 0,
+						);
+					}
+
 					function handleInput(data: string) {
 						if (editMode) {
 							if (matchesKey(data, Key.escape)) {
 								editMode = false;
 								editor.setText("");
+								keepSelectedVisible();
 								refresh();
 								return;
 							}
@@ -104,12 +124,50 @@ export default function question(pi: ExtensionAPI) {
 
 						if (matchesKey(data, Key.up)) {
 							optionIndex = Math.max(0, optionIndex - 1);
+							keepSelectedVisible();
 							refresh();
 							return;
 						}
 
 						if (matchesKey(data, Key.down)) {
 							optionIndex = Math.min(allOptions.length - 1, optionIndex + 1);
+							keepSelectedVisible();
+							refresh();
+							return;
+						}
+
+						if (matchesKey(data, Key.pageUp)) {
+							scrollOffset = clampScrollOffset(
+								scrollOffset - Math.max(1, lastBodyViewportHeight * 2),
+								optionLineRanges.at(-1)?.end ?? 0,
+								lastBodyViewportHeight,
+							);
+							refresh();
+							return;
+						}
+
+						if (matchesKey(data, Key.pageDown)) {
+							scrollOffset = clampScrollOffset(
+								scrollOffset + Math.max(1, lastBodyViewportHeight * 2),
+								optionLineRanges.at(-1)?.end ?? 0,
+								lastBodyViewportHeight,
+							);
+							refresh();
+							return;
+						}
+
+						if (matchesKey(data, Key.home)) {
+							scrollOffset = 0;
+							refresh();
+							return;
+						}
+
+						if (matchesKey(data, Key.end)) {
+							scrollOffset = clampScrollOffset(
+								Number.POSITIVE_INFINITY,
+								optionLineRanges.at(-1)?.end ?? 0,
+								lastBodyViewportHeight,
+							);
 							refresh();
 							return;
 						}
@@ -119,6 +177,7 @@ export default function question(pi: ExtensionAPI) {
 							if (!selected) return;
 							if (selected.isOther) {
 								editMode = true;
+								keepSelectedVisible();
 								refresh();
 							} else {
 								done({ answer: selected.label, wasCustom: false, index: optionIndex + 1 });
@@ -131,27 +190,26 @@ export default function question(pi: ExtensionAPI) {
 						}
 					}
 
-					function render(width: number): string[] {
-						if (cachedLines) return cachedLines;
-
-						const lines: string[] = [];
-						const addChrome = (s: string) => lines.push(truncateToWidth(s, width));
+					function buildBody(width: number): string[] {
+						const body: string[] = [];
+						const ranges: LineRange[] = [];
+						const addChrome = (s: string) => body.push(truncateToWidth(s, width));
 						const addWrapped = (prefix: string, text: string, continuationPrefix = " ") => {
 							const contentWidth = Math.max(1, width - visibleWidth(prefix));
 							const wrapped = new Text(text, 0, 0).render(contentWidth);
 							const continuation = " ".repeat(visibleWidth(prefix));
 							for (let i = 0; i < wrapped.length; i++) {
-								lines.push(`${i === 0 ? prefix : continuationPrefix || continuation}${wrapped[i]}`);
+								body.push(`${i === 0 ? prefix : continuationPrefix || continuation}${wrapped[i]}`);
 							}
 						};
 
-						addChrome(theme.fg("accent", "─".repeat(width)));
 						addWrapped(" ", theme.fg("text", params.question));
-						lines.push("");
+						body.push("");
 
 						for (let i = 0; i < allOptions.length; i++) {
 							const opt = allOptions[i];
 							if (!opt) continue;
+							const start = body.length;
 							const selected = i === optionIndex;
 							const isOther = opt.isOther === true;
 							const prefix = selected ? theme.fg("accent", "> ") : "  ";
@@ -162,26 +220,51 @@ export default function question(pi: ExtensionAPI) {
 							if (opt.description) {
 								addWrapped("     ", theme.fg("muted", opt.description), "     ");
 							}
+							ranges[i] = { start, end: body.length };
 						}
 
 						if (editMode) {
-							lines.push("");
+							body.push("");
 							addChrome(theme.fg("muted", " Your answer:"));
 							for (const line of editor.render(width - 2)) {
 								addChrome(` ${line}`);
 							}
 						}
 
-						lines.push("");
-						if (editMode) {
-							addChrome(theme.fg("dim", " Enter to submit • Esc to go back"));
-						} else {
-							addChrome(theme.fg("dim", " ↑↓ navigate • Enter to select • Esc to cancel"));
-						}
-						addChrome(theme.fg("accent", "─".repeat(width)));
+						optionLineRanges = ranges;
+						return body;
+					}
 
-						cachedLines = lines;
-						return lines;
+					function render(width: number, height?: number): string[] {
+						const effectiveHeight = height ?? defaultScrollableRenderHeight(tui.terminal?.rows);
+						if (effectiveHeight === undefined && cachedLines) return cachedLines;
+
+						const topChrome = [theme.fg("accent", "─".repeat(width))].map((line) => truncateToWidth(line, width));
+						const body = buildBody(width);
+						const helpChrome = [
+							theme.fg(
+								"dim",
+								editMode
+									? " Enter to submit • Esc to go back"
+									: " ↑↓ navigate • Enter to select • Esc to cancel",
+							),
+							theme.fg("accent", "─".repeat(width)),
+						].map((line) => truncateToWidth(line, width));
+
+						if (effectiveHeight === undefined) {
+							const lines = [...topChrome, ...body, "", ...helpChrome];
+							cachedLines = lines;
+							return lines;
+						}
+
+						lastBodyViewportHeight = Math.max(0, effectiveHeight - topChrome.length - helpChrome.length);
+
+						const panel = renderScrollPanel(body, lastBodyViewportHeight, scrollOffset, (direction) =>
+							truncateToWidth(theme.fg("dim", direction === "up" ? " ↑ more" : " ↓ more"), width),
+						);
+						scrollOffset = panel.scrollOffset;
+
+						return [...topChrome, ...panel.lines, ...helpChrome].slice(0, effectiveHeight);
 					}
 
 					return {

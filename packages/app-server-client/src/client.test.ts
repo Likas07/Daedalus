@@ -284,7 +284,9 @@ test("provides typed GUI protocol helpers", async () => {
 	await expect(client.searchComposerFiles({ projectId: "project-1", query: "src", limit: 5 })).resolves.toMatchObject({
 		files: [{ path: "src/index.ts" }],
 	});
-	await expect(client.createWorktree({ projectId: "project-1", branch: "safe" })).resolves.toMatchObject({
+	await expect(
+		client.createWorktree({ projectId: "project-1", branch: "safe", setup: false, includeIgnored: false }),
+	).resolves.toMatchObject({
 		outcome: "adopted-existing",
 		operationId: "op-create",
 		worktree: { id: "worktree-1", branch: "safe" },

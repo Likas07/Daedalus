@@ -22,7 +22,7 @@ daedalus "your prompt"      # Non-interactive mode
 daedalus gui                # Start the local web GUI
 ```
 
-Workspace-aware startup options are available across CLI/TUI/RPC/SDK surfaces: `--project <path>`, `--worktree <path>`, `--workspace-target <id-or-path>`, and `--new-worktree <branch>`. Inside the TUI, use `/workspace` and `/worktree` commands to inspect, enter, create, or exit workspace targets.
+Workspace-aware startup options are available across CLI/TUI/RPC/SDK surfaces: `--project <path>`, `--worktree <path>`, `--workspace-target <id-or-path>`, and `--new-worktree <branch>`. Inside the TUI, use `/workspace` and `/worktree` commands to inspect, enter, create, exit, or clean up workspace targets. Managed worktrees are created under `.daedalus/worktrees/`, receive `.daedalus/worktree.json` metadata, run dependency setup from the root lockfile, support `.worktreeinclude`, and set `push.autoSetupRemote=true` for first-push ergonomics. CLI/TUI, subagents, SDK/runtime callers, and GUI/app-server creation now share the same `finalizeManagedWorktree()` post-create lifecycle; setup and ignored-file includes default to true and require explicit opt-outs (`setup: false`/`setupWorktree: false`, `includeIgnored: false`). See [managed worktrees](docs/worktrees.md) for the parity table, lifecycle, merge-back, cleanup, and troubleshooting guidance.
 
 ## Packages
 
@@ -41,7 +41,7 @@ The desktop app is the primary Daedalus GUI entrypoint. For browser-based local 
 
 GUI documentation: [packages/gui/README.md](packages/gui/README.md), [SQLite persistence](packages/gui/docs/sqlite-persistence.md), [security](packages/gui/docs/security.md), [protocol](packages/gui/docs/protocol.md), and [troubleshooting](packages/gui/docs/troubleshooting.md).
 
-Architecture notes: [core workspace targets](docs/architecture/core-workspace-targets.md) and [delegated worktree isolation](docs/architecture/delegated-worktree-isolation.md).
+Architecture notes: [core workspace targets](docs/architecture/core-workspace-targets.md), [delegated worktree isolation](docs/architecture/delegated-worktree-isolation.md), and [managed worktrees](docs/worktrees.md).
 
 ## Development
 
@@ -50,6 +50,10 @@ bun run dev          # Run the CLI
 bun run check        # Lint + type check
 bun run test         # Run tests
 ```
+
+### Dependency policy
+
+Daedalus uses Bun as its package manager. Keep `bun.lock` as the single root lockfile, update it with `bun install`, and verify reproducible installs with `bun install --frozen-lockfile --dry-run` when changing dependencies. Do not add a root `package-lock.json`; npm lockfiles are not used for this Bun workspace.
 
 ## License
 

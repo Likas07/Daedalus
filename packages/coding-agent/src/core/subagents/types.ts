@@ -12,15 +12,30 @@ export type SubagentRunStatus = "running" | "completed" | "partial" | "blocked" 
 
 export type SubagentEnvelopeStatus = "completed" | "partial" | "blocked";
 export type SubagentWorkspaceIsolation = "inherit" | "shared" | "worktree";
-export type SubagentMergeBackPolicy = "manual" | "merge" | "rebase" | "squash";
+export type SubagentMergeBackPolicy = "patch" | "branch";
+
+export interface SubagentMergeBackResultDetails {
+	policy: SubagentMergeBackPolicy;
+	status: "not_started" | "skipped" | "clean" | "applied" | "blocked" | "failed";
+	message: string;
+	artifactPath?: string;
+	branchName?: string;
+	files?: string[];
+	conflicts?: string[];
+	stdout?: string;
+	stderr?: string;
+}
 
 export interface SubagentWorkspaceMetadata {
 	isolation: SubagentWorkspaceIsolation;
 	workspaceTarget?: WorkspaceTarget;
 	baseBranch?: string;
+	baseCommit?: string;
 	mergeBack?: SubagentMergeBackPolicy;
 	mergeBackArtifactPath?: string;
+	mergeBackBranch?: string;
 	mergeBackTarget?: WorkspaceTarget;
+	mergeBackResult?: SubagentMergeBackResultDetails;
 }
 
 export interface SubagentResultEnvelope {
@@ -125,6 +140,10 @@ export interface SubagentRunRequest {
 	mergeBack?: SubagentMergeBackPolicy;
 	baseBranch?: string;
 	workspaceTarget?: WorkspaceTarget;
+	/** Worktree setup defaults to true for worktree isolation; false skips bootstrap. */
+	setupWorktree?: boolean;
+	/** Include ignored files during worktree setup; defaults to true for worktree isolation. */
+	includeIgnored?: boolean;
 	/** Legacy branch isolation inputs retained for compatibility. */
 	isolationMode?: "shared-branch" | "child-branch";
 	branchTemplate?: string;
@@ -134,6 +153,7 @@ export interface SubagentRunResult {
 	runId: string;
 	resultId?: string;
 	agent: string;
+	parentSessionFile?: string;
 	status: SubagentRunStatus;
 	summary: string;
 	task?: string;
@@ -156,6 +176,7 @@ export interface SubagentRunResult {
 	workspaceMetadata?: SubagentWorkspaceMetadata;
 	baseBranch?: string;
 	mergeBack?: SubagentMergeBackPolicy;
+	mergeBackResult?: SubagentMergeBackResultDetails;
 	data?: unknown;
 	error?: string;
 	usage?: {
@@ -184,4 +205,5 @@ export interface ActiveSubagentRun {
 	isolation?: SubagentWorkspaceIsolation;
 	workspaceTarget?: WorkspaceTarget;
 	workspaceMetadata?: SubagentWorkspaceMetadata;
+	mergeBackResult?: SubagentMergeBackResultDetails;
 }

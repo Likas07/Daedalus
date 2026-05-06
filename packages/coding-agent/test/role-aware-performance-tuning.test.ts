@@ -6,12 +6,18 @@ describe("role-aware performance tuning", () => {
 		const agents = getBundledStarterAgents();
 		const sage = agents.find((agent) => agent.name === "sage");
 		const muse = agents.find((agent) => agent.name === "muse");
-		expect(sage?.toolPolicy?.allowedTools).toEqual(expect.arrayContaining(["sem_search", "fs_search", "todo_read"]));
+		expect(sage?.toolPolicy?.allowedTools).toEqual(
+			expect.arrayContaining(["sem_search", "fs_search", "todo_read", "write", "hashline_edit"]),
+		);
+		expect(sage?.toolPolicy?.writableGlobs).toEqual(["**/*.md"]);
 		expect(sage?.toolPolicy?.allowedTools).not.toContain("sem_workspace_status");
 		expect(sage?.toolPolicy?.allowedTools).not.toContain("sem_workspace_init");
 		expect(sage?.toolPolicy?.allowedTools).not.toContain("sem_workspace_sync");
 		expect(sage?.toolPolicy?.allowedTools).not.toContain("todo_write");
 		expect(sage?.toolPolicy?.allowedTools).not.toContain("bash");
+		expect(sage?.toolPolicy?.allowedTools).not.toContain("plan_create");
+		expect(sage?.toolPolicy?.allowedTools).not.toContain("plan_validate");
+		expect(sage?.toolPolicy?.allowedTools).not.toContain("skill");
 		expect(muse?.toolPolicy?.allowedTools).toEqual(
 			expect.arrayContaining(["sem_search", "fs_search", "todo_read", "todo_write", "plan_create", "plan_validate"]),
 		);
@@ -39,6 +45,11 @@ describe("role-aware performance tuning", () => {
 		expect(sage?.systemPrompt).toContain("Stop once enough evidence exists");
 		expect(muse?.systemPrompt).toContain("Create durable plan artifacts under `plans/`");
 		expect(muse?.systemPrompt).toContain("At the start of every Muse task, load and use the `writing-plans` skill");
+		expect(muse?.systemPrompt).toContain("executable-plan gate");
+		expect(muse?.systemPrompt).toContain("`plan_create`, then run `plan_validate`");
+		expect(muse?.systemPrompt).toContain("`plan_path`");
+		expect(muse?.systemPrompt).toContain("`recommended_parent_action`");
+		expect(muse?.systemPrompt).toContain("Do not force plan artifacts for advisory architecture discussion");
 		expect(muse?.systemPrompt).toContain("Do not use Markdown checkbox lists as Muse's plan output format");
 		expect(worker?.systemPrompt).toContain("Use todo_write narrowly");
 		expect(worker?.systemPrompt).toContain("leave final synthesis and user-facing judgment to Daedalus");

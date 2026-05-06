@@ -1,6 +1,6 @@
 # Daedalus GUI
 
-The Daedalus GUI is the Svelte/Vite renderer used by the desktop app and by the `daedalus gui` web entrypoint. It talks only to the local Daedalus app-server over the typed app-server protocol; coding-agent behavior remains owned by the coding-agent runtime.
+`packages/gui` is the canonical Daedalus GUI renderer. It is a T3Code-derived React/Vite frontend used by the desktop app and by the `daedalus gui` web entrypoint. It talks only to the local Daedalus app-server over the typed app-server protocol; coding-agent behavior remains owned by the coding-agent runtime.
 
 ## Entrypoints
 
@@ -35,11 +35,18 @@ Flags:
 - `--new-server`: force a new app-server.
 - `--log-file <path>`: write app-server logs to a file.
 
+## T3Code-derived scope
+
+The active GUI path is `packages/gui`; legacy splits such as `packages/gui-core` and `packages/gui-components` are not runtime targets. The renderer keeps T3Code's project/thread chat workspace model, but Daedalus owns bootstrap, persistence, auth/model discovery, approvals, terminal/filesystem/Git operations, and agent execution through the app-server.
+
+Unsupported T3Code controls must be disabled with an explicit reason, not fake-enabled. Currently unsupported: remote environments/public server exposure, terminal restart, remote Git mutation and branch mutation, PR mutation, provider CLI installation, and user-configured T3 provider binary paths. See [T3Code-derived GUI](../../docs/gui/t3code-derived-gui.md).
+
 ## Documentation
 
 - [SQLite persistence](docs/sqlite-persistence.md)
 - [Security model](docs/security.md)
 - [Protocol](docs/protocol.md)
+- [T3Code-derived GUI](../../docs/gui/t3code-derived-gui.md)
 - [Troubleshooting](docs/troubleshooting.md)
 
 ## Validation
@@ -53,5 +60,5 @@ bun run check:gui
 Run the browser smoke harness:
 
 ```bash
-bun run smoke:gui:agent-browser
+bun run smoke:gui:gstack-browser
 ```

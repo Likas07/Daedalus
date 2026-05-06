@@ -87,6 +87,7 @@ export interface CreateAgentSessionOptions {
 
 	/** Nested subagent runtime metadata for child sessions. */
 	subagentContext?: SubagentSessionContext;
+	subagentInteractionBroker?: import("./subagents/interaction-broker.js").SubagentInteractionBroker;
 
 	/** Settings manager. Default: SettingsManager.create(cwd, agentDir) */
 	settingsManager?: SettingsManager;
@@ -449,6 +450,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		initialActiveToolNames,
 		extensionRunnerRef,
 		subagentContext: options.subagentContext,
+		subagentInteractionBroker: options.subagentInteractionBroker,
 		sessionStartEvent: options.sessionStartEvent,
 	});
 	const extensionsResult = resourceLoader.getExtensions();

@@ -15,6 +15,7 @@ import {
 	TerminalCreateParamsSchema,
 	TerminalSnapshotSchema,
 	WorktreeCreateOutcomeSchema,
+	WorktreeCreateParamsSchema,
 } from "./index";
 
 function terminalSnapshot(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -138,6 +139,41 @@ describe("app-server protocol schemas", () => {
 				params: { projectId: "project-1", branch: "build/test", operationId: "op-worktree-1" },
 			}),
 		).toBe(true);
+		expect(
+			Value.Check(ClientRequestSchema, {
+				kind: "request",
+				id: "req-worktree-options",
+				method: "worktree/create",
+				params: {
+					projectId: "project-1",
+					branch: "build/no-setup",
+					setup: false,
+					includeIgnored: false,
+				},
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(WorktreeCreateParamsSchema, {
+				projectId: "project-1",
+				branch: "build/setup",
+				setup: true,
+				includeIgnored: true,
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(WorktreeCreateParamsSchema, {
+				projectId: "project-1",
+				branch: "build/bad-setup",
+				setup: "false",
+			}),
+		).toBe(false);
+		expect(
+			Value.Check(WorktreeCreateParamsSchema, {
+				projectId: "project-1",
+				branch: "build/bad-ignored",
+				includeIgnored: 0,
+			}),
+		).toBe(false);
 		expect(
 			Value.Check(ClientRequestSchema, {
 				kind: "request",

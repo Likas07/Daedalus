@@ -21,7 +21,11 @@ function tempDir(name: string): string {
 	return mkdtempSync(join(tmpdir(), `daedalus-${name}-`));
 }
 
-function fakeWorkspaceService(parent: string, child: string) {
+function fakeWorkspaceService(
+	parent: string,
+	child: string,
+	onCreate?: (options: { branch: string; baseRef?: string; setup?: boolean; includeIgnored?: boolean }) => void,
+) {
 	return {
 		resolveBaseTarget: () => ({
 			cwd: parent,
@@ -39,15 +43,23 @@ function fakeWorkspaceService(parent: string, child: string) {
 			baseCommit: "head",
 			validationStatus: "valid",
 		}),
-		createIsolatedTarget: (options: { branch: string; baseRef?: string }) => ({
-			cwd: child,
-			projectRoot: parent,
-			isolationMode: "dedicated_worktree",
-			branch: options.branch,
-			baseBranch: options.baseRef,
-			baseCommit: "base",
-			validationStatus: "valid",
-		}),
+		createIsolatedTarget: (options: {
+			branch: string;
+			baseRef?: string;
+			setup?: boolean;
+			includeIgnored?: boolean;
+		}) => {
+			onCreate?.(options);
+			return {
+				cwd: child,
+				projectRoot: parent,
+				isolationMode: "dedicated_worktree",
+				branch: options.branch,
+				baseBranch: options.baseRef,
+				baseCommit: "base",
+				validationStatus: "valid",
+			};
+		},
 	} as any;
 }
 
@@ -66,7 +78,7 @@ describe("subagent workspace isolation", () => {
 				assignment: "a",
 				isolation: "worktree",
 				baseBranch: "main",
-				mergeBack: "manual",
+				mergeBack: "branch",
 			},
 		});
 
@@ -74,7 +86,75 @@ describe("subagent workspace isolation", () => {
 		expect(prepared.workspaceTarget?.cwd).toBe(child);
 		expect(prepared.workspaceTarget?.isolationMode).toBe("dedicated_worktree");
 		expect(prepared.metadata?.isolation).toBe("worktree");
-		expect(prepared.metadata?.mergeBack).toBe("manual");
+		expect(prepared.metadata?.mergeBack).toBe("branch");
+	});
+
+	test("worktree isolation defaults omitted mergeBack to patch", async () => {
+		const parent = tempDir("default-parent");
+		const child = tempDir("default-child");
+		const prepared = await prepareSubagentWorkspace({
+			cwd: parent,
+			runId: "def123",
+			workspaceService: fakeWorkspaceService(parent, child),
+			request: {
+				agent,
+				parentSessionFile: join(parent, "parent.jsonl"),
+				goal: "g",
+				assignment: "a",
+				isolation: "worktree",
+			},
+		});
+
+		expect(prepared.metadata?.mergeBack).toBe("patch");
+		expect(prepared.workspaceTarget?.mergeBack?.strategy).toBe("patch");
+	});
+
+	test("worktree setup options default to true", async () => {
+		const parent = tempDir("setup-default-parent");
+		const child = tempDir("setup-default-child");
+		let createOptions: { setup?: boolean; includeIgnored?: boolean } | undefined;
+		await prepareSubagentWorkspace({
+			cwd: parent,
+			runId: "setup-default",
+			workspaceService: fakeWorkspaceService(parent, child, (options) => {
+				createOptions = options;
+			}),
+			request: {
+				agent,
+				parentSessionFile: join(parent, "parent.jsonl"),
+				goal: "g",
+				assignment: "a",
+				isolation: "worktree",
+			},
+		});
+
+		expect(createOptions?.setup).toBe(true);
+		expect(createOptions?.includeIgnored).toBe(true);
+	});
+
+	test("worktree setup options support explicit false overrides", async () => {
+		const parent = tempDir("setup-false-parent");
+		const child = tempDir("setup-false-child");
+		let createOptions: { setup?: boolean; includeIgnored?: boolean } | undefined;
+		await prepareSubagentWorkspace({
+			cwd: parent,
+			runId: "setup-false",
+			workspaceService: fakeWorkspaceService(parent, child, (options) => {
+				createOptions = options;
+			}),
+			request: {
+				agent,
+				parentSessionFile: join(parent, "parent.jsonl"),
+				goal: "g",
+				assignment: "a",
+				isolation: "worktree",
+				setupWorktree: false,
+				includeIgnored: false,
+			},
+		});
+
+		expect(createOptions?.setup).toBe(false);
+		expect(createOptions?.includeIgnored).toBe(false);
 	});
 
 	test("worktree target is passed to child SessionManager cwd, nested agent cwd, and tool cwd", async () => {
@@ -112,6 +192,7 @@ describe("subagent workspace isolation", () => {
 			goal: "g",
 			assignment: "a",
 			isolation: "worktree",
+			mergeBack: "patch",
 		});
 		expect(result.workspaceTarget?.cwd).toBe(child);
 		expect(seen.workspaceCwd).toBe(child);

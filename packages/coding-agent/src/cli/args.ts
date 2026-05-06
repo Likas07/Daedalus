@@ -355,6 +355,7 @@ ${chalk.bold(`Available Tools (default: ${defaultToolsText}):`)}
   edit          - Exact-text file edits with find/replace
   hashline_edit - Edit files using LINE#ID anchors from read(format: "hashline")
   fetch         - Fetch remote HTTP/HTTPS content
+  web_search    - Search the web for current information
   ast_grep      - Structural code search using AST matching
   ast_edit      - Structural AST-aware rewrites
   write         - Write files (creates/overwrites)

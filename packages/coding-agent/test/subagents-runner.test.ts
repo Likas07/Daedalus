@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { Type } from "@sinclair/typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	buildTaskPacket,
@@ -9,6 +10,7 @@ import {
 	SubagentRegistry,
 	SubagentRunner,
 } from "../src/core/subagents/index.js";
+import { createSubagentTools } from "../src/core/subagents/policy.js";
 
 const worker: SubagentDefinition = {
 	name: "worker",
@@ -24,6 +26,36 @@ describe("SubagentRunner", () => {
 		for (const dir of tempRoots.splice(0)) {
 			fs.rmSync(dir, { recursive: true, force: true });
 		}
+	});
+
+	it("exposes policy-allowed extension tools to child sessions", () => {
+		const planCreate = {
+			name: "plan_create",
+			label: "Create plan",
+			description: "Create a plan artifact",
+			parameters: Type.Object({}),
+			execute: vi.fn(),
+		};
+		const planValidate = {
+			name: "plan_validate",
+			label: "Validate plan",
+			description: "Validate a plan artifact",
+			parameters: Type.Object({}),
+			execute: vi.fn(),
+		};
+
+		const tools = createSubagentTools(
+			tempRoots[0] ?? process.cwd(),
+			{
+				allowedTools: ["read", "plan_create", "plan_validate"],
+				writableGlobs: [],
+				spawns: [],
+				maxDepth: 1,
+			},
+			[planCreate, planValidate],
+		);
+
+		expect(tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(["read", "plan_create", "plan_validate"]));
 	});
 
 	it("reuses an existing child session file when conversationId is provided", async () => {

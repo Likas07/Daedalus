@@ -1,6 +1,14 @@
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import type { AgentSessionEvent } from "../agent-session.js";
+import {
+	applyMergeBackPatch,
+	captureMergeBackPatch,
+	createTaskBranchMergeBack,
+	dryRunApplyMergeBack,
+	type MergeBackResult,
+} from "../workspaces/merge-back.js";
+import type { WorkspaceTarget } from "../workspaces/types.js";
 import type { WorkspaceService } from "../workspaces/workspace-service.js";
 import { getSubagentArtifactPaths } from "./artifacts.js";
 import { writePersistedSubagentRun } from "./persisted-runs.js";
@@ -11,6 +19,8 @@ import type { SubmitResultPayload } from "./submit-result-tool.js";
 import { buildTaskPacket } from "./task-packet.js";
 import type {
 	SubagentEnvelopeStatus,
+	SubagentMergeBackPolicy,
+	SubagentMergeBackResultDetails,
 	SubagentResultEnvelope,
 	SubagentResultReference,
 	SubagentResultSidecarRecord,
@@ -18,6 +28,7 @@ import type {
 	SubagentRunRequest,
 	SubagentRunResult,
 	SubagentRunStatus,
+	SubagentWorkspaceMetadata,
 } from "./types.js";
 import { type PreparedSubagentWorkspace, prepareSubagentWorkspace } from "./workspace-isolation.js";
 
@@ -129,6 +140,96 @@ function mapEnvelopeStatus(status: SubagentEnvelopeStatus): Exclude<SubagentRunS
 	return status;
 }
 
+const parentMergeQueues = new Map<string, Promise<unknown>>();
+
+function enqueueParentMerge<T>(parentCwd: string, action: () => Promise<T> | T): Promise<T> {
+	const previous = parentMergeQueues.get(parentCwd) ?? Promise.resolve();
+	const next = previous.catch(() => undefined).then(action);
+	let queued: Promise<unknown>;
+	queued = next.finally(() => {
+		if (parentMergeQueues.get(parentCwd) === queued) parentMergeQueues.delete(parentCwd);
+	});
+	parentMergeQueues.set(parentCwd, queued);
+	return next;
+}
+
+function resultStatusForMergeBack(result: MergeBackResult): SubagentMergeBackResultDetails["status"] {
+	if (result.status === "applied") return "applied";
+	if (result.status === "clean") return "clean";
+	if (result.status === "skipped" || result.status === "kept") return "skipped";
+	if (result.status === "conflict") return "blocked";
+	return "failed";
+}
+
+function toMergeBackDetails(policy: SubagentMergeBackPolicy, result: MergeBackResult): SubagentMergeBackResultDetails {
+	return {
+		policy,
+		status: resultStatusForMergeBack(result),
+		message: result.message,
+		artifactPath: result.artifactPath,
+		branchName: result.branchName,
+		files: result.files,
+		conflicts: result.conflicts,
+		stdout: result.stdout,
+		stderr: result.stderr,
+	};
+}
+
+function parentTargetFor(input: { request: SubagentRunRequest; cwd: string }): WorkspaceTarget {
+	return input.request.workspaceTarget ?? { cwd: input.cwd, isolationMode: "shared_cwd" };
+}
+
+async function runPatchMergeBack(input: {
+	parent: WorkspaceTarget;
+	child: WorkspaceTarget;
+	baseRef?: string;
+	artifactPath: string;
+}): Promise<MergeBackResult> {
+	const captured = await captureMergeBackPatch(input);
+	if (captured.status !== "clean") return captured;
+	const checked = await dryRunApplyMergeBack(input);
+	if (checked.status !== "clean") return checked;
+	const applied = await applyMergeBackPatch(input);
+	return { ...applied, artifactPath: input.artifactPath, files: applied.files ?? captured.files };
+}
+
+async function runAutoMergeBack(input: {
+	request: SubagentRunRequest;
+	runId: string;
+	paths: ReturnType<typeof getSubagentArtifactPaths>;
+	workspace: PreparedSubagentWorkspace;
+	parentCwd: string;
+}): Promise<SubagentMergeBackResultDetails | undefined> {
+	const metadata = input.workspace.metadata;
+	const policy = metadata?.mergeBack;
+	const child = input.workspace.workspaceTarget;
+	if (metadata?.isolation !== "worktree" || !child || !policy) return undefined;
+	const parent = parentTargetFor({ request: input.request, cwd: input.parentCwd });
+	const baseRef = metadata.baseCommit ?? child.baseCommit ?? metadata.baseBranch ?? child.baseBranch;
+	const mergeInput = {
+		parent,
+		child,
+		baseRef,
+		artifactPath: input.paths.mergeBackPatchFile,
+		branchName: `daedalus/subagent-results/${input.request.agent.name}-${input.runId}`,
+		commitMessage: `Apply ${input.request.agent.name} subagent result ${input.runId}`,
+	};
+
+	const result = await enqueueParentMerge(parent.cwd, async () => {
+		switch (policy) {
+			case "patch":
+				return runPatchMergeBack(mergeInput);
+			case "branch":
+				return createTaskBranchMergeBack(mergeInput);
+		}
+	});
+	return toMergeBackDetails(policy, result);
+}
+
+function mergeBackBlocked(details: SubagentMergeBackResultDetails | undefined): boolean {
+	return details?.status === "blocked" || details?.status === "failed";
+}
+
 export class SubagentRunner {
 	#createSession: CreateSubagentSession;
 	#registry: SubagentRegistry;
@@ -226,6 +327,7 @@ export class SubagentRunner {
 			runId,
 			resultId,
 			agent: request.agent.name,
+			parentSessionFile: request.parentSessionFile,
 			status: "running",
 			summary: request.goal,
 			task: request.goal,
@@ -269,6 +371,7 @@ export class SubagentRunner {
 				recentActivity,
 				childSessionFile: paths.sessionFile,
 				contextArtifactPath,
+				parentSessionFile: request.parentSessionFile,
 			});
 			void queuePersist({
 				summary: request.goal,
@@ -278,6 +381,7 @@ export class SubagentRunner {
 				childSessionFile: paths.sessionFile,
 				conversationId: paths.sessionFile,
 				contextArtifactPath,
+				parentSessionFile: request.parentSessionFile,
 			});
 			const progress: SubagentRunProgress = {
 				runId,
@@ -346,6 +450,7 @@ export class SubagentRunner {
 					runId,
 					resultId,
 					agent: request.agent.name,
+					parentSessionFile: request.parentSessionFile,
 					status: "failed",
 					summary: "Subagent exited without submit_result.",
 					task: request.goal,
@@ -380,6 +485,7 @@ export class SubagentRunner {
 					runId,
 					resultId,
 					agent: request.agent.name,
+					parentSessionFile: request.parentSessionFile,
 					status: "failed",
 					summary: "Subagent returned invalid result envelope.",
 					task: request.goal,
@@ -424,6 +530,7 @@ export class SubagentRunner {
 					runId,
 					resultId,
 					agent: request.agent.name,
+					parentSessionFile: request.parentSessionFile,
 					status: "failed",
 					summary: "Subagent returned invalid structured output.",
 					task: submitPayload.task,
@@ -439,51 +546,102 @@ export class SubagentRunner {
 				};
 			}
 
+			let mergeBackResult: SubagentMergeBackResultDetails | undefined;
+			if (submitPayload.status === "completed") {
+				emitProgress("merging subagent changes back");
+				mergeBackResult = await runAutoMergeBack({
+					request,
+					runId,
+					paths,
+					workspace,
+					parentCwd: this.#cwd,
+				});
+			}
+
+			const finalEnvelope: SubagentResultEnvelope = mergeBackBlocked(mergeBackResult)
+				? {
+						...submitPayload,
+						status: "blocked",
+						summary: `${submitPayload.summary} (merge-back blocked: ${mergeBackResult?.message ?? "unknown error"})`,
+					}
+				: submitPayload;
+			const mergeBackWorkspaceTarget: WorkspaceTarget | undefined = workspace.workspaceTarget
+				? {
+						...workspace.workspaceTarget,
+						mergeBack: mergeBackResult
+							? {
+									...workspace.workspaceTarget.mergeBack,
+									strategy: mergeBackResult.policy,
+									artifactPath: mergeBackResult.artifactPath,
+									branchName: mergeBackResult.branchName,
+									status:
+										mergeBackResult.status === "blocked" || mergeBackResult.status === "failed"
+											? "blocked"
+											: mergeBackResult.status === "applied" || mergeBackResult.status === "clean"
+												? "applied"
+												: workspace.workspaceTarget.mergeBack?.status,
+								}
+							: workspace.workspaceTarget.mergeBack,
+					}
+				: undefined;
+			const finalWorkspaceMetadata: SubagentWorkspaceMetadata | undefined = workspace.metadata
+				? {
+						...workspace.metadata,
+						workspaceTarget: mergeBackWorkspaceTarget,
+						mergeBackArtifactPath: mergeBackResult?.artifactPath ?? workspace.metadata.mergeBackArtifactPath,
+						mergeBackBranch: mergeBackResult?.branchName ?? workspace.metadata.mergeBackBranch,
+						mergeBackResult,
+					}
+				: undefined;
+
 			const sidecar = createSidecarRecord({
 				resultId,
 				agentId: request.agent.name,
 				conversationId: paths.sessionFile,
-				envelope: submitPayload,
+				envelope: finalEnvelope,
 			});
 			await writeResultSidecar(paths.resultFile, sidecar);
 			const reference = createResultReference({
 				resultId,
 				agentId: request.agent.name,
 				conversationId: paths.sessionFile,
-				envelope: submitPayload,
+				envelope: finalEnvelope,
 			});
 
-			const status = mapEnvelopeStatus(submitPayload.status);
+			const status = mapEnvelopeStatus(finalEnvelope.status);
 			const updatedAt = Date.now();
-			this.#registry.finish(runId, { status, summary: submitPayload.summary });
+			this.#registry.finish(runId, { status, summary: finalEnvelope.summary });
 			await queuePersist({
 				status,
-				summary: submitPayload.summary,
-				task: submitPayload.task,
+				summary: finalEnvelope.summary,
+				task: finalEnvelope.task,
+				parentSessionFile: request.parentSessionFile,
 				conversationId: paths.sessionFile,
-				output: submitPayload.output,
+				output: finalEnvelope.output,
 				reference,
 				updatedAt,
 				activity: lastActivity,
 				recentActivity,
 				resultArtifactPath: paths.resultFile,
-				isolation: workspace.metadata?.isolation,
-				workspaceTarget: workspace.workspaceTarget,
-				workspaceMetadata: workspace.metadata,
-				baseBranch: workspace.metadata?.baseBranch,
-				mergeBack: workspace.metadata?.mergeBack,
-				data: sidecar,
+				isolation: finalWorkspaceMetadata?.isolation,
+				workspaceTarget: mergeBackWorkspaceTarget,
+				workspaceMetadata: finalWorkspaceMetadata,
+				baseBranch: finalWorkspaceMetadata?.baseBranch,
+				mergeBack: finalWorkspaceMetadata?.mergeBack,
+				mergeBackResult,
+				data: { ...sidecar, mergeBackResult },
 			});
 			return {
 				runId,
 				resultId,
 				agent: request.agent.name,
 				status,
-				summary: submitPayload.summary,
-				task: submitPayload.task,
+				summary: finalEnvelope.summary,
+				task: finalEnvelope.task,
+				parentSessionFile: request.parentSessionFile,
 				goal: request.goal,
 				conversationId: paths.sessionFile,
-				output: submitPayload.output,
+				output: finalEnvelope.output,
 				reference,
 				startedAt,
 				updatedAt,
@@ -492,12 +650,13 @@ export class SubagentRunner {
 				childSessionFile: paths.sessionFile,
 				contextArtifactPath,
 				resultArtifactPath: paths.resultFile,
-				isolation: workspace.metadata?.isolation,
-				workspaceTarget: workspace.workspaceTarget,
-				workspaceMetadata: workspace.metadata,
-				baseBranch: workspace.metadata?.baseBranch,
-				mergeBack: workspace.metadata?.mergeBack,
-				data: sidecar,
+				isolation: finalWorkspaceMetadata?.isolation,
+				workspaceTarget: mergeBackWorkspaceTarget,
+				workspaceMetadata: finalWorkspaceMetadata,
+				baseBranch: finalWorkspaceMetadata?.baseBranch,
+				mergeBack: finalWorkspaceMetadata?.mergeBack,
+				mergeBackResult,
+				data: { ...sidecar, mergeBackResult },
 			};
 		} finally {
 			unsubscribe?.();

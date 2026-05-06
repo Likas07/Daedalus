@@ -331,7 +331,7 @@ async function runWorkspaceCommand(
 }
 
 export default function semanticWorkspaceExtension(pi: ExtensionAPI): void {
-	const backgroundSync = createSemanticBackgroundSyncController({
+	const _backgroundSync = createSemanticBackgroundSyncController({
 		onStateChange: (cwd, phase, error) => {
 			if (phase === "finished") {
 				syncExposure(pi, cwd);
@@ -358,16 +358,12 @@ export default function semanticWorkspaceExtension(pi: ExtensionAPI): void {
 			active.includes("sem_search") || !allToolNames.includes("sem_search") ? active : [...active, "sem_search"];
 		rememberSemanticDesiredTools(desired);
 		syncExposure(pi, ctx.cwd);
-		void backgroundSync.maybeStartForSession(ctx.cwd);
 	});
 	pi.on("session_tree", async (_event, ctx) => {
 		syncExposure(pi, ctx.cwd);
 	});
 	pi.on("before_agent_start", async (_event, ctx) => {
 		syncExposure(pi, ctx.cwd);
-	});
-	pi.on("turn_end", async (_event, ctx) => {
-		void backgroundSync.maybeStartAfterTurn(ctx.cwd);
 	});
 
 	pi.registerMessageRenderer("semantic-workspace-status", (message, _options, theme) => {

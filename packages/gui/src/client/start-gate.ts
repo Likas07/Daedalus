@@ -1,6 +1,21 @@
 import type { WorkflowWorktreeMetadata } from "@daedalus-pi/app-server-protocol";
-import type { GuiState } from "./runtime";
-import type { ProviderStatus } from "./view-model";
+
+export interface ProviderStatus {
+	readonly provider?: string;
+	readonly enabled?: boolean;
+	readonly authenticated?: boolean;
+	readonly status?: string;
+}
+
+export interface GuiState {
+	readonly projectRoot?: string;
+	readonly lastProjectId?: string;
+	readonly providerStatuses?: readonly ProviderStatus[];
+	readonly selectedModel?: string;
+	readonly models?: readonly { id: string; provider?: string; available?: boolean }[];
+	readonly worktrees?: readonly WorkflowWorktreeMetadata[];
+	readonly newBuild?: { readonly kind?: string };
+}
 
 export type StartGateRequiredAction =
 	| "enter-prompt"

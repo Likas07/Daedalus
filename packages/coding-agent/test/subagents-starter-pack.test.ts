@@ -215,6 +215,8 @@ describe("starter-pack subagent extension", () => {
 			"Keep final synthesis in Daedalus; subagents return scoped lightweight references.",
 		);
 		expect(systemPrompt).toContain("Use summary first when consuming subagent results.");
+		expect(systemPrompt).toContain("When Muse returns a validated plan_path, summarize the plan first");
+		expect(systemPrompt).toContain("execute_plan(path=<plan_path>, resume=true)");
 		expect(systemPrompt).toContain("read_agent_result_output(result_id)");
 		expect(systemPrompt).toContain("Avoid duplicate delegations.");
 		expect(systemPrompt).toContain("Use compact task packets and inspectable task results.");
@@ -249,7 +251,14 @@ describe("starter-pack subagent extension", () => {
 		const component = new ToolExecutionComponent(
 			"subagent",
 			"tool-1",
-			{ agent: "scout", goal: "Trace auth flow", assignment: "Inspect auth files and report." },
+			{
+				agent: "scout",
+				goal: "Trace auth flow",
+				assignment: "Inspect auth files and report.",
+				isolation: "worktree",
+				merge_back: "patch",
+				base_branch: "main",
+			},
 			{},
 			definition,
 			createFakeTui(),
@@ -266,6 +275,7 @@ describe("starter-pack subagent extension", () => {
 					activity: "grep /Authorization/ in src",
 					recentActivity: ["read src/auth.ts", "grep /Authorization/ in src"],
 					childSessionFile: "/tmp/parent/subagents/run-1.jsonl",
+					workspaceTarget: { cwd: "/tmp/child", isolationMode: "dedicated_worktree", baseBranch: "main" },
 				},
 				isError: false,
 			},
@@ -275,6 +285,10 @@ describe("starter-pack subagent extension", () => {
 		const rendered = stripAnsi(component.render(120).join("\n"));
 		expect(rendered).toContain("scout");
 		expect(rendered).toContain("Trace auth flow");
+		expect(rendered).toContain("isolation worktree");
+		expect(rendered).toContain("merge_back patch");
+		expect(rendered).toContain("base main");
+		expect(rendered).toContain("effective dedicated_worktree");
 		expect(rendered).toContain("grep /Authorization/ in src");
 		expect(rendered).toContain("read src/auth.ts");
 		expect(rendered).toContain("Inspect (");
@@ -304,11 +318,30 @@ describe("starter-pack subagent extension", () => {
 					status: "completed",
 					summary: "Reviewed auth flow",
 					childSessionFile: "/tmp/parent/subagents/run-1.jsonl",
+					isolation: "worktree",
+					workspaceMetadata: { isolation: "worktree", mergeBack: "patch" },
+					mergeBackResult: {
+						policy: "patch",
+						status: "applied",
+						artifactPath: "/tmp/parent/.daedalus/subagents/run-1.patch",
+					},
 				},
 				isError: false,
 			},
 			false,
 		);
+
+		const rendered = stripAnsi(component.render(120).join("\n"));
+		expect(rendered).toContain("worker");
+		expect(rendered).toContain("Inspect auth");
+		expect(rendered).toContain("✓ worker");
+		expect(rendered).toContain("Reviewed auth flow");
+		expect(rendered).toContain("isolation worktree");
+		expect(rendered).toContain("merge_back patch · applied");
+		expect(rendered).toContain("artifact subagents/run-1.patch");
+		expect(rendered).toContain("Inspect (");
+		expect(rendered).not.toContain("done");
+		expect(rendered).not.toContain("/tmp/parent/.daedalus/subagents/run-1.patch");
 
 		expect(component.hasPrimaryAction()).toBe(true);
 		component.focused = true;
@@ -324,8 +357,72 @@ describe("starter-pack subagent extension", () => {
 				status: "completed",
 				summary: "Reviewed auth flow",
 				childSessionFile: "/tmp/parent/subagents/run-1.jsonl",
+				isolation: "worktree",
+				workspaceMetadata: { isolation: "worktree", mergeBack: "patch" },
+				mergeBackResult: {
+					policy: "patch",
+					status: "applied",
+					artifactPath: "/tmp/parent/.daedalus/subagents/run-1.patch",
+				},
 			},
 		});
+	});
+
+	it("renders branch merge-back metadata with the branch name", async () => {
+		const runner = await createRunner();
+		const definition = runner.getToolDefinition("subagent");
+		expect(definition).toBeDefined();
+
+		const component = new ToolExecutionComponent(
+			"subagent",
+			"tool-branch",
+			{
+				agent: "worker",
+				goal: "Implement feature",
+				assignment: "Make scoped edits.",
+				isolation: "worktree",
+				merge_back: "branch",
+			},
+			{},
+			definition,
+			createFakeTui(),
+			tempDir,
+		);
+		component.updateResult(
+			{
+				content: [{ type: "text", text: "done" }],
+				details: {
+					runId: "run-branch",
+					agent: "worker",
+					goal: "Implement feature",
+					status: "completed",
+					summary: "Implemented feature",
+					childSessionFile: "/tmp/parent/subagents/run-branch.jsonl",
+					isolation: "worktree",
+					workspaceMetadata: {
+						isolation: "worktree",
+						mergeBack: "branch",
+						mergeBackBranch: "daedalus/subagent-results/run-branch",
+					},
+					mergeBackResult: {
+						policy: "branch",
+						status: "created",
+						branchName: "daedalus/subagent-results/run-branch",
+					},
+				},
+				isError: false,
+			},
+			false,
+		);
+
+		const rendered = stripAnsi(component.render(120).join("\n"));
+		expect(rendered).toContain("worker");
+		expect(rendered).toContain("Implement feature");
+		expect(rendered).toContain("Implemented feature");
+		expect(rendered).toContain("isolation worktree");
+		expect(rendered).toContain("merge_back branch · created");
+		expect(rendered).toContain("branch daedalus/subagent-results/run-branch");
+		expect(rendered).toContain("Inspect (");
 	});
 
 	it("cycles focused actionable subagent rows newest-to-oldest and wraps", async () => {

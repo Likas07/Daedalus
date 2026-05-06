@@ -32,6 +32,7 @@ import type {
 	StreamOptions,
 } from "../types.js";
 import { AssistantMessageEventStream } from "../utils/event-stream.js";
+import { buildCodexSseHeaders, extractCodexAccountId, resolveCodexResponsesUrl } from "./openai-codex-api.js";
 import {
 	applyServiceTierPricing,
 	convertResponsesMessages,
@@ -44,8 +45,6 @@ import { buildBaseOptions, clampReasoning } from "./simple-options.js";
 // Configuration
 // ============================================================================
 
-const DEFAULT_CODEX_BASE_URL = "https://chatgpt.com/backend-api";
-const JWT_CLAIM_PATH = "https://api.openai.com/auth" as const;
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
 const CODEX_TOOL_CALL_PROVIDERS = new Set(["openai", "openai-codex", "opencode"]);
@@ -151,7 +150,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 				throw new Error(`No API key for provider: ${model.provider}`);
 			}
 
-			const accountId = extractAccountId(apiKey);
+			const accountId = extractCodexAccountId(apiKey);
 			const serviceTier = resolveServiceTier(model, options);
 			let body = buildRequestBody(model, context, options);
 			const nextBody = await options?.onPayload?.(body, model);
@@ -159,7 +158,14 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 				body = nextBody as RequestBody;
 			}
 			const websocketRequestId = options?.sessionId || createCodexRequestId();
-			const sseHeaders = buildSSEHeaders(model.headers, options?.headers, accountId, apiKey, options?.sessionId);
+			const sseHeaders = buildCodexSseHeaders({
+				initHeaders: model.headers,
+				additionalHeaders: options?.headers,
+				accountId,
+				token: apiKey,
+				sessionId: options?.sessionId,
+				userAgent: buildCodexUserAgent(),
+			});
 			const websocketHeaders = buildWebSocketHeaders(
 				model.headers,
 				options?.headers,
@@ -213,7 +219,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 				}
 
 				try {
-					response = await fetch(resolveCodexUrl(model.baseUrl), {
+					response = await fetch(resolveCodexResponsesUrl(model.baseUrl), {
 						method: "POST",
 						headers: sseHeaders,
 						body: bodyJson,
@@ -364,16 +370,8 @@ function clampReasoningEffort(modelId: string, effort: string): string {
 	return effort;
 }
 
-function resolveCodexUrl(baseUrl?: string): string {
-	const raw = baseUrl && baseUrl.trim().length > 0 ? baseUrl : DEFAULT_CODEX_BASE_URL;
-	const normalized = raw.replace(/\/+$/, "");
-	if (normalized.endsWith("/codex/responses")) return normalized;
-	if (normalized.endsWith("/codex")) return `${normalized}/responses`;
-	return `${normalized}/codex/responses`;
-}
-
 function resolveCodexWebSocketUrl(baseUrl?: string): string {
-	const url = new URL(resolveCodexUrl(baseUrl));
+	const url = new URL(resolveCodexResponsesUrl(baseUrl));
 	if (url.protocol === "https:") url.protocol = "wss:";
 	if (url.protocol === "http:") url.protocol = "ws:";
 	return url.toString();
@@ -889,24 +887,13 @@ async function parseErrorResponse(response: Response): Promise<{ message: string
 // Auth & Headers
 // ============================================================================
 
-function extractAccountId(token: string): string {
-	try {
-		const parts = token.split(".");
-		if (parts.length !== 3) throw new Error("Invalid token");
-		const payload = JSON.parse(atob(parts[1]));
-		const accountId = payload?.[JWT_CLAIM_PATH]?.chatgpt_account_id;
-		if (!accountId) throw new Error("No account ID in token");
-		return accountId;
-	} catch {
-		throw new Error("Failed to extract accountId from token");
-	}
+function createCodexRequestId(): string {
+	if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+	return `codex_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function createCodexRequestId(): string {
-	if (typeof globalThis.crypto?.randomUUID === "function") {
-		return globalThis.crypto.randomUUID();
-	}
-	return `codex_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+function buildCodexUserAgent(): string {
+	return _os ? `pi (${_os.platform()} ${_os.release()}; ${_os.arch()})` : "pi (browser)";
 }
 
 function buildBaseCodexHeaders(
@@ -924,26 +911,6 @@ function buildBaseCodexHeaders(
 	headers.set("originator", "pi");
 	const userAgent = _os ? `pi (${_os.platform()} ${_os.release()}; ${_os.arch()})` : "pi (browser)";
 	headers.set("User-Agent", userAgent);
-	return headers;
-}
-
-function buildSSEHeaders(
-	initHeaders: Record<string, string> | undefined,
-	additionalHeaders: Record<string, string> | undefined,
-	accountId: string,
-	token: string,
-	sessionId?: string,
-): Headers {
-	const headers = buildBaseCodexHeaders(initHeaders, additionalHeaders, accountId, token);
-	headers.set("OpenAI-Beta", "responses=experimental");
-	headers.set("accept", "text/event-stream");
-	headers.set("content-type", "application/json");
-
-	if (sessionId) {
-		headers.set("conversation_id", sessionId);
-		headers.set("session_id", sessionId);
-	}
-
 	return headers;
 }
 

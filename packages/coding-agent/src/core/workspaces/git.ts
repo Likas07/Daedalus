@@ -80,6 +80,10 @@ export function gitStatus(cwd: string): GitStatusSummary {
 	return { clean: porcelain.length === 0, porcelain };
 }
 
+export function gitConfigSet(cwd: string, key: string, value: string): void {
+	runGit(["config", key, value], { cwd });
+}
+
 export function gitDiff(cwd: string, args: string[] = []): string {
 	return runGit(["diff", ...args], { cwd });
 }
@@ -130,4 +134,8 @@ export function gitWorktreeAdd(cwd: string, path: string, branch: string, baseRe
 
 export function gitWorktreeRemove(cwd: string, path: string, force = false): void {
 	runGit(["worktree", "remove", ...(force ? ["--force"] : []), path], { cwd });
+}
+
+export function gitWorktreePrune(cwd: string): void {
+	runGit(["worktree", "prune"], { cwd });
 }

@@ -1,99 +1,89 @@
-import type { ExtensionUiField, ExtensionUiRequest } from "@daedalus-pi/app-server-protocol";
+import type { ExtensionUiRequest } from "@daedalus-pi/app-server-protocol";
 
-export function renderExtensionDialogs(
-	requests: readonly ExtensionUiRequest[],
-	respond: (request: ExtensionUiRequest, actionId: string, values: Record<string, unknown>) => void,
-): HTMLElement {
-	const root = document.createElement("section");
-	root.className = "panel extension-dialogs";
-	root.innerHTML = "<h2>Extension dialogs</h2>";
-	for (const request of requests) root.append(renderDialog(request, respond));
-	if (requests.length === 0) root.append(empty("No pending extension UI."));
+export type ExtensionDialogSubmit = (
+	request: ExtensionUiRequest,
+	actionId: string,
+	values: Record<string, unknown>,
+) => void;
+
+export function renderExtensionDialogs(requests: ExtensionUiRequest[], onSubmit: ExtensionDialogSubmit): HTMLElement {
+	const root = document.createElement("div");
+	root.className = "extension-dialogs";
+
+	for (const request of requests) {
+		root.append(renderExtensionDialog(request, onSubmit));
+	}
+
 	return root;
 }
 
-function renderDialog(
-	request: ExtensionUiRequest,
-	respond: (request: ExtensionUiRequest, actionId: string, values: Record<string, unknown>) => void,
-): HTMLElement {
-	const form = document.createElement("form");
-	form.className = "extension-dialog";
-	form.dataset.requestId = request.requestId;
-	form.innerHTML = `<h3>${escapeText(request.title)}</h3><p>${escapeText(request.description ?? request.extensionId)}</p>`;
-	for (const field of request.fields) form.append(renderField(field));
+function renderExtensionDialog(request: ExtensionUiRequest, onSubmit: ExtensionDialogSubmit): HTMLElement {
+	const dialog = document.createElement("section");
+	dialog.className = "extension-dialog";
+	dialog.dataset.requestId = request.requestId;
+
+	const title = document.createElement("h2");
+	title.textContent = request.title;
+	dialog.append(title);
+
+	if (request.description) {
+		const description = document.createElement("p");
+		description.textContent = request.description;
+		dialog.append(description);
+	}
+
+	const fields = document.createElement("div");
+	fields.className = "extension-dialog-fields";
+	for (const field of request.fields) {
+		fields.append(renderField(field));
+	}
+	dialog.append(fields);
+
 	const actions = document.createElement("div");
-	actions.className = "actions";
+	actions.className = "extension-dialog-actions";
 	for (const action of request.actions) {
 		const button = document.createElement("button");
 		button.type = "button";
-		button.className = `button ${action.style ?? "secondary"}`;
-		button.textContent = action.label;
 		button.dataset.actionId = action.id;
-		button.addEventListener("click", () => respond(request, action.id, collectValues(form, request.fields)));
+		button.textContent = action.label;
+		button.addEventListener("click", () => onSubmit(request, action.id, collectFieldValues(dialog)));
 		actions.append(button);
 	}
-	form.append(actions);
-	return form;
+	dialog.append(actions);
+
+	return dialog;
 }
 
-function renderField(field: ExtensionUiField): HTMLElement {
-	const label = document.createElement("label");
-	label.textContent = field.label;
-	let input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
-	if (field.type === "textarea") input = document.createElement("textarea");
-	else if (field.type === "select") {
-		const select = document.createElement("select");
-		for (const option of field.options ?? []) {
-			const item = document.createElement("option");
-			item.value = String(option.value);
-			item.textContent = option.label;
-			select.append(item);
-		}
-		input = select;
-	} else {
-		const element = document.createElement("input");
-		element.type = field.type === "boolean" ? "checkbox" : field.type;
-		input = element;
-	}
+function renderField(field: ExtensionUiRequest["fields"][number]): HTMLElement {
+	const wrapper = document.createElement("label");
+	wrapper.className = "extension-dialog-field";
+	wrapper.textContent = field.label;
+
+	const input = document.createElement(field.type === "textarea" ? "textarea" : "input");
 	input.name = field.id;
-	input.dataset.fieldType = field.type;
+	input.required = field.required ?? false;
+	if (input instanceof HTMLInputElement) {
+		input.type = field.type === "boolean" ? "checkbox" : field.type;
+	}
 	if (field.placeholder) input.setAttribute("placeholder", field.placeholder);
-	if (field.required) input.required = true;
-	if (field.defaultValue !== undefined) setValue(input, field.defaultValue);
-	label.append(input);
-	return label;
+	if (field.defaultValue !== undefined) setElementValue(input, field.defaultValue);
+	wrapper.append(input);
+
+	return wrapper;
 }
 
-function collectValues(form: HTMLFormElement, fields: readonly ExtensionUiField[]): Record<string, unknown> {
+function collectFieldValues(dialog: HTMLElement): Record<string, unknown> {
 	const values: Record<string, unknown> = {};
-	for (const field of fields) {
-		const input = form.elements.namedItem(field.id) as
-			| HTMLInputElement
-			| HTMLTextAreaElement
-			| HTMLSelectElement
-			| null;
-		if (!input) continue;
-		values[field.id] =
-			field.type === "boolean"
-				? (input as HTMLInputElement).checked
-				: field.type === "number"
-					? Number(input.value)
-					: input.value;
+	for (const element of Array.from(dialog.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input, textarea, select"))) {
+		values[element.name] = element instanceof HTMLInputElement && element.type === "checkbox" ? element.checked : element.value;
 	}
 	return values;
 }
-function setValue(input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, value: unknown): void {
-	if (input instanceof HTMLInputElement && input.type === "checkbox") input.checked = Boolean(value);
-	else input.value = String(value);
-}
-function empty(text: string): HTMLElement {
-	const p = document.createElement("p");
-	p.className = "muted";
-	p.textContent = text;
-	return p;
-}
-function escapeText(text: string): string {
-	const div = document.createElement("div");
-	div.textContent = text;
-	return div.innerHTML;
+
+function setElementValue(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, value: unknown): void {
+	if (element instanceof HTMLInputElement && element.type === "checkbox") {
+		element.checked = Boolean(value);
+		return;
+	}
+	element.value = value == null ? "" : String(value);
 }

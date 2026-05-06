@@ -23,3 +23,9 @@ Model Daedalus GUI mode after T3Code/Jean: a persistent project/thread chat work
 Use a durable hierarchy such as `Project -> Thread -> Turn`, or `Project -> Worktree -> Thread -> Turn` when worktree isolation matters. The thread/session survives across turns so the user can continuously chat, steer, approve, answer inline questions, inspect diffs/review panels, use contextual terminals, recover from interruptions, and resume work.
 
 Chat is the center of gravity. Cockpit controls, project canvas/overview, diff/review panels, terminal panes, approvals, draft threads, and recovery tools are supporting panels around the active conversation, not the default interaction model.
+
+## Dependency policy
+
+Use Bun for dependency management in this repository. The root `bun.lock` is the source-of-truth lockfile and should be updated with `bun install`. Do not add or regenerate a root `package-lock.json`; npm lockfiles are stale for this workspace. Preserve example lockfiles outside the root unless a task explicitly targets them.
+
+When dependency manifests or lockfiles change, verify with `bun install --frozen-lockfile --dry-run` from the repository root before reporting completion.

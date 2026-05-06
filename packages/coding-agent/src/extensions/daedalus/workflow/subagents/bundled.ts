@@ -13,8 +13,8 @@ import workerGptOverride from "./agents/worker-overrides-gpt.md" with { type: "t
 const mdGlob = "**/*.md";
 const toolPolicies: Record<string, SubagentDefinition["toolPolicy"]> = {
 	sage: {
-		allowedTools: ["read", "grep", "find", "ls", "fs_search", "sem_search", "todo_read"],
-		writableGlobs: [],
+		allowedTools: ["read", "grep", "find", "ls", "fs_search", "sem_search", "todo_read", "write", "hashline_edit"],
+		writableGlobs: [mdGlob],
 		spawns: [],
 		maxDepth: 1,
 	},
