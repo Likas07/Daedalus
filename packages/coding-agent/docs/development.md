@@ -6,18 +6,20 @@ See [AGENTS.md](../../../AGENTS.md) for additional guidelines.
 
 ```bash
 git clone https://github.com/Likas07/Daedalus
-cd pi-mono
+cd Daedalus
 bun install
-bun run build
+bun run check
 ```
 
-Run from source:
+Run the CLI from source:
 
 ```bash
-/path/to/pi-mono/pi-test.sh
+bun run dev
+# or
+bun --cwd=packages/coding-agent src/cli.ts
 ```
 
-The script can be run from any directory. Daedalus keeps the caller's current working directory.
+Daedalus keeps the caller's current working directory unless a workspace option is supplied.
 
 ## Forking / Rebranding
 
@@ -27,7 +29,7 @@ Configure via `package.json`:
 {
   "daedalusConfig": {
     "name": "daedalus",
-    "configDir": ".pi"
+    "configDir": ".daedalus"
   }
 }
 ```
@@ -36,7 +38,7 @@ Change `name`, `configDir`, and `bin` field for your fork. Affects CLI banner, c
 
 ## Path Resolution
 
-Three execution modes: bun install, standalone binary, tsx from source.
+Three execution modes: Bun from source, linked package, and standalone binary.
 
 **Always use `src/config.ts`** for package assets:
 
@@ -55,10 +57,24 @@ Never use `__dirname` directly for package assets.
 ## Testing
 
 ```bash
-./test.sh                         # Run non-LLM tests (no API keys needed)
-npm test                          # Run all tests
-npm test -- test/specific.test.ts # Run specific test
+bun --cwd=packages/coding-agent test              # Package tests
+bun --cwd=packages/coding-agent run check         # Package type check
+bun run check:gui:parity                          # GUI protocol/parity guard
+bun run check                                     # Root lint + type checks
 ```
+
+For managed worktree changes, useful focused tests are:
+
+```bash
+bun --cwd=packages/coding-agent test \
+  src/core/workspaces/worktree-metadata.test.ts \
+  src/core/workspaces/worktree-bootstrap.test.ts \
+  src/core/workspaces/workspace-service.test.ts \
+  src/core/workspaces/worktree-cleanup.test.ts \
+  src/extensions/daedalus/workflow/workspaces/workspace-commands.test.ts
+```
+
+Daedalus uses Bun as the package manager and `bun.lock` as the single root lockfile. Do not add `package-lock.json`; if a setup path reports `InvalidNPMLockfile`, remove stale npm lockfiles and rerun `bun install`.
 
 ## Project Structure
 
@@ -69,3 +85,7 @@ packages/
   tui/          # Terminal UI components
   coding-agent/ # CLI and interactive mode
 ```
+
+## Managed worktrees
+
+Use `--new-worktree <branch> --confirm-base-checkout` or `/worktree create <branch> [base-ref]` to create an isolated checkout under `.daedalus/worktrees/`. Managed worktrees receive `.daedalus/worktree.json` metadata, apply `.worktreeinclude`, run dependency setup, and set `push.autoSetupRemote=true` for first-push ergonomics. See [managed worktrees](../../../docs/worktrees.md) for lifecycle, merge-back, cleanup, and troubleshooting details.

@@ -95,11 +95,34 @@ pi
 /login  # Then select provider
 ```
 
-Then just talk to pi. By default, pi gives the model these built-in tools: `read`, `bash`, `hashline_edit`, `fetch`, `ast_grep`, `ast_edit`, `write`, `grep`, `find`, and `ls`. The model uses these to fulfill your requests. Add capabilities via [skills](#skills), [prompt templates](#prompt-templates), [extensions](#extensions), or [daedalus packages](#daedalus-packages).
+Then just talk to pi. By default, pi gives the model these built-in tools: `read`, `bash`, `hashline_edit`, `fetch`, `web_search`, `ast_grep`, `ast_edit`, `write`, `grep`, `find`, and `ls`. The model uses these to fulfill your requests. Add capabilities via [skills](#skills), [prompt templates](#prompt-templates), [extensions](#extensions), or [daedalus packages](#daedalus-packages).
 
 **Platform notes:** [Windows](docs/windows.md) | [Termux (Android)](docs/termux.md) | [tmux](docs/tmux.md) | [Terminal setup](docs/terminal-setup.md) | [Shell aliases](docs/shell-aliases.md)
 
 ---
+
+### `web_search`
+
+Daedalus includes a built-in `web_search` tool for current web information when the URL is unknown. This is an ordinary Daedalus tool call: the active model calls `web_search`, Daedalus executes it locally, and the result is returned to the model as a tool result.
+
+Current backend: Codex only.
+
+Requirements:
+
+- Login/configure `openai-codex` OAuth credentials.
+- The tool uses the Codex Responses backend with Codex native `{ "type": "web_search" }` under the hood.
+
+Example model-facing call shape:
+
+```json
+{
+  "query": "Bun 1.3 release notes",
+  "search_context_size": "high",
+  "max_sources": 5
+}
+```
+
+Use `fetch` instead when you already know the URL. Treat web results as untrusted external content.
 
 ## Providers & Models
 
@@ -597,10 +620,10 @@ cat README.md | pi -p "Summarize this text"
 
 | Option | Description |
 |--------|-------------|
-| `--tools <list>` | Enable specific built-in tools (default: `read,bash,hashline_edit,fetch,ast_grep,ast_edit,write,grep,find,ls`) |
+| `--tools <list>` | Enable specific built-in tools (default: `read,bash,hashline_edit,fetch,web_search,ast_grep,ast_edit,write,grep,find,ls`) |
 | `--no-tools` | Disable all built-in tools (extension tools still work) |
 
-Available built-in tools: `read`, `bash`, `edit`, `hashline_edit`, `fetch`, `ast_grep`, `ast_edit`, `write`, `grep`, `find`, `ls`
+Available built-in tools: `read`, `bash`, `edit`, `hashline_edit`, `fetch`, `web_search`, `ast_grep`, `ast_edit`, `write`, `grep`, `find`, `ls`
 
 `hashline_edit` is experimental and enabled in the default coding tool set. It pairs with `read` using `format: "hashline"`. Exact-text `edit` remains available, but is no longer in the default tool set. `fetch`, `ast_grep`, and `ast_edit` are also enabled in the default coding tool set.
 
