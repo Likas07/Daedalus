@@ -34,6 +34,7 @@
 			"packages/web-ui/example/**/*.ts",
 			"scripts/**/*.ts",
 			"!**/node_modules/**/*",
+			"!**/.daedalus/**/*",
 			"!third_party/**/*",
 			"!packages/gui/src/**/*",
 			"!packages/gui/test/**/*",
