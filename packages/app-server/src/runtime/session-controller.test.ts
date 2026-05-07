@@ -8,6 +8,7 @@ class FakeRuntime implements ControlledSessionRuntime {
 	aborted = false;
 	disposed = false;
 	private listeners: Array<(event: unknown) => void> = [];
+	promptDeferred?: Promise<void>;
 
 	constructor(
 		cwd: string,
@@ -25,6 +26,7 @@ class FakeRuntime implements ControlledSessionRuntime {
 			prompt: async (prompt) => {
 				this.prompts.push(prompt);
 				this.emit({ type: "agent_start" });
+				if (this.promptDeferred) await this.promptDeferred;
 				this.emit({ type: "agent_end" });
 			},
 			abort: async () => {
@@ -85,6 +87,7 @@ describe("SessionController", () => {
 				params: { sessionId: "session-1", status: "active" },
 			}),
 		);
+		await new Promise((resolve) => setTimeout(resolve, 0));
 		expect(messages).toContainEqual(
 			expect.objectContaining({
 				kind: "notification",
@@ -92,6 +95,32 @@ describe("SessionController", () => {
 				params: { sessionId: "session-1", turnId: "turn-1", status: "completed" },
 			}),
 		);
+	});
+
+	test("startTurn returns before runtime prompt completes", async () => {
+		let runtime: FakeRuntime | undefined;
+		const controller = new SessionController({
+			agentDir: "/agent",
+			eventSink: () => {},
+			makeSessionManager: ({ cwd }) => ({ cwd }),
+			nextSessionId: () => "session-ack",
+			nextTurnId: () => "turn-ack",
+			nextEventId: () => "event",
+			runtimeFactory: async (input) => {
+				runtime = new FakeRuntime(input.cwd);
+				runtime.promptDeferred = new Promise(() => {});
+				return runtime;
+			},
+		});
+
+		await controller.startSession({ cwd: "/tmp/project" });
+		const start = Date.now();
+		const result = await controller.startTurn({ sessionId: "session-ack", prompt: "work" });
+
+		expect(result).toEqual({ turnId: "turn-ack" });
+		expect(Date.now() - start).toBeLessThan(100);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(runtime?.prompts).toEqual(["work"]);
 	});
 
 	test("interrupts and disposes sessions", async () => {

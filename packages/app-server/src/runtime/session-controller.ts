@@ -261,11 +261,7 @@ export class SessionController {
 			method: "turn/changed",
 			params: { sessionId: input.sessionId, turnId, status: "running" },
 		});
-		await record.runtime.applyRuntimeOptions?.(input.context);
-		const context = await this.resolvePromptContext(record.runtime.cwd, input.context);
-		await record.runtime.session.prompt(context.preamble ? `${context.preamble}\n\n${input.prompt}` : input.prompt, {
-			images: context.images,
-		});
+		void this.runTurnPrompt(record, input, turnId);
 		return { turnId };
 	}
 
@@ -285,6 +281,30 @@ export class SessionController {
 				kind: "notification",
 				method: "turn/changed",
 				params: { sessionId: input.sessionId, turnId, status: "interrupted" },
+			});
+		}
+	}
+
+	private async runTurnPrompt(record: SessionRecord, input: StartTurnInput, turnId: TurnId): Promise<void> {
+		try {
+			await record.runtime.applyRuntimeOptions?.(input.context);
+			const context = await this.resolvePromptContext(record.runtime.cwd, input.context);
+			await record.runtime.session.prompt(context.preamble ? `${context.preamble}\n\n${input.prompt}` : input.prompt, {
+				images: context.images,
+			});
+		} catch (error) {
+			if (record.activeTurnId === turnId) record.activeTurnId = undefined;
+			await this.emit({
+				id: this.nextEventId(),
+				type: "turn/failed",
+				ts: this.nowIso(),
+				sessionId: input.sessionId,
+				payload: { sessionId: input.sessionId, turnId, error: error instanceof Error ? error.message : String(error) },
+			});
+			await this.emit({
+				kind: "notification",
+				method: "turn/changed",
+				params: { sessionId: input.sessionId, turnId, status: "failed" },
 			});
 		}
 	}
