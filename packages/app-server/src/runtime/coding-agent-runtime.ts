@@ -36,10 +36,12 @@ export function createCodingAgentRuntimeFactory(options: CodingAgentRuntimeFacto
 			const agentSession = session as {
 				agent?: { state?: { model?: unknown; thinkingLevel?: unknown } };
 				setActiveTools?: (tools: unknown[]) => void;
+				setFastMode?: (enabled: boolean) => void;
 			};
 			if (resolved.model && agentSession.agent?.state) agentSession.agent.state.model = resolved.model;
 			if (resolved.thinkingLevel && agentSession.agent?.state)
 				agentSession.agent.state.thinkingLevel = resolved.thinkingLevel;
+			if (typeof resolved.fastMode === "boolean") agentSession.setFastMode?.(resolved.fastMode);
 			agentSession.setActiveTools?.(resolved.tools ?? []);
 		};
 		const createRuntime: CreateAgentSessionRuntimeFactory = async ({

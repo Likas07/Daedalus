@@ -28,6 +28,7 @@ export interface ResolvedRuntimeOptions {
 	readonly thinkingLevel?: ThinkingLevel;
 	readonly scopedModels?: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
 	readonly tools?: Tool[];
+	readonly fastMode?: boolean;
 	readonly accessPolicy: AccessPolicy;
 	readonly resourceSettings: { mode: string };
 	readonly sessionDir?: string;
@@ -81,6 +82,7 @@ export async function resolveRuntimeOptions(input: RuntimeOptionsResolverInput):
 		thinkingLevel,
 		scopedModels: model ? [{ model, thinkingLevel }] : undefined,
 		tools,
+		fastMode: context?.fastMode,
 		accessPolicy,
 		resourceSettings: { mode },
 		sessionDir: sessionDirOf(input.sessionManager),
