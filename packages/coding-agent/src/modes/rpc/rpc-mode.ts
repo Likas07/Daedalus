@@ -12,6 +12,7 @@
  */
 
 import * as crypto from "node:crypto";
+import type { PromptOptions } from "../../core/agent-session.js";
 import type { AgentSessionRuntime } from "../../core/agent-session-runtime.js";
 import type {
 	ExtensionUIContext,
@@ -40,6 +41,62 @@ export type {
 	RpcResponse,
 	RpcSessionState,
 } from "./rpc-types.js";
+
+export function createRpcSessionState(
+	session: {
+		model: RpcSessionState["model"];
+		thinkingLevel: RpcSessionState["thinkingLevel"];
+		fastMode: boolean;
+		isStreaming: boolean;
+		isCompacting: boolean;
+		steeringMode: RpcSessionState["steeringMode"];
+		followUpMode: RpcSessionState["followUpMode"];
+		sessionFile?: string;
+		sessionId: string;
+		sessionName?: string;
+		autoCompactionEnabled: boolean;
+		messages: unknown[];
+		pendingMessageCount: number;
+	},
+	runtimeHost: Pick<AgentSessionRuntime, "workspaceTarget">,
+): RpcSessionState {
+	return {
+		model: session.model,
+		thinkingLevel: session.thinkingLevel,
+		fastMode: session.fastMode,
+		isStreaming: session.isStreaming,
+		isCompacting: session.isCompacting,
+		steeringMode: session.steeringMode,
+		followUpMode: session.followUpMode,
+		sessionFile: session.sessionFile,
+		sessionId: session.sessionId,
+		sessionName: session.sessionName,
+		autoCompactionEnabled: session.autoCompactionEnabled,
+		messageCount: session.messages.length,
+		pendingMessageCount: session.pendingMessageCount,
+		workspaceTarget: runtimeHost.workspaceTarget,
+	};
+}
+
+export function setRpcFastMode(session: { setFastMode(enabled: boolean): void }, enabled: boolean): void {
+	session.setFastMode(enabled);
+}
+
+export async function promptRpcSession(
+	session: {
+		messages: unknown[];
+		prompt(message: string, options?: PromptOptions): Promise<void>;
+	},
+	command: Extract<RpcCommand, { type: "prompt" }>,
+): Promise<unknown[]> {
+	const messageCountBeforePrompt = session.messages.length;
+	await session.prompt(command.message, {
+		images: command.images,
+		streamingBehavior: command.streamingBehavior,
+		source: "rpc",
+	});
+	return session.messages.slice(messageCountBeforePrompt);
+}
 
 /**
  * Run in RPC mode.
@@ -368,17 +425,9 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			// =================================================================
 
 			case "prompt": {
-				// Don't await - events will stream
-				// Extension commands are executed immediately, file prompt templates are expanded
-				// If streaming and streamingBehavior specified, queues via steer/followUp
-				session
-					.prompt(command.message, {
-						images: command.images,
-						streamingBehavior: command.streamingBehavior,
-						source: "rpc",
-					})
-					.catch((e) => output(error(id, "prompt", e.message)));
-				return success(id, "prompt");
+				// Await prompt completion so RPC callers can treat the response as the turn lifecycle boundary.
+				const newMessages = await promptRpcSession(session, command);
+				return success(id, "prompt", { events: newMessages });
 			}
 
 			case "steer": {
@@ -410,21 +459,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			// =================================================================
 
 			case "get_state": {
-				const state: RpcSessionState = {
-					model: session.model,
-					thinkingLevel: session.thinkingLevel,
-					isStreaming: session.isStreaming,
-					isCompacting: session.isCompacting,
-					steeringMode: session.steeringMode,
-					followUpMode: session.followUpMode,
-					sessionFile: session.sessionFile,
-					sessionId: session.sessionId,
-					sessionName: session.sessionName,
-					autoCompactionEnabled: session.autoCompactionEnabled,
-					messageCount: session.messages.length,
-					pendingMessageCount: session.pendingMessageCount,
-					workspaceTarget: runtimeHost.workspaceTarget,
-				};
+				const state = createRpcSessionState(session, runtimeHost);
 				return success(id, "get_state", state);
 			}
 			case "workspace_status": {
@@ -500,6 +535,11 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			case "set_thinking_level": {
 				session.setThinkingLevel(command.level);
 				return success(id, "set_thinking_level");
+			}
+
+			case "set_fast_mode": {
+				setRpcFastMode(session, command.enabled);
+				return success(id, "set_fast_mode");
 			}
 
 			case "cycle_thinking_level": {
