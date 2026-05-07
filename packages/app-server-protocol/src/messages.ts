@@ -107,6 +107,18 @@ import {
 	DiffSummaryNotificationSchema as ProtocolV1DiffSummaryNotificationSchema,
 	DiffSummaryParamsSchema as ProtocolV1DiffSummaryParamsSchema,
 	DiffSummaryResultSchema as ProtocolV1DiffSummaryResultSchema,
+	ProviderSnapshotParamsSchema as ProtocolV1ProviderSnapshotParamsSchema,
+	ProviderSnapshotResultSchema as ProtocolV1ProviderSnapshotResultSchema,
+	ThreadRollbackParamsSchema as ProtocolV1ThreadRollbackParamsSchema,
+	ThreadRollbackResultSchema as ProtocolV1ThreadRollbackResultSchema,
+	TextGenerateBranchNameParamsSchema as ProtocolV1TextGenerateBranchNameParamsSchema,
+	TextGenerateBranchNameResultSchema as ProtocolV1TextGenerateBranchNameResultSchema,
+	TextGenerateCommitMessageParamsSchema as ProtocolV1TextGenerateCommitMessageParamsSchema,
+	TextGenerateCommitMessageResultSchema as ProtocolV1TextGenerateCommitMessageResultSchema,
+	TextGeneratePrContentParamsSchema as ProtocolV1TextGeneratePrContentParamsSchema,
+	TextGeneratePrContentResultSchema as ProtocolV1TextGeneratePrContentResultSchema,
+	TextGenerateThreadTitleParamsSchema as ProtocolV1TextGenerateThreadTitleParamsSchema,
+	TextGenerateThreadTitleResultSchema as ProtocolV1TextGenerateThreadTitleResultSchema,
 	TerminalCloseParamsSchema as ProtocolV1TerminalCloseParamsSchema,
 	TerminalCommandResultSchema as ProtocolV1TerminalCommandResultSchema,
 	TerminalContextNotificationSchema as ProtocolV1TerminalContextNotificationSchema,
@@ -150,6 +162,12 @@ const notification = <Method extends string, Params extends TSchema>(method: Met
 	});
 
 export const ProtocolV1Phase3ClientRequestSchema = Type.Union([
+	request("provider.snapshot", ProtocolV1ProviderSnapshotParamsSchema),
+	request("thread.rollback", ProtocolV1ThreadRollbackParamsSchema),
+	request("text.threadTitle", ProtocolV1TextGenerateThreadTitleParamsSchema),
+	request("text.branchName", ProtocolV1TextGenerateBranchNameParamsSchema),
+	request("text.commitMessage", ProtocolV1TextGenerateCommitMessageParamsSchema),
+	request("text.prContent", ProtocolV1TextGeneratePrContentParamsSchema),
 	request("v1.approval.list", ProtocolV1ApprovalListParamsSchema),
 	request("v1.approval.decide", ProtocolV1ApprovalDecisionParamsSchema),
 	request("v1.approval.answer", ProtocolV1ApprovalAnswerInputParamsSchema),
@@ -164,6 +182,12 @@ export const ProtocolV1Phase3ClientRequestSchema = Type.Union([
 export type ProtocolV1Phase3ClientRequest = Static<typeof ProtocolV1Phase3ClientRequestSchema>;
 
 export const ProtocolV1Phase3ClientRequestResultSchemas = {
+	"provider.snapshot": ProtocolV1ProviderSnapshotResultSchema,
+	"thread.rollback": ProtocolV1ThreadRollbackResultSchema,
+	"text.threadTitle": ProtocolV1TextGenerateThreadTitleResultSchema,
+	"text.branchName": ProtocolV1TextGenerateBranchNameResultSchema,
+	"text.commitMessage": ProtocolV1TextGenerateCommitMessageResultSchema,
+	"text.prContent": ProtocolV1TextGeneratePrContentResultSchema,
 	"v1.approval.list": ProtocolV1ApprovalListResultSchema,
 	"v1.approval.decide": ProtocolV1ApprovalDecisionResultSchema,
 	"v1.approval.answer": ProtocolV1ApprovalAnswerInputResultSchema,

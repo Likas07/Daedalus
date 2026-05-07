@@ -1,5 +1,18 @@
 import { type Static, type TSchema, Type } from "@sinclair/typebox";
 import { RequestIdSchema, ThreadIdSchema, TurnIdSchema, WorkspaceTargetIdSchema } from "../ids";
+import { ProviderSnapshotParamsSchema, ProviderSnapshotResultSchema } from "./provider";
+import { ThreadReplayParamsSchema } from "./replay";
+import { ThreadRollbackParamsSchema, ThreadRollbackResultSchema } from "./rollback";
+import {
+	TextGenerateBranchNameParamsSchema,
+	TextGenerateBranchNameResultSchema,
+	TextGenerateCommitMessageParamsSchema,
+	TextGenerateCommitMessageResultSchema,
+	TextGeneratePrContentParamsSchema,
+	TextGeneratePrContentResultSchema,
+	TextGenerateThreadTitleParamsSchema,
+	TextGenerateThreadTitleResultSchema,
+} from "./text-generation";
 import {
 	ThreadCreateParamsSchema,
 	ThreadCreateResultSchema,
@@ -14,6 +27,7 @@ import {
 	TurnStartResultSchema,
 	TurnStatusSchema,
 } from "./thread";
+import { TimelineWindowResultSchema } from "./timeline";
 import {
 	WorkspaceTargetListParamsSchema,
 	WorkspaceTargetListResultSchema,
@@ -64,25 +78,39 @@ export type ProtocolV1InitializeResult = Static<typeof ProtocolV1InitializeResul
 
 export const ProtocolV1ClientRequestSchema = Type.Union([
 	request("initialize", ProtocolV1InitializeParamsSchema),
+	request("provider.snapshot", ProviderSnapshotParamsSchema),
 	request("workspaceTarget.list", WorkspaceTargetListParamsSchema),
 	request("workspaceTarget.validate", WorkspaceTargetValidateParamsSchema),
 	request("thread.create", ThreadCreateParamsSchema),
 	request("thread.list", ThreadListParamsSchema),
 	request("thread.get", ThreadGetParamsSchema),
+	request("thread.replay", ThreadReplayParamsSchema),
+	request("thread.rollback", ThreadRollbackParamsSchema),
 	request("turn.start", TurnStartParamsSchema),
 	request("turn.cancel", TurnCancelParamsSchema),
+	request("text.threadTitle", TextGenerateThreadTitleParamsSchema),
+	request("text.branchName", TextGenerateBranchNameParamsSchema),
+	request("text.commitMessage", TextGenerateCommitMessageParamsSchema),
+	request("text.prContent", TextGeneratePrContentParamsSchema),
 ]);
 export type ProtocolV1ClientRequest = Static<typeof ProtocolV1ClientRequestSchema>;
 
 export const ProtocolV1ClientRequestResultSchemas = {
 	initialize: ProtocolV1InitializeResultSchema,
+	"provider.snapshot": ProviderSnapshotResultSchema,
 	"workspaceTarget.list": WorkspaceTargetListResultSchema,
 	"workspaceTarget.validate": WorkspaceTargetValidateResultSchema,
 	"thread.create": ThreadCreateResultSchema,
 	"thread.list": ThreadListResultSchema,
 	"thread.get": ThreadGetResultSchema,
+	"thread.replay": TimelineWindowResultSchema,
+	"thread.rollback": ThreadRollbackResultSchema,
 	"turn.start": TurnStartResultSchema,
 	"turn.cancel": TurnCancelResultSchema,
+	"text.threadTitle": TextGenerateThreadTitleResultSchema,
+	"text.branchName": TextGenerateBranchNameResultSchema,
+	"text.commitMessage": TextGenerateCommitMessageResultSchema,
+	"text.prContent": TextGeneratePrContentResultSchema,
 } as const;
 
 export type ProtocolV1ClientRequestResultMap = {

@@ -11,10 +11,26 @@ export interface ThreadV1GetResult {
 	readonly timeline: protocolV1.TimelineWindowResult;
 }
 
+export type ThreadV1CreateResult = protocolV1.ThreadCreateResult;
+export type ThreadV1ListResult = protocolV1.ThreadListResult;
 export type ThreadV1ReplayResult = protocolV1.TimelineWindowResult;
 export type ThreadV1StartTurnResult = protocolV1.TurnStartResult;
 export type ThreadV1CancelTurnResult = protocolV1.TurnCancelResult;
 export type ThreadV1PayloadWindowResult = protocolV1.PayloadWindowResult;
+
+export async function createThread(
+	client: ThreadV1RequestClient,
+	params: protocolV1.ThreadCreateParams,
+): Promise<ThreadV1CreateResult> {
+	return (await sendThreadV1Request(client, "thread.create", params)) as ThreadV1CreateResult;
+}
+
+export async function listThreads(
+	client: ThreadV1RequestClient,
+	params: protocolV1.ThreadListParams,
+): Promise<ThreadV1ListResult> {
+	return (await sendThreadV1Request(client, "thread.list", params)) as ThreadV1ListResult;
+}
 
 export async function getThread(
 	client: ThreadV1RequestClient,

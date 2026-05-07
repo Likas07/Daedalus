@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 
 import { AppServerClient } from "../client";
 import { createInProcessTransport } from "../in-process-transport";
-import { cancelTurn, getPayloadWindow, getThread, replayThread, startTurn } from "./thread-client";
+import { cancelTurn, createThread, getPayloadWindow, getThread, listThreads, replayThread, startTurn } from "./thread-client";
 import { subscribeThread } from "./thread-subscriptions";
 
 type AnyRequest = { readonly id: string | number; readonly method: string; readonly params: unknown };
@@ -14,6 +14,23 @@ test("v1 thread client helpers send Thread-only methods", async () => {
 			const request = message as AnyRequest;
 			seen.push({ method: request.method, params: request.params });
 			const respond = (result: unknown) => send({ kind: "response", id: request.id, ok: true, result });
+			if (request.method === "thread.create") {
+				respond({
+					thread: {
+						threadId: "thread-1",
+						projectId: "project-1",
+						workspaceTargetId: "target-1",
+						title: "Thread",
+						status: "idle",
+						updatedAt: "2026-04-30T00:00:00.000Z",
+					},
+				});
+				return;
+			}
+			if (request.method === "thread.list") {
+				respond({ threads: [] });
+				return;
+			}
 			if (request.method === "thread.get") {
 				respond({
 					thread: {
@@ -82,6 +99,10 @@ test("v1 thread client helpers send Thread-only methods", async () => {
 			respond({});
 		}),
 	});
+	await expect(
+		createThread(client, { projectId: "project-1", workspaceTargetId: "target-1", title: "Thread" }),
+	).resolves.toMatchObject({ thread: { threadId: "thread-1" } });
+	await expect(listThreads(client, { projectId: "project-1" })).resolves.toMatchObject({ threads: [] });
 	await expect(getThread(client, { threadId: "thread-1" })).resolves.toMatchObject({
 		thread: { threadId: "thread-1" },
 	});
@@ -100,6 +121,8 @@ test("v1 thread client helpers send Thread-only methods", async () => {
 		toolCallId: "tool-1",
 	});
 	expect(seen.map((request) => request.method)).toEqual([
+		"thread.create",
+		"thread.list",
 		"thread.get",
 		"thread.replay",
 		"turn.start",

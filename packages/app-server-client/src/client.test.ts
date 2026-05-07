@@ -2,6 +2,9 @@ import { expect, test } from "bun:test";
 import type { AppEvent, ClientRequest } from "@daedalus-pi/app-server-protocol";
 import { AppServerClient, AppServerResponseError } from "./client";
 import { createInProcessTransport } from "./in-process-transport";
+import { getProviderSnapshot } from "./v1/provider-client";
+import { rollbackThread } from "./v1/rollback-client";
+import { generateBranchName, generateCommitMessage, generatePrContent, generateThreadTitle } from "./v1/text-generation-client";
 
 test("correlates requests and rejects failed responses", async () => {
 	const client = new AppServerClient({
@@ -448,3 +451,66 @@ class ReplayServer {
 		this.send?.({ kind: "notification", method: "event/appended", params: { event } });
 	}
 }
+
+test("provides v1 adapter-facing provider rollback and text-generation helpers", async () => {
+	const seenMethods: string[] = [];
+	const client = new AppServerClient({
+		transport: createInProcessTransport((message, send) => {
+			const request = message as ClientRequest;
+			seenMethods.push(request.method);
+			const results: Record<string, unknown> = {
+				"provider.snapshot": {
+					status: "ready",
+					server: { name: "daedalus", version: "0", protocolVersion: "1.0.0" },
+					capabilities: {
+						streamingChat: true,
+						cancellation: true,
+						approvals: true,
+						structuredUserInput: true,
+						toolTimeline: true,
+						payloadWindows: true,
+						diffs: true,
+						checkpoints: true,
+						rollback: true,
+						resume: true,
+						modelSwitching: true,
+						textGeneration: true,
+						terminals: true,
+					},
+					models: [],
+					auth: [],
+					commands: [],
+				},
+				"thread.rollback": {
+					threadId: "thread-1",
+					restoredCheckpointId: "checkpoint-1",
+					status: "completed",
+				},
+				"text.threadTitle": { title: "Implement v1 contract" },
+				"text.branchName": { branch: "implement-v1-contract" },
+				"text.commitMessage": { subject: "feat: add v1 contract" },
+				"text.prContent": { title: "Add v1 contract", body: "Adds adapter helpers." },
+			};
+			send({ kind: "response", id: request.id, ok: true, result: results[request.method] ?? {} });
+		}),
+	});
+
+	await expect(getProviderSnapshot(client)).resolves.toMatchObject({ status: "ready" });
+	await expect(rollbackThread(client, { threadId: "thread-1", numTurns: 1, workspaceTargetId: "target-1" })).resolves.toMatchObject({
+		status: "completed",
+	});
+	await expect(generateThreadTitle(client, { message: "hello" })).resolves.toMatchObject({ title: "Implement v1 contract" });
+	await expect(generateBranchName(client, { message: "hello" })).resolves.toMatchObject({ branch: "implement-v1-contract" });
+	await expect(generateCommitMessage(client, { diff: "diff" })).resolves.toMatchObject({ subject: "feat: add v1 contract" });
+	await expect(generatePrContent(client, { diff: "diff" })).resolves.toMatchObject({ title: "Add v1 contract" });
+	expect(seenMethods).toEqual([
+		"provider.snapshot",
+		"thread.rollback",
+		"text.threadTitle",
+		"text.branchName",
+		"text.commitMessage",
+		"text.prContent",
+	]);
+	expect(JSON.stringify(seenMethods)).not.toContain("sessionId");
+	await client.close();
+});

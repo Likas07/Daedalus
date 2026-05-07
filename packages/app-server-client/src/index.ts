@@ -10,7 +10,10 @@ export * from "./sessions";
 export * from "./subscriptions";
 export * from "./v1/approval-client";
 export * from "./v1/diff-client";
+export * from "./v1/provider-client";
+export * from "./v1/rollback-client";
 export * from "./v1/terminal-client";
+export * from "./v1/text-generation-client";
 export * from "./v1/thread-client";
 export {
 	type SubscribeThreadOptions,
