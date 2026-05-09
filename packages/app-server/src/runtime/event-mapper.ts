@@ -22,7 +22,7 @@ export function mapRuntimeEvent(event: RuntimeAgentEvent, options: MapRuntimeEve
 		type: `agent/${event.type}`,
 		ts: (options.now?.() ?? new Date()).toISOString(),
 		sessionId: options.sessionId,
-		payload: event as unknown,
+		payload: { ...event, ...(options.turnId ? { turnId: options.turnId } : {}) } as unknown,
 	} satisfies AppEvent;
 
 	return {

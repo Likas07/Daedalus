@@ -220,4 +220,74 @@ describe("thread v1 projection", () => {
 			},
 		});
 	});
+
+	test("thread timeline notifications include assistant deltas", () => {
+		const notification = notificationForThreadV1StoredEvent({
+			seq: 11,
+			streamId: "thread-1",
+			type: "agent/message_update",
+			payload: {
+				id: "event-11",
+				type: "agent/message_update",
+				ts: "2026-04-30T00:00:03.000Z",
+				sessionId: "thread-1",
+				payload: { turnId: "turn-live", messageId: "message-1", delta: "Hello" },
+			},
+			createdAt: "2026-04-30T00:00:03.000Z",
+		});
+
+		expect(notification).toEqual({
+			kind: "notification",
+			method: "thread.timeline.delta",
+			params: {
+				threadId: "thread-1",
+				turnId: "turn-live",
+				entryId: "message:message-1",
+				sequence: 11,
+				kind: "assistant-message",
+				delta: "Hello",
+			},
+		});
+	});
+
+	test("projects tool lifecycle command output and file changes into timeline entries", () => {
+		const database = seededDatabase();
+		try {
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "agent/tool_execution_start",
+				payload: { sessionId: "thread-1", turnId: "turn-1", toolCallId: "tool-1", toolName: "shell" },
+			});
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "agent/tool_execution_update",
+				payload: { sessionId: "thread-1", turnId: "turn-1", toolCallId: "tool-1", toolName: "shell", delta: "line" },
+			});
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "agent/tool_execution_end",
+				payload: { sessionId: "thread-1", turnId: "turn-1", toolCallId: "tool-1", toolName: "shell", output: "done" },
+			});
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "agent/command_output",
+				payload: { sessionId: "thread-1", turnId: "turn-1", commandId: "cmd-1", output: "stdout" },
+			});
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "agent/file_change",
+				payload: { sessionId: "thread-1", turnId: "turn-1", filePath: "src/app.ts", operation: "modified" },
+			});
+
+			const entries = replayThreadV1({ database, params: { threadId: "thread-1", limit: 100 } }).entries;
+			expect(entries).toContainEqual(expect.objectContaining({ entryId: "tool:tool-1", kind: "tool", status: "running" }));
+			expect(entries).toContainEqual(
+				expect.objectContaining({ entryId: "tool:tool-1:end", kind: "tool", status: "completed" }),
+			);
+			expect(entries).toContainEqual(expect.objectContaining({ entryId: "command:cmd-1:output:11", kind: "terminal-output" }));
+			expect(entries).toContainEqual(expect.objectContaining({ entryId: "file-change:12", kind: "activity" }));
+		} finally {
+			database.close();
+		}
+	});
 });

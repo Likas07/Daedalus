@@ -23,6 +23,10 @@ export class ApprovalService {
 		string,
 		{ resolve: (decision: ApprovalDecision) => void; reject: (error: Error) => void; timer?: Timer }
 	>();
+	private readonly idempotentV1Results = new Map<
+		string,
+		protocolV1.ApprovalDecisionResult | protocolV1.ApprovalAnswerInputResult
+	>();
 
 	constructor(
 		private readonly database: AppServerDatabase,
@@ -44,6 +48,9 @@ export class ApprovalService {
 	}
 
 	decideV1(params: protocolV1.ApprovalDecisionParams): protocolV1.ApprovalDecisionResult {
+		const idempotencyKey = this.v1IdempotencyKey("decide", params);
+		const existing = idempotencyKey ? this.idempotentV1Results.get(idempotencyKey) : undefined;
+		if (existing) return existing as protocolV1.ApprovalDecisionResult;
 		const row = this.readApproval(params.approvalId);
 		const failure = this.validateV1Decision(row, params);
 		if (failure) return failure;
@@ -52,7 +59,7 @@ export class ApprovalService {
 		const request = row
 			? this.toV1Request({ ...row, status: params.decision, updatedAt: decidedAt }, params)
 			: undefined;
-		return {
+		const result = {
 			ok: true,
 			request: request!,
 			decision: {
@@ -64,17 +71,22 @@ export class ApprovalService {
 				message: params.message,
 				decidedAt,
 			},
-		};
+		} satisfies protocolV1.ApprovalDecisionResult;
+		if (idempotencyKey) this.idempotentV1Results.set(idempotencyKey, result);
+		return result;
 	}
 
 	answerInputV1(params: protocolV1.ApprovalAnswerInputParams): protocolV1.ApprovalAnswerInputResult {
+		const idempotencyKey = this.v1IdempotencyKey("answer", params);
+		const existing = idempotencyKey ? this.idempotentV1Results.get(idempotencyKey) : undefined;
+		if (existing) return existing as protocolV1.ApprovalAnswerInputResult;
 		const row = this.readApproval(params.approvalId);
 		const failure = this.validateV1Decision(row, { ...params, decision: "approved" });
 		if (failure) return failure;
 		const answeredAt = new Date().toISOString();
 		this.resolve({ approvalId: params.approvalId, decision: "approved", message: params.answer });
 		const request = row ? this.toV1Request({ ...row, status: "approved", updatedAt: answeredAt }, params) : undefined;
-		return {
+		const result = {
 			ok: true,
 			request: request!,
 			answer: {
@@ -85,7 +97,9 @@ export class ApprovalService {
 				answer: params.answer,
 				answeredAt,
 			},
-		};
+		} satisfies protocolV1.ApprovalAnswerInputResult;
+		if (idempotencyKey) this.idempotentV1Results.set(idempotencyKey, result);
+		return result;
 	}
 
 	request(input: ApprovalRequestInput): { approvalId: string; autoApproved: boolean } {
@@ -244,6 +258,13 @@ export class ApprovalService {
 			createdAt: row.created_at,
 			updatedAt: row.updated_at,
 		};
+	}
+
+	private v1IdempotencyKey(
+		operation: "decide" | "answer",
+		params: { readonly approvalId: string; readonly threadId: string; readonly idempotencyKey?: string },
+	): string | undefined {
+		return params.idempotencyKey ? `${operation}:${params.threadId}:${params.approvalId}:${params.idempotencyKey}` : undefined;
 	}
 
 	private toV1Request(

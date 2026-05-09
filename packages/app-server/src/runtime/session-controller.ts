@@ -361,7 +361,19 @@ export class SessionController {
 			});
 			void this.emit(mapped.event);
 			if (mapped.notification) void this.emit(mapped.notification);
-			if ((event as RuntimeAgentEvent).type === "agent_end") record.activeTurnId = undefined;
+			if ((event as RuntimeAgentEvent).type === "agent_end") {
+				const completedTurnId = record.activeTurnId;
+				if (completedTurnId) {
+					void this.emit({
+						id: this.nextEventId(),
+						type: "turn/completed",
+						ts: this.nowIso(),
+						sessionId,
+						payload: { sessionId, turnId: completedTurnId },
+					});
+				}
+				record.activeTurnId = undefined;
+			}
 		});
 		this.sessions.set(sessionId, record);
 	}

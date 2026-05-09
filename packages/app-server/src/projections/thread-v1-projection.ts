@@ -175,6 +175,33 @@ export function projectStoredEventToTimelineEntry(
 				content: text(payload, "prompt", "content", "message") ?? "",
 			};
 		}
+		case "agent/message_start": {
+			const message = asRecord(payload.message);
+			const turnId = text(payload, "turnId", "turn_id");
+			const messageId = text(payload, "messageId", "message_id") ?? text(message, "id", "messageId", "message_id") ?? String(event.seq);
+			return {
+				...base,
+				entryId: `message:${messageId}`,
+				kind: "activity",
+				turnId,
+				status: "running",
+				title: "Assistant message started",
+			};
+		}
+		case "agent/message_update": {
+			const message = asRecord(payload.message);
+			const turnId = text(payload, "turnId", "turn_id");
+			const messageId = text(payload, "messageId", "message_id") ?? text(message, "id", "messageId", "message_id") ?? String(event.seq);
+			return {
+				...base,
+				entryId: `message:${messageId}:delta:${event.seq}`,
+				kind: "assistant-message",
+				role: "assistant",
+				turnId,
+				messageId,
+				content: text(payload, "delta", "content", "text") ?? text(message, "delta", "content", "text") ?? "",
+			};
+		}
 		case "agent/message_end": {
 			const message = asRecord(payload.message);
 			const role = text(message, "role") ?? text(payload, "role") ?? "assistant";
@@ -198,6 +225,95 @@ export function projectStoredEventToTimelineEntry(
 				turnId,
 				messageId: text(message, "id", "messageId", "message_id") ?? String(event.seq),
 				content: content(message) || content(payload),
+			};
+		}
+		case "agent/tool_execution_start": {
+			const turnId = text(payload, "turnId", "turn_id");
+			const toolCallId = text(payload, "toolCallId", "tool_call_id", "id") ?? String(event.seq);
+			return {
+				...base,
+				entryId: `tool:${toolCallId}`,
+				kind: "tool",
+				turnId,
+				toolCallId,
+				toolName: text(payload, "toolName", "tool_name", "name") ?? "tool",
+				status: "running",
+				summary: text(payload, "summary", "input", "command"),
+			};
+		}
+		case "agent/tool_execution_update": {
+			const turnId = text(payload, "turnId", "turn_id");
+			const toolCallId = text(payload, "toolCallId", "tool_call_id", "id") ?? String(event.seq);
+			const output = text(payload, "delta", "content", "text", "summary") ?? "";
+			return {
+				...base,
+				entryId: `tool:${toolCallId}:update:${event.seq}`,
+				kind: "tool",
+				turnId,
+				toolCallId,
+				toolName: text(payload, "toolName", "tool_name", "name") ?? "tool",
+				status: "running",
+				summary: output.slice(0, 120),
+				payloadRef: {
+					kind: "tool-output",
+					toolCallId,
+					cursor: { seq: event.seq },
+					byteLength: byteLength(output),
+				},
+			};
+		}
+		case "agent/tool_execution_end": {
+			const turnId = text(payload, "turnId", "turn_id");
+			const toolCallId = text(payload, "toolCallId", "tool_call_id", "id") ?? String(event.seq);
+			const output = text(payload, "output", "content", "text", "summary") ?? "";
+			return {
+				...base,
+				entryId: `tool:${toolCallId}:end`,
+				kind: "tool",
+				turnId,
+				toolCallId,
+				toolName: text(payload, "toolName", "tool_name", "name") ?? "tool",
+				status: mapToolStatus(text(payload, "status")),
+				summary: output.slice(0, 120) || text(payload, "summary"),
+				...(output
+					? {
+							payloadRef: {
+								kind: "tool-output" as const,
+								toolCallId,
+								cursor: { seq: event.seq },
+								byteLength: byteLength(output),
+							},
+						}
+					: {}),
+			};
+		}
+		case "agent/command_output": {
+			const turnId = text(payload, "turnId", "turn_id");
+			const terminalId = text(payload, "terminalId", "terminal_id", "commandId", "command_id", "id") ?? String(event.seq);
+			const data = text(payload, "data", "text", "output", "chunk") ?? "";
+			return {
+				...base,
+				entryId: `command:${terminalId}:output:${event.seq}`,
+				kind: "terminal-output",
+				turnId,
+				summary: data.slice(0, 120),
+				payloadRef: {
+					kind: "terminal-output",
+					terminalId,
+					cursor: { seq: event.seq },
+					byteLength: byteLength(data),
+				},
+			};
+		}
+		case "agent/file_change": {
+			return {
+				...base,
+				entryId: `file-change:${event.seq}`,
+				kind: "activity",
+				turnId: text(payload, "turnId", "turn_id"),
+				status: "completed",
+				title: text(payload, "path", "filePath", "file_path") ?? "File changed",
+				description: text(payload, "summary", "operation"),
 			};
 		}
 		case "turn/completed":
@@ -478,6 +594,12 @@ function mapApprovalStatus(status: string | undefined): protocolV1.ApprovalStatu
 	if (status === "denied" || status === "rejected") return "denied";
 	if (status === "cancelled" || status === "canceled") return "cancelled";
 	return "pending";
+}
+
+function mapToolStatus(status: string | undefined): protocolV1.ToolStatus {
+	if (status === "failed" || status === "error") return "failed";
+	if (status === "cancelled" || status === "canceled") return "cancelled";
+	return "completed";
 }
 
 function dedupeTimelineEntries(entries: readonly protocolV1.TimelineEntry[]): protocolV1.TimelineEntry[] {
