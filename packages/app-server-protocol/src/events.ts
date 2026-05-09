@@ -5,6 +5,7 @@ import {
 	DiffSummaryNotificationSchema as ProtocolV1DiffSummaryNotificationSchema,
 	TerminalContextNotificationSchema as ProtocolV1TerminalContextNotificationSchema,
 	TerminalOutputNotificationSchema as ProtocolV1TerminalOutputNotificationSchema,
+	TimelineDeltaNotificationSchema as ProtocolV1TimelineDeltaNotificationSchema,
 	TimelineEntryNotificationSchema as ProtocolV1TimelineEntryNotificationSchema,
 } from "./v1";
 import { WorkflowNeedsAttentionSchema, WorkflowRunsInTargetSchema } from "./workflow";
@@ -32,6 +33,7 @@ export type WorkflowNeedsAttentionEventPayload = Static<typeof WorkflowNeedsAtte
 
 export const ProtocolV1Phase3AppEventPayloadSchema = Type.Union([
 	StrictObject({ kind: Type.Literal("timeline.entry"), data: ProtocolV1TimelineEntryNotificationSchema }),
+	StrictObject({ kind: Type.Literal("timeline.delta"), data: ProtocolV1TimelineDeltaNotificationSchema }),
 	StrictObject({ kind: Type.Literal("approval.changed"), data: ProtocolV1ApprovalRequestNotificationSchema }),
 	StrictObject({ kind: Type.Literal("diff.changed"), data: ProtocolV1DiffSummaryNotificationSchema }),
 	StrictObject({ kind: Type.Literal("terminal.changed"), data: ProtocolV1TerminalContextNotificationSchema }),

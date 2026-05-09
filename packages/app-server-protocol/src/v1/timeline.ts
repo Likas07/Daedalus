@@ -250,3 +250,24 @@ export const TimelineEntryNotificationSchema = StrictObject({
 	nextCursor: Type.Optional(ReplayCursorSchema),
 });
 export type TimelineEntryNotification = Static<typeof TimelineEntryNotificationSchema>;
+
+export const TimelineDeltaKindSchema = Type.Union([
+	Type.Literal("assistant-message"),
+	Type.Literal("reasoning"),
+	Type.Literal("plan"),
+	Type.Literal("tool-output"),
+	Type.Literal("command-output"),
+	Type.Literal("file-change"),
+]);
+export type TimelineDeltaKind = Static<typeof TimelineDeltaKindSchema>;
+
+export const TimelineDeltaNotificationSchema = StrictObject({
+	threadId: ThreadIdSchema,
+	turnId: TurnIdSchema,
+	entryId: TimelineEntryIdSchema,
+	sequence: Type.Integer({ minimum: 0 }),
+	kind: TimelineDeltaKindSchema,
+	delta: Type.String(),
+	payloadRef: Type.Optional(PayloadReferenceSchema),
+});
+export type TimelineDeltaNotification = Static<typeof TimelineDeltaNotificationSchema>;

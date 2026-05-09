@@ -6,6 +6,7 @@ import {
 	ProtocolV1ServerNotificationSchema,
 	SafetySignalSchema,
 	ThreadCreateParamsSchema,
+	ThreadResumeParamsSchema,
 	ThreadSchema,
 	TurnSchema,
 	TurnStartParamsSchema,
@@ -144,6 +145,13 @@ describe("Protocol v1 clean break", () => {
 				sessionId: "session-1",
 			}),
 		).toBe(false);
+		expect(
+			Value.Check(ThreadResumeParamsSchema, {
+				threadId: "thread-1",
+				prompt: "Continue",
+				sessionId: "session-1",
+			}),
+		).toBe(false);
 	});
 
 	test("v1 notification envelope is thread-only", () => {
@@ -172,6 +180,7 @@ test("v1 adapter-facing methods have params and result schemas", () => {
 		"workspaceTarget.validate",
 		"thread.create",
 		"thread.list",
+		"thread.resume",
 		"thread.get",
 		"thread.replay",
 		"thread.rollback",
