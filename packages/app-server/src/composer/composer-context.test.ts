@@ -107,6 +107,7 @@ describe("GUI composer context services", () => {
 				draftState: { prompt: "use this" },
 			},
 		});
+		for (let attempt = 0; attempt < 20 && !runtime?.prompts[0]; attempt++) await Bun.sleep(5);
 		expect(runtime?.prompts[0]).toContain("<gui-context>");
 		expect(runtime?.prompts[0]).toContain("projectId=project-1");
 		expect(runtime?.prompts[0]).toContain("worktreeId=worktree-1");

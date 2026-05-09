@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { openAppServerDatabase } from "../persistence/database";
-import { appendEvent } from "../persistence/event-store";
+import { appendEvent, type EventPayload } from "../persistence/event-store";
 import { runMigrations } from "../persistence/migrations";
 import { projectRuntimeEvents } from "../persistence/projector";
 import { AppRouter } from "./router";
@@ -127,4 +130,169 @@ describe("thread v1 routes", () => {
 			database.close();
 		}
 	});
+
+	test("payload.window resolves durable terminal, diff, tool, and audit payload refs", async () => {
+		const database = databaseWithThread();
+		try {
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "terminal/output",
+				payload: { sessionId: "thread-1", terminalId: "terminal-1", data: "terminal output" },
+			});
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "diff/updated",
+				payload: { sessionId: "thread-1", diffId: "diff-1", filePath: "src/index.ts", hunk: "@@ diff hunk" },
+			});
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "agent/tool_execution_update",
+				payload: { sessionId: "thread-1", turnId: "turn-1", toolCallId: "tool-1", delta: "tool output" },
+			});
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "audit/detail",
+				payload: { sessionId: "thread-1", auditId: "audit-1", action: "checked" },
+			});
+			const context = {
+				database,
+				authority: {
+					startTurn: async () => ({ turnId: "unused" }),
+					cancelTurn: async () => {},
+				},
+			};
+
+			const terminal = await handleThreadV1Request(context, {
+				method: "payload.window",
+				params: { threadId: "thread-1", terminalId: "terminal-1", limit: 10 },
+			});
+			expect(terminal.result).toMatchObject({ chunks: [{ text: "terminal output" }], hasMoreAfter: false });
+
+			const diff = await handleThreadV1Request(context, {
+				method: "payload.window",
+				params: { threadId: "thread-1", diffId: "diff-1", filePath: "src/index.ts", limit: 10 },
+			});
+			expect(diff.result).toMatchObject({ chunks: [{ filePath: "src/index.ts", hunk: "@@ diff hunk" }] });
+
+			const tool = await handleThreadV1Request(context, {
+				method: "payload.window",
+				params: { threadId: "thread-1", toolCallId: "tool-1", limit: 10 },
+			});
+			expect(tool.result).toMatchObject({ chunks: [{ text: "tool output" }] });
+
+			const audit = await handleThreadV1Request(context, {
+				method: "payload.window",
+				params: { threadId: "thread-1", auditId: "audit-1", limit: 10 },
+			});
+			expect(audit.result).toMatchObject({ chunks: [{ data: expect.objectContaining({ action: "checked" }) }] });
+
+			await expect(
+				handleThreadV1Request(context, {
+					method: "payload.window",
+					params: { threadId: "thread-1", toolCallId: "missing-tool", limit: 10 },
+				}),
+			).rejects.toMatchObject({ code: "payload_not_found" });
+		} finally {
+			database.close();
+		}
+	});
+
+	test("router handles workspaceTarget list/validate and thread create/list", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "daedalus-v1-thread-workspace-"));
+		await git(dir, ["init"]);
+		const database = openAppServerDatabase(":memory:");
+		runMigrations(database);
+		const projectId = "project-1";
+		appendEvent(database, {
+			streamId: `project:${projectId}`,
+			type: "project/registered",
+			payload: { projectId, path: dir, name: "Project" },
+		});
+		projectRuntimeEvents(database);
+		try {
+			const router = new AppRouter({
+				database,
+				publish: () => {},
+				controller: {
+					readState: () => ({ sessions: [] }),
+					startSession: async (input: {
+						projectId: string;
+						cwd: string;
+						prompt?: string;
+						runsIn?: EventPayload;
+					}) => {
+						appendEvent(database, {
+							streamId: "thread-new",
+							type: "session/started",
+							payload: {
+								sessionId: "thread-new",
+								projectId: input.projectId,
+								title: "Thread",
+								...(input.runsIn ? { runsIn: input.runsIn } : {}),
+							} satisfies EventPayload,
+						});
+						if (input.prompt) {
+							appendEvent(database, {
+								streamId: "thread-new",
+								type: "turn/started",
+								payload: { sessionId: "thread-new", turnId: "turn-new", prompt: input.prompt },
+							});
+						}
+						return { sessionId: "thread-new" };
+					},
+					resumeSession: async () => ({ sessionId: "thread-new", status: "active" }),
+					startTurn: async () => ({ turnId: "turn-unused" }),
+					interruptTurn: async () => {},
+				} as never,
+			});
+			const targets = (await router.handle({
+				kind: "request",
+				id: "targets",
+				method: "workspaceTarget.list",
+				params: { projectId },
+			} as never)) as { targets: Array<{ id: string; kind: string; projectId: string }> };
+			expect(targets.targets).toContainEqual(expect.objectContaining({ id: `base:${projectId}`, kind: "base-checkout", projectId }));
+			const validated = (await router.handle({
+				kind: "request",
+				id: "validate",
+				method: "workspaceTarget.validate",
+				params: { workspaceTargetId: `base:${projectId}` },
+			} as never)) as { workspaceTarget: { id: string } };
+			expect(validated.workspaceTarget.id).toBe(`base:${projectId}`);
+			const created = (await router.handle({
+				kind: "request",
+				id: "create",
+				method: "thread.create",
+				params: { projectId, workspaceTargetId: `base:${projectId}`, prompt: "Hello" },
+			} as never)) as { thread: { threadId: string; workspaceTargetId: string }; turn?: { turnId: string } };
+			expect(created.thread).toMatchObject({ threadId: "thread-new", workspaceTargetId: `base:${projectId}` });
+			expect(created.turn).toMatchObject({ turnId: "turn-new" });
+			const listed = (await router.handle({
+				kind: "request",
+				id: "list",
+				method: "thread.list",
+				params: { projectId, workspaceTargetId: `base:${projectId}` },
+			} as never)) as { threads: Array<{ threadId: string }> };
+			expect(listed.threads.map((thread) => thread.threadId)).toContain("thread-new");
+			const resumed = (await router.handle({
+				kind: "request",
+				id: "resume",
+				method: "thread.resume",
+				params: { threadId: "thread-new" },
+			} as never)) as { thread: { threadId: string } };
+			expect(resumed.thread.threadId).toBe("thread-new");
+		} finally {
+			database.close();
+		}
+	});
 });
+
+async function git(cwd: string, args: readonly string[]): Promise<void> {
+	const proc = Bun.spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+	const [stdout, stderr, exitCode] = await Promise.all([
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+		proc.exited,
+	]);
+	if (exitCode !== 0) throw new Error(`git ${args.join(" ")} failed: ${stderr.trim() || stdout.trim()}`);
+}
