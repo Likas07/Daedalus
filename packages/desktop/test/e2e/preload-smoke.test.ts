@@ -7,9 +7,9 @@ async function electronCommand(): Promise<string[]> {
 	const electron = (await import("electron")).default;
 	const electronPath = typeof electron === "string" ? electron : "electron";
 	if (process.platform === "linux" && !process.env.DISPLAY && existsSync("/usr/bin/xvfb-run")) {
-		return ["/usr/bin/xvfb-run", "-a", electronPath, "--no-sandbox", "--disable-dev-shm-usage"];
+		return ["/usr/bin/xvfb-run", "-a", electronPath];
 	}
-	return [electronPath, "--no-sandbox", "--disable-dev-shm-usage"];
+	return [electronPath];
 }
 
 describe("Electron preload bridge smoke", () => {
@@ -20,10 +20,11 @@ describe("Electron preload bridge smoke", () => {
 		const preload = resolve(desktopRoot, ".daedalus/desktop-dev/preload.cjs");
 		const runner = resolve(import.meta.dir, "preload-smoke-runner.mjs");
 		const command = await electronCommand();
+		const { ELECTRON_RUN_AS_NODE: _electronRunAsNode, ...env } = process.env;
 		const proc = Bun.spawn([...command, runner, preload], {
 			cwd: desktopRoot,
 			env: {
-				...process.env,
+				...env,
 				ELECTRON_DISABLE_SECURITY_WARNINGS: "1",
 			},
 			stdout: "pipe",
