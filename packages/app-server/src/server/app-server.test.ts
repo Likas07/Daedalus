@@ -210,9 +210,10 @@ test("app router returns canonical required read-model route shapes", async () =
 			kind: "request",
 			id: "project-open",
 			method: "project/open",
-			params: { path: dir },
+			params: { path: dir, projectId: "project-from-gui" },
 		});
 		expectResultShape("project/open", project);
+		expect(project).toEqual({ projectId: "project-from-gui" });
 		expectResultShape(
 			"project/list",
 			await router.handle({ kind: "request", id: "project-list", method: "project/list", params: {} }),

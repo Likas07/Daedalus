@@ -15,6 +15,7 @@ import { SqliteSessionManager } from "../runtime/sqlite-session-manager";
 import { SqliteSessionStore } from "../sessions/sqlite-session-store";
 import type { PtyAdapter } from "../terminal/pty-adapter";
 import { authenticateRequest, createCapabilityToken } from "./auth";
+import type { ProtocolSession } from "./protocol-session";
 import { AppRouter, type OutboundMessage } from "./router";
 import { serveStaticGui } from "./static-gui";
 import { createWebSocketHandlers, type WebSocketClient } from "./websocket";
@@ -42,14 +43,19 @@ export interface AppServerInstance {
 	stop(): Promise<void>;
 }
 
-export async function startAppServer(options: CreateAppServerOptions): Promise<AppServerInstance> {
+export interface AppServerCore {
+	readonly database: ReturnType<typeof openAppServerDatabase>;
+	readonly router: AppRouter;
+	readonly clients: Set<WebSocketClient | ProtocolSession>;
+	close(): Promise<void>;
+}
+
+export async function createAppServerCore(options: CreateAppServerOptions): Promise<AppServerCore> {
 	mkdirSync(dirname(options.databasePath), { recursive: true });
 	const database = openAppServerDatabase(options.databasePath);
 	runMigrations(database);
-	const host = options.host ?? "127.0.0.1";
-	const token = options.token ?? createCapabilityToken();
 	const agentDir = options.agentDir ?? getAgentDir();
-	const clients = new Set<WebSocketClient>();
+	const clients = new Set<WebSocketClient | ProtocolSession>();
 	const publish = (message: OutboundMessage) => {
 		for (const client of clients) client.send(message);
 	};
@@ -82,6 +88,22 @@ export async function startAppServer(options: CreateAppServerOptions): Promise<A
 		extensionUiRouter,
 		agentDir,
 	});
+	return {
+		database,
+		router,
+		clients,
+		close: async () => {
+			database.close();
+		},
+	};
+}
+
+export async function startAppServer(options: CreateAppServerOptions): Promise<AppServerInstance> {
+	const host = options.host ?? "127.0.0.1";
+	const token = options.token ?? createCapabilityToken();
+	const core = await createAppServerCore(options);
+	const router = core.router;
+	const clients = core.clients as Set<WebSocketClient>;
 	const websocket = createWebSocketHandlers(router, clients);
 	const server = Bun.serve({
 		hostname: host,
@@ -117,12 +139,12 @@ export async function startAppServer(options: CreateAppServerOptions): Promise<A
 		token,
 		httpUrl,
 		wsUrl: `ws://${host}:${server.port}/ws`,
-		stop: async () => {
-			server.stop(true);
-			database.close();
-		},
-	};
-}
+			stop: async () => {
+				server.stop(true);
+				await core.close();
+			},
+		};
+	}
 
 const _fakeRuntimeFactory: RuntimeFactory = async (input) => {
 	const listeners = new Set<(event: unknown) => void>();
