@@ -34,7 +34,7 @@ describe("request serialization", () => {
 		expect(events).toEqual(["first:start", "first:end", "second:start"]);
 	});
 
-	test("allows shared read requests to run concurrently", async () => {
+	test("allows read-only replay requests to run concurrently", async () => {
 		const serializer = new RequestSerializer();
 		const events: string[] = [];
 		let releaseFirst!: () => void;
@@ -52,7 +52,7 @@ describe("request serialization", () => {
 			},
 		);
 		const second = serializer.run(
-			{ method: "payload.window", params: { threadId: "thread-1", terminalId: "terminal-1", limit: 1 } } as never,
+			{ method: "thread.replay", params: { threadId: "thread-1", limit: 10 } } as never,
 			async () => {
 				events.push("second:start");
 				return "second";
@@ -70,11 +70,15 @@ describe("request serialization", () => {
 			kind: "exclusive",
 			key: "global",
 		});
-		expect(serializationScopeForRequest({ method: "worktree/create", params: { projectId: "project-1" } } as never)).toEqual({
+		expect(
+			serializationScopeForRequest({ method: "worktree/create", params: { projectId: "project-1" } } as never),
+		).toEqual({
 			kind: "exclusive",
 			key: "project:project-1",
 		});
-		expect(serializationScopeForRequest({ method: "v1.approval.decide", params: { threadId: "thread-1" } } as never)).toEqual({
+		expect(
+			serializationScopeForRequest({ method: "v1.approval.decide", params: { threadId: "thread-1" } } as never),
+		).toEqual({
 			kind: "exclusive",
 			key: "thread:thread-1",
 		});
