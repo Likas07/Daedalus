@@ -6,6 +6,25 @@ function client() {
 }
 
 describe("daedalus command adapter", () => {
+	test("maps project creation to project/open with the GUI-generated project id", async () => {
+		const c = client();
+		const dispatch = createDaedalusCommandAdapter(c as never);
+		const command = {
+			type: "project.create",
+			projectId: "project-client",
+			title: "Daedalus",
+			workspaceRoot: "/home/likas/Research/Daedalus",
+		};
+
+		await dispatch(command as never);
+
+		expect(c.request).toHaveBeenCalledWith("project/open", {
+			projectId: "project-client",
+			path: "/home/likas/Research/Daedalus",
+			name: "Daedalus",
+		});
+	});
+
 	test("maps draft thread creation to session/start with model and draft context", async () => {
 		const c = client();
 		const dispatch = createDaedalusCommandAdapter(c as never);

@@ -329,7 +329,10 @@ export const ProjectSummarySchema = StrictObject({
 });
 export type ProjectSummary = Static<typeof ProjectSummarySchema>;
 
-export const ProjectOpenParamsSchema = StrictObject({ path: Type.String({ minLength: 1 }) });
+export const ProjectOpenParamsSchema = StrictObject({
+	path: Type.String({ minLength: 1 }),
+	projectId: Type.Optional(ProjectIdSchema),
+});
 export type ProjectOpenParams = Static<typeof ProjectOpenParamsSchema>;
 
 export const ProjectOpenResultSchema = StrictObject({ projectId: ProjectIdSchema });

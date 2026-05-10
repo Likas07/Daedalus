@@ -134,6 +134,14 @@ export function createDaedalusCommandAdapter(client: AppServerClient, options: D
 				if (!response.ok) throw new Error(response.disabledReason);
 				return { sequence: 0 };
 			}
+			case "project.create": {
+				await client.request("project/open", {
+					projectId: input.projectId,
+					path: input.workspaceRoot,
+					name: input.title,
+				} as never);
+				return { sequence: 0 };
+			}
 			default:
 				return client.request("session/start", command as never) as never;
 		}

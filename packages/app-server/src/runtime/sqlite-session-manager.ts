@@ -9,6 +9,7 @@ import {
 	type SessionStoreSession,
 	serializeSessionJsonl,
 	type ThinkingLevelChangeEntry,
+	type WorkspaceSessionIdentity,
 } from "@daedalus-pi/coding-agent";
 
 type AgentMessage = SessionMessageEntry["message"];
@@ -129,6 +130,18 @@ export class SqliteSessionManager {
 
 	getHeader(): SessionHeader {
 		return this.session.header;
+	}
+
+	getWorkspaceIdentity(): WorkspaceSessionIdentity | undefined {
+		return this.session.header.workspaceIdentity;
+	}
+
+	setWorkspaceIdentity(identity: WorkspaceSessionIdentity | undefined): void {
+		if (identity) this.session.header.workspaceIdentity = identity;
+		else delete this.session.header.workspaceIdentity;
+		this.options.store.database
+			.query("UPDATE gui_sessions SET header_json = ? WHERE id = ?")
+			.run(JSON.stringify(this.session.header), this.getSessionId());
 	}
 
 	getEntries(): SessionEntry[] {
