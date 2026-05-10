@@ -83,7 +83,7 @@ export class ApprovalService {
 		const row = this.readApproval(params.approvalId);
 		const failure = this.validateV1Decision(row, { ...params, decision: "approved" });
 		if (failure) return failure;
-		const answer = params.answer ?? JSON.stringify(params.answers ?? {});
+		const answer = params.answers ? JSON.stringify(params.answers) : (params.answer ?? "");
 		const answeredAt = new Date().toISOString();
 		this.resolve({ approvalId: params.approvalId, decision: "approved", message: answer });
 		const request = row ? this.toV1Request({ ...row, status: "approved", updatedAt: answeredAt }, params) : undefined;
@@ -96,6 +96,7 @@ export class ApprovalService {
 				turnId: params.turnId,
 				workspaceTargetId: params.workspaceTargetId,
 				answer,
+				...(params.answers ? { answers: params.answers } : {}),
 				answeredAt,
 			},
 		} satisfies protocolV1.ApprovalAnswerInputResult;
@@ -203,6 +204,17 @@ export class ApprovalService {
 			return this.failure(params, "wrong-thread", `Approval ${params.approvalId} belongs to another thread.`, row, {
 				requestThreadId,
 			});
+		const requestTurnId = stringValue(request.turnId);
+		if (requestTurnId && requestTurnId !== params.turnId)
+			return this.failure(params, "wrong-turn", `Approval ${params.approvalId} belongs to another turn.`, row);
+		const requestWorkspaceTargetId = stringValue(request.workspaceTargetId);
+		if (requestWorkspaceTargetId && requestWorkspaceTargetId !== params.workspaceTargetId)
+			return this.failure(
+				params,
+				"wrong-workspace-target",
+				`Approval ${params.approvalId} belongs to another workspace target.`,
+				row,
+			);
 		const status = mapApprovalStatus(row.status);
 		if (status === "expired")
 			return this.failure(params, "expired", `Approval ${params.approvalId} has expired.`, row);

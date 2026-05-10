@@ -197,6 +197,65 @@ describe("thread v1 routes", () => {
 		}
 	});
 
+	test("router sends structured v1 approval answers without flattening metadata", async () => {
+		const database = databaseWithThread();
+		try {
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "approval/requested",
+				payload: {
+					approvalId: "approval-input-1",
+					sessionId: "thread-1",
+					kind: "answer-input",
+					turnId: "turn-1",
+					workspaceTargetId: "target-1",
+					title: "Need input",
+					request: {
+						kind: "answer-input",
+						turnId: "turn-1",
+						workspaceTargetId: "target-1",
+						title: "Need input",
+						question: "Which branches?",
+					},
+				},
+			});
+			projectRuntimeEvents(database);
+			const router = new AppRouter({
+				database,
+				publish: () => {},
+				controller: {
+					readState: () => ({ sessions: [] }),
+					startTurn: async () => ({ turnId: "unused" }),
+					interruptTurn: async () => {},
+				} as never,
+			});
+
+			const answered = (await router.handle({
+				kind: "request",
+				id: "answer",
+				method: "v1.approval.answer",
+				params: {
+					approvalId: "approval-input-1",
+					threadId: "thread-1",
+					turnId: "turn-1",
+					workspaceTargetId: "target-1",
+					answers: { branches: { answers: ["main", "release"] } },
+					idempotencyKey: "answer-once",
+				},
+			} as never)) as { ok: boolean; answer: { answer: string; answers?: unknown } };
+
+			expect(answered).toMatchObject({
+				ok: true,
+				answer: {
+					answer: JSON.stringify({ branches: { answers: ["main", "release"] } }),
+					answers: { branches: { answers: ["main", "release"] } },
+				},
+			});
+		} finally {
+			database.close();
+		}
+	});
+
 	test("router handles workspaceTarget list/validate and thread create/list", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "daedalus-v1-thread-workspace-"));
 		await git(dir, ["init"]);

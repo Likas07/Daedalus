@@ -1761,19 +1761,6 @@ function extensionForMime(mimeType: string): string {
 
 function normalizeApprovalAnswerParams(params: unknown): protocolV1.ApprovalAnswerInputParams {
 	const record = params && typeof params === "object" ? (params as Record<string, unknown>) : {};
-	if (typeof record.answer === "string" && record.answer.length > 0)
-		return record as protocolV1.ApprovalAnswerInputParams;
-	const answers = record.answers;
-	if (answers && typeof answers === "object" && !Array.isArray(answers)) {
-		const flattened = Object.entries(answers as Record<string, { answers?: unknown }>)
-			.flatMap(([key, value]) =>
-				Array.isArray(value?.answers)
-					? value.answers.map((answer) => `${key}: ${String(answer)}`)
-					: [],
-			)
-			.join("\n");
-		if (flattened.length > 0) return { ...(record as protocolV1.ApprovalAnswerInputParams), answer: flattened };
-	}
 	return record as protocolV1.ApprovalAnswerInputParams;
 }
 
