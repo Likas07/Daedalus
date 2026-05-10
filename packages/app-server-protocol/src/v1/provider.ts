@@ -16,6 +16,7 @@ export const ProviderCapabilityMapSchema = StrictObject({
 	resume: Type.Boolean(),
 	modelSwitching: Type.Boolean(),
 	textGeneration: Type.Boolean(),
+	imageAttachments: Type.Boolean(),
 	terminals: Type.Boolean(),
 });
 export type ProviderCapabilityMap = Static<typeof ProviderCapabilityMapSchema>;

@@ -64,8 +64,14 @@ export async function startTurnV1(
 	context: V1RouteContext,
 	params: protocolV1.TurnStartParams,
 ): Promise<ThreadV1StartTurnResult> {
-	await context.beforeStartTurn?.(params.threadId);
-	const result = await context.authority.startTurn(params);
+	const turnId = `turn-${crypto.randomUUID()}`;
+	const attachmentIds = [...(params.attachmentIds ?? [])];
+	for (const attachment of params.attachments ?? []) {
+		if (!context.saveInlineAttachment) throw new Error("Inline attachments are not configured");
+		attachmentIds.push(await context.saveInlineAttachment(attachment));
+	}
+	await context.beforeStartTurn?.(params.threadId, turnId);
+	const result = await context.authority.startTurn({ ...params, turnId, attachmentIds });
 	projectRuntimeEvents(context.database);
 	await context.afterStartTurn?.(params.threadId, result.turnId);
 	const turn =
@@ -145,11 +151,20 @@ function asTurnStartParams(value: unknown): protocolV1.TurnStartParams {
 		threadId: requiredString(params, "threadId"),
 		prompt: requiredString(params, "prompt"),
 		attachmentIds: stringArray(params.attachmentIds),
+		attachments: inlineAttachments(params.attachments),
 		filePaths: stringArray(params.filePaths),
 		model: optionalString(params.model),
 		effort: optionalString(params.effort),
 		draftState: asOptionalRecord(params.draftState),
 	};
+}
+
+function inlineAttachments(value: unknown): protocolV1.TurnStartParams["attachments"] {
+	if (!Array.isArray(value)) return undefined;
+	return value
+		.map((item) => asRecord(item))
+		.filter((item) => item.type === "image" && typeof item.url === "string" && item.url.length > 0)
+		.map((item) => ({ type: "image" as const, url: item.url as string }));
 }
 
 function asTurnCancelParams(value: unknown): protocolV1.TurnCancelParams {

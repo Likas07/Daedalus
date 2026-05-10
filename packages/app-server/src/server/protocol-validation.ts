@@ -54,6 +54,9 @@ function validateClientRequest(message: unknown): ValidatedInboundMessage | Prot
 		Value.Check(ProtocolV1ClientRequestSchema, message) ||
 		Value.Check(ProtocolV1Phase3ClientRequestSchema, message)
 	) {
+		if (method === "v1.approval.answer" && !hasApprovalAnswer(message)) {
+			return { code: "invalid_params", message: "v1.approval.answer requires answer or answers" };
+		}
 		return { kind: "request", request: message as ClientRequest };
 	}
 	return {
@@ -61,6 +64,16 @@ function validateClientRequest(message: unknown): ValidatedInboundMessage | Prot
 		message: `Invalid params for ${method}`,
 		data: { errors: schemaErrorsForRequest(message) },
 	};
+}
+
+function hasApprovalAnswer(message: unknown): boolean {
+	const params = (message as { params?: unknown }).params;
+	if (!params || typeof params !== "object") return false;
+	const record = params as { answer?: unknown; answers?: unknown };
+	return (
+		(typeof record.answer === "string" && record.answer.length > 0) ||
+		!!(record.answers && typeof record.answers === "object" && !Array.isArray(record.answers))
+	);
 }
 
 function knownRequestMethods(): Set<string> {

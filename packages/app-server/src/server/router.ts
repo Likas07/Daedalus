@@ -178,6 +178,7 @@ export class AppRouter {
 					startTurn: async (params) =>
 						this.options.controller.startTurn({
 							sessionId: params.threadId,
+							turnId: params.turnId,
 							prompt: params.prompt,
 							context: {
 								attachmentIds: params.attachmentIds,
@@ -199,13 +200,22 @@ export class AppRouter {
 					list: (params) => this.listThreadsV1(params),
 					resume: (params) => this.resumeThreadV1(params),
 				},
-				beforeStartTurn: async (threadId) => {
-					await this.validateStoredTurnTarget(threadId);
+				beforeStartTurn: async (threadId, turnId) => {
+					const runsIn = await this.validateStoredTurnTarget(threadId);
+					await this.checkpointService.create({
+						cwd: runsIn.canonicalPath,
+						sessionId: threadId,
+						turnId,
+						label: `Before ${turnId}`,
+					});
 				},
 				afterStartTurn: async (threadId) => {
 					const runsIn = await this.validateStoredTurnTarget(threadId);
 					this.workspaceSelectionService.setValidated({ projectId: runsIn.projectId, sessionId: threadId });
 				},
+				saveInlineAttachment: (attachment) => this.saveInlineV1Attachment(attachment),
+				providerSnapshot: () => this.providerSnapshotV1(),
+				rollbackThread: (params) => this.rollbackThreadV1(params),
 			},
 			request,
 			this.v1Router,
@@ -249,7 +259,7 @@ export class AppRouter {
 					}),
 				};
 			case "project/open": {
-				const result = this.projectService.open({ path: request.params.path });
+				const result = this.projectService.open({ path: request.params.path, projectId: request.params.projectId });
 				this.projects.set(result.projectId, request.params.path);
 				return result;
 			}
@@ -1207,7 +1217,7 @@ export class AppRouter {
 			case "v1.approval.answer":
 				return {
 					handled: true,
-					result: this.approvalService.answerInputV1(params as protocolV1.ApprovalAnswerInputParams),
+					result: this.approvalService.answerInputV1(normalizeApprovalAnswerParams(params)),
 				};
 			case "v1.diff.summary":
 				return { handled: true, result: await this.handleDiffSummaryV1(params as protocolV1.DiffSummaryParams) };
@@ -1348,6 +1358,123 @@ export class AppRouter {
 		} catch (error) {
 			return terminalFailure(params, "not-found", error instanceof Error ? error.message : String(error));
 		}
+	}
+
+	private async providerSnapshotV1(): Promise<protocolV1.ProviderSnapshotResult> {
+		let degradedMessage: string | undefined;
+		const authStatuses = this.providerAuthService.status().providers;
+		const authenticatedProviders = authStatuses.filter((status) => status.authenticated);
+		let models: protocolV1.ProviderSnapshotResult["models"] = [];
+		try {
+			models = (await this.listModels()).map((model) => {
+				const record = model as Record<string, unknown>;
+				const id = stringOr(record.id, "unknown");
+				const provider = stringOr(record.provider, "unknown");
+				return {
+					slug: slugify(`${provider}-${id}`) || id,
+					provider,
+					id,
+					name: stringOr(record.label, id),
+					available: record.available !== false,
+					reasoning: record.reasoning === true,
+					fastMode: record.supportsFastMode === true || record.fastMode === true,
+					reasoningLevels: Array.isArray(record.reasoningLevels)
+						? record.reasoningLevels.filter((item): item is string => typeof item === "string")
+						: undefined,
+				};
+			});
+		} catch (error) {
+			degradedMessage = error instanceof Error ? error.message : String(error);
+		}
+		return {
+			status: degradedMessage ? "degraded" : authenticatedProviders.length > 0 ? "ready" : "auth-needed",
+			server: { name: "daedalus-app-server", version: "0.1.0", protocolVersion: "1" },
+			capabilities: {
+				streamingChat: true,
+				cancellation: true,
+				approvals: true,
+				structuredUserInput: true,
+				toolTimeline: true,
+				payloadWindows: true,
+				diffs: true,
+				checkpoints: true,
+				rollback: true,
+				resume: true,
+				modelSwitching: true,
+				textGeneration: true,
+				imageAttachments: true,
+				terminals: true,
+			},
+			models,
+			auth: authStatuses.map((status) => ({
+				provider: status.provider,
+				status: status.authenticated ? "authenticated" : "unauthenticated",
+				message: status.message ?? status.instruction,
+			})),
+			commands: this.commandService.list().map((command) => ({
+				name: command.name,
+				description: command.description,
+				source: command.source,
+			})),
+			message: degradedMessage,
+		};
+	}
+
+	private async rollbackThreadV1(params: protocolV1.ThreadRollbackParams): Promise<protocolV1.ThreadRollbackResult> {
+		const target = await this.resolveV1WorkspaceTarget(params.threadId, params.workspaceTargetId);
+		if (!target.ok) throw new Error(target.message);
+		const checkpoints = this.listCheckpoints(params.threadId);
+		const checkpoint = checkpoints[Math.min(params.numTurns - 1, checkpoints.length - 1)];
+		if (!checkpoint) throw new Error(`No checkpoint available for thread ${params.threadId}`);
+		const checkpointRef = checkpoint.ref ?? checkpoint.checkpointId;
+		const mutation = await this.gitMutationService.restoreCheckpoint({
+			cwd: target.cwd,
+			checkpointRef,
+			sessionId: params.threadId,
+		});
+		const stored = appendEvent(this.options.database, {
+			streamId: `session:${params.threadId}`,
+			type: "thread/rollback",
+			payload: {
+				threadId: params.threadId,
+				workspaceTargetId: params.workspaceTargetId,
+				numTurns: params.numTurns,
+				restoredCheckpointId: checkpoint.checkpointId,
+				restoredToTurnId: checkpoint.checkpointId.split(":").at(-1) ?? null,
+				removedTurnIds: [],
+				hiddenEventRange: null,
+				idempotencyKey: params.idempotencyKey ?? null,
+			},
+		});
+		projectRuntimeEvents(this.options.database);
+		this.options.publish({
+			kind: "notification",
+			method: "thread.timeline.delta",
+			params: { threadId: params.threadId, after: { seq: stored.seq - 1 } },
+		} as unknown as OutboundMessage);
+		const approvalId =
+			mutation && typeof mutation === "object" && "approvalId" in mutation
+				? stringOr((mutation as unknown as Record<string, unknown>).approvalId, "")
+				: "";
+		return {
+			threadId: params.threadId,
+			restoredCheckpointId: checkpoint.checkpointId,
+			restoredToTurnId: checkpoint.checkpointId.split(":").at(-1),
+			status: approvalId ? "approval-required" : "completed",
+			approvalId: approvalId || undefined,
+		};
+	}
+
+	private async saveInlineV1Attachment(attachment: { type: "image"; url: string }): Promise<string> {
+		const match = /^data:([^;,]+);base64,(.+)$/s.exec(attachment.url);
+		if (!match) throw new Error("Inline image attachments must be data URLs");
+		const [, mimeType, dataBase64] = match;
+		const saved = await this.attachmentService.save({
+			filename: `inline-${crypto.randomUUID()}.${extensionForMime(mimeType)}`,
+			mimeType,
+			dataBase64,
+		});
+		return saved.id;
 	}
 
 	private async resolveV1WorkspaceTarget(
@@ -1604,6 +1731,50 @@ function activeThreadCountForTarget(database: AppServerDatabase, projectId: stri
 		if ((session.status === "archived" || session.status === "deleted") as boolean) return false;
 		return worktreeId ? session.worktreeId === worktreeId : !session.worktreeId;
 	}).length;
+}
+
+function stringOr(value: unknown, fallback: string): string {
+	return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+function slugify(value: string): string {
+	return value
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "");
+}
+
+function extensionForMime(mimeType: string): string {
+	switch (mimeType) {
+		case "image/jpeg":
+			return "jpg";
+		case "image/gif":
+			return "gif";
+		case "image/webp":
+			return "webp";
+		case "image/svg+xml":
+			return "svg";
+		default:
+			return "png";
+	}
+}
+
+function normalizeApprovalAnswerParams(params: unknown): protocolV1.ApprovalAnswerInputParams {
+	const record = params && typeof params === "object" ? (params as Record<string, unknown>) : {};
+	if (typeof record.answer === "string" && record.answer.length > 0)
+		return record as protocolV1.ApprovalAnswerInputParams;
+	const answers = record.answers;
+	if (answers && typeof answers === "object" && !Array.isArray(answers)) {
+		const flattened = Object.entries(answers as Record<string, { answers?: unknown }>)
+			.flatMap(([key, value]) =>
+				Array.isArray(value?.answers)
+					? value.answers.map((answer) => `${key}: ${String(answer)}`)
+					: [],
+			)
+			.join("\n");
+		if (flattened.length > 0) return { ...(record as protocolV1.ApprovalAnswerInputParams), answer: flattened };
+	}
+	return record as protocolV1.ApprovalAnswerInputParams;
 }
 
 function diffTargetMismatch(

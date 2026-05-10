@@ -83,8 +83,9 @@ export class ApprovalService {
 		const row = this.readApproval(params.approvalId);
 		const failure = this.validateV1Decision(row, { ...params, decision: "approved" });
 		if (failure) return failure;
+		const answer = params.answer ?? JSON.stringify(params.answers ?? {});
 		const answeredAt = new Date().toISOString();
-		this.resolve({ approvalId: params.approvalId, decision: "approved", message: params.answer });
+		this.resolve({ approvalId: params.approvalId, decision: "approved", message: answer });
 		const request = row ? this.toV1Request({ ...row, status: "approved", updatedAt: answeredAt }, params) : undefined;
 		const result = {
 			ok: true,
@@ -94,7 +95,7 @@ export class ApprovalService {
 				threadId: params.threadId,
 				turnId: params.turnId,
 				workspaceTargetId: params.workspaceTargetId,
-				answer: params.answer,
+				answer,
 				answeredAt,
 			},
 		} satisfies protocolV1.ApprovalAnswerInputResult;

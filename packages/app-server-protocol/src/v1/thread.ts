@@ -107,6 +107,14 @@ export const TurnStartParamsSchema = StrictObject({
 	threadId: ThreadIdSchema,
 	prompt: Type.String({ minLength: 1 }),
 	attachmentIds: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+	attachments: Type.Optional(
+		Type.Array(
+			StrictObject({
+				type: Type.Literal("image"),
+				url: Type.String({ minLength: 1 }),
+			}),
+		),
+	),
 	filePaths: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
 	model: Type.Optional(Type.String({ minLength: 1 })),
 	effort: Type.Optional(Type.String({ minLength: 1 })),

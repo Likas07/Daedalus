@@ -80,7 +80,8 @@ export const ApprovalAnswerInputParamsSchema = StrictObject({
 	threadId: ThreadIdSchema,
 	turnId: TurnIdSchema,
 	workspaceTargetId: WorkspaceTargetIdSchema,
-	answer: Type.String({ minLength: 1 }),
+	answer: Type.Optional(Type.String({ minLength: 1 })),
+	answers: Type.Optional(Type.Record(Type.String({ minLength: 1 }), StrictObject({ answers: Type.Array(Type.String()) }))),
 	idempotencyKey: Type.Optional(Type.String({ minLength: 1 })),
 });
 export type ApprovalAnswerInputParams = Static<typeof ApprovalAnswerInputParamsSchema>;

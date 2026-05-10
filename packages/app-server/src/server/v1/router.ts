@@ -2,6 +2,9 @@ import type { protocolV1 } from "@daedalus-pi/app-server-protocol";
 import type { AppServerDatabase } from "../../persistence/database";
 import { createApprovalV1RouteHandler } from "./approval-routes";
 import { createPayloadV1RouteHandler } from "./payload-routes";
+import { createProviderV1RouteHandler } from "./provider-routes";
+import { createRollbackV1RouteHandler } from "./rollback-routes";
+import { createTextV1RouteHandler } from "./text-routes";
 import { createThreadV1RouteHandler } from "./thread-routes";
 import { createTimelineV1RouteHandler } from "./timeline-routes";
 import { createWorkspaceV1RouteHandler } from "./workspace-routes";
@@ -9,6 +12,7 @@ import { createWorkspaceV1RouteHandler } from "./workspace-routes";
 export interface V1RuntimeAuthority {
 	startTurn(input: {
 		readonly threadId: string;
+		readonly turnId?: string;
 		readonly prompt: string;
 		readonly attachmentIds?: readonly string[];
 		readonly filePaths?: readonly string[];
@@ -31,8 +35,17 @@ export interface V1RouteContext {
 		list(params: protocolV1.ThreadListParams): Promise<protocolV1.ThreadListResult>;
 		resume(params: protocolV1.ThreadResumeParams): Promise<protocolV1.ThreadResumeResult>;
 	};
-	readonly beforeStartTurn?: (threadId: string) => Promise<void> | void;
+	readonly beforeStartTurn?: (threadId: string, turnId: string) => Promise<void> | void;
 	readonly afterStartTurn?: (threadId: string, turnId: string | undefined) => Promise<void> | void;
+	readonly saveInlineAttachment?: (attachment: { type: "image"; url: string }) => Promise<string>;
+	readonly providerSnapshot?: () => Promise<protocolV1.ProviderSnapshotResult>;
+	readonly rollbackThread?: (params: protocolV1.ThreadRollbackParams) => Promise<protocolV1.ThreadRollbackResult>;
+	readonly textGeneration?: {
+		threadTitle(params: protocolV1.TextGenerateThreadTitleParams): Promise<protocolV1.TextGenerateThreadTitleResult>;
+		branchName(params: protocolV1.TextGenerateBranchNameParams): Promise<protocolV1.TextGenerateBranchNameResult>;
+		commitMessage(params: protocolV1.TextGenerateCommitMessageParams): Promise<protocolV1.TextGenerateCommitMessageResult>;
+		prContent(params: protocolV1.TextGeneratePrContentParams): Promise<protocolV1.TextGeneratePrContentResult>;
+	};
 }
 
 export interface V1RouteHandler {
@@ -48,9 +61,15 @@ export type V1Method =
 	| "thread.resume"
 	| "thread.get"
 	| "thread.replay"
+	| "thread.rollback"
 	| "turn.start"
 	| "turn.cancel"
-	| "payload.window";
+	| "payload.window"
+	| "provider.snapshot"
+	| "text.threadTitle"
+	| "text.branchName"
+	| "text.commitMessage"
+	| "text.prContent";
 
 export interface V1Request {
 	readonly kind?: "request";
@@ -96,6 +115,9 @@ export function createDefaultV1Router(): V1Router {
 		createTimelineV1RouteHandler(),
 		createApprovalV1RouteHandler(),
 		createWorkspaceV1RouteHandler(),
+		createProviderV1RouteHandler(),
+		createRollbackV1RouteHandler(),
+		createTextV1RouteHandler(),
 	]);
 }
 
