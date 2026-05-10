@@ -1,4 +1,6 @@
-import type { protocolV1 } from "@daedalus-pi/app-server-protocol";
+import { protocolV1 } from "@daedalus-pi/app-server-protocol";
+import type { TSchema } from "@sinclair/typebox";
+import { Value } from "@sinclair/typebox/value";
 import type { V1Request, V1RouteHandler } from "./router";
 
 export function createTextV1RouteHandler(): V1RouteHandler {
@@ -13,13 +15,29 @@ export function createTextV1RouteHandler(): V1RouteHandler {
 			const service = context.textGeneration ?? defaultTextGenerationService();
 			switch (v1Request.method) {
 				case "text.threadTitle":
-					return service.threadTitle(v1Request.params as protocolV1.TextGenerateThreadTitleParams);
+					return checkedTextResult(
+						v1Request.method,
+						protocolV1.TextGenerateThreadTitleResultSchema,
+						await service.threadTitle(v1Request.params as protocolV1.TextGenerateThreadTitleParams),
+					);
 				case "text.branchName":
-					return service.branchName(v1Request.params as protocolV1.TextGenerateBranchNameParams);
+					return checkedTextResult(
+						v1Request.method,
+						protocolV1.TextGenerateBranchNameResultSchema,
+						await service.branchName(v1Request.params as protocolV1.TextGenerateBranchNameParams),
+					);
 				case "text.commitMessage":
-					return service.commitMessage(v1Request.params as protocolV1.TextGenerateCommitMessageParams);
+					return checkedTextResult(
+						v1Request.method,
+						protocolV1.TextGenerateCommitMessageResultSchema,
+						await service.commitMessage(v1Request.params as protocolV1.TextGenerateCommitMessageParams),
+					);
 				case "text.prContent":
-					return service.prContent(v1Request.params as protocolV1.TextGeneratePrContentParams);
+					return checkedTextResult(
+						v1Request.method,
+						protocolV1.TextGeneratePrContentResultSchema,
+						await service.prContent(v1Request.params as protocolV1.TextGeneratePrContentParams),
+					);
 				default:
 					throw new Error(`Unsupported text v1 method: ${v1Request.method}`);
 			}
@@ -27,12 +45,21 @@ export function createTextV1RouteHandler(): V1RouteHandler {
 	};
 }
 
+function checkedTextResult(method: string, schema: TSchema, result: unknown): unknown {
+	if (!Value.Check(schema, result)) throw new Error(`${method} returned schema-invalid result`);
+	return result;
+}
+
 export function defaultTextGenerationService() {
 	return {
-		async threadTitle(params: protocolV1.TextGenerateThreadTitleParams): Promise<protocolV1.TextGenerateThreadTitleResult> {
+		async threadTitle(
+			params: protocolV1.TextGenerateThreadTitleParams,
+		): Promise<protocolV1.TextGenerateThreadTitleResult> {
 			return { title: limit(titleCase(seedText(params)), 120) || "New Thread" };
 		},
-		async branchName(params: protocolV1.TextGenerateBranchNameParams): Promise<protocolV1.TextGenerateBranchNameResult> {
+		async branchName(
+			params: protocolV1.TextGenerateBranchNameParams,
+		): Promise<protocolV1.TextGenerateBranchNameResult> {
 			return { branch: limit(slug(seedText(params)) || "daedalus-thread", 80) };
 		},
 		async commitMessage(
@@ -50,11 +77,16 @@ export function defaultTextGenerationService() {
 }
 
 function seedText(params: { message?: string; diff?: string; files?: readonly string[] }): string {
-	return clean(params.message ?? params.diff?.split("\n").find((line) => line.trim().length > 0) ?? params.files?.[0] ?? "");
+	return clean(
+		params.message ?? params.diff?.split("\n").find((line) => line.trim().length > 0) ?? params.files?.[0] ?? "",
+	);
 }
 
 function clean(value: string): string {
-	return value.replace(/\s+/g, " ").replace(/[^\w .:/-]/g, "").trim();
+	return value
+		.replace(/\s+/g, " ")
+		.replace(/[^\w .:/-]/g, "")
+		.trim();
 }
 
 function titleCase(value: string): string {
