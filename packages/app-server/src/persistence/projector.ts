@@ -344,9 +344,8 @@ function number(payload: PayloadRecord, ...keys: string[]): number | undefined {
 
 function text(payload: PayloadRecord, ...keys: string[]): string | undefined {
 	for (const key of keys) {
-		const value = payload[key];
-		if (typeof value === "string") return value;
-		if (typeof value === "number" || typeof value === "boolean") return String(value);
+		const value = textValue(payload[key]);
+		if (value !== undefined) return value;
 	}
 	return undefined;
 }
@@ -366,4 +365,27 @@ function jsonText(payload: PayloadRecord, ...keys: string[]): string | undefined
 
 function content(payload: PayloadRecord): string {
 	return text(payload, "content", "message", "summary") ?? jsonText(payload, "data", "payload") ?? "";
+}
+
+function textValue(value: EventPayload | undefined): string | undefined {
+	if (typeof value === "string") return value;
+	if (typeof value === "number" || typeof value === "boolean") return String(value);
+	if (Array.isArray(value)) {
+		const parts = value.map(textPart).filter((part): part is string => part !== undefined);
+		return parts.length > 0 ? parts.join("") : undefined;
+	}
+	if (value && typeof value === "object") {
+		const record = value as PayloadRecord;
+		return textValue(record.text) ?? textValue(record.content) ?? textValue(record.message) ?? textValue(record.summary);
+	}
+	return undefined;
+}
+
+function textPart(value: EventPayload): string | undefined {
+	if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+	const record = value as PayloadRecord;
+	const type = typeof record.type === "string" ? record.type : undefined;
+	if (type && type !== "text" && type !== "output_text" && type !== "summary_text") return undefined;
+	return textValue(record.text) ?? textValue(record.content) ?? textValue(record.message) ?? textValue(record.summary);
 }

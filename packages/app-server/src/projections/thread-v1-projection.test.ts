@@ -96,6 +96,49 @@ describe("thread v1 projection", () => {
 		}
 	});
 
+	test("projects assistant message_end content arrays into visible text", () => {
+		const database = openAppServerDatabase(":memory:");
+		runMigrations(database);
+		appendEvent(database, {
+			streamId: "app",
+			type: "project/registered",
+			payload: { projectId: "project-1", name: "Project", path: "/repo" },
+		});
+		appendEvent(database, {
+			streamId: "thread-array",
+			type: "session/started",
+			payload: { sessionId: "thread-array", projectId: "project-1", title: "Array content" },
+		});
+		appendEvent(database, {
+			streamId: "thread-array",
+			type: "turn/started",
+			payload: { sessionId: "thread-array", turnId: "turn-1", prompt: "Hello" },
+		});
+		appendEvent(database, {
+			streamId: "thread-array",
+			type: "agent/message_end",
+			payload: {
+				sessionId: "thread-array",
+				turnId: "turn-1",
+				message: {
+					id: "message-array",
+					role: "assistant",
+					content: [{ type: "text", text: "Hello" }, { type: "text", text: " there" }],
+				},
+			},
+		});
+		projectRuntimeEvents(database);
+		try {
+			const snapshot = buildThreadV1Snapshot({ database, threadId: "thread-array" });
+			expect(snapshot.timeline.entries.find((entry) => entry.entryId === "message:message-array")).toMatchObject({
+				kind: "assistant-message",
+				content: "Hello there",
+			});
+		} finally {
+			database.close();
+		}
+	});
+
 	test("replays stable cursor windows without duplicate rows", () => {
 		const database = seededDatabase();
 		try {

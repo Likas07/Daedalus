@@ -669,9 +669,8 @@ function parseMaybeJson(value: string): JsonRecord {
 
 function text(payload: JsonRecord, ...keys: string[]): string | undefined {
 	for (const key of keys) {
-		const value = payload[key];
-		if (typeof value === "string") return value;
-		if (typeof value === "number" || typeof value === "boolean") return String(value);
+		const value = textValue(payload[key]);
+		if (value !== undefined) return value;
 	}
 	return undefined;
 }
@@ -680,6 +679,30 @@ function content(payload: JsonRecord): string {
 	return (
 		text(payload, "content", "message", "summary", "text") ?? JSON.stringify(payload.data ?? payload.payload ?? "")
 	);
+}
+
+function textValue(value: unknown): string | undefined {
+	if (typeof value === "string") return value;
+	if (typeof value === "number" || typeof value === "boolean") return String(value);
+	if (Array.isArray(value)) {
+		const parts = value.map(textPart).filter((part): part is string => part !== undefined);
+		if (parts.length > 0) return parts.join("");
+		return undefined;
+	}
+	if (value && typeof value === "object") {
+		const record = value as JsonRecord;
+		return textValue(record.text) ?? textValue(record.content) ?? textValue(record.message) ?? textValue(record.summary);
+	}
+	return undefined;
+}
+
+function textPart(value: unknown): string | undefined {
+	if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+	if (!value || typeof value !== "object") return undefined;
+	const record = value as JsonRecord;
+	const type = typeof record.type === "string" ? record.type : undefined;
+	if (type && type !== "text" && type !== "output_text" && type !== "summary_text") return undefined;
+	return textValue(record.text) ?? textValue(record.content) ?? textValue(record.message) ?? textValue(record.summary);
 }
 
 function approvalTitle(payload: JsonRecord): string {

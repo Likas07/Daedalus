@@ -41,6 +41,21 @@ test("agent message end uses real streaming event name and appends detail messag
 	});
 });
 
+test("agent message end extracts nested text content arrays", () => {
+	const projected = projectAppEventToProjectionEvents({
+		event: base("agent/message_end", {
+			turnId: "t1",
+			message: { id: "m1", role: "assistant", content: [{ type: "text", text: "Hello" }, { type: "text", text: " there" }] },
+		}),
+		seq: 8,
+	});
+
+	expect(projected.thread[0]).toMatchObject({
+		type: "message-appended",
+		message: { id: "m1", turnId: "t1", role: "assistant", content: "Hello there" },
+	});
+});
+
 test("approvals update shell and detail projections", () => {
 	const projected = projectAppEventToProjectionEvents({
 		event: base("approval/requested", {
