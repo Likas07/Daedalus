@@ -1,8 +1,7 @@
 import type { AppEvent, ServerNotification, SessionId, TurnId } from "@daedalus-pi/app-server-protocol";
-export interface RuntimeAgentEvent {
-	readonly type: string;
-	readonly [key: string]: unknown;
-}
+import type { CanonicalAgentEvent, RuntimeAgentEvent } from "./canonical-agent-events";
+
+export type { RuntimeAgentEvent } from "./canonical-agent-events";
 
 export interface RuntimeEventEnvelope {
 	readonly event: AppEvent;
@@ -29,6 +28,21 @@ export function mapRuntimeEvent(event: RuntimeAgentEvent, options: MapRuntimeEve
 		event: appEvent,
 		notification: mapNotification(event, options.sessionId, options.turnId),
 	};
+}
+
+export function mapCanonicalAgentEvent(
+	event: CanonicalAgentEvent,
+	options: Omit<MapRuntimeEventOptions, "turnId">,
+): RuntimeEventEnvelope {
+	const appEvent = {
+		id: options.nextEventId?.() ?? `${options.sessionId}:${Date.now()}:${Math.random().toString(36).slice(2)}`,
+		type: event.type,
+		ts: (options.now?.() ?? new Date()).toISOString(),
+		sessionId: options.sessionId,
+		payload: event.payload,
+	} satisfies AppEvent;
+
+	return { event: appEvent };
 }
 
 function mapNotification(

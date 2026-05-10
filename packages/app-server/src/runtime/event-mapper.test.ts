@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mapRuntimeEvent } from "./event-mapper";
+import { mapCanonicalAgentEvent, mapRuntimeEvent } from "./event-mapper";
 
 describe("runtime event mapper", () => {
 	test("maps runtime message and tool events into durable agent events", () => {
@@ -24,6 +24,41 @@ describe("runtime event mapper", () => {
 			type: "agent/tool_execution_update",
 			sessionId: "thread-1",
 			payload: { type: "tool_execution_update", toolCallId: "tool-1", delta: "out" },
+		});
+	});
+
+	test("maps canonical runtime events without rewriting their type or payload", () => {
+		let id = 0;
+		const mapped = mapCanonicalAgentEvent(
+			{
+				type: "agent/message_delta",
+				payload: {
+					sessionId: "thread-1",
+					turnId: "turn-1",
+					messageId: "message-1",
+					delta: "hi",
+				},
+			},
+			{
+				sessionId: "thread-1",
+				nextEventId: () => `event-${++id}`,
+				now: () => new Date("2026-05-08T00:00:00.000Z"),
+			},
+		);
+
+		expect(mapped).toEqual({
+			event: {
+				id: "event-1",
+				type: "agent/message_delta",
+				ts: "2026-05-08T00:00:00.000Z",
+				sessionId: "thread-1",
+				payload: {
+					sessionId: "thread-1",
+					turnId: "turn-1",
+					messageId: "message-1",
+					delta: "hi",
+				},
+			},
 		});
 	});
 });

@@ -12,7 +12,8 @@ import type { WorkspaceTarget } from "@daedalus-pi/coding-agent";
 export type RuntimeSessionManager = unknown;
 
 import { createSessionIdentitySnapshot } from "../sessions/session-identity";
-import { mapRuntimeEvent, type RuntimeAgentEvent } from "./event-mapper";
+import { CanonicalAgentEventNormalizer } from "./canonical-agent-events";
+import { mapCanonicalAgentEvent, mapRuntimeEvent, type RuntimeAgentEvent } from "./event-mapper";
 
 export type RuntimeControllerMessage = AppEvent | ServerNotification | ServerRequest;
 export type RuntimeEventSink = (message: RuntimeControllerMessage) => void | Promise<void>;
@@ -352,16 +353,34 @@ export class SessionController {
 	private register(sessionId: SessionId, runtime: ControlledSessionRuntime): void {
 		if (this.sessions.has(sessionId)) throw new Error(`Session already exists: ${sessionId}`);
 		const record: SessionRecord = { id: sessionId, runtime, unsubscribe: () => {} };
+		const normalizer = new CanonicalAgentEventNormalizer();
 		record.unsubscribe = runtime.session.subscribe((event) => {
-			const mapped = mapRuntimeEvent(event as never, {
+			const runtimeEvent = event as RuntimeAgentEvent;
+			const normalized = normalizer.normalize(runtimeEvent, {
 				sessionId,
 				turnId: record.activeTurnId,
-				nextEventId: () => this.nextEventId(),
-				now: this.options.now,
 			});
-			void this.emit(mapped.event);
-			if (mapped.notification) void this.emit(mapped.notification);
-			if ((event as RuntimeAgentEvent).type === "agent_end") {
+			for (const canonicalEvent of normalized.events) {
+				const mapped = mapCanonicalAgentEvent(canonicalEvent, {
+					sessionId,
+					nextEventId: () => this.nextEventId(),
+					now: this.options.now,
+				});
+				void this.emit(mapped.event);
+			}
+			const mapped = normalized.handled
+				? undefined
+				: mapRuntimeEvent(runtimeEvent, {
+						sessionId,
+						turnId: record.activeTurnId,
+						nextEventId: () => this.nextEventId(),
+						now: this.options.now,
+					});
+			if (mapped) {
+				void this.emit(mapped.event);
+				if (mapped.notification) void this.emit(mapped.notification);
+			}
+			if (runtimeEvent.type === "agent_end") {
 				const completedTurnId = record.activeTurnId;
 				if (completedTurnId) {
 					void this.emit({
