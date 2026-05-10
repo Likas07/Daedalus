@@ -190,8 +190,11 @@ export function projectStoredEventToTimelineEntry(
 		}
 		case "agent/message_update": {
 			const message = asRecord(payload.message);
+			const assistantMessageEvent = asRecord(payload.assistantMessageEvent);
 			const turnId = text(payload, "turnId", "turn_id");
-			const messageId = text(payload, "messageId", "message_id") ?? text(message, "id", "messageId", "message_id") ?? String(event.seq);
+			const delta = text(payload, "delta") ?? text(assistantMessageEvent, "delta");
+			if (delta === undefined) return undefined;
+			const messageId = messageIdFromPayload(payload, message, turnId) ?? String(event.seq);
 			return {
 				...base,
 				entryId: `message:${messageId}:delta:${event.seq}`,
@@ -199,7 +202,7 @@ export function projectStoredEventToTimelineEntry(
 				role: "assistant",
 				turnId,
 				messageId,
-				content: text(payload, "delta", "content", "text") ?? text(message, "delta", "content", "text") ?? "",
+				content: delta,
 			};
 		}
 		case "agent/message_end": {
@@ -678,6 +681,18 @@ function text(payload: JsonRecord, ...keys: string[]): string | undefined {
 function content(payload: JsonRecord): string {
 	return (
 		text(payload, "content", "message", "summary", "text") ?? JSON.stringify(payload.data ?? payload.payload ?? "")
+	);
+}
+
+function messageIdFromPayload(payload: JsonRecord, message: JsonRecord, turnId?: string): string | undefined {
+	const assistantMessageEvent = asRecord(payload.assistantMessageEvent);
+	const partial = asRecord(assistantMessageEvent.partial);
+	return (
+		text(payload, "messageId", "message_id") ??
+		text(message, "id", "messageId", "message_id", "responseId") ??
+		text(partial, "id", "messageId", "message_id", "responseId") ??
+		text(payload, "id") ??
+		turnId
 	);
 }
 

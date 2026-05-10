@@ -71,9 +71,16 @@ function projectStoredEventToTimelineDelta(event: StoredEvent): protocolV1.Timel
 	if (!threadId || threadId === "app" || !turnId) return undefined;
 	if (event.type === "agent/message_update") {
 		const message = asRecord(payload.message);
-		const delta = text(payload, "delta", "content", "text") ?? text(message, "delta", "content", "text");
+		const assistantMessageEvent = asRecord(payload.assistantMessageEvent);
+		const delta = text(payload, "delta") ?? text(assistantMessageEvent, "delta");
 		if (delta === undefined) return undefined;
-		const messageId = text(payload, "messageId", "message_id") ?? text(message, "id", "messageId", "message_id") ?? turnId;
+		const partial = asRecord(assistantMessageEvent.partial);
+		const messageId =
+			text(payload, "messageId", "message_id") ??
+			text(message, "id", "messageId", "message_id", "responseId") ??
+			text(partial, "id", "messageId", "message_id", "responseId") ??
+			text(payload, "id") ??
+			turnId;
 		return {
 			threadId,
 			turnId,

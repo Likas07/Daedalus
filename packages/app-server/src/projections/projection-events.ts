@@ -110,13 +110,14 @@ function messageFromEvent(event: AppEvent, _seq: number): ThreadMessage {
 
 function messageActivityFromEvent(event: AppEvent) {
 	const payload = payloadRecord(event.payload);
+	const assistantMessageEvent = payloadRecord(payload.assistantMessageEvent);
 	const status = event.type === "agent/message_start" ? "running" : "running";
 	return {
 		id: text(payload, "messageId", "message_id", "id") ?? event.id,
 		kind: "thinking" as const,
 		status: status as "running",
 		title: event.type === "agent/message_start" ? "Assistant message started" : "Assistant message updated",
-		detail: text(payload, "delta", "content", "text"),
+		detail: text(payload, "delta") ?? text(assistantMessageEvent, "delta"),
 		startedAt: event.ts,
 	};
 }

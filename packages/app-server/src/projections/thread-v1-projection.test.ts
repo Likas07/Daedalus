@@ -293,6 +293,61 @@ describe("thread v1 projection", () => {
 		});
 	});
 
+	test("thread timeline notifications use explicit runtime deltas for cumulative assistant updates", () => {
+		const notification = notificationForThreadV1StoredEvent({
+			seq: 12,
+			streamId: "thread-1",
+			type: "agent/message_update",
+			payload: {
+				id: "event-12",
+				type: "agent/message_update",
+				ts: "2026-04-30T00:00:04.000Z",
+				sessionId: "thread-1",
+				payload: {
+					turnId: "turn-live",
+					assistantMessageEvent: { type: "text_delta", delta: " there" },
+					message: { responseId: "response-1", content: [{ type: "text", text: "Hello there" }] },
+				},
+			},
+			createdAt: "2026-04-30T00:00:04.000Z",
+		});
+
+		expect(notification).toEqual({
+			kind: "notification",
+			method: "thread.timeline.delta",
+			params: {
+				threadId: "thread-1",
+				turnId: "turn-live",
+				entryId: "message:response-1",
+				sequence: 12,
+				kind: "assistant-message",
+				delta: " there",
+			},
+		});
+	});
+
+	test("thread timeline notifications skip cumulative assistant updates without explicit deltas", () => {
+		const notification = notificationForThreadV1StoredEvent({
+			seq: 13,
+			streamId: "thread-1",
+			type: "agent/message_update",
+			payload: {
+				id: "event-13",
+				type: "agent/message_update",
+				ts: "2026-04-30T00:00:05.000Z",
+				sessionId: "thread-1",
+				payload: {
+					turnId: "turn-live",
+					assistantMessageEvent: { type: "text_end", content: "Hello there" },
+					message: { responseId: "response-1", content: [{ type: "text", text: "Hello there" }] },
+				},
+			},
+			createdAt: "2026-04-30T00:00:05.000Z",
+		});
+
+		expect(notification).toBeUndefined();
+	});
+
 	test("projects tool lifecycle command output and file changes into timeline entries", () => {
 		const database = seededDatabase();
 		try {
