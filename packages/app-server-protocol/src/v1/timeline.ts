@@ -42,7 +42,8 @@ export const UserMessageTimelineEntrySchema = StrictObject({
 	...TimelineEntryBaseFields,
 	kind: Type.Literal("user-message"),
 	role: Type.Literal("user"),
-	messageId: Type.Optional(TimelinePayloadIdSchema),
+	turnId: TurnIdSchema,
+	messageId: TimelinePayloadIdSchema,
 	content: Type.String(),
 });
 export type UserMessageTimelineEntry = Static<typeof UserMessageTimelineEntrySchema>;
@@ -51,7 +52,8 @@ export const AssistantMessageTimelineEntrySchema = StrictObject({
 	...TimelineEntryBaseFields,
 	kind: Type.Literal("assistant-message"),
 	role: Type.Literal("assistant"),
-	messageId: Type.Optional(TimelinePayloadIdSchema),
+	turnId: TurnIdSchema,
+	messageId: TimelinePayloadIdSchema,
 	content: Type.String(),
 });
 export type AssistantMessageTimelineEntry = Static<typeof AssistantMessageTimelineEntrySchema>;
@@ -86,7 +88,9 @@ export type ToolStatus = Static<typeof ToolStatusSchema>;
 
 export const ToolTimelineEntrySchema = StrictObject({
 	...TimelineEntryBaseFields,
+	entryId: Type.String({ minLength: 6, pattern: "^tool:.+" }),
 	kind: Type.Literal("tool"),
+	turnId: TurnIdSchema,
 	toolCallId: TimelinePayloadIdSchema,
 	toolName: Type.String({ minLength: 1 }),
 	status: ToolStatusSchema,
@@ -267,7 +271,7 @@ export const TimelineDeltaNotificationSchema = StrictObject({
 	entryId: TimelineEntryIdSchema,
 	sequence: Type.Integer({ minimum: 0 }),
 	kind: TimelineDeltaKindSchema,
-	delta: Type.String(),
+	delta: Type.String({ description: "Incremental live-stream chunk only; never cumulative materialized text." }),
 	payloadRef: Type.Optional(PayloadReferenceSchema),
 });
 export type TimelineDeltaNotification = Static<typeof TimelineDeltaNotificationSchema>;

@@ -130,7 +130,7 @@ export class CanonicalAgentEventNormalizer {
 		options: RequiredTurnOptions,
 	): CanonicalizeRuntimeEventResult {
 		const message = asRecord(event.message);
-		if (roleFrom(event, message) !== "assistant") return { handled: true, events: [] };
+		if (isExplicitNonAssistantMessage(event, message)) return { handled: true, events: [] };
 		const state = this.resolveMessageState(event, options, { starting: true });
 		return { handled: true, events: this.startEvent(state, options.sessionId) };
 	}
@@ -140,7 +140,7 @@ export class CanonicalAgentEventNormalizer {
 		options: RequiredTurnOptions,
 	): CanonicalizeRuntimeEventResult {
 		const message = asRecord(event.message);
-		if (roleFrom(event, message) !== "assistant") return { handled: true, events: [] };
+		if (isExplicitNonAssistantMessage(event, message)) return { handled: true, events: [] };
 		const assistantMessageEvent = asRecord(event.assistantMessageEvent);
 		if (assistantMessageEvent.type === "text_start")
 			return this.normalizeTextStart({ ...event, ...assistantMessageEvent }, options);
@@ -165,7 +165,7 @@ export class CanonicalAgentEventNormalizer {
 
 	private normalizeMessageEnd(event: RuntimeAgentEvent, options: RequiredTurnOptions): CanonicalizeRuntimeEventResult {
 		const message = asRecord(event.message);
-		if (roleFrom(event, message) !== "assistant") return { handled: true, events: [] };
+		if (isExplicitNonAssistantMessage(event, message)) return { handled: true, events: [] };
 		const state = this.resolveMessageState(event, options, { ending: true });
 		if (state.completed) return { handled: true, events: [] };
 		state.completed = true;
@@ -391,8 +391,9 @@ function messageMetadata(event: RuntimeAgentEvent, message: JsonRecord): {
 	};
 }
 
-function roleFrom(event: RuntimeAgentEvent, message: JsonRecord): string | undefined {
-	return text(event, "role") ?? text(message, "role");
+function isExplicitNonAssistantMessage(event: RuntimeAgentEvent, message: JsonRecord): boolean {
+	const role = text(event, "role") ?? text(message, "role");
+	return role !== undefined && role !== "assistant";
 }
 
 function toolStatus(event: RuntimeAgentEvent): "completed" | "failed" | "cancelled" {

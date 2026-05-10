@@ -170,7 +170,6 @@ describe("app-server Codex parity gate", () => {
 		ws.close();
 		await Bun.sleep(20);
 
-		const beforeReconnectNotifications = messages.filter((message) => isNotification(message, "thread.timeline")).length;
 		ws = await connect(server, messages);
 		send(ws, "init-2", "initialize", { protocolVersion: appServerProtocolVersion, client: { name: "parity-gate" } });
 		await response(messages, "init-2");
@@ -178,8 +177,10 @@ describe("app-server Codex parity gate", () => {
 		const replay = await response(messages, "replay");
 		expect(replay.ok).toBe(true);
 		const replayEntries = (replay.result as protocolV1.TimelineWindowResult).entries;
-		expect(replayEntries.length).toBeGreaterThanOrEqual(beforeReconnectNotifications);
+		expect(replayEntries.length).toBeGreaterThan(0);
 		expect(new Set(replayEntries.map((entry) => entry.entryId)).size).toBe(replayEntries.length);
+		expect(replayEntries.filter((entry) => entry.kind === "assistant-message")).toHaveLength(1);
+		expect(replayEntries.some((entry) => entry.entryId.includes(":delta:"))).toBe(false);
 
 		const payloadRefs = replayEntries.flatMap((entry) => payloadRefsForEntry(entry));
 		if (diffFile?.payloadRef) payloadRefs.push(diffFile.payloadRef);

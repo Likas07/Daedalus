@@ -27,6 +27,7 @@ describe("Protocol v1 timeline contracts", () => {
 			...baseEntry,
 			kind: "assistant-message",
 			role: "assistant",
+			messageId: "message-1",
 			content: "Done.",
 		};
 
@@ -65,6 +66,7 @@ describe("Protocol v1 timeline contracts", () => {
 	test("tool timeline entry references long output instead of embedding output", () => {
 		const entry = {
 			...baseEntry,
+			entryId: "tool:tool-call-1",
 			kind: "tool",
 			toolCallId: "tool-call-1",
 			toolName: "bash",
@@ -92,12 +94,26 @@ describe("Protocol v1 timeline contracts", () => {
 
 	test("TimelineEntry covers render variants used by the GUI", () => {
 		const variants = [
-			{ ...baseEntry, entryId: "entry-user", kind: "user-message", role: "user", content: "Build it" },
-			{ ...baseEntry, entryId: "entry-assistant", kind: "assistant-message", role: "assistant", content: "Working" },
+			{
+				...baseEntry,
+				entryId: "entry-user",
+				kind: "user-message",
+				role: "user",
+				messageId: "user-message-1",
+				content: "Build it",
+			},
+			{
+				...baseEntry,
+				entryId: "entry-assistant",
+				kind: "assistant-message",
+				role: "assistant",
+				messageId: "assistant-message-1",
+				content: "Working",
+			},
 			{ ...baseEntry, entryId: "entry-activity", kind: "activity", status: "running", title: "Thinking" },
 			{
 				...baseEntry,
-				entryId: "entry-tool",
+				entryId: "tool:tool-call-1",
 				kind: "tool",
 				toolCallId: "tool-call-1",
 				toolName: "read",
@@ -170,6 +186,8 @@ describe("Protocol v1 timeline contracts", () => {
 						createdAt,
 						kind: "user-message",
 						role: "user",
+						turnId: "turn-1",
+						messageId: "turn-1",
 						content: "Continue",
 					},
 				],

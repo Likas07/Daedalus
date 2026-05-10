@@ -164,10 +164,10 @@ export function projectStoredEventToTimelineEntry(
 	};
 	switch (event.type) {
 		case "turn/started": {
-			const turnId = text(payload, "turnId", "turn_id", "id");
+			const turnId = text(payload, "turnId", "turn_id", "id") ?? String(event.seq);
 			return {
 				...base,
-				entryId: `turn:${turnId ?? event.seq}:user`,
+				entryId: `turn:${turnId}:user`,
 				kind: "user-message",
 				role: "user",
 				turnId,
@@ -178,7 +178,8 @@ export function projectStoredEventToTimelineEntry(
 		case "agent/message_start": {
 			const message = asRecord(payload.message);
 			const turnId = text(payload, "turnId", "turn_id");
-			const messageId = text(payload, "messageId", "message_id") ?? text(message, "id", "messageId", "message_id") ?? String(event.seq);
+			const messageId =
+				text(payload, "messageId", "message_id") ?? text(message, "id", "messageId", "message_id") ?? String(event.seq);
 			return {
 				...base,
 				entryId: `message:${messageId}`,
@@ -188,50 +189,40 @@ export function projectStoredEventToTimelineEntry(
 				title: "Assistant message started",
 			};
 		}
+		case "agent/message_delta":
 		case "agent/message_update": {
-			const message = asRecord(payload.message);
-			const assistantMessageEvent = asRecord(payload.assistantMessageEvent);
-			const turnId = text(payload, "turnId", "turn_id");
-			const delta = text(payload, "delta") ?? text(assistantMessageEvent, "delta");
-			if (delta === undefined) return undefined;
-			const messageId = messageIdFromPayload(payload, message, turnId) ?? String(event.seq);
-			return {
-				...base,
-				entryId: `message:${messageId}:delta:${event.seq}`,
-				kind: "assistant-message",
-				role: "assistant",
-				turnId,
-				messageId,
-				content: delta,
-			};
+			return undefined;
 		}
 		case "agent/message_end": {
 			const message = asRecord(payload.message);
 			const role = text(message, "role") ?? text(payload, "role") ?? "assistant";
-			const turnId = text(payload, "turnId", "turn_id");
+			const turnId = text(payload, "turnId", "turn_id") ?? String(event.seq);
+			const messageId = messageIdFromPayload(payload, message, turnId) ?? String(event.seq);
 			if (role === "user") {
 				return {
 					...base,
-					entryId: `message:${text(message, "id", "messageId", "message_id") ?? event.seq}`,
+					entryId: `message:${messageId}`,
 					kind: "user-message",
 					role: "user",
 					turnId,
-					messageId: text(message, "id", "messageId", "message_id") ?? String(event.seq),
+					messageId,
 					content: content(message) || content(payload),
 				};
 			}
 			return {
 				...base,
-				entryId: `message:${text(message, "id", "messageId", "message_id") ?? event.seq}`,
+				entryId: `message:${messageId}`,
 				kind: "assistant-message",
 				role: "assistant",
 				turnId,
-				messageId: text(message, "id", "messageId", "message_id") ?? String(event.seq),
+				messageId,
 				content: content(message) || content(payload),
 			};
 		}
+		case "agent/tool_start":
 		case "agent/tool_execution_start": {
 			const turnId = text(payload, "turnId", "turn_id");
+			if (!turnId) return undefined;
 			const toolCallId = text(payload, "toolCallId", "tool_call_id", "id") ?? String(event.seq);
 			return {
 				...base,
@@ -244,34 +235,19 @@ export function projectStoredEventToTimelineEntry(
 				summary: text(payload, "summary", "input", "command"),
 			};
 		}
+		case "agent/tool_delta":
 		case "agent/tool_execution_update": {
-			const turnId = text(payload, "turnId", "turn_id");
-			const toolCallId = text(payload, "toolCallId", "tool_call_id", "id") ?? String(event.seq);
-			const output = text(payload, "delta", "content", "text", "summary") ?? "";
-			return {
-				...base,
-				entryId: `tool:${toolCallId}:update:${event.seq}`,
-				kind: "tool",
-				turnId,
-				toolCallId,
-				toolName: text(payload, "toolName", "tool_name", "name") ?? "tool",
-				status: "running",
-				summary: output.slice(0, 120),
-				payloadRef: {
-					kind: "tool-output",
-					toolCallId,
-					cursor: { seq: event.seq },
-					byteLength: byteLength(output),
-				},
-			};
+			return undefined;
 		}
+		case "agent/tool_end":
 		case "agent/tool_execution_end": {
 			const turnId = text(payload, "turnId", "turn_id");
+			if (!turnId) return undefined;
 			const toolCallId = text(payload, "toolCallId", "tool_call_id", "id") ?? String(event.seq);
 			const output = text(payload, "output", "content", "text", "summary") ?? "";
 			return {
 				...base,
-				entryId: `tool:${toolCallId}:end`,
+				entryId: `tool:${toolCallId}`,
 				kind: "tool",
 				turnId,
 				toolCallId,
@@ -607,7 +583,7 @@ function mapToolStatus(status: string | undefined): protocolV1.ToolStatus {
 
 function dedupeTimelineEntries(entries: readonly protocolV1.TimelineEntry[]): protocolV1.TimelineEntry[] {
 	const byId = new Map<string, protocolV1.TimelineEntry>();
-	for (const entry of entries) if (!byId.has(entry.entryId)) byId.set(entry.entryId, entry);
+	for (const entry of entries) byId.set(entry.entryId, entry);
 	return [...byId.values()];
 }
 
@@ -679,9 +655,10 @@ function text(payload: JsonRecord, ...keys: string[]): string | undefined {
 }
 
 function content(payload: JsonRecord): string {
-	return (
-		text(payload, "content", "message", "summary", "text") ?? JSON.stringify(payload.data ?? payload.payload ?? "")
-	);
+	const visible = text(payload, "content", "message", "summary", "text");
+	if (visible !== undefined) return visible;
+	const fallback = payload.data ?? payload.payload;
+	return fallback === undefined ? "" : JSON.stringify(fallback);
 }
 
 function messageIdFromPayload(payload: JsonRecord, message: JsonRecord, turnId?: string): string | undefined {
@@ -691,6 +668,7 @@ function messageIdFromPayload(payload: JsonRecord, message: JsonRecord, turnId?:
 		text(payload, "messageId", "message_id") ??
 		text(message, "id", "messageId", "message_id", "responseId") ??
 		text(partial, "id", "messageId", "message_id", "responseId") ??
+		text(payload, "responseId", "response_id") ??
 		text(payload, "id") ??
 		turnId
 	);

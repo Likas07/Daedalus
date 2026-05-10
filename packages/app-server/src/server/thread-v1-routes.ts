@@ -69,7 +69,7 @@ function projectStoredEventToTimelineDelta(event: StoredEvent): protocolV1.Timel
 	const threadId = text(payload, "sessionId", "session_id") ?? event.streamId;
 	const turnId = text(payload, "turnId", "turn_id");
 	if (!threadId || threadId === "app" || !turnId) return undefined;
-	if (event.type === "agent/message_update") {
+	if (event.type === "agent/message_delta" || event.type === "agent/message_update") {
 		const message = asRecord(payload.message);
 		const assistantMessageEvent = asRecord(payload.assistantMessageEvent);
 		const delta = text(payload, "delta") ?? text(assistantMessageEvent, "delta");
@@ -90,7 +90,7 @@ function projectStoredEventToTimelineDelta(event: StoredEvent): protocolV1.Timel
 			delta,
 		};
 	}
-	if (event.type === "agent/tool_execution_update") {
+	if (event.type === "agent/tool_delta" || event.type === "agent/tool_execution_update") {
 		const toolCallId = text(payload, "toolCallId", "tool_call_id", "id") ?? turnId;
 		const delta = text(payload, "delta", "content", "text", "summary");
 		if (delta === undefined) return undefined;

@@ -146,7 +146,13 @@ function toolChunks(database: AppServerDatabase, threadId: string, toolCallId: s
 		const eventToolCallId =
 			stringValue(payload.toolCallId) ?? stringValue(payload.tool_call_id) ?? stringValue(payload.id);
 		if (eventToolCallId !== toolCallId) return [];
-		if (event.type !== "agent/tool_execution_update" && event.type !== "agent/tool_execution_end") return [];
+		if (
+			event.type !== "agent/tool_delta" &&
+			event.type !== "agent/tool_end" &&
+			event.type !== "agent/tool_execution_update" &&
+			event.type !== "agent/tool_execution_end"
+		)
+			return [];
 		const text =
 			stringValue(payload.delta) ??
 			stringValue(payload.output) ??
