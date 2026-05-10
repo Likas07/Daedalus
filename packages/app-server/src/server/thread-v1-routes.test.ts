@@ -76,6 +76,91 @@ describe("thread v1 routes", () => {
 		}
 	});
 
+	test("thread.get and replay hide rolled-back turns while keeping later turns visible", async () => {
+		const database = databaseWithThread();
+		try {
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "agent/message_end",
+				payload: { sessionId: "thread-1", turnId: "turn-1", messageId: "message-1", content: "first" },
+			});
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "turn/completed",
+				payload: { sessionId: "thread-1", turnId: "turn-1" },
+			});
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "turn/started",
+				payload: { sessionId: "thread-1", turnId: "turn-2", prompt: "Removed" },
+			});
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "agent/message_end",
+				payload: { sessionId: "thread-1", turnId: "turn-2", messageId: "message-removed", content: "removed" },
+			});
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "turn/completed",
+				payload: { sessionId: "thread-1", turnId: "turn-2" },
+			});
+			appendEvent(database, {
+				streamId: "session:thread-1",
+				type: "thread/rollback",
+				payload: {
+					threadId: "thread-1",
+					workspaceTargetId: "target-1",
+					numTurns: 1,
+					removedTurnIds: ["turn-2"],
+					hiddenEventRange: null,
+					idempotencyKey: "rollback-once",
+				},
+			});
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "turn/started",
+				payload: { sessionId: "thread-1", turnId: "turn-3", prompt: "After rollback" },
+			});
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "agent/message_end",
+				payload: { sessionId: "thread-1", turnId: "turn-3", messageId: "message-3", content: "after" },
+			});
+			projectRuntimeEvents(database);
+			const router = new AppRouter({
+				database,
+				publish: () => {},
+				controller: {
+					readState: () => ({ sessions: [] }),
+					startTurn: async () => ({ turnId: "turn-new" }),
+					interruptTurn: async () => {},
+				} as never,
+			});
+
+			const get = (await router.handle({
+				kind: "request",
+				id: "v1-get-rollback",
+				method: "thread.get",
+				params: { threadId: "thread-1" },
+			} as never)) as { turns: Array<{ turnId: string }>; timeline: { entries: Array<{ entryId: string }> } };
+			const replay = (await router.handle({
+				kind: "request",
+				id: "v1-replay-rollback",
+				method: "thread.replay",
+				params: { threadId: "thread-1", limit: 100 },
+			} as never)) as { entries: Array<{ entryId: string }> };
+
+			expect(get.turns.map((turn) => turn.turnId)).toEqual(["turn-1", "turn-3"]);
+			expect(get.timeline.entries.map((entry) => entry.entryId)).not.toContain("message:message-removed");
+			expect(replay.entries.map((entry) => entry.entryId)).toEqual(
+				get.timeline.entries.map((entry) => entry.entryId),
+			);
+			expect(new Set(replay.entries.map((entry) => entry.entryId)).size).toBe(replay.entries.length);
+		} finally {
+			database.close();
+		}
+	});
+
 	test("turn.start and turn.cancel route through runtime authority", async () => {
 		const database = databaseWithThread();
 		const calls: string[] = [];
@@ -310,7 +395,9 @@ describe("thread v1 routes", () => {
 				method: "workspaceTarget.list",
 				params: { projectId },
 			} as never)) as { targets: Array<{ id: string; kind: string; projectId: string }> };
-			expect(targets.targets).toContainEqual(expect.objectContaining({ id: `base:${projectId}`, kind: "base-checkout", projectId }));
+			expect(targets.targets).toContainEqual(
+				expect.objectContaining({ id: `base:${projectId}`, kind: "base-checkout", projectId }),
+			);
 			const validated = (await router.handle({
 				kind: "request",
 				id: "validate",

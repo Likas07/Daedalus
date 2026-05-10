@@ -1030,7 +1030,9 @@ export class AppRouter {
 			if (!project) throw new Error(`Unknown workspace target: ${params.workspaceTargetId}`);
 			return { workspaceTarget: await this.baseWorkspaceTargetV1(project) };
 		}
-		const worktree = (await this.worktreeService.listMetadata()).find((candidate) => candidate.id === params.workspaceTargetId);
+		const worktree = (await this.worktreeService.listMetadata()).find(
+			(candidate) => candidate.id === params.workspaceTargetId,
+		);
 		if (!worktree) throw new Error(`Unknown workspace target: ${params.workspaceTargetId}`);
 		return { workspaceTarget: worktreeWorkspaceTargetV1(worktree) };
 	}
@@ -1138,7 +1140,13 @@ export class AppRouter {
 				activeThreadCount: activeThreadCountForTarget(this.options.database, project.id),
 				safetySignals:
 					dirtyCount > 0
-						? [{ level: "warning", message: "Base checkout has uncommitted changes.", code: "base-checkout-dirty" }]
+						? [
+								{
+									level: "warning",
+									message: "Base checkout has uncommitted changes.",
+									code: "base-checkout-dirty",
+								},
+							]
 						: [],
 				updatedAt: project.updatedAt,
 			};
@@ -1421,12 +1429,28 @@ export class AppRouter {
 	}
 
 	private async rollbackThreadV1(params: protocolV1.ThreadRollbackParams): Promise<protocolV1.ThreadRollbackResult> {
+		return this.operationIdempotencyService.run(
+			{
+				operationId: params.idempotencyKey
+					? `v1:thread.rollback:${params.threadId}:${params.idempotencyKey}`
+					: undefined,
+				method: "thread.rollback",
+				payload: params,
+			},
+			() => this.performRollbackThreadV1(params),
+		);
+	}
+
+	private async performRollbackThreadV1(
+		params: protocolV1.ThreadRollbackParams,
+	): Promise<protocolV1.ThreadRollbackResult> {
 		const target = await this.resolveV1WorkspaceTarget(params.threadId, params.workspaceTargetId);
 		if (!target.ok) throw new Error(target.message);
 		const checkpoints = this.listCheckpoints(params.threadId);
 		const checkpoint = checkpoints[Math.min(params.numTurns - 1, checkpoints.length - 1)];
 		if (!checkpoint) throw new Error(`No checkpoint available for thread ${params.threadId}`);
 		const checkpointRef = checkpoint.ref ?? checkpoint.checkpointId;
+		const rollbackScope = this.rollbackScopeForCheckpoint(params.threadId, checkpoint.checkpointId);
 		const mutation = await this.gitMutationService.restoreCheckpoint({
 			cwd: target.cwd,
 			checkpointRef,
@@ -1441,8 +1465,8 @@ export class AppRouter {
 				numTurns: params.numTurns,
 				restoredCheckpointId: checkpoint.checkpointId,
 				restoredToTurnId: checkpoint.checkpointId.split(":").at(-1) ?? null,
-				removedTurnIds: [],
-				hiddenEventRange: null,
+				removedTurnIds: [...rollbackScope.removedTurnIds],
+				hiddenEventRange: rollbackScope.hiddenEventRange,
 				idempotencyKey: params.idempotencyKey ?? null,
 			},
 		});
@@ -1463,6 +1487,56 @@ export class AppRouter {
 			status: approvalId ? "approval-required" : "completed",
 			approvalId: approvalId || undefined,
 		};
+	}
+
+	private rollbackScopeForCheckpoint(
+		threadId: string,
+		checkpointId: string,
+	): {
+		readonly removedTurnIds: readonly string[];
+		readonly hiddenEventRange: { readonly startSeq: number; readonly endSeq: number } | null;
+	} {
+		const events = readEventsAfter(this.options.database, 0, { limit: 10_000 });
+		const checkpoint = events.find((event) => {
+			if (event.type !== "checkpoint/created") return false;
+			const payload = event.payload as Record<string, unknown>;
+			return payload.checkpointId === checkpointId;
+		});
+		if (!checkpoint) return { removedTurnIds: [], hiddenEventRange: null };
+		const scopedEvents = events.filter(
+			(event) =>
+				event.seq > checkpoint.seq &&
+				(this.threadIdForRollbackScopeEvent(event) === threadId || event.streamId === threadId),
+		);
+		const endSeq = scopedEvents.reduce((max, event) => Math.max(max, event.seq), checkpoint.seq);
+		const removedTurnIds = [
+			...new Set(
+				scopedEvents
+					.map((event) => this.turnIdForRollbackScopeEvent(event))
+					.filter((turnId): turnId is string => typeof turnId === "string" && turnId.length > 0),
+			),
+		];
+		return {
+			removedTurnIds,
+			hiddenEventRange: endSeq > checkpoint.seq ? { startSeq: checkpoint.seq + 1, endSeq } : null,
+		};
+	}
+
+	private threadIdForRollbackScopeEvent(event: {
+		readonly streamId: string;
+		readonly payload: unknown;
+	}): string | undefined {
+		const payload =
+			event.payload && typeof event.payload === "object" ? (event.payload as Record<string, unknown>) : {};
+		return (
+			stringOr(payload.threadId, "") || stringOr(payload.sessionId, "") || event.streamId.replace(/^session:/, "")
+		);
+	}
+
+	private turnIdForRollbackScopeEvent(event: { readonly payload: unknown }): string | undefined {
+		const payload =
+			event.payload && typeof event.payload === "object" ? (event.payload as Record<string, unknown>) : {};
+		return stringOr(payload.turnId, "") || stringOr(payload.turn_id, "") || undefined;
 	}
 
 	private async saveInlineV1Attachment(attachment: { type: "image"; url: string }): Promise<string> {

@@ -81,7 +81,10 @@ export function buildThreadV1(options: {
 }
 
 export function listThreadV1Turns(options: ListThreadV1TurnsOptions): protocolV1.Turn[] {
-	const rows = listSessionTurns(options.database, options.threadId);
+	const hiddenState = buildRollbackHiddenState(readEvents(options.database, { limit: 10000 }), options.threadId);
+	const rows = listSessionTurns(options.database, options.threadId).filter(
+		(row) => !hiddenState.hiddenTurnIds.has(row.id),
+	);
 	const eventIndex = buildThreadEventIndex(options.database, options.threadId);
 	const turnRowsById = new Map(rows.map((row) => [row.id, row]));
 	const fallbackTurnIds =
@@ -138,11 +141,19 @@ export function collectThreadTimelineEntries(
 	const session = readSession(database, threadId);
 	if (!session) throw new Error(`Unknown thread: ${threadId}`);
 	const events = readEvents(database, { limit: 10000 });
+	const hiddenState = buildRollbackHiddenState(events, threadId);
 	const eventEntries = events
+		.filter((event) => !hiddenState.isHiddenEvent(event))
 		.map((event) => projectStoredEventToTimelineEntry(event, threadId))
 		.filter((entry): entry is protocolV1.TimelineEntry => !!entry);
 	const eventEntryIds = new Set(eventEntries.map((entry) => entry.entryId));
-	const fallbackEntries = collectReadModelFallbackEntries(database, session, eventEntryIds, maxSequence(eventEntries));
+	const fallbackEntries = collectReadModelFallbackEntries(
+		database,
+		session,
+		eventEntryIds,
+		maxSequence(eventEntries),
+		hiddenState,
+	);
 	return dedupeTimelineEntries([...eventEntries, ...fallbackEntries]).sort(
 		(a, b) => a.sequence - b.sequence || a.entryId.localeCompare(b.entryId),
 	);
@@ -179,7 +190,9 @@ export function projectStoredEventToTimelineEntry(
 			const message = asRecord(payload.message);
 			const turnId = text(payload, "turnId", "turn_id");
 			const messageId =
-				text(payload, "messageId", "message_id") ?? text(message, "id", "messageId", "message_id") ?? String(event.seq);
+				text(payload, "messageId", "message_id") ??
+				text(message, "id", "messageId", "message_id") ??
+				String(event.seq);
 			return {
 				...base,
 				entryId: `message:${messageId}`,
@@ -268,7 +281,8 @@ export function projectStoredEventToTimelineEntry(
 		}
 		case "agent/command_output": {
 			const turnId = text(payload, "turnId", "turn_id");
-			const terminalId = text(payload, "terminalId", "terminal_id", "commandId", "command_id", "id") ?? String(event.seq);
+			const terminalId =
+				text(payload, "terminalId", "terminal_id", "commandId", "command_id", "id") ?? String(event.seq);
 			const data = text(payload, "data", "text", "output", "chunk") ?? "";
 			return {
 				...base,
@@ -416,6 +430,7 @@ function collectReadModelFallbackEntries(
 	session: SessionRow,
 	existingEntryIds: ReadonlySet<string>,
 	startSequence: number,
+	hiddenState?: RollbackHiddenState,
 ): protocolV1.TimelineEntry[] {
 	let sequence = startSequence;
 	const entries: protocolV1.TimelineEntry[] = [];
@@ -423,6 +438,8 @@ function collectReadModelFallbackEntries(
 		const kind = turn.role === "user" ? "user-message" : "assistant-message";
 		const entryId = `turn:${turn.id}:${turn.role}`;
 		if (
+			hiddenState?.hiddenTurnIds.has(turn.id) ||
+			hiddenState?.hiddenEntryIds.has(entryId) ||
 			existingEntryIds.has(entryId) ||
 			existingEntryIds.has(`turn:${turn.id}:user`) ||
 			existingEntryIds.has(`message:${turn.id}`)
@@ -512,7 +529,9 @@ function buildThreadEventIndex(
 		{ status: protocolV1.TurnStatus; prompt?: string; createdAt: string; updatedAt: string; completedAt?: string }
 	>();
 	const turnOrder: string[] = [];
-	for (const event of readEvents(database, { streamId: threadId, limit: 10000 })) {
+	const allEvents = readEvents(database, { limit: 10000 });
+	const hiddenState = buildRollbackHiddenState(allEvents, threadId);
+	for (const event of allEvents.filter((event) => event.streamId === threadId && !hiddenState.isHiddenEvent(event))) {
 		const payload = storedEventPayload(event);
 		const turnId = text(payload, "turnId", "turn_id", "id");
 		if (!turnId) continue;
@@ -589,6 +608,102 @@ function dedupeTimelineEntries(entries: readonly protocolV1.TimelineEntry[]): pr
 
 function maxSequence(entries: readonly protocolV1.TimelineEntry[]): number {
 	return entries.reduce((max, entry) => Math.max(max, entry.sequence), 0);
+}
+
+interface RollbackHiddenState {
+	readonly hiddenTurnIds: ReadonlySet<string>;
+	readonly hiddenEntryIds: ReadonlySet<string>;
+	readonly isHiddenEvent: (event: StoredEvent) => boolean;
+}
+
+function buildRollbackHiddenState(events: readonly StoredEvent[], threadId: string): RollbackHiddenState {
+	const hiddenTurnIds = new Set<string>();
+	const hiddenEntryIds = new Set<string>();
+	const hiddenTurnIdsBeforeSeq: Array<{ readonly turnIds: ReadonlySet<string>; readonly beforeSeq: number }> = [];
+	const hiddenRanges: Array<{ readonly startSeq: number; readonly endSeq: number }> = [];
+	for (const event of events) {
+		if (event.type !== "thread/rollback") continue;
+		const payload = storedEventPayload(event);
+		if (threadIdFromPayloadOrStream(payload, event.streamId) !== threadId) continue;
+		const removedTurnIds = stringArray(payload.removedTurnIds);
+		if (removedTurnIds.length > 0) {
+			for (const turnId of removedTurnIds) hiddenTurnIds.add(turnId);
+			hiddenTurnIdsBeforeSeq.push({ turnIds: new Set(removedTurnIds), beforeSeq: event.seq });
+		}
+		const range = hiddenEventRange(payload.hiddenEventRange, event.seq);
+		if (range) hiddenRanges.push(range);
+	}
+	for (const event of events) {
+		const hiddenBySeq = hiddenRanges.some((range) => event.seq >= range.startSeq && event.seq <= range.endSeq);
+		const payload = storedEventPayload(event);
+		const turnId = text(payload, "turnId", "turn_id", "id");
+		const hiddenByTurn =
+			turnId &&
+			hiddenTurnIdsBeforeSeq.some((rollback) => event.seq < rollback.beforeSeq && rollback.turnIds.has(turnId));
+		if (hiddenBySeq || hiddenByTurn) addHiddenEntryIds(hiddenEntryIds, event, payload);
+	}
+	return {
+		hiddenTurnIds,
+		hiddenEntryIds,
+		isHiddenEvent: (event) => {
+			if (event.type === "thread/rollback") return false;
+			for (const range of hiddenRanges) {
+				if (event.seq >= range.startSeq && event.seq <= range.endSeq) return true;
+			}
+			const payload = storedEventPayload(event);
+			const turnId = text(payload, "turnId", "turn_id", "id");
+			if (!turnId) return false;
+			return hiddenTurnIdsBeforeSeq.some(
+				(rollback) => event.seq < rollback.beforeSeq && rollback.turnIds.has(turnId),
+			);
+		},
+	};
+}
+
+function addHiddenEntryIds(target: Set<string>, event: StoredEvent, payload: JsonRecord): void {
+	const turnId = text(payload, "turnId", "turn_id", "id");
+	if (event.type === "turn/started" && turnId) target.add(`turn:${turnId}:user`);
+	if (event.type === "turn/completed" && turnId) target.add(`turn:${turnId}:completed`);
+	if (event.type === "turn/interrupted" && turnId) target.add(`turn:${turnId}:cancelled`);
+	if (event.type === "agent/message_end") {
+		const message = asRecord(payload.message);
+		const messageId = messageIdFromPayload(payload, message, turnId ?? String(event.seq));
+		if (messageId) {
+			target.add(`message:${messageId}`);
+			target.add(`turn:${messageId}:assistant`);
+		}
+		if (turnId) target.add(`turn:${turnId}:assistant`);
+	}
+	if (event.type === "agent/tool_end") {
+		const toolCallId = text(payload, "toolCallId", "tool_call_id", "id");
+		if (toolCallId) target.add(`tool:${toolCallId}`);
+	}
+}
+
+function hiddenEventRange(
+	value: unknown,
+	rollbackSeq: number,
+): { readonly startSeq: number; readonly endSeq: number } | undefined {
+	const range = asRecord(value);
+	const startSeq = numberValue(range.startSeq) ?? numberValue(range.fromSeq) ?? numberValue(range.start);
+	const endSeq =
+		numberValue(range.endSeq) ?? numberValue(range.toSeq) ?? numberValue(range.end) ?? numberValue(range.untilSeq);
+	if (startSeq === undefined) return undefined;
+	return { startSeq, endSeq: endSeq ?? rollbackSeq - 1 };
+}
+
+function threadIdFromPayloadOrStream(payload: JsonRecord, streamId: string): string | undefined {
+	return text(payload, "threadId", "thread_id", "sessionId", "session_id") ?? streamId.replace(/^session:/, "");
+}
+
+function stringArray(value: unknown): string[] {
+	return Array.isArray(value)
+		? value.filter((item): item is string => typeof item === "string" && item.length > 0)
+		: [];
+}
+
+function numberValue(value: unknown): number | undefined {
+	return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function titleFromTurns(database: AppServerDatabase, threadId: string): string | undefined {
@@ -684,7 +799,9 @@ function textValue(value: unknown): string | undefined {
 	}
 	if (value && typeof value === "object") {
 		const record = value as JsonRecord;
-		return textValue(record.text) ?? textValue(record.content) ?? textValue(record.message) ?? textValue(record.summary);
+		return (
+			textValue(record.text) ?? textValue(record.content) ?? textValue(record.message) ?? textValue(record.summary)
+		);
 	}
 	return undefined;
 }

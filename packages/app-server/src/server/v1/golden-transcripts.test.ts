@@ -175,6 +175,9 @@ const scenarios: readonly GoldenScenario[] = [
 			turnStarted("turn-1", "First"),
 			assistantEnd("turn-1", "message-turn-1", "First response"),
 			turnCompleted("turn-1"),
+			turnStarted("turn-2", "Removed"),
+			assistantEnd("turn-2", "message-rolled-back", "Removed response"),
+			turnCompleted("turn-2"),
 			event("thread/rollback", {
 				threadId,
 				workspaceTargetId: "target-1",
@@ -194,7 +197,7 @@ const scenarios: readonly GoldenScenario[] = [
 			"message:message-turn-3",
 			"turn:turn-3:completed",
 		],
-		hiddenReplayEntryIds: ["message:message-rolled-back"],
+		hiddenReplayEntryIds: ["turn:turn-2:user", "message:message-rolled-back", "turn:turn-2:completed"],
 	},
 	{
 		name: "reconnect-after-partial-stream",
