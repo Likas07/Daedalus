@@ -62,7 +62,9 @@ export async function createAppServerCore(options: CreateAppServerOptions): Prom
 	let router!: AppRouter;
 	const sessionStore = new SqliteSessionStore({ database });
 	const accessPolicyService = new AccessPolicyService(database);
-	const approvalService = new ApprovalService(database, accessPolicyService, (event) => publish(event));
+	const approvalService = new ApprovalService(database, accessPolicyService, (event) =>
+		publish(event as OutboundMessage),
+	);
 	const extensionUiRouter = new ExtensionUiRouter((message) => publish(message));
 	const controller = new SessionController({
 		runtimeFactory:
@@ -139,12 +141,12 @@ export async function startAppServer(options: CreateAppServerOptions): Promise<A
 		token,
 		httpUrl,
 		wsUrl: `ws://${host}:${server.port}/ws`,
-			stop: async () => {
-				server.stop(true);
-				await core.close();
-			},
-		};
-	}
+		stop: async () => {
+			server.stop(true);
+			await core.close();
+		},
+	};
+}
 
 const _fakeRuntimeFactory: RuntimeFactory = async (input) => {
 	const listeners = new Set<(event: unknown) => void>();

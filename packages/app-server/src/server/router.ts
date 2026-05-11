@@ -149,7 +149,9 @@ export class AppRouter {
 		this.accessPolicyService = options.accessPolicyService ?? new AccessPolicyService(options.database);
 		this.approvalService =
 			options.approvalService ??
-			new ApprovalService(options.database, this.accessPolicyService, (event) => this.options.publish(event));
+			new ApprovalService(options.database, this.accessPolicyService, (event) =>
+				this.options.publish(event as OutboundMessage),
+			);
 		this.gitMutationService = new GitMutationService({
 			approvalService: this.approvalService,
 			diffService: this.diffService,

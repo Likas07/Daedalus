@@ -13,12 +13,17 @@ export interface ToolApprovalGateOptions {
 	readonly approvalService: ApprovalService;
 	readonly accessPolicy: AccessPolicyService;
 	readonly timeoutMs?: number;
+	readonly workspaceTargetId?: string;
+	readonly getTurnId?: () => string | undefined;
+	readonly getWorkspaceTargetId?: () => string | undefined;
 }
 
 export interface ToolApprovalInput {
 	readonly toolName: string;
 	readonly toolCallId: string;
 	readonly args: unknown;
+	readonly turnId?: string;
+	readonly workspaceTargetId?: string;
 	readonly signal?: AbortSignal;
 }
 
@@ -32,16 +37,31 @@ export class ToolApprovalDeniedError extends Error {
 export class ToolApprovalGate {
 	private disposed = false;
 	private readonly pending = new Set<string>();
+	private runtimeContext: {
+		readonly getTurnId?: () => string | undefined;
+		readonly workspaceTargetId?: string;
+	} = {};
 
 	constructor(private readonly options: ToolApprovalGateOptions) {}
+
+	setContext(context: { readonly getTurnId?: () => string | undefined; readonly workspaceTargetId?: string }): void {
+		this.runtimeContext = context;
+	}
 
 	async beforeToolCall(input: ToolApprovalInput): Promise<ToolGateResult | undefined> {
 		const risk = classifyToolRisk(input.toolName, input.args);
 		if (risk === "safe") return undefined;
 		if (risk === "hard") {
-			return { block: true, reason: `Blocked by access policy: ${input.toolName} is not allowed from the GUI.` };
+			return {
+				block: true,
+				reason: `Blocked by access policy: ${input.toolName} is not allowed from the GUI.`,
+			};
 		}
-		if (this.disposed) return { block: true, reason: "Session was disposed before tool approval." };
+		if (this.disposed)
+			return {
+				block: true,
+				reason: "Session was disposed before tool approval.",
+			};
 		const approvalId = `tool-${input.toolCallId}`;
 		this.pending.add(approvalId);
 		try {
@@ -56,6 +76,15 @@ export class ToolApprovalGate {
 					summary: summarizeTool(input.toolName, input.args),
 					risk: "medium",
 					scope: input.toolName,
+					kind: "command",
+					turnId:
+						input.turnId ?? this.options.getTurnId?.() ?? this.runtimeContext.getTurnId?.() ?? "turn:unknown",
+					workspaceTargetId:
+						input.workspaceTargetId ??
+						this.options.getWorkspaceTargetId?.() ??
+						this.options.workspaceTargetId ??
+						this.runtimeContext.workspaceTargetId ??
+						`base:${this.options.sessionId}`,
 				},
 			});
 			if (requested.autoApproved) return undefined;

@@ -11,6 +11,23 @@ export interface ApprovalRequestInput {
 	readonly hardBlock?: boolean;
 }
 
+export interface ApprovalRequestedNotification {
+	readonly kind: "notification";
+	readonly method: "approval.requested" | "user-input.requested";
+	readonly params: {
+		readonly requestId: string;
+		readonly approvalId: string;
+		readonly threadId: string;
+		readonly turnId: string;
+		readonly workspaceTargetId: string;
+		readonly requestKind: string;
+		readonly request: unknown;
+		readonly title?: string;
+		readonly summary?: string;
+		readonly question?: string;
+	};
+}
+
 export interface ApprovalDecision {
 	readonly approvalId: string;
 	readonly decision: "approved" | "denied";
@@ -21,7 +38,11 @@ export interface ApprovalDecision {
 export class ApprovalService {
 	private readonly waiters = new Map<
 		string,
-		{ resolve: (decision: ApprovalDecision) => void; reject: (error: Error) => void; timer?: Timer }
+		{
+			resolve: (decision: ApprovalDecision) => void;
+			reject: (error: Error) => void;
+			timer?: Timer;
+		}
 	>();
 	private readonly idempotentV1Results = new Map<
 		string,
@@ -31,7 +52,7 @@ export class ApprovalService {
 	constructor(
 		private readonly database: AppServerDatabase,
 		private readonly accessPolicy: AccessPolicyService,
-		private readonly publish?: (event: AppEvent) => void,
+		private readonly publish?: (message: AppEvent | ApprovalRequestedNotification) => void,
 	) {}
 
 	list(sessionId?: string): unknown[] {
@@ -55,7 +76,11 @@ export class ApprovalService {
 		const failure = this.validateV1Decision(row, params);
 		if (failure) return failure;
 		const decidedAt = new Date().toISOString();
-		this.resolve({ approvalId: params.approvalId, decision: params.decision, message: params.message });
+		this.resolve({
+			approvalId: params.approvalId,
+			decision: params.decision,
+			message: params.message,
+		});
 		const request = row
 			? this.toV1Request({ ...row, status: params.decision, updatedAt: decidedAt }, params)
 			: undefined;
@@ -81,11 +106,18 @@ export class ApprovalService {
 		const existing = idempotencyKey ? this.idempotentV1Results.get(idempotencyKey) : undefined;
 		if (existing) return existing as protocolV1.ApprovalAnswerInputResult;
 		const row = this.readApproval(params.approvalId);
-		const failure = this.validateV1Decision(row, { ...params, decision: "approved" });
+		const failure = this.validateV1Decision(row, {
+			...params,
+			decision: "approved",
+		});
 		if (failure) return failure;
 		const answer = params.answers ? JSON.stringify(params.answers) : (params.answer ?? "");
 		const answeredAt = new Date().toISOString();
-		this.resolve({ approvalId: params.approvalId, decision: "approved", message: answer });
+		this.resolve({
+			approvalId: params.approvalId,
+			decision: "approved",
+			message: answer,
+		});
 		const request = row ? this.toV1Request({ ...row, status: "approved", updatedAt: answeredAt }, params) : undefined;
 		const result = {
 			ok: true,
@@ -104,7 +136,10 @@ export class ApprovalService {
 		return result;
 	}
 
-	request(input: ApprovalRequestInput): { approvalId: string; autoApproved: boolean } {
+	request(input: ApprovalRequestInput): {
+		approvalId: string;
+		autoApproved: boolean;
+	} {
 		const approvalId = input.id ?? `approval-${crypto.randomUUID()}`;
 		const request =
 			input.request && typeof input.request === "object"
@@ -123,15 +158,22 @@ export class ApprovalService {
 			payload: payload as EventPayload,
 		});
 		projectRuntimeEvents(this.database);
-		this.publish?.({
+		const appEvent = {
 			id: approvalId,
 			type: "approval/requested",
 			ts: new Date().toISOString(),
 			sessionId: input.sessionId,
 			payload,
-		} as unknown as AppEvent);
+		} as unknown as AppEvent;
+		this.publish?.(appEvent);
+		const liveNotification = approvalRequestedNotification(payload);
+		if (liveNotification) this.publish?.(liveNotification);
 		if (this.accessPolicy.getPolicy().mode === "unrestricted" && input.hardBlock !== true) {
-			this.resolve({ approvalId, decision: "approved", reason: "auto-approved by Unrestricted mode" });
+			this.resolve({
+				approvalId,
+				decision: "approved",
+				reason: "auto-approved by Unrestricted mode",
+			});
 			this.accessPolicy.auditAutoApproved(approvalId);
 			return { approvalId, autoApproved: true };
 		}
@@ -175,7 +217,11 @@ export class ApprovalService {
 			approvalId: input.approvalId,
 			status: input.decision,
 			decision: input.decision,
-			response: { decision: input.decision, message: input.message, reason: input.reason },
+			response: {
+				decision: input.decision,
+				message: input.message,
+				reason: input.reason,
+			},
 			reason: input.reason ?? input.message,
 			ts: new Date().toISOString(),
 		} as unknown as AppEvent;
@@ -275,9 +321,15 @@ export class ApprovalService {
 
 	private v1IdempotencyKey(
 		operation: "decide" | "answer",
-		params: { readonly approvalId: string; readonly threadId: string; readonly idempotencyKey?: string },
+		params: {
+			readonly approvalId: string;
+			readonly threadId: string;
+			readonly idempotencyKey?: string;
+		},
 	): string | undefined {
-		return params.idempotencyKey ? `${operation}:${params.threadId}:${params.approvalId}:${params.idempotencyKey}` : undefined;
+		return params.idempotencyKey
+			? `${operation}:${params.threadId}:${params.approvalId}:${params.idempotencyKey}`
+			: undefined;
 	}
 
 	private toV1Request(
@@ -300,6 +352,40 @@ export class ApprovalService {
 			updatedAt: approval.updatedAt,
 		};
 	}
+}
+
+function approvalRequestedNotification(payload: Record<string, unknown>): ApprovalRequestedNotification | undefined {
+	const approvalId = stringValue(payload.approvalId);
+	const threadId = stringValue(payload.sessionId) ?? stringValue(payload.threadId);
+	const turnId = stringValue(payload.turnId);
+	const workspaceTargetId = stringValue(payload.workspaceTargetId);
+	if (!approvalId || !threadId || !turnId || !workspaceTargetId) return undefined;
+	const request =
+		payload.request && typeof payload.request === "object" ? (payload.request as Record<string, unknown>) : {};
+	const requestKind =
+		stringValue(payload.requestKind) ??
+		stringValue(payload.kind) ??
+		stringValue(payload.type) ??
+		stringValue(request.kind) ??
+		stringValue(request.type) ??
+		"approval";
+	const method = requestKind === "answer-input" ? "user-input.requested" : "approval.requested";
+	return {
+		kind: "notification",
+		method,
+		params: {
+			requestId: approvalId,
+			approvalId,
+			threadId,
+			turnId,
+			workspaceTargetId,
+			requestKind,
+			request,
+			...(stringValue(payload.title) ? { title: stringValue(payload.title) } : {}),
+			...(stringValue(payload.summary) ? { summary: stringValue(payload.summary) } : {}),
+			...(stringValue(payload.question) ? { question: stringValue(payload.question) } : {}),
+		},
+	};
 }
 
 function parseRecord(value: string): Record<string, unknown> {

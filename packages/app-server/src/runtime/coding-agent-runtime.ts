@@ -56,7 +56,11 @@ export function createCodingAgentRuntimeFactory(options: CodingAgentRuntimeFacto
 				workspaceTarget: runtimeWorkspaceTarget,
 			});
 			currentServices = services;
-			const resolved = await resolveRuntimeOptions({ services, sessionManager, context });
+			const resolved = await resolveRuntimeOptions({
+				services,
+				sessionManager,
+				context,
+			});
 			services.diagnostics.push(...resolved.diagnostics);
 			const session = await createAgentSessionFromServices({
 				services,
@@ -126,7 +130,9 @@ export function createCodingAgentRuntimeFactory(options: CodingAgentRuntimeFacto
 function installApprovalGate(session: unknown, gate: ToolApprovalGate): void {
 	const agentSession = session as {
 		__approvalGate?: ToolApprovalGate;
-		agent?: { beforeToolCall?: (context: any, signal?: AbortSignal) => Promise<unknown> | unknown };
+		agent?: {
+			beforeToolCall?: (context: any, signal?: AbortSignal) => Promise<unknown> | unknown;
+		};
 	};
 	agentSession.__approvalGate?.dispose("Approval gate replaced.");
 	agentSession.__approvalGate = gate;
@@ -139,6 +145,8 @@ function installApprovalGate(session: unknown, gate: ToolApprovalGate): void {
 			toolName: context.toolCall.name,
 			toolCallId: context.toolCall.id,
 			args: context.args,
+			turnId: typeof context.turnId === "string" ? context.turnId : undefined,
+			workspaceTargetId: typeof context.workspaceTargetId === "string" ? context.workspaceTargetId : undefined,
 			signal,
 		});
 	};

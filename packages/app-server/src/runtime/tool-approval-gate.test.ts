@@ -37,9 +37,15 @@ test("classifies read-only tools as safe and risky tools as approval-sensitive",
 test("supervised mode waits for approval", async () => {
 	const { database, gate } = setup();
 	let settled = false;
-	const pending = gate.beforeToolCall({ toolName: "write", toolCallId: "call-1", args: { path: "a" } }).then(() => {
-		settled = true;
-	});
+	const pending = gate
+		.beforeToolCall({
+			toolName: "write",
+			toolCallId: "call-1",
+			args: { path: "a" },
+		})
+		.then(() => {
+			settled = true;
+		});
 	await Bun.sleep(20);
 	expect(settled).toBe(false);
 	expect(readEvents(database).map((event) => event.type)).toContain("approval/requested");
@@ -48,9 +54,54 @@ test("supervised mode waits for approval", async () => {
 	database.close();
 });
 
+test("tool approvals include stable turn and workspace metadata", async () => {
+	const { database, gate } = setup();
+	gate.setContext({ getTurnId: () => "turn-1", workspaceTargetId: "target-1" });
+	const pending = gate.beforeToolCall({
+		toolName: "bash",
+		toolCallId: "call-meta",
+		args: { command: "git status" },
+	});
+	await Bun.sleep(10);
+	const event = readEvents(database).find((event) => event.type === "approval/requested");
+	expect(event?.payload).toMatchObject({
+		approvalId: "tool-call-meta",
+		sessionId: "session-1",
+		kind: "command",
+		turnId: "turn-1",
+		workspaceTargetId: "target-1",
+	});
+	gate.dispose();
+	await pending;
+	database.close();
+});
+
+test("tool approval metadata falls back to non-empty ids", async () => {
+	const { database, gate } = setup();
+	const pending = gate.beforeToolCall({
+		toolName: "bash",
+		toolCallId: "call-fallback",
+		args: { command: "git status" },
+	});
+	await Bun.sleep(10);
+	const event = readEvents(database).find((event) => event.type === "approval/requested");
+	expect(event?.payload).toMatchObject({
+		approvalId: "tool-call-fallback",
+		turnId: "turn:unknown",
+		workspaceTargetId: "base:session-1",
+	});
+	gate.dispose();
+	await pending;
+	database.close();
+});
+
 test("approve resumes tool execution", async () => {
 	const { database, approvals, gate } = setup();
-	const pending = gate.beforeToolCall({ toolName: "write", toolCallId: "call-approve", args: { path: "a" } });
+	const pending = gate.beforeToolCall({
+		toolName: "write",
+		toolCallId: "call-approve",
+		args: { path: "a" },
+	});
 	await Bun.sleep(10);
 	approvals.resolve({ approvalId: "tool-call-approve", decision: "approved" });
 	expect(await pending).toBeUndefined();
@@ -59,9 +110,17 @@ test("approve resumes tool execution", async () => {
 
 test("deny blocks tool execution", async () => {
 	const { database, approvals, gate } = setup();
-	const pending = gate.beforeToolCall({ toolName: "write", toolCallId: "call-deny", args: { path: "a" } });
+	const pending = gate.beforeToolCall({
+		toolName: "write",
+		toolCallId: "call-deny",
+		args: { path: "a" },
+	});
 	await Bun.sleep(10);
-	approvals.resolve({ approvalId: "tool-call-deny", decision: "denied", message: "revise please" });
+	approvals.resolve({
+		approvalId: "tool-call-deny",
+		decision: "denied",
+		message: "revise please",
+	});
 	expect(await pending).toEqual({ block: true, reason: "revise please" });
 	database.close();
 });
@@ -70,7 +129,11 @@ test("unrestricted auto-approves soft prompts", async () => {
 	const { database, access, gate } = setup();
 	access.setMode("unrestricted");
 	expect(
-		await gate.beforeToolCall({ toolName: "write", toolCallId: "call-auto", args: { path: "a" } }),
+		await gate.beforeToolCall({
+			toolName: "write",
+			toolCallId: "call-auto",
+			args: { path: "a" },
+		}),
 	).toBeUndefined();
 	expect(readEvents(database).map((event) => event.type)).toContain("access/auto-approved");
 	database.close();
@@ -80,7 +143,11 @@ test("hard blocks remain blocked", async () => {
 	const { database, access, gate } = setup();
 	access.setMode("unrestricted");
 	expect(
-		await gate.beforeToolCall({ toolName: "bash", toolCallId: "call-hard", args: { command: "sudo rm -rf /" } }),
+		await gate.beforeToolCall({
+			toolName: "bash",
+			toolCallId: "call-hard",
+			args: { command: "sudo rm -rf /" },
+		}),
 	).toEqual({
 		block: true,
 		reason: "Blocked by access policy: bash is not allowed from the GUI.",
