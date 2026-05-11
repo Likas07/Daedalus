@@ -72,13 +72,17 @@ export function createCodingAgentRuntimeFactory(options: CodingAgentRuntimeFacto
 				tools: resolved.tools,
 			});
 			if (options.extensionUiRouter && sessionId) {
+				const uiBridge = new ExtensionUIBridge({
+					extensionId: "app-server",
+					sessionId,
+					router: options.extensionUiRouter,
+					emit: () => {},
+					approvalService: options.approvalService,
+					userInputTimeoutMs: options.approvalTimeoutMs,
+				});
+				(session.session as { __extensionUIBridge?: ExtensionUIBridge }).__extensionUIBridge = uiBridge;
 				await session.session.bindExtensions({
-					uiContext: new ExtensionUIBridge({
-						extensionId: "app-server",
-						sessionId,
-						router: options.extensionUiRouter,
-						emit: () => {},
-					}) as never,
+					uiContext: uiBridge as never,
 				});
 			}
 			if (options.approvalService && options.accessPolicy && sessionId)
@@ -120,6 +124,9 @@ export function createCodingAgentRuntimeFactory(options: CodingAgentRuntimeFacto
 			},
 			dispose: async () => {
 				(runtime.session as { __approvalGate?: ToolApprovalGate }).__approvalGate?.dispose();
+				(runtime.session as { __extensionUIBridge?: ExtensionUIBridge }).__extensionUIBridge?.cancelPending(
+					"Session disposed",
+				);
 				if (sessionId) options.extensionUiRouter?.cancelSession(sessionId, "Session disposed");
 				await runtime.dispose();
 			},

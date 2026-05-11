@@ -405,6 +405,15 @@ export class SessionController {
 			getTurnId: () => record.activeTurnId,
 			workspaceTargetId: workspaceTargetId(runtime.workspaceTarget) ?? `base:${sessionId}`,
 		});
+		const extensionUIBridge = runtime.session as {
+			__extensionUIBridge?: {
+				setContext?: (context: { getTurnId?: () => string | undefined; workspaceTargetId?: string }) => void;
+			};
+		};
+		extensionUIBridge.__extensionUIBridge?.setContext?.({
+			getTurnId: () => record.activeTurnId,
+			workspaceTargetId: workspaceTargetId(runtime.workspaceTarget) ?? `base:${sessionId}`,
+		});
 		const normalizer = new CanonicalAgentEventNormalizer();
 		record.unsubscribe = runtime.session.subscribe((event) => {
 			const runtimeEvent = event as RuntimeAgentEvent;
