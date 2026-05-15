@@ -267,7 +267,9 @@ export default function planExecutionExtension(pi: ExtensionAPI): void {
 		async execute(_toolCallId, params) {
 			if (!params.selector) {
 				return {
-					content: [{ type: "text", text: "plan_task_read requires selector (active, next, task id, or step number)." }],
+					content: [
+						{ type: "text", text: "plan_task_read requires selector (active, next, task id, or step number)." },
+					],
 					isError: true,
 					details: latestExecution,
 				};

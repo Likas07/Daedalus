@@ -2,7 +2,15 @@ import { expect, test } from "bun:test";
 
 import { AppServerClient } from "../client";
 import { createInProcessTransport } from "../in-process-transport";
-import { cancelTurn, createThread, getPayloadWindow, getThread, listThreads, replayThread, startTurn } from "./thread-client";
+import {
+	cancelTurn,
+	createThread,
+	getPayloadWindow,
+	getThread,
+	listThreads,
+	replayThread,
+	startTurn,
+} from "./thread-client";
 import { subscribeThread } from "./thread-subscriptions";
 
 type AnyRequest = { readonly id: string | number; readonly method: string; readonly params: unknown };

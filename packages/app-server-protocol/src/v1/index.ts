@@ -6,7 +6,7 @@ export * from "./provider";
 export * from "./replay";
 export * from "./rollback";
 export * from "./terminal";
+export * from "./text-generation";
 export * from "./thread";
 export * from "./timeline";
-export * from "./text-generation";
 export * from "./workspace-target";

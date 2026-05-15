@@ -114,7 +114,9 @@ describe("primary role runtime mode", () => {
 		expect(providerSystemPrompt).toContain("You may consult Sage through subagent delegation");
 		expect(providerSystemPrompt).toContain("Executable implementation plans must use this lifecycle before handoff");
 		expect(providerSystemPrompt).toContain("If `plan_validate` fails, fix the plan artifact");
-		expect(providerSystemPrompt).toContain("Advisory planning that is not intended for `execute_plan` may return analysis directly");
+		expect(providerSystemPrompt).toContain(
+			"Advisory planning that is not intended for `execute_plan` may return analysis directly",
+		);
 		expect(providerSystemPrompt).not.toContain("submit_result exactly once");
 
 		session.dispose();
@@ -413,10 +415,19 @@ describe("primary role runtime mode", () => {
 			]),
 		);
 		expect(activeTools).toEqual(
-			expect.arrayContaining(["plan_validate", "execute_plan", "plan_task_read", "subagent", "todo_read", "todo_write"]),
+			expect.arrayContaining([
+				"plan_validate",
+				"execute_plan",
+				"plan_task_read",
+				"subagent",
+				"todo_read",
+				"todo_write",
+			]),
 		);
 		const persistedHandoff = entries.filter((entry) => entry.customType === "primary-role-mode").at(-1);
-		expect(persistedHandoff?.data.baselineTools).toEqual(expect.arrayContaining(["plan_validate", "execute_plan", "plan_task_read"]));
+		expect(persistedHandoff?.data.baselineTools).toEqual(
+			expect.arrayContaining(["plan_validate", "execute_plan", "plan_task_read"]),
+		);
 
 		activeTools = ["read", "write", "hashline_edit"];
 		await sessionTreeHandler({ type: "session_tree" }, ctx);

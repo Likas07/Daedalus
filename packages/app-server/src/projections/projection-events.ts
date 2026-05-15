@@ -172,7 +172,9 @@ function textValue(value: unknown): string | undefined {
 	}
 	if (value && typeof value === "object") {
 		const record = value as Record<string, unknown>;
-		return textValue(record.text) ?? textValue(record.content) ?? textValue(record.message) ?? textValue(record.summary);
+		return (
+			textValue(record.text) ?? textValue(record.content) ?? textValue(record.message) ?? textValue(record.summary)
+		);
 	}
 	return undefined;
 }

@@ -11,7 +11,9 @@ describe("runtime event mapper", () => {
 			now: () => new Date("2026-05-08T00:00:00.000Z"),
 		};
 
-		expect(mapRuntimeEvent({ type: "message_update", messageId: "message-1", delta: "hi" }, options).event).toMatchObject({
+		expect(
+			mapRuntimeEvent({ type: "message_update", messageId: "message-1", delta: "hi" }, options).event,
+		).toMatchObject({
 			id: "event-1",
 			type: "agent/message_update",
 			sessionId: "thread-1",

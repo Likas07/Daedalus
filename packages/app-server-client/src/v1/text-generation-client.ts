@@ -9,14 +9,22 @@ export async function generateThreadTitle(
 	client: TextGenerationV1RequestClient,
 	params: protocolV1.TextGenerateThreadTitleParams,
 ): Promise<protocolV1.TextGenerateThreadTitleResult> {
-	return (await sendTextGenerationV1Request(client, "text.threadTitle", params)) as protocolV1.TextGenerateThreadTitleResult;
+	return (await sendTextGenerationV1Request(
+		client,
+		"text.threadTitle",
+		params,
+	)) as protocolV1.TextGenerateThreadTitleResult;
 }
 
 export async function generateBranchName(
 	client: TextGenerationV1RequestClient,
 	params: protocolV1.TextGenerateBranchNameParams,
 ): Promise<protocolV1.TextGenerateBranchNameResult> {
-	return (await sendTextGenerationV1Request(client, "text.branchName", params)) as protocolV1.TextGenerateBranchNameResult;
+	return (await sendTextGenerationV1Request(
+		client,
+		"text.branchName",
+		params,
+	)) as protocolV1.TextGenerateBranchNameResult;
 }
 
 export async function generateCommitMessage(
@@ -34,7 +42,11 @@ export async function generatePrContent(
 	client: TextGenerationV1RequestClient,
 	params: protocolV1.TextGeneratePrContentParams,
 ): Promise<protocolV1.TextGeneratePrContentResult> {
-	return (await sendTextGenerationV1Request(client, "text.prContent", params)) as protocolV1.TextGeneratePrContentResult;
+	return (await sendTextGenerationV1Request(
+		client,
+		"text.prContent",
+		params,
+	)) as protocolV1.TextGeneratePrContentResult;
 }
 
 function sendTextGenerationV1Request(

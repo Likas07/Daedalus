@@ -3,9 +3,9 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-	appServerProtocolVersion,
-	protocolV1,
 	type AppEvent,
+	appServerProtocolVersion,
+	type protocolV1,
 	type ServerNotification,
 } from "@daedalus-pi/app-server-protocol";
 import { appendEvent, openAppServerDatabase, projectRuntimeEvents } from "..";
@@ -83,10 +83,15 @@ describe("app-server Codex parity gate", () => {
 		expect(turnId).toBeTruthy();
 		const activeTurnId = turnId!;
 		await waitFor(() =>
-			messages.find((message) => isNotification(message, "thread.timeline.delta") && JSON.stringify(message).includes("Hello")),
+			messages.find(
+				(message) => isNotification(message, "thread.timeline.delta") && JSON.stringify(message).includes("Hello"),
+			),
 		);
 		await waitFor(() =>
-			messages.find((message) => isNotification(message, "thread.timeline.delta") && JSON.stringify(message).includes("tool chunk")),
+			messages.find(
+				(message) =>
+					isNotification(message, "thread.timeline.delta") && JSON.stringify(message).includes("tool chunk"),
+			),
 		);
 
 		send(ws, "terminal", "v1.terminal.open", {
@@ -110,7 +115,10 @@ describe("app-server Codex parity gate", () => {
 			payload: { sessionId: threadId, terminalId, data: "terminal chunk\n" },
 		} as AppEvent);
 		await waitFor(() =>
-			messages.find((message) => isNotification(message, "terminal/output") && JSON.stringify(message).includes("terminal chunk")),
+			messages.find(
+				(message) =>
+					isNotification(message, "terminal/output") && JSON.stringify(message).includes("terminal chunk"),
+			),
 		);
 
 		send(ws, "diff", "v1.diff.summary", {
@@ -150,12 +158,17 @@ describe("app-server Codex parity gate", () => {
 		});
 		projectRuntimeEvents(approvalDatabase);
 		approvalDatabase.close();
-		send(ws, "approvals", "v1.approval.list", { threadId, turnId: activeTurnId, workspaceTargetId, status: "pending" });
+		send(ws, "approvals", "v1.approval.list", {
+			threadId,
+			turnId: activeTurnId,
+			workspaceTargetId,
+			status: "pending",
+		});
 		const approvals = await response(messages, "approvals");
 		expect(approvals.ok).toBe(true);
-		expect((approvals.result as protocolV1.ApprovalListResult).requests.map((request) => request.approvalId)).toContain(
-			approvalId,
-		);
+		expect(
+			(approvals.result as protocolV1.ApprovalListResult).requests.map((request) => request.approvalId),
+		).toContain(approvalId);
 		send(ws, "answer", "v1.approval.answer", {
 			approvalId,
 			threadId,
@@ -190,7 +203,10 @@ describe("app-server Codex parity gate", () => {
 			send(ws, `payload-${index}`, "payload.window", payloadParams(threadId, ref));
 			const payload = await response(messages, `payload-${index}`);
 			expect(payload.ok, JSON.stringify({ ref, payload })).toBe(true);
-			expect((payload.result as { chunks: unknown[] }).chunks.length, JSON.stringify({ ref, payload })).toBeGreaterThan(0);
+			expect(
+				(payload.result as { chunks: unknown[] }).chunks.length,
+				JSON.stringify({ ref, payload }),
+			).toBeGreaterThan(0);
 		}
 
 		send(ws, "unsupported", "definitely.unsupported", {});
@@ -216,8 +232,18 @@ class FakeRuntime implements ControlledSessionRuntime {
 			prompt: async () => {
 				this.listener?.({ type: "message_update", messageId: "assistant-1", delta: "Hello " });
 				this.listener?.({ type: "tool_execution_start", toolCallId: "tool-1", toolName: "shell" });
-				this.listener?.({ type: "tool_execution_update", toolCallId: "tool-1", toolName: "shell", delta: "tool chunk" });
-				this.listener?.({ type: "tool_execution_end", toolCallId: "tool-1", toolName: "shell", output: "tool result" });
+				this.listener?.({
+					type: "tool_execution_update",
+					toolCallId: "tool-1",
+					toolName: "shell",
+					delta: "tool chunk",
+				});
+				this.listener?.({
+					type: "tool_execution_end",
+					toolCallId: "tool-1",
+					toolName: "shell",
+					output: "tool result",
+				});
 				this.listener?.({
 					type: "message_end",
 					message: { id: "assistant-1", role: "assistant", content: "Hello from fake runtime" },

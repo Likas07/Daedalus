@@ -4,7 +4,12 @@ import { AppServerClient, AppServerResponseError } from "./client";
 import { createInProcessTransport } from "./in-process-transport";
 import { getProviderSnapshot } from "./v1/provider-client";
 import { rollbackThread } from "./v1/rollback-client";
-import { generateBranchName, generateCommitMessage, generatePrContent, generateThreadTitle } from "./v1/text-generation-client";
+import {
+	generateBranchName,
+	generateCommitMessage,
+	generatePrContent,
+	generateThreadTitle,
+} from "./v1/text-generation-client";
 
 test("correlates requests and rejects failed responses", async () => {
 	const client = new AppServerClient({
@@ -505,12 +510,20 @@ test("provides v1 adapter-facing provider rollback and text-generation helpers",
 	});
 
 	await expect(getProviderSnapshot(client)).resolves.toMatchObject({ status: "ready" });
-	await expect(rollbackThread(client, { threadId: "thread-1", numTurns: 1, workspaceTargetId: "target-1" })).resolves.toMatchObject({
+	await expect(
+		rollbackThread(client, { threadId: "thread-1", numTurns: 1, workspaceTargetId: "target-1" }),
+	).resolves.toMatchObject({
 		status: "completed",
 	});
-	await expect(generateThreadTitle(client, { message: "hello" })).resolves.toMatchObject({ title: "Implement v1 contract" });
-	await expect(generateBranchName(client, { message: "hello" })).resolves.toMatchObject({ branch: "implement-v1-contract" });
-	await expect(generateCommitMessage(client, { diff: "diff" })).resolves.toMatchObject({ subject: "feat: add v1 contract" });
+	await expect(generateThreadTitle(client, { message: "hello" })).resolves.toMatchObject({
+		title: "Implement v1 contract",
+	});
+	await expect(generateBranchName(client, { message: "hello" })).resolves.toMatchObject({
+		branch: "implement-v1-contract",
+	});
+	await expect(generateCommitMessage(client, { diff: "diff" })).resolves.toMatchObject({
+		subject: "feat: add v1 contract",
+	});
 	await expect(generatePrContent(client, { diff: "diff" })).resolves.toMatchObject({ title: "Add v1 contract" });
 	expect(seenMethods).toEqual([
 		"provider.snapshot",

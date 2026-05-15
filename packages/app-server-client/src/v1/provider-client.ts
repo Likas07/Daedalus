@@ -1,5 +1,5 @@
-import type { Static } from "@sinclair/typebox";
 import type { protocolV1 } from "@daedalus-pi/app-server-protocol";
+import type { Static } from "@sinclair/typebox";
 import type { AppServerClient } from "../client";
 
 export type ProviderV1RequestClient =

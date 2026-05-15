@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { protocolV1 } from "@daedalus-pi/app-server-protocol";
 import { Value } from "@sinclair/typebox/value";
-import { openAppServerDatabase, type AppServerDatabase } from "../../persistence/database";
+import { type AppServerDatabase, openAppServerDatabase } from "../../persistence/database";
 import { appendEvent, type EventPayload, type StoredEvent } from "../../persistence/event-store";
 import { runMigrations } from "../../persistence/migrations";
 import { projectRuntimeEvents } from "../../persistence/projector";

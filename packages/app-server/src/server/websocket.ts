@@ -10,7 +10,10 @@ const MAX_QUEUE = 128;
 export class WebSocketClient {
 	private readonly queue: string[] = [];
 	private readonly session: ProtocolSession;
-	constructor(readonly ws: AppServerWebSocket, router: AppRouter) {
+	constructor(
+		readonly ws: AppServerWebSocket,
+		router: AppRouter,
+	) {
 		this.session = new ProtocolSession(router, (message) => this.send(message));
 	}
 

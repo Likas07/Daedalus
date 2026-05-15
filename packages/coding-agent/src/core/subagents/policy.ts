@@ -1,8 +1,8 @@
 import path from "node:path";
 import { minimatch } from "minimatch";
+import { formatPlanStepDetail, readBoundPlanTask } from "../../extensions/daedalus/workflow/plan-execution/shared.js";
 import { createCodingTools, type Tool } from "../tools/index.js";
 import { createSkillTool } from "../tools/skill.js";
-import { formatPlanStepDetail, readBoundPlanTask } from "../../extensions/daedalus/workflow/plan-execution/shared.js";
 import type { SubagentDefinition, SubagentPolicy, SubagentTaskBinding } from "./types.js";
 
 const WRITE_TOOLS = new Set(["write", "edit", "hashline_edit"]);

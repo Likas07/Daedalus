@@ -1,5 +1,4 @@
 import {
-	resultSchemaForMethod,
 	type AccessMode,
 	type ClientNotification,
 	type ClientRequest,
@@ -10,6 +9,7 @@ import {
 	type InitializeParams,
 	type InitializeResult,
 	type ClientRequestResultMap as ProtocolClientRequestResultMap,
+	resultSchemaForMethod,
 	type ServerNotification,
 	type ServerRequest,
 	type ServerResponse,
@@ -84,14 +84,21 @@ export class AppServerResponseError extends Error {
 }
 
 export class AppServerClientTimeoutError extends Error {
-	constructor(readonly requestId: string, readonly method: string, readonly timeoutMs: number) {
+	constructor(
+		readonly requestId: string,
+		readonly method: string,
+		readonly timeoutMs: number,
+	) {
 		super(`App-server request ${method} timed out after ${timeoutMs}ms`);
 		this.name = "AppServerClientTimeoutError";
 	}
 }
 
 export class AppServerClientDecodeError extends Error {
-	constructor(readonly method: string, readonly value: unknown) {
+	constructor(
+		readonly method: string,
+		readonly value: unknown,
+	) {
 		super(`Invalid app-server response for ${method}`);
 		this.name = "AppServerClientDecodeError";
 	}
@@ -412,8 +419,7 @@ export class AppServerClient {
 				return;
 			}
 			pending.resolve(response.result);
-		}
-		else pending.reject(new AppServerResponseError(response.error));
+		} else pending.reject(new AppServerResponseError(response.error));
 	}
 
 	private handleNotification(notification: ServerNotification): void {

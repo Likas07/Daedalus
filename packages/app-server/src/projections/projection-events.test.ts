@@ -45,7 +45,14 @@ test("agent message end extracts nested text content arrays", () => {
 	const projected = projectAppEventToProjectionEvents({
 		event: base("agent/message_end", {
 			turnId: "t1",
-			message: { id: "m1", role: "assistant", content: [{ type: "text", text: "Hello" }, { type: "text", text: " there" }] },
+			message: {
+				id: "m1",
+				role: "assistant",
+				content: [
+					{ type: "text", text: "Hello" },
+					{ type: "text", text: " there" },
+				],
+			},
 		}),
 		seq: 8,
 	});

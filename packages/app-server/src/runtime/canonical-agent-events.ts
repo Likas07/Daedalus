@@ -169,7 +169,8 @@ export class CanonicalAgentEventNormalizer {
 		const state = this.resolveMessageState(event, options, { ending: true });
 		if (state.completed) return { handled: true, events: [] };
 		state.completed = true;
-		if (this.activeFallbackMessageByTurn.get(options.turnId) === state) this.activeFallbackMessageByTurn.delete(options.turnId);
+		if (this.activeFallbackMessageByTurn.get(options.turnId) === state)
+			this.activeFallbackMessageByTurn.delete(options.turnId);
 		const metadata = messageMetadata(event, message);
 		return {
 			handled: true,
@@ -186,7 +187,11 @@ export class CanonicalAgentEventNormalizer {
 						...(metadata.responseId ? { responseId: metadata.responseId } : {}),
 						...(metadata.provider ? { provider: metadata.provider } : {}),
 						...(metadata.model ? { model: metadata.model } : {}),
-						...(event.usage !== undefined ? { usage: event.usage } : message.usage !== undefined ? { usage: message.usage } : {}),
+						...(event.usage !== undefined
+							? { usage: event.usage }
+							: message.usage !== undefined
+								? { usage: message.usage }
+								: {}),
 					},
 				},
 			],
@@ -227,7 +232,11 @@ export class CanonicalAgentEventNormalizer {
 						turnId: options.turnId,
 						toolCallId,
 						toolName: text(event, "toolName", "tool_name", "name") ?? "tool",
-						...(event.args !== undefined ? { input: event.args } : event.input !== undefined ? { input: event.input } : {}),
+						...(event.args !== undefined
+							? { input: event.args }
+							: event.input !== undefined
+								? { input: event.input }
+								: {}),
 					},
 				},
 			],
@@ -264,8 +273,14 @@ export class CanonicalAgentEventNormalizer {
 						turnId: options.turnId,
 						toolCallId,
 						status,
-						...(event.result !== undefined ? { output: event.result } : event.output !== undefined ? { output: event.output } : {}),
-						...(status === "failed" ? { error: text(event, "error", "errorMessage", "message") ?? textValue(event.result) } : {}),
+						...(event.result !== undefined
+							? { output: event.result }
+							: event.output !== undefined
+								? { output: event.output }
+								: {}),
+						...(status === "failed"
+							? { error: text(event, "error", "errorMessage", "message") ?? textValue(event.result) }
+							: {}),
 					},
 				},
 			],
@@ -368,7 +383,10 @@ function explicitMessageId(event: RuntimeAgentEvent, message: JsonRecord): strin
 	);
 }
 
-function messageMetadata(event: RuntimeAgentEvent, message: JsonRecord): {
+function messageMetadata(
+	event: RuntimeAgentEvent,
+	message: JsonRecord,
+): {
 	readonly responseId?: string;
 	readonly provider?: string;
 	readonly model?: string;
@@ -439,7 +457,9 @@ function textValue(value: unknown): string | undefined {
 	}
 	if (value && typeof value === "object") {
 		const record = value as JsonRecord;
-		return textValue(record.text) ?? textValue(record.content) ?? textValue(record.message) ?? textValue(record.summary);
+		return (
+			textValue(record.text) ?? textValue(record.content) ?? textValue(record.message) ?? textValue(record.summary)
+		);
 	}
 	return undefined;
 }

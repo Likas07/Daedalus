@@ -123,7 +123,10 @@ describe("thread v1 projection", () => {
 				message: {
 					id: "message-array",
 					role: "assistant",
-					content: [{ type: "text", text: "Hello" }, { type: "text", text: " there" }],
+					content: [
+						{ type: "text", text: "Hello" },
+						{ type: "text", text: " there" },
+					],
 				},
 			},
 		});
@@ -445,12 +448,24 @@ describe("thread v1 projection", () => {
 			appendEvent(database, {
 				streamId: "thread-1",
 				type: "agent/tool_delta",
-				payload: { sessionId: "thread-1", turnId: "turn-1", toolCallId: "tool-1", toolName: "shell", delta: "line" },
+				payload: {
+					sessionId: "thread-1",
+					turnId: "turn-1",
+					toolCallId: "tool-1",
+					toolName: "shell",
+					delta: "line",
+				},
 			});
 			appendEvent(database, {
 				streamId: "thread-1",
 				type: "agent/tool_end",
-				payload: { sessionId: "thread-1", turnId: "turn-1", toolCallId: "tool-1", toolName: "shell", output: "done" },
+				payload: {
+					sessionId: "thread-1",
+					turnId: "turn-1",
+					toolCallId: "tool-1",
+					toolName: "shell",
+					output: "done",
+				},
 			});
 			appendEvent(database, {
 				streamId: "thread-1",
@@ -467,7 +482,9 @@ describe("thread v1 projection", () => {
 			expect(entries).toContainEqual(
 				expect.objectContaining({ entryId: "tool:tool-1", kind: "tool", status: "completed" }),
 			);
-			expect(entries).toContainEqual(expect.objectContaining({ entryId: "command:cmd-1:output:11", kind: "terminal-output" }));
+			expect(entries).toContainEqual(
+				expect.objectContaining({ entryId: "command:cmd-1:output:11", kind: "terminal-output" }),
+			);
 			expect(entries).toContainEqual(expect.objectContaining({ entryId: "file-change:12", kind: "activity" }));
 		} finally {
 			database.close();

@@ -1,11 +1,11 @@
 import {
+	type AppServerErrorCode,
+	type ClientNotification,
 	ClientNotificationSchema,
+	type ClientRequest,
 	ClientRequestSchema,
 	ProtocolV1ClientRequestSchema,
 	ProtocolV1Phase3ClientRequestSchema,
-	type AppServerErrorCode,
-	type ClientNotification,
-	type ClientRequest,
 } from "@daedalus-pi/app-server-protocol";
 import { Value } from "@sinclair/typebox/value";
 
@@ -25,7 +25,8 @@ export function validateInboundMessage(message: unknown): ValidatedInboundMessag
 	}
 	const kind = (message as { readonly kind?: unknown }).kind;
 	if (kind === "notification") return validateClientNotification(message);
-	if (kind !== "request") return { code: "invalid_request", message: "App-server message kind must be request or notification" };
+	if (kind !== "request")
+		return { code: "invalid_request", message: "App-server message kind must be request or notification" };
 	return validateClientRequest(message);
 }
 
@@ -38,7 +39,9 @@ export function isInitializeRequest(message: unknown): boolean {
 	);
 }
 
-export function validationFailed(value: ValidatedInboundMessage | ProtocolValidationError): value is ProtocolValidationError {
+export function validationFailed(
+	value: ValidatedInboundMessage | ProtocolValidationError,
+): value is ProtocolValidationError {
 	return "code" in value;
 }
 
@@ -209,7 +212,11 @@ function validateClientNotification(message: unknown): ValidatedInboundMessage |
 	if (Value.Check(ClientNotificationSchema, message)) {
 		return { kind: "notification", notification: message as ClientNotification };
 	}
-	return { code: "invalid_request", message: "Invalid client notification", data: { errors: schemaErrors(ClientNotificationSchema, message) } };
+	return {
+		code: "invalid_request",
+		message: "Invalid client notification",
+		data: { errors: schemaErrors(ClientNotificationSchema, message) },
+	};
 }
 
 function validateRequestEnvelope(message: unknown): ProtocolValidationError | undefined {

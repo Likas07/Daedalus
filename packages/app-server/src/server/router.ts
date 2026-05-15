@@ -52,7 +52,7 @@ import { GitMutationService } from "../workspaces/git-mutation-service";
 import { ProjectService } from "../workspaces/project-service";
 import { assertPathWithinRoot, resolveRootScopedTarget } from "../workspaces/root-boundary";
 import { validateWorktreeTarget } from "../workspaces/worktree-safety";
-import { WorktreeService, type WorktreeLifecycleMetadata } from "../workspaces/worktree-service";
+import { type WorktreeLifecycleMetadata, WorktreeService } from "../workspaces/worktree-service";
 
 import { ExportService } from "./export-service";
 import { notificationForThreadV1StoredEvent } from "./thread-v1-routes";

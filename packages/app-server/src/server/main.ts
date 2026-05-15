@@ -1,8 +1,7 @@
 import { readFileSync } from "node:fs";
-import { startAppServer } from "./app-server";
-import { createAppServerCore } from "./app-server";
-import { startStdioProtocol } from "./stdio";
 import packageJson from "../../package.json" with { type: "json" };
+import { createAppServerCore, startAppServer } from "./app-server";
+import { startStdioProtocol } from "./stdio";
 
 interface Args {
 	db: string;

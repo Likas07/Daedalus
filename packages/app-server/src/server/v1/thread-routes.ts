@@ -1,15 +1,10 @@
 import type { protocolV1 } from "@daedalus-pi/app-server-protocol";
 import type { AppServerDatabase } from "../../persistence/database";
 import { projectRuntimeEvents } from "../../persistence/projector";
-import {
-	buildThreadV1Snapshot,
-	listThreadV1Turns,
-	replayThreadV1,
-} from "../../projections/thread-v1-projection";
+import { buildThreadV1Snapshot, listThreadV1Turns, replayThreadV1 } from "../../projections/thread-v1-projection";
 import type {
 	ThreadV1CancelTurnResult,
 	ThreadV1GetResult,
-	ThreadV1ReplayResult,
 	ThreadV1StartTurnResult,
 	V1Request,
 	V1RouteContext,

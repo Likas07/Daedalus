@@ -398,10 +398,19 @@ Extra prompt content`,
 			mkdirSync(extensionSharedSkillDir, { recursive: true });
 			mkdirSync(builtinSharedSkillDir, { recursive: true });
 			writeFileSync(join(projectSkillDir, "SKILL.md"), "---\nname: planning\ndescription: project\n---\nProject");
-			writeFileSync(join(extensionSkillDir, "SKILL.md"), "---\nname: planning\ndescription: extension\n---\nExtension");
+			writeFileSync(
+				join(extensionSkillDir, "SKILL.md"),
+				"---\nname: planning\ndescription: extension\n---\nExtension",
+			);
 			writeFileSync(join(builtinSkillDir, "SKILL.md"), "---\nname: planning\ndescription: builtin\n---\nBuiltin");
-			writeFileSync(join(extensionSharedSkillDir, "SKILL.md"), "---\nname: shared\ndescription: extension\n---\nExtension");
-			writeFileSync(join(builtinSharedSkillDir, "SKILL.md"), "---\nname: shared\ndescription: builtin\n---\nBuiltin");
+			writeFileSync(
+				join(extensionSharedSkillDir, "SKILL.md"),
+				"---\nname: shared\ndescription: extension\n---\nExtension",
+			);
+			writeFileSync(
+				join(builtinSharedSkillDir, "SKILL.md"),
+				"---\nname: shared\ndescription: builtin\n---\nBuiltin",
+			);
 
 			const loader = new DefaultResourceLoader({ cwd, agentDir });
 			await loader.reload();

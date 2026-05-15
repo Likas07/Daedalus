@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import type { SubagentTaskBinding } from "../../../../core/subagents/types.js";
 import type { TodoItem } from "../../tools/todo-state.js";
 import {
 	createTodoSnapshot,
@@ -8,7 +9,6 @@ import {
 	type TodoWriteResult,
 } from "../../tools/todo-state.js";
 import { markdownHash, planSidecarPath, validateExecutablePlan } from "./schema.js";
-import type { SubagentTaskBinding } from "../../../../core/subagents/types.js";
 
 export interface PlanArtifactStep {
 	step: number;
@@ -179,7 +179,7 @@ export function loadPlanArtifact(filePath: string, cwd: string): PlanArtifact {
 export function readBoundPlanTask(cwd: string, binding: SubagentTaskBinding): PlanArtifactStep {
 	const requestedPath = resolve(cwd, binding.planPath);
 	const markdownPath = requestedPath.endsWith(".plan.json")
-		? requestedPath.slice(0, -".plan.json".length) + ".md"
+		? `${requestedPath.slice(0, -".plan.json".length)}.md`
 		: requestedPath;
 	const plan = loadPlanArtifact(markdownPath, cwd);
 	const step = plan.steps.find((candidate) => candidate.id === binding.taskId);

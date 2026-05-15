@@ -46,7 +46,14 @@ const MUSE_TOOLS = [
 	"skill",
 ] as const;
 
-const IMPLEMENTATION_HANDOFF_TOOLS = ["plan_validate", "execute_plan", "plan_task_read", "subagent", "todo_read", "todo_write"] as const;
+const IMPLEMENTATION_HANDOFF_TOOLS = [
+	"plan_validate",
+	"execute_plan",
+	"plan_task_read",
+	"subagent",
+	"todo_read",
+	"todo_write",
+] as const;
 const MUSE_PLAN_HANDOFF_OPTIONS = ["Implement with Daedalus", "Revise plan", "Stay in Muse"] as const;
 
 type MusePlanReadyMetadata = {

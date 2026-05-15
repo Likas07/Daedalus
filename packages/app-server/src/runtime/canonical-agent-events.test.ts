@@ -63,7 +63,11 @@ describe("canonical agent event normalizer", () => {
 				assistantMessageEvent: {
 					type: "text_delta",
 					delta: " there",
-					partial: { role: "assistant", responseId: "response-1", content: [{ type: "text", text: "Hello there" }] },
+					partial: {
+						role: "assistant",
+						responseId: "response-1",
+						content: [{ type: "text", text: "Hello there" }],
+					},
 				},
 			},
 			{
@@ -81,10 +85,9 @@ describe("canonical agent event normalizer", () => {
 			"agent/message_delta",
 			"agent/message_delta",
 		]);
-		expect(events.filter((event) => event.type === "agent/message_delta").map((event) => event.payload.delta)).toEqual([
-			"Hello",
-			" there",
-		]);
+		expect(
+			events.filter((event) => event.type === "agent/message_delta").map((event) => event.payload.delta),
+		).toEqual(["Hello", " there"]);
 	});
 
 	test("does not turn raw text_end into a duplicate delta", () => {
@@ -148,7 +151,11 @@ describe("canonical agent event normalizer", () => {
 	test("uses a stable fallback id when response id is missing", () => {
 		const events = normalize([
 			{ type: "text_start", partial: { role: "assistant", content: [] } },
-			{ type: "text_delta", delta: "Hello", partial: { role: "assistant", content: [{ type: "text", text: "Hello" }] } },
+			{
+				type: "text_delta",
+				delta: "Hello",
+				partial: { role: "assistant", content: [{ type: "text", text: "Hello" }] },
+			},
 			{ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "Hello" }] } },
 		]);
 
@@ -168,10 +175,7 @@ describe("canonical agent event normalizer", () => {
 		]);
 
 		const finalMessages = events.filter((event) => event.type === "agent/message_end");
-		expect(finalMessages.map((event) => event.payload.messageId)).toEqual([
-			"turn-1:assistant",
-			"turn-1:assistant:2",
-		]);
+		expect(finalMessages.map((event) => event.payload.messageId)).toEqual(["turn-1:assistant", "turn-1:assistant:2"]);
 		expect(finalMessages.map((event) => event.payload.content)).toEqual(["First", "Second"]);
 	});
 });

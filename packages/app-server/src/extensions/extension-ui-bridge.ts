@@ -203,7 +203,9 @@ export class ExtensionUIBridge {
 		if (!this.options.sessionId) throw new Error("Extension structured user input requires a session id");
 		const turnId = this.options.getTurnId?.() ?? this.runtimeContext.getTurnId?.();
 		const workspaceTargetId =
-			this.options.getWorkspaceTargetId?.() ?? this.runtimeContext.workspaceTargetId ?? `base:${this.options.sessionId}`;
+			this.options.getWorkspaceTargetId?.() ??
+			this.runtimeContext.workspaceTargetId ??
+			`base:${this.options.sessionId}`;
 		if (!turnId) throw new Error("Extension structured user input requires an active turn id");
 		if (input.questions.length === 0) return { answers: {}, cancelled: true };
 		const approvalId = `input-${randomUUID()}`;
@@ -313,7 +315,9 @@ export class ExtensionUIBridge {
 	}
 }
 
-function parseStructuredAnswers(value: string | undefined): Record<string, { readonly answers: ReadonlyArray<string> }> {
+function parseStructuredAnswers(
+	value: string | undefined,
+): Record<string, { readonly answers: ReadonlyArray<string> }> {
 	if (!value) return {};
 	try {
 		const parsed = JSON.parse(value) as unknown;

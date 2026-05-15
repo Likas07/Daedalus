@@ -1,11 +1,11 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createSubagentTools } from "../src/core/subagents/policy.js";
 import type { Tool } from "../src/core/tools/index.js";
-import { readBoundPlanTask } from "../src/extensions/daedalus/workflow/plan-execution/shared.js";
 import { writeExecutablePlanFiles } from "../src/extensions/daedalus/workflow/plan-execution/schema.js";
+import { readBoundPlanTask } from "../src/extensions/daedalus/workflow/plan-execution/shared.js";
 
 const tempDirs: string[] = [];
 

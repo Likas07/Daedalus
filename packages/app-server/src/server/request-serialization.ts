@@ -16,7 +16,13 @@ export class RequestSerializer {
 		const current = new Promise<void>((resolve) => {
 			release = resolve;
 		});
-		this.queues.set(scope.key, previous.then(() => current, () => current));
+		this.queues.set(
+			scope.key,
+			previous.then(
+				() => current,
+				() => current,
+			),
+		);
 
 		await previous.catch(() => undefined);
 		try {

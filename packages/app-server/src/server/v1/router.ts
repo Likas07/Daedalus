@@ -43,7 +43,9 @@ export interface V1RouteContext {
 	readonly textGeneration?: {
 		threadTitle(params: protocolV1.TextGenerateThreadTitleParams): Promise<protocolV1.TextGenerateThreadTitleResult>;
 		branchName(params: protocolV1.TextGenerateBranchNameParams): Promise<protocolV1.TextGenerateBranchNameResult>;
-		commitMessage(params: protocolV1.TextGenerateCommitMessageParams): Promise<protocolV1.TextGenerateCommitMessageResult>;
+		commitMessage(
+			params: protocolV1.TextGenerateCommitMessageParams,
+		): Promise<protocolV1.TextGenerateCommitMessageResult>;
 		prContent(params: protocolV1.TextGeneratePrContentParams): Promise<protocolV1.TextGeneratePrContentResult>;
 	};
 }

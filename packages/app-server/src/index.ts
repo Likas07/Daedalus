@@ -124,8 +124,6 @@ export {
 	createAppServerCore,
 	startAppServer,
 } from "./server/app-server";
-export { ProtocolSession, type ProtocolSessionSend } from "./server/protocol-session";
-export { startStdioProtocol } from "./server/stdio";
 export {
 	type AuthOptions,
 	authenticateRequest,
@@ -133,7 +131,9 @@ export {
 	isAllowedOrigin,
 	isLoopbackHost,
 } from "./server/auth";
+export { ProtocolSession, type ProtocolSessionSend } from "./server/protocol-session";
 export { AppRouter, type AppRouterOptions, type OutboundMessage, type Publish } from "./server/router";
+export { startStdioProtocol } from "./server/stdio";
 export {
 	type GuiSessionReadModel,
 	type ProjectGuiSessionReadModelOptions,

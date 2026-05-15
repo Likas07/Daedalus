@@ -229,60 +229,61 @@ describe("Protocol v1 clean break", () => {
 		).toBe(true);
 	});
 
-// Adapter-facing method coverage: if this fails, update both params and result schema maps.
-test("v1 adapter-facing methods have params and result schemas", () => {
-	const expectedMethods = [
-		"initialize",
-		"provider.snapshot",
-		"workspaceTarget.list",
-		"workspaceTarget.validate",
-		"thread.create",
-		"thread.list",
-		"thread.resume",
-		"thread.get",
-		"thread.replay",
-		"thread.rollback",
-		"turn.start",
-		"turn.cancel",
-		"text.threadTitle",
-		"text.branchName",
-		"text.commitMessage",
-		"text.prContent",
-	] as const;
+	// Adapter-facing method coverage: if this fails, update both params and result schema maps.
+	test("v1 adapter-facing methods have params and result schemas", () => {
+		const expectedMethods = [
+			"initialize",
+			"provider.snapshot",
+			"workspaceTarget.list",
+			"workspaceTarget.validate",
+			"thread.create",
+			"thread.list",
+			"thread.resume",
+			"thread.get",
+			"thread.replay",
+			"thread.rollback",
+			"turn.start",
+			"turn.cancel",
+			"text.threadTitle",
+			"text.branchName",
+			"text.commitMessage",
+			"text.prContent",
+		] as const;
 
-	for (const method of expectedMethods) expect(protocolV1.ProtocolV1ClientRequestResultSchemas[method]).toBeTruthy();
+		for (const method of expectedMethods)
+			expect(protocolV1.ProtocolV1ClientRequestResultSchemas[method]).toBeTruthy();
 
-	expect(
-		Value.Check(ProtocolV1ClientRequestSchema, {
-			kind: "request",
-			id: "req-provider",
-			method: "provider.snapshot",
-			params: {},
-		}),
-	).toBe(true);
-	expect(
-		Value.Check(ProtocolV1ClientRequestSchema, {
-			kind: "request",
-			id: "req-rollback",
-			method: "thread.rollback",
-			params: { threadId: "thread-1", numTurns: 1, workspaceTargetId: "target-1" },
-		}),
-	).toBe(true);
-	expect(
-		Value.Check(ProtocolV1ClientRequestSchema, {
-			kind: "request",
-			id: "req-text",
-			method: "text.commitMessage",
-			params: { message: "summarize", diff: "diff --git" },
-		}),
-	).toBe(true);
-	expect(
-		Value.Check(ProtocolV1ClientRequestSchema, {
-			kind: "request",
-			id: "req-rollback-session",
-			method: "thread.rollback",
-			params: { threadId: "thread-1", numTurns: 1, workspaceTargetId: "target-1", sessionId: "session-1" },
-		}),
-	).toBe(false);
-});
+		expect(
+			Value.Check(ProtocolV1ClientRequestSchema, {
+				kind: "request",
+				id: "req-provider",
+				method: "provider.snapshot",
+				params: {},
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ProtocolV1ClientRequestSchema, {
+				kind: "request",
+				id: "req-rollback",
+				method: "thread.rollback",
+				params: { threadId: "thread-1", numTurns: 1, workspaceTargetId: "target-1" },
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ProtocolV1ClientRequestSchema, {
+				kind: "request",
+				id: "req-text",
+				method: "text.commitMessage",
+				params: { message: "summarize", diff: "diff --git" },
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(ProtocolV1ClientRequestSchema, {
+				kind: "request",
+				id: "req-rollback-session",
+				method: "thread.rollback",
+				params: { threadId: "thread-1", numTurns: 1, workspaceTargetId: "target-1", sessionId: "session-1" },
+			}),
+		).toBe(false);
+	});
 });

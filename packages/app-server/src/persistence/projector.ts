@@ -376,7 +376,9 @@ function textValue(value: EventPayload | undefined): string | undefined {
 	}
 	if (value && typeof value === "object") {
 		const record = value as PayloadRecord;
-		return textValue(record.text) ?? textValue(record.content) ?? textValue(record.message) ?? textValue(record.summary);
+		return (
+			textValue(record.text) ?? textValue(record.content) ?? textValue(record.message) ?? textValue(record.summary)
+		);
 	}
 	return undefined;
 }

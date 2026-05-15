@@ -61,12 +61,7 @@ export class ProtocolSession {
 	}
 }
 
-function failedResponse(
-	id: string,
-	code: AppServerErrorCode,
-	message: string,
-	data?: unknown,
-): ServerResponse {
+function failedResponse(id: string, code: AppServerErrorCode, message: string, data?: unknown): ServerResponse {
 	return { kind: "response", id, ok: false, error: { code, message, data } };
 }
 

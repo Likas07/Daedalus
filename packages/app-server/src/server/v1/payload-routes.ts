@@ -128,7 +128,8 @@ function diffChunks(
 		const eventDiffId = stringValue(payload.diffId) ?? stringValue(payload.diff_id);
 		if (eventDiffId && eventDiffId !== diffId) return [];
 		if (!eventDiffId && event.type !== "diff/updated" && event.type !== "agent/file_change") return [];
-		const path = stringValue(payload.filePath) ?? stringValue(payload.file_path) ?? stringValue(payload.path) ?? filePath;
+		const path =
+			stringValue(payload.filePath) ?? stringValue(payload.file_path) ?? stringValue(payload.path) ?? filePath;
 		if (!path || (filePath && path !== filePath)) return [];
 		const hunk = stringValue(payload.hunk) ?? stringValue(payload.patch) ?? stringValue(payload.diff) ?? "";
 		if (!hunk && eventDiffId !== diffId) return [];
@@ -193,7 +194,8 @@ function pageChunks<Chunk extends PayloadChunk>(
 	let filtered = [...chunks].sort((a, b) => a.cursor.seq - b.cursor.seq);
 	if (params.after) filtered = filtered.filter((chunk) => chunk.cursor.seq > params.after!.seq);
 	if (params.before) filtered = filtered.filter((chunk) => chunk.cursor.seq < params.before!.seq);
-	if ((params.direction ?? "forward") === "backward") filtered = filtered.slice(Math.max(0, filtered.length - params.limit));
+	if ((params.direction ?? "forward") === "backward")
+		filtered = filtered.slice(Math.max(0, filtered.length - params.limit));
 	else filtered = filtered.slice(0, params.limit);
 	const first = filtered.at(0);
 	const last = filtered.at(-1);
