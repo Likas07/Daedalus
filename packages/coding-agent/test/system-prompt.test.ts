@@ -175,6 +175,7 @@ describe("buildSystemPrompt", () => {
 			expect(prompt).toContain("## Intent Gate");
 			expect(prompt).toContain("## Parallel & Delegation Doctrine");
 			expect(prompt).toContain("## Hard Blocks");
+			expect(prompt).toContain("## Executable Planning Doctrine");
 		});
 
 		test("defaults Daedalus toward delegation for non-trivial work and keeps synthesis ownership", () => {
@@ -196,6 +197,15 @@ describe("buildSystemPrompt", () => {
 			expect(prompt).toContain(
 				"Muse should maximize safe parallel execution and mark serialization boundaries explicitly",
 			);
+		});
+
+		test("defines the executable planning lifecycle", () => {
+			const prompt = buildSystemPrompt({ selectedTools: [], contextFiles: [], skills: [] });
+
+			expect(prompt).toContain(
+				"Muse uses `writing-plans` -> `plan_create` -> Muse `plan_validate` -> Daedalus re-runs `plan_validate` -> `execute_plan` -> selector reads tasks with `plan_task_read` -> task-bound Worker implements -> Daedalus performs final verification",
+			);
+			expect(prompt).toContain("Daedalus must validate the plan again before executing");
 		});
 
 		test("subagent sessions do not reuse the parent Daedalus identity prompt", () => {

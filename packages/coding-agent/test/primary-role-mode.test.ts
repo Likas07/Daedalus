@@ -112,6 +112,9 @@ describe("primary role runtime mode", () => {
 		expect(providerSystemPrompt).toContain("[PRIMARY ROLE MODE: MUSE]");
 		expect(providerSystemPrompt).toContain("You are Muse");
 		expect(providerSystemPrompt).toContain("You may consult Sage through subagent delegation");
+		expect(providerSystemPrompt).toContain("Executable implementation plans must use this lifecycle before handoff");
+		expect(providerSystemPrompt).toContain("If `plan_validate` fails, fix the plan artifact");
+		expect(providerSystemPrompt).toContain("Advisory planning that is not intended for `execute_plan` may return analysis directly");
 		expect(providerSystemPrompt).not.toContain("submit_result exactly once");
 
 		session.dispose();
@@ -410,14 +413,14 @@ describe("primary role runtime mode", () => {
 			]),
 		);
 		expect(activeTools).toEqual(
-			expect.arrayContaining(["execute_plan", "plan_task_read", "subagent", "todo_read", "todo_write"]),
+			expect.arrayContaining(["plan_validate", "execute_plan", "plan_task_read", "subagent", "todo_read", "todo_write"]),
 		);
 		const persistedHandoff = entries.filter((entry) => entry.customType === "primary-role-mode").at(-1);
-		expect(persistedHandoff?.data.baselineTools).toEqual(expect.arrayContaining(["execute_plan", "plan_task_read"]));
+		expect(persistedHandoff?.data.baselineTools).toEqual(expect.arrayContaining(["plan_validate", "execute_plan", "plan_task_read"]));
 
 		activeTools = ["read", "write", "hashline_edit"];
 		await sessionTreeHandler({ type: "session_tree" }, ctx);
-		expect(activeTools).toEqual(expect.arrayContaining(["execute_plan", "plan_task_read"]));
+		expect(activeTools).toEqual(expect.arrayContaining(["plan_validate", "execute_plan", "plan_task_read"]));
 		expect(sentMessages).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({
@@ -434,8 +437,10 @@ describe("primary role runtime mode", () => {
 			}),
 		]);
 		expect(queuedUserMessages[0].content).toContain("execute_plan");
+		expect(queuedUserMessages[0].content).toContain("Re-run plan_validate");
 		expect(queuedUserMessages[0].content).toContain("resume=true");
 		expect(queuedUserMessages[0].content).toContain("Worker");
+		expect(queuedUserMessages[0].content).toContain("plan_task_read");
 	});
 
 	it("keeps delegated Sage prompts on the subagent result contract while primary Sage does not use it", () => {

@@ -9,6 +9,7 @@ Daedalus implements the [Agent Skills standard](https://agentskills.io/specifica
 ## Table of Contents
 
 - [Locations](#locations)
+- [Built-in Daedalus Skills](#built-in-daedalus-skills)
 - [How Skills Work](#how-skills-work)
 - [Skill Commands](#skill-commands)
 - [Skill Structure](#skill-structure)
@@ -21,18 +22,18 @@ Daedalus implements the [Agent Skills standard](https://agentskills.io/specifica
 
 > **Security:** Skills can instruct the model to perform any action and may include executable code the model invokes. Review skill content before use.
 
-Daedalus loads skills from:
+Daedalus loads skills from these sources, in precedence order:
 
-- Global:
-  - `~/.daedalus/agent/skills/`
-  - `~/.agents/skills/`
-- Project:
-  - `.daedalus/skills/`
-  - `.agents/skills/` in `cwd` and ancestor directories (up to git repo root, or filesystem root when not in a repo)
-- Packages: `skills/` directories or `pi.skills` entries in `package.json`
-- Settings: `skills` array with files or directories
-- CLI: `--skill <path>` (repeatable, additive even with `--no-skills`)
+1. **Project** skills:
+   - `.daedalus/skills/`
+   - `.agents/skills/` in `cwd` and ancestor directories (up to git repo root, or filesystem root when not in a repo)
+2. **User** skills:
+   - `~/.daedalus/agent/skills/`
+   - `~/.agents/skills/`
+3. **Extension** skills from enabled Daedalus extensions and packages (`skills/` directories or `pi.skills` entries in `package.json`)
+4. **Built-in** Daedalus skills bundled with the coding-agent package
 
+Settings (`skills` array with files or directories) and CLI `--skill <path>` entries are explicit additions. `--skill` is repeatable and still loads when discovery is disabled with `--no-skills`.
 Discovery rules:
 - In `~/.daedalus/agent/skills/` and `.daedalus/skills/`, direct root `.md` files are discovered as individual skills
 - In all skill locations, directories containing `SKILL.md` are discovered recursively
@@ -40,6 +41,16 @@ Discovery rules:
 
 Disable discovery with `--no-skills` (explicit `--skill` paths still load).
 
+
+## Built-in Daedalus Skills
+
+Daedalus ships a small set of built-in skills used by the default workflow:
+
+- `writing-plans` - turns requirements into detailed, step-by-step implementation plans.
+- `executing-plans` - executes written implementation plans, chooses execution strategy per task, and preserves review checkpoints.
+- `verification-before-completion` - runs fresh verification before reporting work complete.
+
+Built-ins are normal Agent Skills. They appear in the same discovery output, can be invoked with `/skill:name`, and can be overridden by defining a skill with the same name in a higher-precedence source. The effective precedence is **project > user > extension > built-in**.
 ### Using Skills from Other Harnesses
 
 To use skills from Claude Code or OpenAI Codex, add their directories to settings:
@@ -186,7 +197,7 @@ Unknown frontmatter fields are ignored.
 
 **Exception:** Skills with missing description are not loaded.
 
-Name collisions (same name from different locations) warn and keep the first skill found.
+Name collisions (same name from different locations) warn and keep the higher-precedence skill. Precedence is project > user > extension > built-in.
 
 ## Example
 

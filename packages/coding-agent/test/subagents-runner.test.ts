@@ -155,7 +155,12 @@ describe("SubagentRunner", () => {
 		const root = fs.mkdtempSync(path.join(os.tmpdir(), "daedalus-subagent-progress-"));
 		tempRoots.push(root);
 		const parentSessionFile = path.join(root, "parent.jsonl");
-		const updates: Array<{ agent: string; activity?: string; recentActivity?: string[] }> = [];
+		const updates: Array<{ agent: string; activity?: string; recentActivity?: string[]; taskBinding?: unknown }> = [];
+		const taskBinding = {
+			type: "plan-task" as const,
+			planPath: "docs/plans/example.plan.json",
+			taskId: "task-3",
+		};
 
 		const runner = new SubagentRunner({
 			createSession: async (options: any) => {
@@ -199,17 +204,21 @@ describe("SubagentRunner", () => {
 			agent: { ...worker, name: "sage" },
 			goal: "Trace auth flow",
 			assignment: "Inspect the auth entrypoints and summarize them.",
+			taskBinding,
 			onProgress: (progress) => {
 				updates.push({
 					agent: progress.agent,
 					activity: progress.activity,
 					recentActivity: progress.recentActivity,
+					taskBinding: progress.taskBinding,
 				});
 			},
 		});
 
 		expect(result.status).toBe("completed");
 		expect(updates[0]?.agent).toBe("sage");
+		expect(updates[0]?.taskBinding).toEqual(taskBinding);
+		expect(result.taskBinding).toEqual(taskBinding);
 		expect(updates.some((update) => update.activity?.includes("read src/auth.ts"))).toBe(true);
 		expect(updates.some((update) => update.activity?.includes("grep /Authorization/ in src"))).toBe(true);
 		expect(updates.at(-1)?.recentActivity).toContain("read src/auth.ts");

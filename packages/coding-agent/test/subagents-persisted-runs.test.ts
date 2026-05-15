@@ -23,6 +23,7 @@ describe("persisted subagent runs", () => {
 		tempRoots.push(root);
 		const parentSessionFile = path.join(root, "parent.jsonl");
 		const subagentDir = path.join(root, "parent", "subagents");
+		const taskBinding = { type: "plan-task" as const, planPath: "docs/plans/example.plan.json", taskId: "task-3" };
 
 		await writePersistedSubagentRun(path.join(subagentDir, "run-1.meta.json"), {
 			runId: "run-1",
@@ -42,10 +43,12 @@ describe("persisted subagent runs", () => {
 			startedAt: 150,
 			updatedAt: 400,
 			activity: "hashline_edit src/auth.ts",
+			taskBinding,
 		});
 
 		const runs = await listPersistedSubagentRuns(parentSessionFile);
 		expect(runs.map((run) => run.runId)).toEqual(["run-2", "run-1"]);
 		expect(runs[0]?.activity).toBe("hashline_edit src/auth.ts");
+		expect(runs[0]?.taskBinding).toEqual(taskBinding);
 	});
 });

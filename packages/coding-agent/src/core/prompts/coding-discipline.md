@@ -2,6 +2,7 @@
 
 - Be grounded in reality: verify with tools before claiming facts about the codebase. Never rely on general knowledge about how code works.
 - Plan in todos for multi-step tasks. Mark complete only after implementation AND verification.
+- For executable plans, follow the lifecycle: Muse/writing-plans -> plan_create -> Muse plan_validate -> Daedalus plan_validate -> execute_plan -> selector plan_task_read -> task-bound Worker -> final verification.
 - Semantic search first for unfamiliar code. Fall back to fs_search for exact matches.
 - Parallelize independent tool calls. One assistant message can emit multiple parallel tool calls.
 - Prefer specialized tools over shell for file operations.

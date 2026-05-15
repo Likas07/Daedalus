@@ -30,7 +30,7 @@ const ExecutePlanParams = Type.Object({
 });
 
 const PlanTaskReadParams = Type.Object({
-	selector: Type.Optional(Type.String({ description: "Task id, step number, active, or next (default: active)" })),
+	selector: Type.String({ description: "Required task id, step number, active, or next" }),
 });
 
 const PlanCreateParams = Type.Object({
@@ -91,14 +91,15 @@ function summarizeExecution(result: ReturnType<typeof initializePlanExecution>):
 	const active = result.todos.find((todo) => todo.status === "in_progress");
 	const state = { plan: result.plan, todos: result.todos, summary: result.summary };
 	const readyGroups = readyParallelGroups(state);
-	const firstGroup = readyGroups[0];
+	const readyGroupSummary = readyGroups.map(
+		(group) => `${group.group}: ${group.steps.map((step) => step.id).join(", ")}`,
+	);
 	return [
 		`Initialized plan execution from ${result.plan.path ?? "inline plan"} with ${result.todos.length} task(s); ${unfinished} active`,
 		active ? `Active: ${active.content}` : undefined,
-		firstGroup
-			? `Ready parallel group ${firstGroup.group}: ${firstGroup.steps.map((step) => step.id).join(", ")}`
-			: undefined,
-		"Use plan_task_read selector=active for the current task details instead of reading the full plan file.",
+		readyGroupSummary.length > 0 ? `Ready parallel groups: ${readyGroupSummary.join("; ")}` : undefined,
+		"Use plan_task_read selector=<task-id> for each ready task packet instead of reading the full plan file.",
+		"Dispatch one task-bound Worker per independent ready task; pass taskBinding with planPath, taskId, taskTitle, and files.",
 	]
 		.filter(Boolean)
 		.join("\n");
@@ -264,6 +265,13 @@ export default function planExecutionExtension(pi: ExtensionAPI): void {
 		],
 		parameters: PlanTaskReadParams,
 		async execute(_toolCallId, params) {
+			if (!params.selector) {
+				return {
+					content: [{ type: "text", text: "plan_task_read requires selector (active, next, task id, or step number)." }],
+					isError: true,
+					details: latestExecution,
+				};
+			}
 			if (!latestExecution) {
 				return {
 					content: [{ type: "text", text: "No active plan execution. Run execute_plan first." }],
@@ -271,10 +279,10 @@ export default function planExecutionExtension(pi: ExtensionAPI): void {
 					details: undefined,
 				};
 			}
-			const step = findPlanStepBySelector(latestExecution, params.selector ?? "active");
+			const step = findPlanStepBySelector(latestExecution, params.selector);
 			if (!step) {
 				return {
-					content: [{ type: "text", text: `No plan task found for selector: ${params.selector ?? "active"}` }],
+					content: [{ type: "text", text: `No plan task found for selector: ${params.selector}` }],
 					isError: true,
 					details: latestExecution,
 				};

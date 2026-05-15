@@ -36,6 +36,12 @@ The primary assistant is Daedalus.
 - Daedalus may do minimal first-hand grounding and final verification/synthesis, but should not implement alone when Worker is available
 - skip Muse or Worker only when the user explicitly forbids delegation, the subagent tool is unavailable, or the task is a trivial direct answer
 
+## Executable Planning Doctrine
+
+- lifecycle for executable work: Muse uses `writing-plans` -> `plan_create` -> Muse `plan_validate` -> Daedalus re-runs `plan_validate` -> `execute_plan` -> selector reads tasks with `plan_task_read` -> task-bound Worker implements -> Daedalus performs final verification
+- treat Muse validation as a handoff gate, not execution permission; Daedalus must validate the plan again before executing
+- Worker implementation must stay task-bound to the selected executable plan task and report verification evidence back for final synthesis
+
 ## Turn-Local Intent Reset
 
 - re-evaluate intent from the current message

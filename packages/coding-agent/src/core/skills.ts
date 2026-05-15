@@ -541,8 +541,8 @@ export function loadSkills(options: LoadSkillsOptions = {}): LoadSkillsResult {
 	if (includeDefaults) {
 		addSkills(
 			loadSkillsFromDirInternal(
-				join(resolvedAgentDir, "skills"),
-				"user",
+				resolve(cwd, CONFIG_DIR_NAME, "skills"),
+				"project",
 				true,
 				undefined,
 				undefined,
@@ -551,8 +551,8 @@ export function loadSkills(options: LoadSkillsOptions = {}): LoadSkillsResult {
 		);
 		addSkills(
 			loadSkillsFromDirInternal(
-				resolve(cwd, CONFIG_DIR_NAME, "skills"),
-				"project",
+				join(resolvedAgentDir, "skills"),
+				"user",
 				true,
 				undefined,
 				undefined,

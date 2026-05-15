@@ -2565,7 +2565,7 @@ export class AgentSession {
 					settingsManager: this.settingsManager,
 					sessionManager,
 					resourceLoader,
-					tools: createSubagentTools(workspaceCwd, runtime.policy, Array.from(this._toolRegistry.values())),
+					tools: createSubagentTools(workspaceCwd, runtime.policy, Array.from(this._toolRegistry.values()), request.taskBinding),
 					customTools: [createSubmitResultTool(onSubmit)],
 					model: runtime.model,
 					thinkingLevel: runtime.thinkingLevel,
@@ -2576,6 +2576,7 @@ export class AgentSession {
 						spawns: runtime.policy.spawns,
 						maxDepth: runtime.policy.maxDepth,
 						workspaceTarget: workspace.workspaceTarget,
+						taskBinding: request.taskBinding,
 					},
 					subagentInteractionBroker: this._subagentInteractionBroker,
 					sessionStartEvent: {
@@ -2598,6 +2599,7 @@ export class AgentSession {
 					agent: request.agent.name,
 					goal: request.goal,
 					workspace: workspace.metadata,
+					taskBinding: request.taskBinding,
 				});
 
 				return {
