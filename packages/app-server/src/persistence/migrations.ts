@@ -317,6 +317,27 @@ ALTER TABLE operation_idempotency_records ADD COLUMN lease_expires_at TEXT;
 ALTER TABLE operation_idempotency_records ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0;
 `,
 	},
+	{
+		version: 15,
+		name: "timeline_payload_chunks",
+		sql: `
+CREATE TABLE IF NOT EXISTS payload_chunks (
+	thread_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+	kind TEXT NOT NULL,
+	payload_id TEXT NOT NULL,
+	seq INTEGER NOT NULL,
+	text TEXT,
+	data TEXT,
+	file_path TEXT,
+	content_type TEXT,
+	byte_length INTEGER NOT NULL DEFAULT 0,
+	created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+	PRIMARY KEY (thread_id, kind, payload_id, seq)
+);
+
+CREATE INDEX IF NOT EXISTS payload_chunks_lookup_idx ON payload_chunks(thread_id, kind, payload_id, seq);
+`,
+	},
 ];
 
 export function runMigrations(database: AppServerDatabase): void {

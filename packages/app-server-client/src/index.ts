@@ -1,5 +1,6 @@
 export * from "./audit";
 export * from "./client";
+export * from "./connection-state";
 export * from "./diagnostics";
 export * from "./in-process-transport";
 export * from "./integrations";
@@ -21,5 +22,6 @@ export {
 	type ThreadSubscription,
 	type ThreadV1NotificationClient,
 } from "./v1/thread-subscriptions";
+export * from "./v1/user-input-client";
 export * from "./workflow";
 export * from "./ws-transport";

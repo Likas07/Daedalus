@@ -9,4 +9,5 @@ export * from "./terminal";
 export * from "./text-generation";
 export * from "./thread";
 export * from "./timeline";
+export * from "./user-input";
 export * from "./workspace-target";
