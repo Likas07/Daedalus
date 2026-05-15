@@ -1,4 +1,5 @@
 import type { AppServerTransport } from "./client";
+import { AppServerConnectionError, type ConnectionState, describeCloseEvent } from "./connection-state";
 
 export interface WebSocketTransportOptions {
 	readonly url: string;
@@ -13,6 +14,7 @@ export class WebSocketAppServerTransport implements AppServerTransport {
 	private readonly closeListeners = new Set<(error?: unknown) => void>();
 	private openPromise: Promise<void> | undefined;
 	private closeNotified = false;
+	private state: ConnectionState = "connecting";
 
 	constructor(options: WebSocketTransportOptions) {
 		const WebSocketCtor = options.WebSocketImpl ?? WebSocket;
@@ -23,19 +25,45 @@ export class WebSocketAppServerTransport implements AppServerTransport {
 			for (const listener of this.listeners) listener(message);
 		});
 		this.openPromise = new Promise((resolve, reject) => {
-			this.ws.addEventListener("open", () => resolve(), { once: true });
-			this.ws.addEventListener("error", () => reject(new Error("WebSocket connection failed")), { once: true });
+			this.ws.addEventListener(
+				"open",
+				() => {
+					this.state = "open";
+					resolve();
+				},
+				{ once: true },
+			);
+			this.ws.addEventListener(
+				"error",
+				(event) => {
+					this.state = "error";
+					const error = new AppServerConnectionError("WebSocket connection failed", {
+						state: "error",
+						cause: event,
+					});
+					reject(error);
+					this.notifyClose(error);
+				},
+				{ once: true },
+			);
 		});
-		this.ws.addEventListener("close", () => {
-			this.notifyClose(new Error("WebSocket connection closed"));
+		this.ws.addEventListener("close", (event) => {
+			this.state = "closed";
+			this.notifyClose(new AppServerConnectionError(describeCloseEvent(event), { state: "closed", cause: event }));
 		});
-		this.ws.addEventListener("error", () => {
-			this.notifyClose(new Error("WebSocket connection failed"));
+		this.ws.addEventListener("error", (event) => {
+			this.state = "error";
+			this.notifyClose(
+				new AppServerConnectionError("WebSocket connection failed", { state: "error", cause: event }),
+			);
 		});
 	}
 
 	async send(message: unknown): Promise<void> {
 		if (this.ws.readyState === WebSocket.CONNECTING) await this.openPromise;
+		if (this.ws.readyState !== WebSocket.OPEN) {
+			throw new AppServerConnectionError("WebSocket is not open", { state: this.state });
+		}
 		this.ws.send(JSON.stringify(message));
 	}
 
@@ -50,6 +78,7 @@ export class WebSocketAppServerTransport implements AppServerTransport {
 	}
 
 	close(): void {
+		this.state = "closing";
 		this.ws.close();
 	}
 
