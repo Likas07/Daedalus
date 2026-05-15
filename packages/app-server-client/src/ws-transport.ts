@@ -12,6 +12,7 @@ export class WebSocketAppServerTransport implements AppServerTransport {
 	private readonly listeners = new Set<(message: unknown) => void>();
 	private readonly closeListeners = new Set<(error?: unknown) => void>();
 	private openPromise: Promise<void> | undefined;
+	private closeNotified = false;
 
 	constructor(options: WebSocketTransportOptions) {
 		const WebSocketCtor = options.WebSocketImpl ?? WebSocket;
@@ -26,10 +27,10 @@ export class WebSocketAppServerTransport implements AppServerTransport {
 			this.ws.addEventListener("error", () => reject(new Error("WebSocket connection failed")), { once: true });
 		});
 		this.ws.addEventListener("close", () => {
-			for (const listener of this.closeListeners) listener(new Error("WebSocket connection closed"));
+			this.notifyClose(new Error("WebSocket connection closed"));
 		});
 		this.ws.addEventListener("error", () => {
-			for (const listener of this.closeListeners) listener(new Error("WebSocket connection failed"));
+			this.notifyClose(new Error("WebSocket connection failed"));
 		});
 	}
 
@@ -50,6 +51,12 @@ export class WebSocketAppServerTransport implements AppServerTransport {
 
 	close(): void {
 		this.ws.close();
+	}
+
+	private notifyClose(error: Error): void {
+		if (this.closeNotified) return;
+		this.closeNotified = true;
+		for (const listener of this.closeListeners) listener(error);
 	}
 }
 

@@ -15,10 +15,9 @@ import { SqliteSessionManager } from "../runtime/sqlite-session-manager";
 import { SqliteSessionStore } from "../sessions/sqlite-session-store";
 import type { PtyAdapter } from "../terminal/pty-adapter";
 import { authenticateRequest, createCapabilityToken } from "./auth";
-import type { ProtocolSession } from "./protocol-session";
 import { AppRouter, type OutboundMessage } from "./router";
 import { serveStaticGui } from "./static-gui";
-import { createWebSocketHandlers, type WebSocketClient } from "./websocket";
+import { createWebSocketHandlers, type AppServerClientConnection, type WebSocketClient } from "./websocket";
 
 export interface CreateAppServerOptions {
 	readonly databasePath: string;
@@ -46,7 +45,7 @@ export interface AppServerInstance {
 export interface AppServerCore {
 	readonly database: ReturnType<typeof openAppServerDatabase>;
 	readonly router: AppRouter;
-	readonly clients: Set<WebSocketClient | ProtocolSession>;
+	readonly clients: Set<AppServerClientConnection>;
 	close(): Promise<void>;
 }
 
@@ -55,7 +54,7 @@ export async function createAppServerCore(options: CreateAppServerOptions): Prom
 	const database = openAppServerDatabase(options.databasePath);
 	runMigrations(database);
 	const agentDir = options.agentDir ?? getAgentDir();
-	const clients = new Set<WebSocketClient | ProtocolSession>();
+	const clients = new Set<AppServerClientConnection>();
 	const publish = (message: OutboundMessage) => {
 		for (const client of clients) client.send(message);
 	};
@@ -105,8 +104,7 @@ export async function startAppServer(options: CreateAppServerOptions): Promise<A
 	const token = options.token ?? createCapabilityToken();
 	const core = await createAppServerCore(options);
 	const router = core.router;
-	const clients = core.clients as Set<WebSocketClient>;
-	const websocket = createWebSocketHandlers(router, clients);
+	const websocket = createWebSocketHandlers(router, core.clients);
 	const server = Bun.serve({
 		hostname: host,
 		port: options.port ?? 0,

@@ -4,6 +4,7 @@ import { ProtocolSession } from "./protocol-session";
 import type { AppRouter, OutboundMessage } from "./router";
 
 export type AppServerWebSocket = ServerWebSocket<{ client: WebSocketClient }>;
+export type AppServerClientConnection = WebSocketClient | ProtocolSession;
 
 const MAX_QUEUE = 128;
 
@@ -39,7 +40,7 @@ export class WebSocketClient {
 	}
 }
 
-export function createWebSocketHandlers(router: AppRouter, clients: Set<WebSocketClient>) {
+export function createWebSocketHandlers(router: AppRouter, clients: Set<AppServerClientConnection>) {
 	return {
 		open(ws: AppServerWebSocket) {
 			const client = new WebSocketClient(ws, router);

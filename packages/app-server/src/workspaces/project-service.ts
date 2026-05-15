@@ -22,6 +22,8 @@ export class ProjectService {
 		if (existing) return { projectId: existing.id };
 
 		const projectId = input.projectId ?? `project-${crypto.randomUUID()}`;
+		if (input.projectId && this.get(input.projectId))
+			throw new Error(`Project id already exists: ${input.projectId}`);
 		const name = input.name ?? normalizedPath.split(/[\\/]/).at(-1) ?? normalizedPath;
 		appendEvent(this.options.database, {
 			streamId: `project:${projectId}`,

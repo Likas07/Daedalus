@@ -1,3 +1,4 @@
+import { resolve, sep } from "node:path";
 import type { protocolV1 } from "@daedalus-pi/app-server-protocol";
 import type { AppServerDatabase } from "../../persistence/database";
 import { readEvents } from "../../persistence/event-store";
@@ -243,7 +244,7 @@ function reconstructDiffChunks(
 	if (!row?.runs_in_json) return [];
 	const runsIn = asRecord(JSON.parse(row.runs_in_json));
 	const cwd = stringValue(runsIn.canonicalPath) ?? stringValue(runsIn.path);
-	if (!cwd || !filePath) return [];
+	if (!cwd || !isSafeRelativePath(cwd, filePath)) return [];
 	const proc = Bun.spawnSync(["git", "diff", "--patch", "HEAD", "--", filePath], { cwd });
 	if (proc.exitCode !== 0) return [];
 	const patch = new TextDecoder().decode(proc.stdout);
@@ -253,6 +254,13 @@ function reconstructDiffChunks(
 		hunk,
 		byteLength: byteLength(hunk),
 	}));
+}
+
+function isSafeRelativePath(cwd: string, filePath: string | undefined): filePath is string {
+	if (!filePath || filePath.startsWith("-") || filePath.includes("\0")) return false;
+	const root = resolve(cwd);
+	const target = resolve(root, filePath);
+	return target === root || target.startsWith(`${root}${sep}`);
 }
 
 function splitPatchHunks(patch: string): string[] {

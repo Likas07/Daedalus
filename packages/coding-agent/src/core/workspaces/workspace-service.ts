@@ -70,6 +70,17 @@ function isNotGitRepositoryError(error: unknown): boolean {
 	return error instanceof GitError && notGitRepositoryPattern.test(error.stderr || error.message);
 }
 
+const missingRevisionPattern = /ambiguous argument|unknown revision|needed a single revision|bad revision/i;
+
+function gitRevParseOptional(cwd: string, ref: string): string | undefined {
+	try {
+		return gitRevParse(cwd, ref);
+	} catch (error) {
+		if (error instanceof GitError && missingRevisionPattern.test(error.stderr || error.message)) return undefined;
+		throw error;
+	}
+}
+
 function workspaceDirtyStatus(porcelain: string): string {
 	return porcelain
 		.split("\n")
@@ -159,7 +170,7 @@ export class WorkspaceService {
 			repositoryRoot,
 			branch,
 			worktreePath: actualCwd,
-			baseCommit: gitRevParse(actualCwd, "HEAD"),
+			baseCommit: gitRevParseOptional(actualCwd, "HEAD"),
 			validationStatus: "valid",
 		};
 	}
@@ -168,7 +179,7 @@ export class WorkspaceService {
 		return {
 			...this.resolveCurrentTarget(this.projectRoot),
 			baseBranch,
-			baseCommit: gitRevParse(this.projectRoot, baseBranch),
+			baseCommit: gitRevParseOptional(this.projectRoot, baseBranch),
 		};
 	}
 
