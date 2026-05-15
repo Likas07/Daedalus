@@ -1,13 +1,16 @@
-import type { ClientRequest } from "@daedalus-pi/app-server-protocol";
-
 export type RequestSerializationScope =
 	| { readonly kind: "shared" }
 	| { readonly kind: "exclusive"; readonly key: string };
 
+export interface SerializableRequest {
+	readonly method: string;
+	readonly params: unknown;
+}
+
 export class RequestSerializer {
 	private readonly queues = new Map<string, Promise<void>>();
 
-	async run<T>(request: Pick<ClientRequest, "method" | "params">, operation: () => Promise<T>): Promise<T> {
+	async run<T>(request: SerializableRequest, operation: () => Promise<T>): Promise<T> {
 		const scope = serializationScopeForRequest(request);
 		if (scope.kind === "shared") return operation();
 
@@ -28,9 +31,7 @@ export class RequestSerializer {
 	}
 }
 
-export function serializationScopeForRequest(
-	request: Pick<ClientRequest, "method" | "params">,
-): RequestSerializationScope {
+export function serializationScopeForRequest(request: SerializableRequest): RequestSerializationScope {
 	const method = request.method;
 	if (GLOBAL_EXCLUSIVE_METHODS.has(method)) return { kind: "exclusive", key: "global" };
 	if (PROJECT_EXCLUSIVE_METHODS.has(method)) return { kind: "exclusive", key: projectScopeKey(request.params) };

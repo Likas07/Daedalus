@@ -6,6 +6,8 @@ import {
 	type AppServerErrorCode,
 	type ClientNotification,
 	type ClientRequest,
+	type ProtocolV1ClientRequest,
+	type ProtocolV1Phase3ClientRequest,
 } from "@daedalus-pi/app-server-protocol";
 import { Value } from "@sinclair/typebox/value";
 
@@ -16,7 +18,7 @@ export interface ProtocolValidationError {
 }
 
 export type ValidatedInboundMessage =
-	| { readonly kind: "request"; readonly request: ClientRequest }
+	| { readonly kind: "request"; readonly request: ClientRequest | ProtocolV1ClientRequest | ProtocolV1Phase3ClientRequest }
 	| { readonly kind: "notification"; readonly notification: ClientNotification };
 
 export function validateInboundMessage(message: unknown): ValidatedInboundMessage | ProtocolValidationError {
@@ -49,15 +51,17 @@ function validateClientRequest(message: unknown): ValidatedInboundMessage | Prot
 	if (!knownRequestMethods().has(method)) {
 		return { code: "method_not_found", message: `Unsupported app-server method: ${method}` };
 	}
-	if (
-		Value.Check(ClientRequestSchema, message) ||
-		Value.Check(ProtocolV1ClientRequestSchema, message) ||
-		Value.Check(ProtocolV1Phase3ClientRequestSchema, message)
-	) {
+	if (Value.Check(ClientRequestSchema, message)) {
+		return { kind: "request", request: message as ClientRequest };
+	}
+	if (Value.Check(ProtocolV1ClientRequestSchema, message)) {
+		return { kind: "request", request: message as ProtocolV1ClientRequest };
+	}
+	if (Value.Check(ProtocolV1Phase3ClientRequestSchema, message)) {
 		if (method === "v1.approval.answer" && !hasApprovalAnswer(message)) {
 			return { code: "invalid_params", message: "v1.approval.answer requires answer or answers" };
 		}
-		return { kind: "request", request: message as ClientRequest };
+		return { kind: "request", request: message as ProtocolV1Phase3ClientRequest };
 	}
 	return {
 		code: "invalid_params",

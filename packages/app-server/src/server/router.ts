@@ -8,6 +8,8 @@ import type {
 	ClientRequest,
 	DiffTarget,
 	protocolV1,
+	ProtocolV1ClientRequest,
+	ProtocolV1Phase3ClientRequest,
 	RootScopedTarget,
 	ServerNotification,
 	ServerRequest,
@@ -60,6 +62,7 @@ import { createDefaultV1Router, handleV1Request } from "./v1/router";
 
 export type OutboundMessage = AppEvent | ServerNotification | ServerRequest;
 export type Publish = (message: OutboundMessage) => void;
+export type AppRouterRequest = ClientRequest | ProtocolV1ClientRequest | ProtocolV1Phase3ClientRequest;
 
 function supportsXhighFor(id: string): boolean {
 	if (id.includes("gpt-5.2") || id.includes("gpt-5.3") || id.includes("gpt-5.4") || id.includes("gpt-5.5"))
@@ -172,7 +175,7 @@ export class AppRouter {
 				return;
 		}
 	}
-	async handle(request: ClientRequest): Promise<unknown> {
+	async handle(request: AppRouterRequest): Promise<unknown> {
 		const v1Route = await handleV1Request(
 			{
 				database: this.options.database,
@@ -722,10 +725,13 @@ export class AppRouter {
 				const after = Number(request.params.cursor?.after ?? 0);
 				const limit = request.params.cursor?.limit ?? 1000;
 				const stored = readEventsAfter(this.options.database, Number.isFinite(after) ? after : 0, { limit });
-				const events = stored
+				const replayEvents = stored
 					.map((event) => event.payload as unknown as AppEvent)
 					.filter((event) => !request.params.types || request.params.types.includes(event.type));
-				return { events, next: events.length ? { after: String(stored.at(-1)?.seq ?? after) } : undefined };
+				return {
+					events: replayEvents,
+					next: replayEvents.length ? { after: String(stored.at(-1)?.seq ?? after) } : undefined,
+				};
 			}
 			default:
 				throw Object.assign(new Error(`Unsupported app-server method: ${request.method}`), {
@@ -1446,11 +1452,14 @@ export class AppRouter {
 	private async performRollbackThreadV1(
 		params: protocolV1.ThreadRollbackParams,
 	): Promise<protocolV1.ThreadRollbackResult> {
+		if (!Number.isInteger(params.numTurns) || params.numTurns < 1)
+			throw new Error(`Invalid numTurns for thread rollback: ${params.numTurns}`);
 		const target = await this.resolveV1WorkspaceTarget(params.threadId, params.workspaceTargetId);
 		if (!target.ok) throw new Error(target.message);
 		const checkpoints = this.listCheckpoints(params.threadId);
-		const checkpoint = checkpoints[Math.min(params.numTurns - 1, checkpoints.length - 1)];
-		if (!checkpoint) throw new Error(`No checkpoint available for thread ${params.threadId}`);
+		if (checkpoints.length === 0) throw new Error(`No checkpoint available for thread ${params.threadId}`);
+		const checkpointIndex = Math.max(0, Math.min(params.numTurns - 1, checkpoints.length - 1));
+		const checkpoint = checkpoints[checkpointIndex];
 		const checkpointRef = checkpoint.ref ?? checkpoint.checkpointId;
 		const rollbackScope = this.rollbackScopeForCheckpoint(params.threadId, checkpoint.checkpointId);
 		const mutation = await this.gitMutationService.restoreCheckpoint({

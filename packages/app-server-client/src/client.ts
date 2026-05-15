@@ -157,6 +157,8 @@ export class AppServerClient {
 		try {
 			await this.transport.send(message);
 		} catch (error) {
+			const pending = this.pending.get(id);
+			if (pending?.timer) clearTimeout(pending.timer);
 			this.pending.delete(id);
 			throw error;
 		}
@@ -352,7 +354,8 @@ export class AppServerClient {
 		this.unsubscribeTransport?.();
 		this.unsubscribeClose?.();
 		this.transport = transport;
-		this.state = this.initializePromise ? "ready" : "connecting";
+		this.initializePromise = undefined;
+		this.state = "connecting";
 		this.attachTransport(transport);
 		return this.replayMissedEvents();
 	}

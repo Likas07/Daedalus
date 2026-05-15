@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { finalizeManagedWorktree, WorkspaceService } from "./workspace-service.js";
@@ -25,6 +25,13 @@ function tempRepo(): string {
 	return realpathSync(dir);
 }
 
+function tempUnbornRepo(): string {
+	const dir = mkdtempSync(join(tmpdir(), "daedalus-workspace-service-unborn-"));
+	tempDirs.push(dir);
+	sh(dir, ["git", "init", "-b", "main"]);
+	return realpathSync(dir);
+}
+
 afterEach(() => {
 	for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
@@ -45,6 +52,27 @@ describe("WorkspaceService", () => {
 		const base = service.resolveBaseTarget("main");
 		expect(base.baseBranch).toBe("main");
 		expect(base.baseCommit).toHaveLength(40);
+	});
+
+	test("resolves unborn git repos without a base commit", () => {
+		const repo = tempUnbornRepo();
+		const child = join(repo, "child");
+		mkdirSync(child);
+		const service = new WorkspaceService({ projectRoot: repo });
+
+		const current = service.resolveCurrentTarget(child);
+		expect(current.cwd).toBe(child);
+		expect(current.projectRoot).toBe(repo);
+		expect(current.isolationMode).toBe("external_worktree");
+		expect(current.repositoryRoot).toBe(repo);
+		expect(current.branch).toBe("main");
+		expect(current.worktreePath).toBe(child);
+		expect(current.baseCommit).toBeUndefined();
+		expect(current.validationStatus).toBe("valid");
+
+		const base = service.resolveBaseTarget();
+		expect(base.baseBranch).toBe("main");
+		expect(base.baseCommit).toBeUndefined();
 	});
 
 	test("resolves non-git current targets as detached", () => {

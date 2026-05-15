@@ -99,19 +99,23 @@ describe("app-server Codex parity gate", () => {
 		});
 		const terminal = await response(messages, "terminal");
 		expect(terminal.ok).toBe(true);
-		const terminalId = (terminal.result as protocolV1.TerminalCommandResult & { ok: true }).context.terminalId;
-		terminalOutput?.("terminal chunk\n");
-		server.router.append({
-			id: "terminal-output-parity",
-			type: "terminal/output",
-			ts: new Date().toISOString(),
-			sessionId: threadId,
-			terminalId,
-			payload: { sessionId: threadId, terminalId, data: "terminal chunk\n" },
-		} as AppEvent);
-		await waitFor(() =>
-			messages.find((message) => isNotification(message, "terminal/output") && JSON.stringify(message).includes("terminal chunk")),
-		);
+			const terminalId = (terminal.result as protocolV1.TerminalCommandResult & { ok: true }).context.terminalId;
+			const terminalChunk = "terminal chunk\n";
+			terminalOutput?.(terminalChunk);
+			server.router.append({
+				id: "terminal-output-parity",
+				type: "terminal/output",
+				ts: new Date().toISOString(),
+				sessionId: threadId,
+				terminalId,
+				payload: { sessionId: threadId, terminalId, data: terminalChunk },
+			} as AppEvent);
+			await waitFor(() =>
+				messages.find(
+					(message) =>
+						isNotification(message, "terminal/output") && JSON.stringify(message).includes(terminalChunk.trim()),
+				),
+			);
 
 		send(ws, "diff", "v1.diff.summary", {
 			workspaceTargetId,
@@ -184,7 +188,12 @@ describe("app-server Codex parity gate", () => {
 
 		const payloadRefs = replayEntries.flatMap((entry) => payloadRefsForEntry(entry));
 		if (diffFile?.payloadRef) payloadRefs.push(diffFile.payloadRef);
-		payloadRefs.push({ kind: "terminal-output", terminalId, cursor: { seq: 1 }, byteLength: 15 });
+			payloadRefs.push({
+				kind: "terminal-output",
+				terminalId,
+				cursor: { seq: 1 },
+				byteLength: Buffer.byteLength(terminalChunk, "utf8"),
+			});
 		expect(payloadRefs.length).toBeGreaterThanOrEqual(3);
 		for (const [index, ref] of payloadRefs.entries()) {
 			send(ws, `payload-${index}`, "payload.window", payloadParams(threadId, ref));

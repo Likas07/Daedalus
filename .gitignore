@@ -70,6 +70,8 @@ compaction-results/
 changes/
 __pycache__/
 packages/coding-agent/auth.json
+auth.json
+.daedalus/
 .daedalus/agent/
 .daedalus/semantic-workspace.json
 .daedalus/semantic-store/

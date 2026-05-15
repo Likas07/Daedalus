@@ -36,6 +36,7 @@ export interface ApprovalDecision {
 }
 
 export class ApprovalService {
+	private static readonly MAX_IDEMPOTENCY_CACHE_SIZE = 10_000;
 	private readonly waiters = new Map<
 		string,
 		{
@@ -97,7 +98,7 @@ export class ApprovalService {
 				decidedAt,
 			},
 		} satisfies protocolV1.ApprovalDecisionResult;
-		if (idempotencyKey) this.idempotentV1Results.set(idempotencyKey, result);
+		if (idempotencyKey) this.cacheIdempotentV1Result(idempotencyKey, result);
 		return result;
 	}
 
@@ -111,7 +112,10 @@ export class ApprovalService {
 			decision: "approved",
 		});
 		if (failure) return failure;
-		const answer = params.answers ? JSON.stringify(params.answers) : (params.answer ?? "");
+		const answer = approvalAnswer(params);
+		if (answer === undefined) {
+			throw new Error("Approval answer requires answer or answers.");
+		}
 		const answeredAt = new Date().toISOString();
 		this.resolve({
 			approvalId: params.approvalId,
@@ -132,7 +136,7 @@ export class ApprovalService {
 				answeredAt,
 			},
 		} satisfies protocolV1.ApprovalAnswerInputResult;
-		if (idempotencyKey) this.idempotentV1Results.set(idempotencyKey, result);
+		if (idempotencyKey) this.cacheIdempotentV1Result(idempotencyKey, result);
 		return result;
 	}
 
@@ -332,6 +336,20 @@ export class ApprovalService {
 			: undefined;
 	}
 
+	private cacheIdempotentV1Result(
+		key: string,
+		result: protocolV1.ApprovalDecisionResult | protocolV1.ApprovalAnswerInputResult,
+	): void {
+		if (!this.idempotentV1Results.has(key)) {
+			while (this.idempotentV1Results.size >= ApprovalService.MAX_IDEMPOTENCY_CACHE_SIZE) {
+				const oldest = this.idempotentV1Results.keys().next().value;
+				if (oldest === undefined) break;
+				this.idempotentV1Results.delete(oldest);
+			}
+		}
+		this.idempotentV1Results.set(key, result);
+	}
+
 	private toV1Request(
 		approval: ApprovalReadModel,
 		params: Pick<protocolV1.ApprovalListParams, "threadId" | "workspaceTargetId"> & { readonly turnId?: string },
@@ -399,6 +417,12 @@ function parseRecord(value: string): Record<string, unknown> {
 
 function stringValue(value: unknown): string | undefined {
 	return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function approvalAnswer(params: protocolV1.ApprovalAnswerInputParams): string | undefined {
+	if (params.answers && typeof params.answers === "object") return JSON.stringify(params.answers);
+	if (typeof params.answer === "string" && params.answer.length > 0) return params.answer;
+	return undefined;
 }
 
 function approvalKind(value: unknown): protocolV1.ApprovalRequestKind {

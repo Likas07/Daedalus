@@ -202,9 +202,9 @@ export class ExtensionUIBridge {
 		}
 		if (!this.options.sessionId) throw new Error("Extension structured user input requires a session id");
 		const turnId = this.options.getTurnId?.() ?? this.runtimeContext.getTurnId?.();
-		const workspaceTargetId =
-			this.options.getWorkspaceTargetId?.() ?? this.runtimeContext.workspaceTargetId ?? `base:${this.options.sessionId}`;
 		if (!turnId) throw new Error("Extension structured user input requires an active turn id");
+		const workspaceTargetId = this.options.getWorkspaceTargetId?.() ?? this.runtimeContext.workspaceTargetId;
+		if (!workspaceTargetId) throw new Error("Extension structured user input requires a workspace target id");
 		if (input.questions.length === 0) return { answers: {}, cancelled: true };
 		const approvalId = `input-${randomUUID()}`;
 		const firstQuestion = input.questions[0];

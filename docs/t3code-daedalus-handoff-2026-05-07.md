@@ -46,6 +46,14 @@ You must obey these rules:
 9. Prefer focused unit/integration tests before browser tests.
 10. Browser smoke must be bounded and deliberate. No runaway waits.
 
+Environment setup for examples below:
+
+```bash
+export T3CODE_ROOT="${T3CODE_ROOT:?set T3CODE_ROOT to your t3code checkout}"
+export DAEDALUS_ROOT="${DAEDALUS_ROOT:?set DAEDALUS_ROOT to your Daedalus checkout}"
+export DAEDALUS_WORKTREE="${DAEDALUS_WORKTREE:-${DAEDALUS_ROOT}/.daedalus/worktrees/t3code-daedalus-appserver-codex-parity}"
+```
+
 Suggested process check command:
 
 ```bash
@@ -59,7 +67,7 @@ Suggested cleanup before a restart:
 [ -f /tmp/t3code-single-dev.pid ] && kill "$(cat /tmp/t3code-single-dev.pid)" 2>/dev/null || true
 
 # Kill any leftover Daedalus app-server spawned by t3code.
-pkill -f '/home/likas/Research/Daedalus/.daedalus/worktrees/t3code-daedalus-appserver-codex-parity/packages/app-server/src/server/main.ts' || true
+pkill -f "${DAEDALUS_WORKTREE}/packages/app-server/src/server/main.ts" || true
 
 sleep 2
 
@@ -69,7 +77,7 @@ pgrep -af 'gui-inspiration/t3code|t3:dev|dev-runner|app-server/src/server/main|d
 Use a single log/pid path if you start t3code:
 
 ```bash
-cd /home/likas/Research/gui-inspiration/t3code
+cd "${T3CODE_ROOT}"
 bun run dev > /tmp/t3code-single-dev.log 2>&1 &
 echo $! > /tmp/t3code-single-dev.pid
 ```
@@ -86,7 +94,7 @@ Use gstack headed browser only.
 
 Do not use ad hoc browser instances. Do not spawn multiple gstack sessions.
 
-Use the `browse` skill if available. Then launch/control the single headed browser. Keep it as the only UI surface for t3code testing.
+Use the `browse` skill if available. Then launch/control the single-headed browser. Keep it as the only UI surface for t3code testing.
 
 The t3code page should be opened only there.
 
@@ -97,13 +105,13 @@ The t3code page should be opened only there.
 Repo:
 
 ```text
-/home/likas/Research/Daedalus
+${DAEDALUS_ROOT}
 ```
 
 Implementation worktree:
 
 ```text
-/home/likas/Research/Daedalus/.daedalus/worktrees/t3code-daedalus-appserver-codex-parity
+${DAEDALUS_WORKTREE}
 ```
 
 Branch:
@@ -123,7 +131,7 @@ e089ef204 fix(app-server): report v1 provider auth snapshot
 Repo:
 
 ```text
-/home/likas/Research/gui-inspiration/t3code
+${T3CODE_ROOT}
 ```
 
 Branch:
@@ -150,8 +158,8 @@ c184898e fix(qa): QA-002 — align Daedalus app-server request protocol
 Before editing, inspect this:
 
 ```bash
-git -C /home/likas/Research/gui-inspiration/t3code status --short
-git -C /home/likas/Research/Daedalus/.daedalus/worktrees/t3code-daedalus-appserver-codex-parity status --short
+git -C "${T3CODE_ROOT}" status --short
+git -C "${DAEDALUS_WORKTREE}" status --short
 ```
 
 Known current t3code dirty state at handoff:
@@ -356,7 +364,7 @@ Use focused tests first. Do **not** start browser/t3code until these pass.
 Suggested t3code tests:
 
 ```bash
-cd /home/likas/Research/gui-inspiration/t3code
+cd "${T3CODE_ROOT}"
 
 bun test \
   apps/server/src/provider/Layers/DaedalusProvider.test.ts \
@@ -369,7 +377,7 @@ bun test \
 Suggested Daedalus checks if Daedalus is touched:
 
 ```bash
-cd /home/likas/Research/Daedalus/.daedalus/worktrees/t3code-daedalus-appserver-codex-parity
+cd "${DAEDALUS_WORKTREE}"
 
 bun run --filter @daedalus-pi/app-server check
 bun test \
@@ -388,7 +396,7 @@ Use one t3code dev process and one headed gstack browser.
 ### Start t3code once
 
 ```bash
-cd /home/likas/Research/gui-inspiration/t3code
+cd "${T3CODE_ROOT}"
 bun run dev > /tmp/t3code-single-dev.log 2>&1 &
 echo $! > /tmp/t3code-single-dev.pid
 ```
@@ -432,19 +440,19 @@ If full approval/rollback is too large for one safe browser run, stop after prom
 Existing QA report:
 
 ```text
-/home/likas/Research/gui-inspiration/t3code/.gstack/qa-reports/qa-report-t3code-localhost-2026-05-07.md
+${T3CODE_ROOT}/.gstack/qa-reports/qa-report-t3code-localhost-2026-05-07.md
 ```
 
 Baseline:
 
 ```text
-/home/likas/Research/gui-inspiration/t3code/.gstack/qa-reports/baseline.json
+${T3CODE_ROOT}/.gstack/qa-reports/baseline.json
 ```
 
 Screenshots directory:
 
 ```text
-/home/likas/Research/gui-inspiration/t3code/.gstack/qa-reports/screenshots/
+${T3CODE_ROOT}/.gstack/qa-reports/screenshots/
 ```
 
 Update the QA report only after actual evidence.
