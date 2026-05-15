@@ -85,6 +85,36 @@ describe("SqliteSessionManager", () => {
 		expect((await sessionStore.read({ sessionId: "session-controller-id" })).header.id).toBe("session-controller-id");
 	});
 
+	test("persists workspace identity in the SQLite session header", async () => {
+		const sessionStore = store();
+		const manager = await SqliteSessionManager.create({
+			store: sessionStore,
+			cwd: "/repo",
+			sessionId: "session-with-workspace",
+		}).initialized();
+		const identity = {
+			version: 1,
+			sessionId: "session-with-workspace",
+			workspace: {
+				id: "base:project-1",
+				projectId: "project-1",
+				cwd: "/repo",
+				isolationMode: "shared_cwd",
+				metadata: {},
+			},
+		} as const;
+
+		manager.setWorkspaceIdentity(identity);
+
+		expect(manager.getWorkspaceIdentity()).toEqual(identity);
+		const reopened = await SqliteSessionManager.create({
+			store: sessionStore,
+			cwd: "/repo",
+			sessionPath: "session-with-workspace",
+		}).initialized();
+		expect(reopened.getWorkspaceIdentity()).toEqual(identity);
+	});
+
 	test("opens imported JSONL before resume", async () => {
 		const sessionStore = store();
 		await sessionStore.import({

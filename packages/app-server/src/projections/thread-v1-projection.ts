@@ -81,7 +81,10 @@ export function buildThreadV1(options: {
 }
 
 export function listThreadV1Turns(options: ListThreadV1TurnsOptions): protocolV1.Turn[] {
-	const rows = listSessionTurns(options.database, options.threadId);
+	const hiddenState = buildRollbackHiddenState(readEvents(options.database, { limit: 10000 }), options.threadId);
+	const rows = listSessionTurns(options.database, options.threadId).filter(
+		(row) => !hiddenState.hiddenTurnIds.has(row.id),
+	);
 	const eventIndex = buildThreadEventIndex(options.database, options.threadId);
 	const turnRowsById = new Map(rows.map((row) => [row.id, row]));
 	const fallbackTurnIds =
@@ -138,11 +141,19 @@ export function collectThreadTimelineEntries(
 	const session = readSession(database, threadId);
 	if (!session) throw new Error(`Unknown thread: ${threadId}`);
 	const events = readEvents(database, { limit: 10000 });
+	const hiddenState = buildRollbackHiddenState(events, threadId);
 	const eventEntries = events
+		.filter((event) => !hiddenState.isHiddenEvent(event))
 		.map((event) => projectStoredEventToTimelineEntry(event, threadId))
 		.filter((entry): entry is protocolV1.TimelineEntry => !!entry);
 	const eventEntryIds = new Set(eventEntries.map((entry) => entry.entryId));
-	const fallbackEntries = collectReadModelFallbackEntries(database, session, eventEntryIds, maxSequence(eventEntries));
+	const fallbackEntries = collectReadModelFallbackEntries(
+		database,
+		session,
+		eventEntryIds,
+		maxSequence(eventEntries),
+		hiddenState,
+	);
 	return dedupeTimelineEntries([...eventEntries, ...fallbackEntries]).sort(
 		(a, b) => a.sequence - b.sequence || a.entryId.localeCompare(b.entryId),
 	);
@@ -164,10 +175,10 @@ export function projectStoredEventToTimelineEntry(
 	};
 	switch (event.type) {
 		case "turn/started": {
-			const turnId = text(payload, "turnId", "turn_id", "id");
+			const turnId = text(payload, "turnId", "turn_id", "id") ?? String(event.seq);
 			return {
 				...base,
-				entryId: `turn:${turnId ?? event.seq}:user`,
+				entryId: `turn:${turnId}:user`,
 				kind: "user-message",
 				role: "user",
 				turnId,
@@ -175,29 +186,127 @@ export function projectStoredEventToTimelineEntry(
 				content: text(payload, "prompt", "content", "message") ?? "",
 			};
 		}
+		case "agent/message_start": {
+			const message = asRecord(payload.message);
+			const turnId = text(payload, "turnId", "turn_id");
+			const messageId =
+				text(payload, "messageId", "message_id") ??
+				text(message, "id", "messageId", "message_id") ??
+				String(event.seq);
+			return {
+				...base,
+				entryId: `message:${messageId}`,
+				kind: "activity",
+				turnId,
+				status: "running",
+				title: "Assistant message started",
+			};
+		}
+		case "agent/message_delta":
+		case "agent/message_update": {
+			return undefined;
+		}
 		case "agent/message_end": {
 			const message = asRecord(payload.message);
 			const role = text(message, "role") ?? text(payload, "role") ?? "assistant";
-			const turnId = text(payload, "turnId", "turn_id");
+			const turnId = text(payload, "turnId", "turn_id") ?? String(event.seq);
+			const messageId = messageIdFromPayload(payload, message, turnId) ?? String(event.seq);
 			if (role === "user") {
 				return {
 					...base,
-					entryId: `message:${text(message, "id", "messageId", "message_id") ?? event.seq}`,
+					entryId: `message:${messageId}`,
 					kind: "user-message",
 					role: "user",
 					turnId,
-					messageId: text(message, "id", "messageId", "message_id") ?? String(event.seq),
+					messageId,
 					content: content(message) || content(payload),
 				};
 			}
 			return {
 				...base,
-				entryId: `message:${text(message, "id", "messageId", "message_id") ?? event.seq}`,
+				entryId: `message:${messageId}`,
 				kind: "assistant-message",
 				role: "assistant",
 				turnId,
-				messageId: text(message, "id", "messageId", "message_id") ?? String(event.seq),
+				messageId,
 				content: content(message) || content(payload),
+			};
+		}
+		case "agent/tool_start":
+		case "agent/tool_execution_start": {
+			const turnId = text(payload, "turnId", "turn_id");
+			if (!turnId) return undefined;
+			const toolCallId = text(payload, "toolCallId", "tool_call_id", "id") ?? String(event.seq);
+			return {
+				...base,
+				entryId: `tool:${toolCallId}`,
+				kind: "tool",
+				turnId,
+				toolCallId,
+				toolName: text(payload, "toolName", "tool_name", "name") ?? "tool",
+				status: "running",
+				summary: text(payload, "summary", "input", "command"),
+			};
+		}
+		case "agent/tool_delta":
+		case "agent/tool_execution_update": {
+			return undefined;
+		}
+		case "agent/tool_end":
+		case "agent/tool_execution_end": {
+			const turnId = text(payload, "turnId", "turn_id");
+			if (!turnId) return undefined;
+			const toolCallId = text(payload, "toolCallId", "tool_call_id", "id") ?? String(event.seq);
+			const output = text(payload, "output", "content", "text", "summary") ?? "";
+			return {
+				...base,
+				entryId: `tool:${toolCallId}`,
+				kind: "tool",
+				turnId,
+				toolCallId,
+				toolName: text(payload, "toolName", "tool_name", "name") ?? "tool",
+				status: mapToolStatus(text(payload, "status")),
+				summary: output.slice(0, 120) || text(payload, "summary"),
+				...(output
+					? {
+							payloadRef: {
+								kind: "tool-output" as const,
+								toolCallId,
+								cursor: { seq: event.seq },
+								byteLength: byteLength(output),
+							},
+						}
+					: {}),
+			};
+		}
+		case "agent/command_output": {
+			const turnId = text(payload, "turnId", "turn_id");
+			const terminalId =
+				text(payload, "terminalId", "terminal_id", "commandId", "command_id", "id") ?? String(event.seq);
+			const data = text(payload, "data", "text", "output", "chunk") ?? "";
+			return {
+				...base,
+				entryId: `command:${terminalId}:output:${event.seq}`,
+				kind: "terminal-output",
+				turnId,
+				summary: data.slice(0, 120),
+				payloadRef: {
+					kind: "terminal-output",
+					terminalId,
+					cursor: { seq: event.seq },
+					byteLength: byteLength(data),
+				},
+			};
+		}
+		case "agent/file_change": {
+			return {
+				...base,
+				entryId: `file-change:${event.seq}`,
+				kind: "activity",
+				turnId: text(payload, "turnId", "turn_id"),
+				status: "completed",
+				title: text(payload, "path", "filePath", "file_path") ?? "File changed",
+				description: text(payload, "summary", "operation"),
 			};
 		}
 		case "turn/completed":
@@ -321,6 +430,7 @@ function collectReadModelFallbackEntries(
 	session: SessionRow,
 	existingEntryIds: ReadonlySet<string>,
 	startSequence: number,
+	hiddenState?: RollbackHiddenState,
 ): protocolV1.TimelineEntry[] {
 	let sequence = startSequence;
 	const entries: protocolV1.TimelineEntry[] = [];
@@ -328,6 +438,8 @@ function collectReadModelFallbackEntries(
 		const kind = turn.role === "user" ? "user-message" : "assistant-message";
 		const entryId = `turn:${turn.id}:${turn.role}`;
 		if (
+			hiddenState?.hiddenTurnIds.has(turn.id) ||
+			hiddenState?.hiddenEntryIds.has(entryId) ||
 			existingEntryIds.has(entryId) ||
 			existingEntryIds.has(`turn:${turn.id}:user`) ||
 			existingEntryIds.has(`message:${turn.id}`)
@@ -417,7 +529,9 @@ function buildThreadEventIndex(
 		{ status: protocolV1.TurnStatus; prompt?: string; createdAt: string; updatedAt: string; completedAt?: string }
 	>();
 	const turnOrder: string[] = [];
-	for (const event of readEvents(database, { streamId: threadId, limit: 10000 })) {
+	const allEvents = readEvents(database, { limit: 10000 });
+	const hiddenState = buildRollbackHiddenState(allEvents, threadId);
+	for (const event of allEvents.filter((event) => event.streamId === threadId && !hiddenState.isHiddenEvent(event))) {
 		const payload = storedEventPayload(event);
 		const turnId = text(payload, "turnId", "turn_id", "id");
 		if (!turnId) continue;
@@ -480,14 +594,116 @@ function mapApprovalStatus(status: string | undefined): protocolV1.ApprovalStatu
 	return "pending";
 }
 
+function mapToolStatus(status: string | undefined): protocolV1.ToolStatus {
+	if (status === "failed" || status === "error") return "failed";
+	if (status === "cancelled" || status === "canceled") return "cancelled";
+	return "completed";
+}
+
 function dedupeTimelineEntries(entries: readonly protocolV1.TimelineEntry[]): protocolV1.TimelineEntry[] {
 	const byId = new Map<string, protocolV1.TimelineEntry>();
-	for (const entry of entries) if (!byId.has(entry.entryId)) byId.set(entry.entryId, entry);
+	for (const entry of entries) byId.set(entry.entryId, entry);
 	return [...byId.values()];
 }
 
 function maxSequence(entries: readonly protocolV1.TimelineEntry[]): number {
 	return entries.reduce((max, entry) => Math.max(max, entry.sequence), 0);
+}
+
+interface RollbackHiddenState {
+	readonly hiddenTurnIds: ReadonlySet<string>;
+	readonly hiddenEntryIds: ReadonlySet<string>;
+	readonly isHiddenEvent: (event: StoredEvent) => boolean;
+}
+
+function buildRollbackHiddenState(events: readonly StoredEvent[], threadId: string): RollbackHiddenState {
+	const hiddenTurnIds = new Set<string>();
+	const hiddenEntryIds = new Set<string>();
+	const hiddenTurnIdsBeforeSeq: Array<{ readonly turnIds: ReadonlySet<string>; readonly beforeSeq: number }> = [];
+	const hiddenRanges: Array<{ readonly startSeq: number; readonly endSeq: number }> = [];
+	for (const event of events) {
+		if (event.type !== "thread/rollback") continue;
+		const payload = storedEventPayload(event);
+		if (threadIdFromPayloadOrStream(payload, event.streamId) !== threadId) continue;
+		const removedTurnIds = stringArray(payload.removedTurnIds);
+		if (removedTurnIds.length > 0) {
+			for (const turnId of removedTurnIds) hiddenTurnIds.add(turnId);
+			hiddenTurnIdsBeforeSeq.push({ turnIds: new Set(removedTurnIds), beforeSeq: event.seq });
+		}
+		const range = hiddenEventRange(payload.hiddenEventRange, event.seq);
+		if (range) hiddenRanges.push(range);
+	}
+	for (const event of events) {
+		const hiddenBySeq = hiddenRanges.some((range) => event.seq >= range.startSeq && event.seq <= range.endSeq);
+		const payload = storedEventPayload(event);
+		const turnId = text(payload, "turnId", "turn_id", "id");
+		const hiddenByTurn =
+			turnId &&
+			hiddenTurnIdsBeforeSeq.some((rollback) => event.seq < rollback.beforeSeq && rollback.turnIds.has(turnId));
+		if (hiddenBySeq || hiddenByTurn) addHiddenEntryIds(hiddenEntryIds, event, payload);
+	}
+	return {
+		hiddenTurnIds,
+		hiddenEntryIds,
+		isHiddenEvent: (event) => {
+			if (event.type === "thread/rollback") return false;
+			for (const range of hiddenRanges) {
+				if (event.seq >= range.startSeq && event.seq <= range.endSeq) return true;
+			}
+			const payload = storedEventPayload(event);
+			const turnId = text(payload, "turnId", "turn_id", "id");
+			if (!turnId) return false;
+			return hiddenTurnIdsBeforeSeq.some(
+				(rollback) => event.seq < rollback.beforeSeq && rollback.turnIds.has(turnId),
+			);
+		},
+	};
+}
+
+function addHiddenEntryIds(target: Set<string>, event: StoredEvent, payload: JsonRecord): void {
+	const turnId = text(payload, "turnId", "turn_id", "id");
+	if (event.type === "turn/started" && turnId) target.add(`turn:${turnId}:user`);
+	if (event.type === "turn/completed" && turnId) target.add(`turn:${turnId}:completed`);
+	if (event.type === "turn/interrupted" && turnId) target.add(`turn:${turnId}:cancelled`);
+	if (event.type === "agent/message_end") {
+		const message = asRecord(payload.message);
+		const messageId = messageIdFromPayload(payload, message, turnId ?? String(event.seq));
+		if (messageId) {
+			target.add(`message:${messageId}`);
+			target.add(`turn:${messageId}:assistant`);
+		}
+		if (turnId) target.add(`turn:${turnId}:assistant`);
+	}
+	if (event.type === "agent/tool_end") {
+		const toolCallId = text(payload, "toolCallId", "tool_call_id", "id");
+		if (toolCallId) target.add(`tool:${toolCallId}`);
+	}
+}
+
+function hiddenEventRange(
+	value: unknown,
+	rollbackSeq: number,
+): { readonly startSeq: number; readonly endSeq: number } | undefined {
+	const range = asRecord(value);
+	const startSeq = numberValue(range.startSeq) ?? numberValue(range.fromSeq) ?? numberValue(range.start);
+	const endSeq =
+		numberValue(range.endSeq) ?? numberValue(range.toSeq) ?? numberValue(range.end) ?? numberValue(range.untilSeq);
+	if (startSeq === undefined) return undefined;
+	return { startSeq, endSeq: endSeq ?? rollbackSeq - 1 };
+}
+
+function threadIdFromPayloadOrStream(payload: JsonRecord, streamId: string): string | undefined {
+	return text(payload, "threadId", "thread_id", "sessionId", "session_id") ?? streamId.replace(/^session:/, "");
+}
+
+function stringArray(value: unknown): string[] {
+	return Array.isArray(value)
+		? value.filter((item): item is string => typeof item === "string" && item.length > 0)
+		: [];
+}
+
+function numberValue(value: unknown): number | undefined {
+	return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function titleFromTurns(database: AppServerDatabase, threadId: string): string | undefined {
@@ -547,17 +763,56 @@ function parseMaybeJson(value: string): JsonRecord {
 
 function text(payload: JsonRecord, ...keys: string[]): string | undefined {
 	for (const key of keys) {
-		const value = payload[key];
-		if (typeof value === "string") return value;
-		if (typeof value === "number" || typeof value === "boolean") return String(value);
+		const value = textValue(payload[key]);
+		if (value !== undefined) return value;
 	}
 	return undefined;
 }
 
 function content(payload: JsonRecord): string {
+	const visible = text(payload, "content", "message", "summary", "text");
+	if (visible !== undefined) return visible;
+	const fallback = payload.data ?? payload.payload;
+	return fallback === undefined ? "" : JSON.stringify(fallback);
+}
+
+function messageIdFromPayload(payload: JsonRecord, message: JsonRecord, turnId?: string): string | undefined {
+	const assistantMessageEvent = asRecord(payload.assistantMessageEvent);
+	const partial = asRecord(assistantMessageEvent.partial);
 	return (
-		text(payload, "content", "message", "summary", "text") ?? JSON.stringify(payload.data ?? payload.payload ?? "")
+		text(payload, "messageId", "message_id") ??
+		text(message, "id", "messageId", "message_id", "responseId") ??
+		text(partial, "id", "messageId", "message_id", "responseId") ??
+		text(payload, "responseId", "response_id") ??
+		text(payload, "id") ??
+		turnId
 	);
+}
+
+function textValue(value: unknown): string | undefined {
+	if (typeof value === "string") return value;
+	if (typeof value === "number" || typeof value === "boolean") return String(value);
+	if (Array.isArray(value)) {
+		const parts = value.map(textPart).filter((part): part is string => part !== undefined);
+		if (parts.length > 0) return parts.join("");
+		return undefined;
+	}
+	if (value && typeof value === "object") {
+		const record = value as JsonRecord;
+		return (
+			textValue(record.text) ?? textValue(record.content) ?? textValue(record.message) ?? textValue(record.summary)
+		);
+	}
+	return undefined;
+}
+
+function textPart(value: unknown): string | undefined {
+	if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+	if (!value || typeof value !== "object") return undefined;
+	const record = value as JsonRecord;
+	const type = typeof record.type === "string" ? record.type : undefined;
+	if (type && type !== "text" && type !== "output_text" && type !== "summary_text") return undefined;
+	return textValue(record.text) ?? textValue(record.content) ?? textValue(record.message) ?? textValue(record.summary);
 }
 
 function approvalTitle(payload: JsonRecord): string {

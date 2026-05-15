@@ -4,6 +4,7 @@ export type InProcessHandler = (message: unknown, sendToClient: (message: unknow
 
 export class InProcessAppServerTransport implements AppServerTransport {
 	private readonly listeners = new Set<(message: unknown) => void>();
+	private readonly closeListeners = new Set<(error?: unknown) => void>();
 	private closed = false;
 
 	constructor(private readonly handler: InProcessHandler) {}
@@ -18,9 +19,16 @@ export class InProcessAppServerTransport implements AppServerTransport {
 		return () => this.listeners.delete(listener);
 	}
 
+	onClose(listener: (error?: unknown) => void): () => void {
+		this.closeListeners.add(listener);
+		return () => this.closeListeners.delete(listener);
+	}
+
 	close(): void {
 		this.closed = true;
 		this.listeners.clear();
+		for (const listener of this.closeListeners) listener(new Error("In-process app-server transport is closed"));
+		this.closeListeners.clear();
 	}
 
 	deliver(message: unknown): void {

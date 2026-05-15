@@ -72,6 +72,30 @@ function errorResult(
 	};
 }
 
+function resultFromStructuredAnswers(
+	questions: Question[],
+	result: { answers: Record<string, { answers: readonly string[] }>; cancelled?: boolean },
+): QuestionnaireResult {
+	if (result.cancelled) return { questions, answers: [], cancelled: true };
+	const answers = questions.flatMap((question) => {
+		const selected = result.answers[question.id]?.answers ?? [];
+		const value = selected[0];
+		if (!value) return [];
+		const optionIndex = question.options.findIndex((option) => option.value === value || option.label === value);
+		const option = optionIndex >= 0 ? question.options[optionIndex] : undefined;
+		return [
+			{
+				id: question.id,
+				value: option?.value ?? value,
+				label: option?.label ?? value,
+				wasCustom: option === undefined,
+				...(optionIndex >= 0 ? { index: optionIndex + 1 } : {}),
+			},
+		];
+	});
+	return { questions, answers, cancelled: answers.length === 0 };
+}
+
 export default function questionnaire(pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "questionnaire",
@@ -97,7 +121,25 @@ export default function questionnaire(pi: ExtensionAPI) {
 			const isMulti = questions.length > 1;
 			const totalTabs = questions.length + 1;
 
-			const result = await ctx.ui.custom<QuestionnaireResult>((tui, theme, _kb, done) => {
+			const result = ctx.ui.requestUserInput
+				? resultFromStructuredAnswers(
+						questions,
+						await ctx.ui.requestUserInput({
+							title: isMulti ? "Questionnaire" : questions[0]?.label,
+							signal: _signal,
+							questions: questions.map((question) => ({
+								id: question.id,
+								header: question.label,
+								question: question.prompt,
+								options: question.options.map((option) => ({
+									value: option.value,
+									label: option.label,
+									description: option.description ?? option.label,
+								})),
+							})),
+						}),
+					)
+				: await ctx.ui.custom<QuestionnaireResult>((tui, theme, _kb, done) => {
 				let currentTab = 0;
 				let optionIndex = 0;
 				let inputMode = false;

@@ -1,5 +1,6 @@
 import { type Static, type TSchema, Type } from "@sinclair/typebox";
 import { ProjectIdSchema, ThreadIdSchema, TurnIdSchema, WorkspaceTargetIdSchema } from "../ids";
+import { TimelineWindowResultSchema } from "./timeline";
 
 const StrictObject = <Properties extends Record<string, TSchema>>(properties: Properties) =>
 	Type.Object(properties, { additionalProperties: false });
@@ -75,6 +76,21 @@ export const ThreadListResultSchema = StrictObject({
 });
 export type ThreadListResult = Static<typeof ThreadListResultSchema>;
 
+export const ThreadResumeParamsSchema = StrictObject({
+	threadId: ThreadIdSchema,
+	prompt: Type.Optional(Type.String({ minLength: 1 })),
+	model: Type.Optional(Type.String({ minLength: 1 })),
+	effort: Type.Optional(Type.String({ minLength: 1 })),
+	draftState: Type.Optional(JsonObjectSchema),
+});
+export type ThreadResumeParams = Static<typeof ThreadResumeParamsSchema>;
+
+export const ThreadResumeResultSchema = StrictObject({
+	thread: ThreadSchema,
+	turn: Type.Optional(TurnSchema),
+});
+export type ThreadResumeResult = Static<typeof ThreadResumeResultSchema>;
+
 export const ThreadGetParamsSchema = StrictObject({
 	threadId: ThreadIdSchema,
 });
@@ -82,6 +98,8 @@ export type ThreadGetParams = Static<typeof ThreadGetParamsSchema>;
 
 export const ThreadGetResultSchema = StrictObject({
 	thread: ThreadSchema,
+	turns: Type.Array(TurnSchema),
+	timeline: TimelineWindowResultSchema,
 });
 export type ThreadGetResult = Static<typeof ThreadGetResultSchema>;
 
@@ -89,6 +107,14 @@ export const TurnStartParamsSchema = StrictObject({
 	threadId: ThreadIdSchema,
 	prompt: Type.String({ minLength: 1 }),
 	attachmentIds: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+	attachments: Type.Optional(
+		Type.Array(
+			StrictObject({
+				type: Type.Literal("image"),
+				url: Type.String({ minLength: 1 }),
+			}),
+		),
+	),
 	filePaths: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
 	model: Type.Optional(Type.String({ minLength: 1 })),
 	effort: Type.Optional(Type.String({ minLength: 1 })),

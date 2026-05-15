@@ -123,6 +123,37 @@ describe("SessionController", () => {
 		expect(runtime?.prompts).toEqual(["work"]);
 	});
 
+	test("agent_end persists exactly one completed turn event", async () => {
+		const messages: RuntimeControllerMessage[] = [];
+		const controller = new SessionController({
+			agentDir: "/agent",
+			eventSink: (message) => {
+				messages.push(message);
+			},
+			makeSessionManager: ({ cwd }) => ({ cwd }),
+			nextSessionId: () => "session-complete",
+			nextTurnId: () => "turn-complete",
+			nextEventId: (() => {
+				let id = 0;
+				return () => `event-${++id}`;
+			})(),
+			now: () => new Date("2026-01-02T03:04:05.000Z"),
+			runtimeFactory: async (input) => new FakeRuntime(input.cwd),
+		});
+
+		await controller.startSession({ cwd: "/tmp/project" });
+		await controller.startTurn({ sessionId: "session-complete", prompt: "work" });
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const completed = messages.filter((message) => (message as { type?: string }).type === "turn/completed");
+		expect(completed).toHaveLength(1);
+		expect(completed[0]).toMatchObject({
+			type: "turn/completed",
+			sessionId: "session-complete",
+			payload: { sessionId: "session-complete", turnId: "turn-complete" },
+		});
+	});
+
 	test("interrupts and disposes sessions", async () => {
 		const messages: RuntimeControllerMessage[] = [];
 		let runtime: FakeRuntime | undefined;

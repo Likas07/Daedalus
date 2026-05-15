@@ -1,5 +1,8 @@
 import { readFileSync } from "node:fs";
 import { startAppServer } from "./app-server";
+import { createAppServerCore } from "./app-server";
+import { startStdioProtocol } from "./stdio";
+import packageJson from "../../package.json" with { type: "json" };
 
 interface Args {
 	db: string;
@@ -9,6 +12,9 @@ interface Args {
 	token?: string;
 	gui: boolean;
 	project: string;
+	stdio: boolean;
+	version: boolean;
+	agentDir?: string;
 }
 
 function parseArgs(argv: readonly string[]): Args {
@@ -18,6 +24,8 @@ function parseArgs(argv: readonly string[]): Args {
 		port: 0,
 		gui: false,
 		project: process.cwd(),
+		stdio: false,
+		version: false,
 	};
 	for (let i = 0; i < argv.length; i += 1) {
 		const arg = argv[i];
@@ -42,6 +50,13 @@ function parseArgs(argv: readonly string[]): Args {
 		} else if (arg === "--project" && next) {
 			args.project = next;
 			i += 1;
+		} else if (arg === "--stdio") {
+			args.stdio = true;
+		} else if (arg === "--version") {
+			args.version = true;
+		} else if (arg === "--agent-dir" && next) {
+			args.agentDir = next;
+			i += 1;
 		}
 	}
 
@@ -50,7 +65,20 @@ function parseArgs(argv: readonly string[]): Args {
 
 export async function main(argv = Bun.argv.slice(2)): Promise<void> {
 	const args = parseArgs(argv);
+	if (args.version) {
+		console.log(packageJson.version);
+		return;
+	}
 	const token = args.token ?? (args.tokenFile ? readFileSync(args.tokenFile, "utf8").trim() : undefined);
+	if (args.stdio) {
+		const core = await createAppServerCore({
+			databasePath: args.db,
+			agentDir: args.agentDir,
+			projectRoot: args.project,
+		});
+		await startStdioProtocol(core);
+		return;
+	}
 	const server = await startAppServer({
 		databasePath: args.db,
 		host: args.host,
@@ -58,6 +86,7 @@ export async function main(argv = Bun.argv.slice(2)): Promise<void> {
 		token,
 		serveGui: args.gui,
 		projectRoot: args.project,
+		agentDir: args.agentDir,
 	});
 	console.log(
 		JSON.stringify({ httpUrl: server.httpUrl, wsUrl: server.wsUrl, token: token ? "<redacted>" : server.token }),

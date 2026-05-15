@@ -146,7 +146,7 @@ describe("runtime event projector", () => {
 		appendEvent(db, {
 			streamId: "session-2",
 			type: "agent/message_end",
-			payload: { message: { id: "message-1", role: "assistant", content: "durable answer" } },
+			payload: { message: { id: "message-1", role: "assistant", content: [{ type: "text", text: "durable answer" }] } },
 		});
 		appendEvent(db, {
 			streamId: "terminal-2",

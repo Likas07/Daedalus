@@ -8,6 +8,7 @@ import {
 	type TodoWriteResult,
 } from "../../tools/todo-state.js";
 import { markdownHash, planSidecarPath, validateExecutablePlan } from "./schema.js";
+import type { SubagentTaskBinding } from "../../../../core/subagents/types.js";
 
 export interface PlanArtifactStep {
 	step: number;
@@ -125,7 +126,7 @@ export function parsePlanArtifactText(text: string, sourcePath?: string): PlanAr
 	};
 }
 
-function renderExecutableTaskDetail(task: any, step: number): string {
+export function renderExecutableTaskDetail(task: any, step: number): string {
 	const lines: string[] = [`# Task ${step}: ${task.title}`, "", "Files:"];
 	for (const file of task.files.create ?? []) lines.push(`- Create: ${file}`);
 	for (const file of task.files.modify ?? []) lines.push(`- Modify: ${file}`);
@@ -173,6 +174,19 @@ export function loadPlanArtifact(filePath: string, cwd: string): PlanArtifact {
 		};
 	}
 	return parsePlanArtifactText(text, resolved);
+}
+
+export function readBoundPlanTask(cwd: string, binding: SubagentTaskBinding): PlanArtifactStep {
+	const requestedPath = resolve(cwd, binding.planPath);
+	const markdownPath = requestedPath.endsWith(".plan.json")
+		? requestedPath.slice(0, -".plan.json".length) + ".md"
+		: requestedPath;
+	const plan = loadPlanArtifact(markdownPath, cwd);
+	const step = plan.steps.find((candidate) => candidate.id === binding.taskId);
+	if (!step) {
+		throw new Error(`Bound plan task not found: ${binding.taskId}`);
+	}
+	return step;
 }
 
 export function planArtifactToTodos(plan: PlanArtifact): TodoItem[] {

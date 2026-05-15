@@ -28,6 +28,8 @@ Server responses use the same `id`:
 
 Server notifications and server-initiated requests use `kind: "notification"` and `kind: "request"` respectively. Runtime events are persisted as app events and can be replayed with `event/replay`.
 
+Unknown public methods fail with `method_not_found`; unsupported requests must not be treated as empty successful responses. WebSocket clients are expected to initialize before normal requests. The typed client enforces this for WebSocket transports, rejects pending requests when the transport closes, supports per-request timeouts, and validates successful responses against `ClientRequestResultSchemas`.
+
 ## Core methods
 
 - `initialize` negotiates protocol version and returns capabilities.
@@ -43,6 +45,16 @@ Server notifications and server-initiated requests use `kind: "notification"` an
 - `event/replay` returns persisted events after a cursor, optionally filtered by type.
 
 The canonical schemas live in `packages/app-server-protocol/src`.
+
+## v1 Thread Protocol
+
+The adapter-facing v1 surface uses thread/workspace terminology and avoids legacy `sessionId` compatibility fields. Implemented methods include `workspaceTarget.list`, `workspaceTarget.validate`, `thread.create`, `thread.list`, `thread.resume`, `thread.get`, `thread.replay`, `turn.start`, `turn.cancel`, and `payload.window`.
+
+`thread.timeline` and `thread.timeline.delta` notifications provide the ordered render index and live deltas for assistant text and tool output. Reconnect flows use durable cursors through `thread.replay` and `event/replay`.
+
+`payload.window` resolves every emitted payload reference through a database-backed window: terminal output by `terminalId`, diff content by `diffId` plus optional `filePath`, tool output by `toolCallId`, and audit detail by `auditId`. Each result returns chunks, `previousCursor`, `nextCursor`, `hasMoreBefore`, and `hasMoreAfter`. Unknown or wrong-thread references fail with typed error codes instead of returning accidental empty chunks.
+
+Approvals are available through `v1.approval.list`, `v1.approval.decide`, and `v1.approval.answer`. Decisions and structured answers accept idempotency keys; duplicate submissions with the same key return the original result, while stale, expired, duplicate, wrong-thread, and not-found decisions return typed failures. Approval lifecycle updates are published as `v1.approval.changed` and projected into replayable timeline entries.
 
 ## Extension UI flow
 

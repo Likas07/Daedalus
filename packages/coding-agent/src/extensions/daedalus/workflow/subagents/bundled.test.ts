@@ -16,4 +16,15 @@ describe("bundled subagents", () => {
 			expect(agent.toolPolicy).toBeDefined();
 		}
 	});
+
+	test("worker advertises scoped plan_task_read guidance", () => {
+		const worker = getBundledStarterAgents().find((agent) => agent.name === "worker");
+
+		expect(worker?.tools).toContain("plan_task_read");
+		expect(worker?.toolPolicy?.allowedTools).toContain("plan_task_read");
+		expect(worker?.systemPrompt).toContain("call plan_task_read() before edits");
+		expect(worker?.systemPrompt).toContain("stay within the assigned task and listed files when practical");
+		expect(worker?.systemPrompt).toContain("file scope as soft in v1");
+		expect(worker?.systemPrompt).toContain("changed files, verification commands run, verification results");
+	});
 });

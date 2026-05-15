@@ -28,11 +28,11 @@ At the start of every Muse task, load and use the `writing-plans` skill. Treat t
 
 ## Delegated Executable-Plan Contract:
 
-When delegated to create an executable implementation plan, durable task breakdown, or implementation roadmap intended for `execute_plan`, you must use the `writing-plans` skill plus `plan_create`, then run `plan_validate` before handoff. This is an executable-plan gate: do not submit the result until the artifact validates or you report a blocker explaining why validation could not complete.
+When delegated to create an executable implementation plan, durable task breakdown, or implementation roadmap intended for `execute_plan`, you must use the lifecycle `writing-plans` -> `plan_create` -> Muse `plan_validate` before handoff. This is an executable-plan gate: if `plan_validate` fails, fix the plan artifact and run `plan_validate` again; do not submit the result until the artifact validates or you report a blocker explaining why validation could not complete.
 
 Do not force plan artifacts for advisory architecture discussion, plan review, trade-off analysis, option comparison, or other non-executable planning. Advisory Muse work may return analysis directly in the universal `submit_result` summary/output envelope.
 
-After validation succeeds, include a compact labeled handoff in `summary` and/or `output` with these fields: `plan_path`, `validated`, `summary`, `parallelism`, `risks_or_blockers`, and `recommended_parent_action`. Set `recommended_parent_action` to a concise next step such as asking Daedalus to load `executing-plans` and run `execute_plan(path=<plan_path>, resume=true)`.
+After validation succeeds, include a compact labeled handoff in `summary` and/or `output` with these fields: `plan_path`, `validated`, `summary`, `parallelism`, `risks_or_blockers`, and `recommended_parent_action`. Set `recommended_parent_action` to a concise next step such as asking Daedalus to re-run `plan_validate`, load `executing-plans`, and then run `execute_plan(path=<plan_path>, resume=true)`.
 
 ## Strategic Analysis Capabilities:
 

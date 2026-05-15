@@ -323,7 +323,10 @@ describe("execute_plan primitive", () => {
 
 		expect(result.details.plan.format).toBe("executable-plan-v1");
 		expect(result.details.todos[0]).toMatchObject({ id: "task-sidecar", content: "Task 1: Sidecar task" });
-		expect(getText(result)).toContain("Ready parallel group sidecar: task-sidecar");
+		const output = getText(result);
+		expect(output).toContain("Ready parallel groups: sidecar: task-sidecar");
+		expect(output).toContain("Use plan_task_read selector=<task-id> for each ready task packet");
+		expect(output).toContain("Dispatch one task-bound Worker per independent ready task");
 
 		session.dispose();
 	});
@@ -405,6 +408,12 @@ describe("execute_plan primitive", () => {
 		expect(output).toContain("packages/coding-agent/src/core/tools/read.ts");
 		expect(output).not.toContain("Task 2: Profile reads");
 		expect(Buffer.byteLength(output, "utf8")).toBeLessThan(10_000);
+
+		const missingSelector = await taskRead!.execute("plan-task-read-missing-selector", {}, undefined, undefined, {
+			cwd: tempDir,
+		} as any);
+		expect(missingSelector.isError).toBe(true);
+		expect(getText(missingSelector)).toContain("requires selector");
 
 		session.dispose();
 	});

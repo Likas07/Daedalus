@@ -10,6 +10,7 @@ export interface ProjectServiceOptions {
 export interface OpenProjectInput {
 	readonly path: string;
 	readonly name?: string;
+	readonly projectId?: string;
 }
 
 export class ProjectService {
@@ -20,7 +21,7 @@ export class ProjectService {
 		const existing = this.list().find((project) => resolve(project.path) === normalizedPath);
 		if (existing) return { projectId: existing.id };
 
-		const projectId = `project-${crypto.randomUUID()}`;
+		const projectId = input.projectId ?? `project-${crypto.randomUUID()}`;
 		const name = input.name ?? normalizedPath.split(/[\\/]/).at(-1) ?? normalizedPath;
 		appendEvent(this.options.database, {
 			streamId: `project:${projectId}`,

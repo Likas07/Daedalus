@@ -173,6 +173,54 @@ describe("question/questionnaire tool rendering", () => {
 		expect(submitText).toContain("regression coverage");
 	});
 
+	test("questionnaire uses structured user input when the host provides it", async () => {
+		const tool = register(questionnaire);
+		let requested: unknown;
+		const result = await tool.execute(
+			"tool-call",
+			{
+				questions: [
+					{
+						id: "scope",
+						label: "Scope",
+						prompt: "Choose the scope.",
+						options: [{ value: "small", label: "Small", description: "Small scope" }],
+						allowOther: false,
+					},
+				],
+			},
+			new AbortController().signal,
+			() => {},
+			{
+				hasUI: true,
+				ui: {
+					notify() {},
+					requestUserInput(input: unknown) {
+						requested = input;
+						return Promise.resolve({ answers: { scope: { answers: ["small"] } } });
+					},
+					custom() {
+						throw new Error("custom UI should not be used");
+					},
+				},
+			},
+		);
+
+		expect(requested).toMatchObject({
+			title: "Scope",
+			questions: [
+				{
+					id: "scope",
+					header: "Scope",
+					question: "Choose the scope.",
+					options: [{ value: "small", label: "Small", description: "Small scope" }],
+				},
+			],
+		});
+		expect(result.content[0]?.text).toBe("Scope: user selected: 1. Small");
+		expect(result.details.cancelled).toBe(false);
+	});
+
 	test("question custom UI caps long content to terminal height and scrolls with sticky chrome", async () => {
 		const tool = register(question);
 		const width = 44;

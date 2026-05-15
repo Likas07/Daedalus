@@ -98,24 +98,26 @@ export function projectAppEventToProjectionEvents(options: ProjectAppEventOption
 
 function messageFromEvent(event: AppEvent, _seq: number): ThreadMessage {
 	const payload = payloadRecord(event.payload);
+	const message = payloadRecord(payload.message);
 	return {
-		id: text(payload, "messageId", "message_id", "id") ?? event.id,
+		id: text(payload, "messageId", "message_id", "id") ?? text(message, "id", "messageId", "message_id") ?? event.id,
 		turnId: text(payload, "turnId", "turn_id"),
-		role: role(text(payload, "role")),
-		content: text(payload, "content", "text", "message") ?? "",
+		role: role(text(message, "role") ?? text(payload, "role")),
+		content: text(message, "content", "text", "message") ?? text(payload, "content", "text", "message") ?? "",
 		createdAt: event.ts,
 	};
 }
 
 function messageActivityFromEvent(event: AppEvent) {
 	const payload = payloadRecord(event.payload);
+	const assistantMessageEvent = payloadRecord(payload.assistantMessageEvent);
 	const status = event.type === "agent/message_start" ? "running" : "running";
 	return {
 		id: text(payload, "messageId", "message_id", "id") ?? event.id,
 		kind: "thinking" as const,
 		status: status as "running",
 		title: event.type === "agent/message_start" ? "Assistant message started" : "Assistant message updated",
-		detail: text(payload, "delta", "content", "text"),
+		detail: text(payload, "delta") ?? text(assistantMessageEvent, "delta"),
 		startedAt: event.ts,
 	};
 }
@@ -156,10 +158,32 @@ function payloadRecord(value: unknown): Record<string, unknown> {
 
 function text(record: Record<string, unknown>, ...keys: string[]): string | undefined {
 	for (const key of keys) {
-		const value = record[key];
-		if (typeof value === "string" && value.length > 0) return value;
+		const value = textValue(record[key]);
+		if (value !== undefined && value.length > 0) return value;
 	}
 	return undefined;
+}
+
+function textValue(value: unknown): string | undefined {
+	if (typeof value === "string") return value;
+	if (Array.isArray(value)) {
+		const parts = value.map(textPart).filter((part): part is string => part !== undefined);
+		return parts.length > 0 ? parts.join("") : undefined;
+	}
+	if (value && typeof value === "object") {
+		const record = value as Record<string, unknown>;
+		return textValue(record.text) ?? textValue(record.content) ?? textValue(record.message) ?? textValue(record.summary);
+	}
+	return undefined;
+}
+
+function textPart(value: unknown): string | undefined {
+	if (typeof value === "string") return value;
+	if (!value || typeof value !== "object") return undefined;
+	const record = value as Record<string, unknown>;
+	const type = typeof record.type === "string" ? record.type : undefined;
+	if (type && type !== "text" && type !== "output_text" && type !== "summary_text") return undefined;
+	return textValue(record.text) ?? textValue(record.content) ?? textValue(record.message) ?? textValue(record.summary);
 }
 
 function role(value: string | undefined): ThreadMessage["role"] {

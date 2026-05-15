@@ -99,6 +99,25 @@ export interface ExtensionWidgetOptions {
 	placement?: WidgetPlacement;
 }
 
+export interface ExtensionUserInputOption {
+	value: string;
+	label: string;
+	description?: string;
+}
+
+export interface ExtensionUserInputQuestion {
+	id: string;
+	header: string;
+	question: string;
+	options: ExtensionUserInputOption[];
+	multiSelect?: boolean;
+}
+
+export interface ExtensionUserInputResult {
+	answers: Record<string, { answers: string[] }>;
+	cancelled?: boolean;
+}
+
 /** Raw terminal input listener for extensions. */
 export type TerminalInputHandler = (data: string) => { consume?: boolean; data?: string } | undefined;
 
@@ -173,6 +192,13 @@ export interface ExtensionUIContext {
 			onHandle?: (handle: OverlayHandle) => void;
 		},
 	): Promise<T>;
+
+	/** Ask structured questions through the host UI, when the host supports provider-level user-input requests. */
+	requestUserInput?(input: {
+		title?: string;
+		questions: ExtensionUserInputQuestion[];
+		signal?: AbortSignal;
+	}): Promise<ExtensionUserInputResult>;
 
 	/** Paste text into the editor, triggering paste handling (collapse for large content). */
 	pasteToEditor(text: string): void;

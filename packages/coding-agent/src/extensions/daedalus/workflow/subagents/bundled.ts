@@ -52,6 +52,7 @@ const toolPolicies: Record<string, SubagentDefinition["toolPolicy"]> = {
 			"fs_search",
 			"sem_search",
 			"execute_plan",
+			"plan_task_read",
 			"fetch",
 			"ast_grep",
 			"ast_edit",

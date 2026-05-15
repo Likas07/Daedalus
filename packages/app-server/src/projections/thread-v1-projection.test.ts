@@ -96,6 +96,49 @@ describe("thread v1 projection", () => {
 		}
 	});
 
+	test("projects assistant message_end content arrays into visible text", () => {
+		const database = openAppServerDatabase(":memory:");
+		runMigrations(database);
+		appendEvent(database, {
+			streamId: "app",
+			type: "project/registered",
+			payload: { projectId: "project-1", name: "Project", path: "/repo" },
+		});
+		appendEvent(database, {
+			streamId: "thread-array",
+			type: "session/started",
+			payload: { sessionId: "thread-array", projectId: "project-1", title: "Array content" },
+		});
+		appendEvent(database, {
+			streamId: "thread-array",
+			type: "turn/started",
+			payload: { sessionId: "thread-array", turnId: "turn-1", prompt: "Hello" },
+		});
+		appendEvent(database, {
+			streamId: "thread-array",
+			type: "agent/message_end",
+			payload: {
+				sessionId: "thread-array",
+				turnId: "turn-1",
+				message: {
+					id: "message-array",
+					role: "assistant",
+					content: [{ type: "text", text: "Hello" }, { type: "text", text: " there" }],
+				},
+			},
+		});
+		projectRuntimeEvents(database);
+		try {
+			const snapshot = buildThreadV1Snapshot({ database, threadId: "thread-array" });
+			expect(snapshot.timeline.entries.find((entry) => entry.entryId === "message:message-array")).toMatchObject({
+				kind: "assistant-message",
+				content: "Hello there",
+			});
+		} finally {
+			database.close();
+		}
+	});
+
 	test("replays stable cursor windows without duplicate rows", () => {
 		const database = seededDatabase();
 		try {
@@ -219,5 +262,215 @@ describe("thread v1 projection", () => {
 				},
 			},
 		});
+	});
+
+	test("thread timeline notifications include assistant deltas", () => {
+		const notification = notificationForThreadV1StoredEvent({
+			seq: 11,
+			streamId: "thread-1",
+			type: "agent/message_delta",
+			payload: {
+				id: "event-11",
+				type: "agent/message_delta",
+				ts: "2026-04-30T00:00:03.000Z",
+				sessionId: "thread-1",
+				payload: { turnId: "turn-live", messageId: "message-1", delta: "Hello" },
+			},
+			createdAt: "2026-04-30T00:00:03.000Z",
+		});
+
+		expect(notification).toEqual({
+			kind: "notification",
+			method: "thread.timeline.delta",
+			params: {
+				threadId: "thread-1",
+				turnId: "turn-live",
+				entryId: "message:message-1",
+				sequence: 11,
+				kind: "assistant-message",
+				delta: "Hello",
+			},
+		});
+	});
+
+	test("thread timeline notifications use explicit runtime deltas for cumulative assistant updates", () => {
+		const notification = notificationForThreadV1StoredEvent({
+			seq: 12,
+			streamId: "thread-1",
+			type: "agent/message_update",
+			payload: {
+				id: "event-12",
+				type: "agent/message_update",
+				ts: "2026-04-30T00:00:04.000Z",
+				sessionId: "thread-1",
+				payload: {
+					turnId: "turn-live",
+					assistantMessageEvent: { type: "text_delta", delta: " there" },
+					message: { responseId: "response-1", content: [{ type: "text", text: "Hello there" }] },
+				},
+			},
+			createdAt: "2026-04-30T00:00:04.000Z",
+		});
+
+		expect(notification).toEqual({
+			kind: "notification",
+			method: "thread.timeline.delta",
+			params: {
+				threadId: "thread-1",
+				turnId: "turn-live",
+				entryId: "message:response-1",
+				sequence: 12,
+				kind: "assistant-message",
+				delta: " there",
+			},
+		});
+	});
+
+	test("thread timeline notifications skip cumulative assistant updates without explicit deltas", () => {
+		const notification = notificationForThreadV1StoredEvent({
+			seq: 13,
+			streamId: "thread-1",
+			type: "agent/message_update",
+			payload: {
+				id: "event-13",
+				type: "agent/message_update",
+				ts: "2026-04-30T00:00:05.000Z",
+				sessionId: "thread-1",
+				payload: {
+					turnId: "turn-live",
+					assistantMessageEvent: { type: "text_end", content: "Hello there" },
+					message: { responseId: "response-1", content: [{ type: "text", text: "Hello there" }] },
+				},
+			},
+			createdAt: "2026-04-30T00:00:05.000Z",
+		});
+
+		expect(notification).toBeUndefined();
+	});
+
+	test("streaming assistant response replays only one durable assistant entry", () => {
+		const database = openAppServerDatabase(":memory:");
+		runMigrations(database);
+		appendEvent(database, {
+			streamId: "app",
+			type: "project/registered",
+			payload: { projectId: "project-1", name: "Project", path: "/repo" },
+		});
+		appendEvent(database, {
+			streamId: "thread-stream",
+			type: "session/started",
+			payload: { sessionId: "thread-stream", projectId: "project-1", title: "Stream" },
+		});
+		appendEvent(database, {
+			streamId: "thread-stream",
+			type: "turn/started",
+			payload: { sessionId: "thread-stream", turnId: "turn-1", prompt: "Hello" },
+		});
+		const start = appendEvent(database, {
+			streamId: "thread-stream",
+			type: "agent/message_start",
+			payload: { sessionId: "thread-stream", turnId: "turn-1", messageId: "message-1", role: "assistant" },
+		});
+		const firstDelta = appendEvent(database, {
+			streamId: "thread-stream",
+			type: "agent/message_delta",
+			payload: { sessionId: "thread-stream", turnId: "turn-1", messageId: "message-1", delta: "Hel" },
+		});
+		const secondDelta = appendEvent(database, {
+			streamId: "thread-stream",
+			type: "agent/message_delta",
+			payload: { sessionId: "thread-stream", turnId: "turn-1", messageId: "message-1", delta: "lo" },
+		});
+		const final = appendEvent(database, {
+			streamId: "thread-stream",
+			type: "agent/message_end",
+			payload: {
+				sessionId: "thread-stream",
+				turnId: "turn-1",
+				messageId: "message-1",
+				role: "assistant",
+				content: "Hello",
+			},
+		});
+		appendEvent(database, {
+			streamId: "thread-stream",
+			type: "turn/completed",
+			payload: { sessionId: "thread-stream", turnId: "turn-1" },
+		});
+		projectRuntimeEvents(database);
+		try {
+			const notifications = [start, firstDelta, secondDelta, final]
+				.map((event) => notificationForThreadV1StoredEvent(event))
+				.filter((event): event is NonNullable<typeof event> => !!event);
+			expect(notifications.map((notification) => notification.method)).toEqual([
+				"thread.timeline",
+				"thread.timeline.delta",
+				"thread.timeline.delta",
+				"thread.timeline",
+			]);
+			expect(
+				notifications
+					.filter((notification) => notification.method === "thread.timeline.delta")
+					.map((notification) => notification.params),
+			).toEqual([
+				expect.objectContaining({ entryId: "message:message-1", delta: "Hel" }),
+				expect.objectContaining({ entryId: "message:message-1", delta: "lo" }),
+			]);
+
+			const replay = replayThreadV1({ database, params: { threadId: "thread-stream", limit: 100 } });
+			const assistantEntries = replay.entries.filter((entry) => entry.kind === "assistant-message");
+			expect(assistantEntries).toEqual([
+				expect.objectContaining({
+					entryId: "message:message-1",
+					messageId: "message-1",
+					content: "Hello",
+				}),
+			]);
+			expect(replay.entries.some((entry) => entry.entryId.includes(":delta:"))).toBe(false);
+			expect(new Set(replay.entries.map((entry) => entry.entryId)).size).toBe(replay.entries.length);
+			expect(replay.entries.every((entry) => Value.Check(protocolV1.TimelineEntrySchema, entry))).toBe(true);
+		} finally {
+			database.close();
+		}
+	});
+
+	test("projects tool lifecycle command output and file changes into timeline entries", () => {
+		const database = seededDatabase();
+		try {
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "agent/tool_start",
+				payload: { sessionId: "thread-1", turnId: "turn-1", toolCallId: "tool-1", toolName: "shell" },
+			});
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "agent/tool_delta",
+				payload: { sessionId: "thread-1", turnId: "turn-1", toolCallId: "tool-1", toolName: "shell", delta: "line" },
+			});
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "agent/tool_end",
+				payload: { sessionId: "thread-1", turnId: "turn-1", toolCallId: "tool-1", toolName: "shell", output: "done" },
+			});
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "agent/command_output",
+				payload: { sessionId: "thread-1", turnId: "turn-1", commandId: "cmd-1", output: "stdout" },
+			});
+			appendEvent(database, {
+				streamId: "thread-1",
+				type: "agent/file_change",
+				payload: { sessionId: "thread-1", turnId: "turn-1", filePath: "src/app.ts", operation: "modified" },
+			});
+
+			const entries = replayThreadV1({ database, params: { threadId: "thread-1", limit: 100 } }).entries;
+			expect(entries).toContainEqual(
+				expect.objectContaining({ entryId: "tool:tool-1", kind: "tool", status: "completed" }),
+			);
+			expect(entries).toContainEqual(expect.objectContaining({ entryId: "command:cmd-1:output:11", kind: "terminal-output" }));
+			expect(entries).toContainEqual(expect.objectContaining({ entryId: "file-change:12", kind: "activity" }));
+		} finally {
+			database.close();
+		}
 	});
 });

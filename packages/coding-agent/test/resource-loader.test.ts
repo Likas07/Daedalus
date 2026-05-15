@@ -385,6 +385,55 @@ Extra prompt content`,
 			expect(loadedPrompt?.sourceInfo?.source).toBe("extension:extra");
 			expect(loadedPrompt?.sourceInfo?.path).toBe(promptPath);
 		});
+
+		it("orders skills as project over extension over built-in", async () => {
+			const projectSkillDir = join(cwd, CONFIG_DIR_NAME, "skills", "planning");
+			const extensionSkillDir = join(tempDir, "extension-skills", "planning");
+			const builtinSkillDir = join(tempDir, "builtin-skills", "planning");
+			const extensionSharedSkillDir = join(tempDir, "extension-skills", "shared");
+			const builtinSharedSkillDir = join(tempDir, "builtin-skills", "shared");
+			mkdirSync(projectSkillDir, { recursive: true });
+			mkdirSync(extensionSkillDir, { recursive: true });
+			mkdirSync(builtinSkillDir, { recursive: true });
+			mkdirSync(extensionSharedSkillDir, { recursive: true });
+			mkdirSync(builtinSharedSkillDir, { recursive: true });
+			writeFileSync(join(projectSkillDir, "SKILL.md"), "---\nname: planning\ndescription: project\n---\nProject");
+			writeFileSync(join(extensionSkillDir, "SKILL.md"), "---\nname: planning\ndescription: extension\n---\nExtension");
+			writeFileSync(join(builtinSkillDir, "SKILL.md"), "---\nname: planning\ndescription: builtin\n---\nBuiltin");
+			writeFileSync(join(extensionSharedSkillDir, "SKILL.md"), "---\nname: shared\ndescription: extension\n---\nExtension");
+			writeFileSync(join(builtinSharedSkillDir, "SKILL.md"), "---\nname: shared\ndescription: builtin\n---\nBuiltin");
+
+			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			await loader.reload();
+			loader.extendResources({
+				skillPaths: [
+					{
+						path: builtinSkillDir,
+						metadata: { source: "extension:daedalus", scope: "temporary", origin: "top-level" },
+					},
+					{
+						path: extensionSkillDir,
+						metadata: { source: "extension:external", scope: "temporary", origin: "top-level" },
+					},
+					{
+						path: builtinSharedSkillDir,
+						metadata: { source: "extension:daedalus", scope: "temporary", origin: "top-level" },
+					},
+					{
+						path: extensionSharedSkillDir,
+						metadata: { source: "extension:external", scope: "temporary", origin: "top-level" },
+					},
+				],
+			});
+
+			const skill = loader.getSkills().skills.find((s) => s.name === "planning");
+			expect(skill?.description).toBe("project");
+			expect(skill?.sourceInfo.scope).toBe("project");
+
+			const sharedSkill = loader.getSkills().skills.find((s) => s.name === "shared");
+			expect(sharedSkill?.description).toBe("extension");
+			expect(sharedSkill?.sourceInfo.source).toBe("extension:external");
+		});
 	});
 
 	describe("noSkills option", () => {

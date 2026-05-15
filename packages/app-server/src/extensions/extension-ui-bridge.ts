@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
 	ExtensionId,
 	ExtensionUiRequest,
@@ -7,6 +8,7 @@ import type {
 	ServerRequest,
 	SessionId,
 } from "@daedalus-pi/app-server-protocol";
+import type { ApprovalService } from "../runtime/approval-service";
 import type { ExtensionUiRouter } from "./extension-ui-router";
 export interface ExtensionUIDialogOptions {
 	readonly signal?: AbortSignal;
@@ -22,6 +24,23 @@ export type TerminalInputHandler = (data: string) => { consume?: boolean; data?:
 export type ExtensionBridgeEmit = (message: ServerRequest | ServerNotification) => void | Promise<void>;
 export type ExtensionBridgeWarningSink = (warning: ExtensionBridgeCompatibilityWarning) => void;
 
+export interface ExtensionBridgeUserInputQuestion {
+	readonly id: string;
+	readonly header: string;
+	readonly question: string;
+	readonly options: ReadonlyArray<{
+		readonly value: string;
+		readonly label: string;
+		readonly description?: string;
+	}>;
+	readonly multiSelect?: boolean;
+}
+
+export interface ExtensionBridgeUserInputResult {
+	readonly answers: Record<string, { readonly answers: ReadonlyArray<string> }>;
+	readonly cancelled?: boolean;
+}
+
 export interface ExtensionBridgeCompatibilityWarning {
 	readonly feature: string;
 	readonly message: string;
@@ -34,12 +53,25 @@ export interface ExtensionUIBridgeOptions {
 	readonly router?: ExtensionUiRouter;
 	readonly nextRequestId?: () => ExtensionUiRequestId;
 	readonly warn?: ExtensionBridgeWarningSink;
+	readonly approvalService?: ApprovalService;
+	readonly getTurnId?: () => string | undefined;
+	readonly getWorkspaceTargetId?: () => string | undefined;
+	readonly userInputTimeoutMs?: number;
 }
 
 export class ExtensionUIBridge {
 	private readonly pending = new Map<ExtensionUiRequestId, (response: ExtensionUiResponse) => void>();
+	private readonly pendingUserInputApprovals = new Set<string>();
+	private runtimeContext: {
+		readonly getTurnId?: () => string | undefined;
+		readonly workspaceTargetId?: string;
+	} = {};
 
 	constructor(private readonly options: ExtensionUIBridgeOptions) {}
+
+	setContext(context: { readonly getTurnId?: () => string | undefined; readonly workspaceTargetId?: string }): void {
+		this.runtimeContext = context;
+	}
 
 	async select(title: string, options: string[], opts?: ExtensionUIDialogOptions): Promise<string | undefined> {
 		const response = await this.request({
@@ -159,6 +191,53 @@ export class ExtensionUIBridge {
 		throw new Error("Extension custom UI is not supported by the app-server GUI bridge");
 	}
 
+	async requestUserInput(input: {
+		readonly title?: string;
+		readonly questions: ReadonlyArray<ExtensionBridgeUserInputQuestion>;
+		readonly signal?: AbortSignal;
+	}): Promise<ExtensionBridgeUserInputResult> {
+		if (!this.options.approvalService) {
+			this.warn("requestUserInput", "Structured user input is not configured for the GUI bridge.");
+			throw new Error("Extension structured user input is not configured by the app-server GUI bridge");
+		}
+		if (!this.options.sessionId) throw new Error("Extension structured user input requires a session id");
+		const turnId = this.options.getTurnId?.() ?? this.runtimeContext.getTurnId?.();
+		const workspaceTargetId =
+			this.options.getWorkspaceTargetId?.() ?? this.runtimeContext.workspaceTargetId ?? `base:${this.options.sessionId}`;
+		if (!turnId) throw new Error("Extension structured user input requires an active turn id");
+		if (input.questions.length === 0) return { answers: {}, cancelled: true };
+		const approvalId = `input-${randomUUID()}`;
+		const firstQuestion = input.questions[0];
+		this.pendingUserInputApprovals.add(approvalId);
+		try {
+			this.options.approvalService.request({
+				id: approvalId,
+				sessionId: this.options.sessionId,
+				hardBlock: true,
+				request: {
+					kind: "answer-input",
+					title: input.title ?? firstQuestion?.header ?? "Input requested",
+					summary: firstQuestion?.question,
+					question: firstQuestion?.question,
+					questions: input.questions,
+					turnId,
+					workspaceTargetId,
+				},
+			});
+			const decision = await this.options.approvalService.waitForDecision(approvalId, {
+				timeoutMs: this.options.userInputTimeoutMs,
+				signal: input.signal,
+			});
+			if (decision.decision === "denied") return { answers: {}, cancelled: true };
+			return {
+				answers: parseStructuredAnswers(decision.message ?? decision.reason),
+				cancelled: false,
+			};
+		} finally {
+			this.pendingUserInputApprovals.delete(approvalId);
+		}
+	}
+
 	pasteToEditor(text: string): void {
 		this.setEditorText(text);
 	}
@@ -190,6 +269,8 @@ export class ExtensionUIBridge {
 			this.pending.delete(requestId);
 			resolve({ requestId, actionId: "cancel", values: {} });
 		}
+		for (const approvalId of this.pendingUserInputApprovals) this.options.approvalService?.cancel(approvalId, reason);
+		this.pendingUserInputApprovals.clear();
 		if (this.options.sessionId) this.options.router?.cancelSession(this.options.sessionId, reason);
 	}
 
@@ -229,5 +310,23 @@ export class ExtensionUIBridge {
 	}
 	private warn(feature: string, message: string): void {
 		this.options.warn?.({ feature, message });
+	}
+}
+
+function parseStructuredAnswers(value: string | undefined): Record<string, { readonly answers: ReadonlyArray<string> }> {
+	if (!value) return {};
+	try {
+		const parsed = JSON.parse(value) as unknown;
+		if (!parsed || typeof parsed !== "object") return {};
+		const result: Record<string, { readonly answers: ReadonlyArray<string> }> = {};
+		for (const [questionId, answer] of Object.entries(parsed as Record<string, unknown>)) {
+			if (!answer || typeof answer !== "object") continue;
+			const answers = (answer as { answers?: unknown }).answers;
+			if (!Array.isArray(answers)) continue;
+			result[questionId] = { answers: answers.filter((entry): entry is string => typeof entry === "string") };
+		}
+		return result;
+	} catch {
+		return {};
 	}
 }

@@ -6,7 +6,10 @@ import {
 	ProtocolV1ServerNotificationSchema,
 	SafetySignalSchema,
 	ThreadCreateParamsSchema,
+	ThreadResumeParamsSchema,
 	ThreadSchema,
+	TimelineDeltaNotificationSchema,
+	TimelineEntrySchema,
 	TurnSchema,
 	TurnStartParamsSchema,
 	WorkspaceTargetSchema,
@@ -144,6 +147,13 @@ describe("Protocol v1 clean break", () => {
 				sessionId: "session-1",
 			}),
 		).toBe(false);
+		expect(
+			Value.Check(ThreadResumeParamsSchema, {
+				threadId: "thread-1",
+				prompt: "Continue",
+				sessionId: "session-1",
+			}),
+		).toBe(false);
 	});
 
 	test("v1 notification envelope is thread-only", () => {
@@ -163,6 +173,62 @@ describe("Protocol v1 clean break", () => {
 		).toBe(false);
 	});
 
+	test("timeline entries require stable ids for messages and tools", () => {
+		const assistant = {
+			entryId: "message:message-1",
+			threadId: "thread-1",
+			turnId: "turn-1",
+			sequence: 1,
+			createdAt: updatedAt,
+			kind: "assistant-message",
+			role: "assistant",
+			messageId: "message-1",
+			content: "Hello",
+		};
+		expect(Value.Check(TimelineEntrySchema, assistant)).toBe(true);
+		expect(Value.Check(TimelineEntrySchema, { ...assistant, turnId: undefined })).toBe(false);
+		expect(Value.Check(TimelineEntrySchema, { ...assistant, messageId: undefined })).toBe(false);
+		expect(
+			Value.Check(TimelineEntrySchema, {
+				entryId: "tool:tool-1",
+				threadId: "thread-1",
+				turnId: "turn-1",
+				sequence: 2,
+				createdAt: updatedAt,
+				kind: "tool",
+				toolCallId: "tool-1",
+				toolName: "shell",
+				status: "completed",
+			}),
+		).toBe(true);
+		expect(
+			Value.Check(TimelineEntrySchema, {
+				entryId: "tool-runner:tool-1",
+				threadId: "thread-1",
+				turnId: "turn-1",
+				sequence: 2,
+				createdAt: updatedAt,
+				kind: "tool",
+				toolCallId: "tool-1",
+				toolName: "shell",
+				status: "completed",
+			}),
+		).toBe(false);
+	});
+
+	test("timeline deltas are separate incremental notifications", () => {
+		expect(
+			Value.Check(TimelineDeltaNotificationSchema, {
+				threadId: "thread-1",
+				turnId: "turn-1",
+				entryId: "message:message-1",
+				sequence: 3,
+				kind: "assistant-message",
+				delta: "Hel",
+			}),
+		).toBe(true);
+	});
+
 // Adapter-facing method coverage: if this fails, update both params and result schema maps.
 test("v1 adapter-facing methods have params and result schemas", () => {
 	const expectedMethods = [
@@ -172,6 +238,7 @@ test("v1 adapter-facing methods have params and result schemas", () => {
 		"workspaceTarget.validate",
 		"thread.create",
 		"thread.list",
+		"thread.resume",
 		"thread.get",
 		"thread.replay",
 		"thread.rollback",

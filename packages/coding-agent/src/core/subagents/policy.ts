@@ -2,7 +2,8 @@ import path from "node:path";
 import { minimatch } from "minimatch";
 import { createCodingTools, type Tool } from "../tools/index.js";
 import { createSkillTool } from "../tools/skill.js";
-import type { SubagentDefinition, SubagentPolicy } from "./types.js";
+import { formatPlanStepDetail, readBoundPlanTask } from "../../extensions/daedalus/workflow/plan-execution/shared.js";
+import type { SubagentDefinition, SubagentPolicy, SubagentTaskBinding } from "./types.js";
 
 const WRITE_TOOLS = new Set(["write", "edit", "hashline_edit"]);
 const READ_TOOLS = new Set(["read", "grep", "find", "ls"]);
@@ -66,13 +67,32 @@ function extractPathArgs(toolName: string, params: Record<string, unknown>): str
 	}
 }
 
-function getAvailableSubagentTools(cwd: string, policy: SubagentPolicy, extraTools: readonly Tool[] = []): Tool[] {
+function getAvailableSubagentTools(
+	cwd: string,
+	policy: SubagentPolicy,
+	extraTools: readonly Tool[] = [],
+	taskBinding?: SubagentTaskBinding,
+): Tool[] {
 	const tools = createCodingTools(cwd);
 	if (policy.allowedTools.includes("skill")) {
 		tools.push(createSkillTool({ cwd }));
 	}
 	const byName = new Map(tools.map((tool) => [tool.name, tool]));
 	for (const tool of extraTools) {
+		if (tool.name === "plan_task_read") {
+			if (taskBinding?.type === "plan-task") {
+				byName.set(tool.name, {
+					...tool,
+					description: "Read this subagent's bound plan task packet.",
+					parameters: { type: "object", properties: {}, additionalProperties: false },
+					async execute(_toolCallId: string) {
+						const step = readBoundPlanTask(cwd, taskBinding);
+						return { content: [{ type: "text", text: formatPlanStepDetail(step) }], details: { taskBinding } };
+					},
+				} as Tool);
+			}
+			continue;
+		}
 		if (!byName.has(tool.name)) {
 			byName.set(tool.name, tool);
 		}
@@ -80,8 +100,13 @@ function getAvailableSubagentTools(cwd: string, policy: SubagentPolicy, extraToo
 	return Array.from(byName.values());
 }
 
-export function createSubagentTools(cwd: string, policy: SubagentPolicy, extraTools: readonly Tool[] = []): Tool[] {
-	return getAvailableSubagentTools(cwd, policy, extraTools)
+export function createSubagentTools(
+	cwd: string,
+	policy: SubagentPolicy,
+	extraTools: readonly Tool[] = [],
+	taskBinding?: SubagentTaskBinding,
+): Tool[] {
+	return getAvailableSubagentTools(cwd, policy, extraTools, taskBinding)
 		.filter((tool) => policy.allowedTools.includes(tool.name))
 		.map((tool) => {
 			if (!WRITE_TOOLS.has(tool.name) && !READ_TOOLS.has(tool.name)) {

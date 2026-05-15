@@ -46,7 +46,7 @@ const MUSE_TOOLS = [
 	"skill",
 ] as const;
 
-const IMPLEMENTATION_HANDOFF_TOOLS = ["execute_plan", "plan_task_read", "subagent", "todo_read", "todo_write"] as const;
+const IMPLEMENTATION_HANDOFF_TOOLS = ["plan_validate", "execute_plan", "plan_task_read", "subagent", "todo_read", "todo_write"] as const;
 const MUSE_PLAN_HANDOFF_OPTIONS = ["Implement with Daedalus", "Revise plan", "Stay in Muse"] as const;
 
 type MusePlanReadyMetadata = {
@@ -178,7 +178,7 @@ export default function primaryRoleMode(pi: ExtensionAPI): void {
 			{ triggerTurn: false },
 		);
 		pi.sendUserMessage(
-			`Implement the validated plan at ${planPath}. Use execute_plan with resume=true, and delegate implementation tasks to Worker subagents where appropriate.`,
+			`Implement the validated plan at ${planPath}. Re-run plan_validate on ${planPath} before execute_plan, then use execute_plan with resume=true and delegate selected plan_task_read tasks to Worker subagents where appropriate.`,
 			{ deliverAs: "followUp" },
 		);
 	}

@@ -26,6 +26,13 @@ interface SubagentToolDetails {
 	contextArtifactPath?: string;
 	resultArtifactPath?: string;
 	error?: string;
+	taskBinding?: {
+		type: "plan-task";
+		planPath: string;
+		taskId: string;
+		taskTitle?: string;
+		files?: string[];
+	};
 	isolation?: string;
 	workspaceTarget?: {
 		cwd?: string;
@@ -189,6 +196,8 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 			"Do not launch subagents for initial codebase exploration or simple lookups. Use sem_search first.",
 			"This exploration limit does not override role routing: use Muse for plans and always use Worker for implementation after minimal grounding.",
 			"When launching multiple independent tasks, call subagent once per independent task in parallel (single assistant message, multiple tool calls).",
+			"During executable-plan execution, prefer one Worker per ready task and pass taskBinding with the plan path, task id, title, and file list.",
+			"Use Reviewer for whole-plan/final review by default; only dispatch a task-bound Reviewer for risky tasks that need focused review.",
 			"Keep Daedalus summary-first result semantics: inspect the returned summary/reference first and read deferred full output only when needed.",
 			`Use isolation:"inherit" for the parent cwd without child workspace metadata; isolation:"shared" for the parent cwd with shared workspace metadata; isolation:"worktree" for a dedicated managed worktree.`,
 			`Use isolation:"worktree" for implementation, risky edits, or parallel mutations that should not touch the parent checkout.`,
@@ -215,6 +224,15 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 				Type.String({
 					description:
 						"With worktree isolation, choose the base branch/ref; omit it to let Daedalus resolve the current/base target.",
+				}),
+			),
+			taskBinding: Type.Optional(
+				Type.Object({
+					type: Type.Literal("plan-task"),
+					planPath: Type.String(),
+					taskId: Type.String(),
+					taskTitle: Type.Optional(Type.String()),
+					files: Type.Optional(Type.Array(Type.String())),
 				}),
 			),
 		}),
@@ -246,6 +264,7 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 				isolation: params.isolation,
 				mergeBack: params.merge_back,
 				baseBranch: params.base_branch,
+				taskBinding: params.taskBinding,
 				workspaceTarget: ctx.workspaceTarget,
 				onProgress: (progress) => {
 					onUpdate?.({
@@ -271,6 +290,7 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 							contextArtifactPath: progress.contextArtifactPath,
 							runId: progress.runId,
 							workspaceTarget: progress.workspaceTarget,
+							taskBinding: progress.taskBinding,
 						} satisfies SubagentToolDetails,
 					});
 				},
@@ -309,6 +329,7 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 					isolation: result.isolation,
 					workspaceMetadata: result.workspaceMetadata,
 					mergeBackResult: result.mergeBackResult,
+					taskBinding: result.taskBinding,
 				} satisfies SubagentToolDetails,
 			};
 		},

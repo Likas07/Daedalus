@@ -386,6 +386,8 @@ Use this skill when the user asks about X.
 
 Place in `~/.pi/agent/skills/`, `~/.agents/skills/`, `.pi/skills/`, or `.agents/skills/` (from `cwd` up through parent directories) or a [daedalus package](#daedalus-packages) to share with others. See [docs/skills.md](docs/skills.md).
 
+Executable planning workflows that combine Muse, plan validation, `execute_plan`, task-bound Workers, and final verification are documented in [docs/executable-planning.md](docs/executable-planning.md).
+
 ### Extensions
 
 <p align="center"><img src="docs/images/doom-extension.png" alt="Doom Extension" width="600"></p>

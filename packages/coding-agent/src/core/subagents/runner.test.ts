@@ -31,15 +31,29 @@ describe("SubagentRunner", () => {
 			},
 		});
 
+		const taskBinding = {
+			type: "plan-task" as const,
+			planPath: "docs/plans/2026_05_15/example.plan.json",
+			taskId: "task-3",
+			taskTitle: "Task binding types",
+			files: ["src/auth.ts"],
+		};
 		const result = await runner.run({
 			agent,
 			parentSessionFile: join(cwd, "parent.jsonl"),
 			goal: "goal",
 			assignment: "assignment",
+			taskBinding,
 		});
 		expect(result.status).toBe("completed");
 		expect(result.summary).toBe("done");
 		expect(result.output).toBe("output");
+		expect(result.taskBinding).toEqual(taskBinding);
+		const meta = JSON.parse(
+			await readFile(getSubagentArtifactPaths(join(cwd, "parent.jsonl"), result.runId).metaFile, "utf8"),
+		);
+		expect(meta.taskBinding).toEqual(taskBinding);
+		expect(meta.data.taskBinding).toEqual(taskBinding);
 		expect(result.reference).toMatchObject({
 			resultId: result.resultId,
 			agentId: "worker",

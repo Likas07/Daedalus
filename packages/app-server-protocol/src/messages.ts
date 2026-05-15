@@ -109,8 +109,20 @@ import {
 	DiffSummaryResultSchema as ProtocolV1DiffSummaryResultSchema,
 	ProviderSnapshotParamsSchema as ProtocolV1ProviderSnapshotParamsSchema,
 	ProviderSnapshotResultSchema as ProtocolV1ProviderSnapshotResultSchema,
+	PayloadWindowParamsSchema as ProtocolV1PayloadWindowParamsSchema,
+	PayloadWindowResultSchema as ProtocolV1PayloadWindowResultSchema,
+	ProtocolV1AppServerErrorCodeSchema,
+	ThreadGetParamsSchema as ProtocolV1ThreadGetParamsSchema,
+	ThreadGetResultSchema as ProtocolV1ThreadGetResultSchema,
+	ThreadReplayParamsSchema as ProtocolV1ThreadReplayParamsSchema,
+	ThreadResumeParamsSchema as ProtocolV1ThreadResumeParamsSchema,
+	ThreadResumeResultSchema as ProtocolV1ThreadResumeResultSchema,
 	ThreadRollbackParamsSchema as ProtocolV1ThreadRollbackParamsSchema,
 	ThreadRollbackResultSchema as ProtocolV1ThreadRollbackResultSchema,
+	TurnCancelParamsSchema as ProtocolV1TurnCancelParamsSchema,
+	TurnCancelResultSchema as ProtocolV1TurnCancelResultSchema,
+	TurnStartParamsSchema as ProtocolV1TurnStartParamsSchema,
+	TurnStartResultSchema as ProtocolV1TurnStartResultSchema,
 	TextGenerateBranchNameParamsSchema as ProtocolV1TextGenerateBranchNameParamsSchema,
 	TextGenerateBranchNameResultSchema as ProtocolV1TextGenerateBranchNameResultSchema,
 	TextGenerateCommitMessageParamsSchema as ProtocolV1TextGenerateCommitMessageParamsSchema,
@@ -119,6 +131,9 @@ import {
 	TextGeneratePrContentResultSchema as ProtocolV1TextGeneratePrContentResultSchema,
 	TextGenerateThreadTitleParamsSchema as ProtocolV1TextGenerateThreadTitleParamsSchema,
 	TextGenerateThreadTitleResultSchema as ProtocolV1TextGenerateThreadTitleResultSchema,
+	TimelineDeltaNotificationSchema as ProtocolV1TimelineDeltaNotificationSchema,
+	TimelineEntryNotificationSchema as ProtocolV1TimelineEntryNotificationSchema,
+	TimelineWindowResultSchema as ProtocolV1TimelineWindowResultSchema,
 	TerminalCloseParamsSchema as ProtocolV1TerminalCloseParamsSchema,
 	TerminalCommandResultSchema as ProtocolV1TerminalCommandResultSchema,
 	TerminalContextNotificationSchema as ProtocolV1TerminalContextNotificationSchema,
@@ -314,7 +329,10 @@ export const ProjectSummarySchema = StrictObject({
 });
 export type ProjectSummary = Static<typeof ProjectSummarySchema>;
 
-export const ProjectOpenParamsSchema = StrictObject({ path: Type.String({ minLength: 1 }) });
+export const ProjectOpenParamsSchema = StrictObject({
+	path: Type.String({ minLength: 1 }),
+	projectId: Type.Optional(ProjectIdSchema),
+});
 export type ProjectOpenParams = Static<typeof ProjectOpenParamsSchema>;
 
 export const ProjectOpenResultSchema = StrictObject({ projectId: ProjectIdSchema });
@@ -820,6 +838,12 @@ export const ClientRequestSchema = Type.Union([
 	request("shell/snapshot", ShellSnapshotParamsSchema),
 	request("thread/snapshot", ThreadSnapshotParamsSchema),
 	request("event/replay", EventReplayParamsSchema),
+	request("thread.get", ProtocolV1ThreadGetParamsSchema),
+	request("thread.resume", ProtocolV1ThreadResumeParamsSchema),
+	request("thread.replay", ProtocolV1ThreadReplayParamsSchema),
+	request("turn.start", ProtocolV1TurnStartParamsSchema),
+	request("turn.cancel", ProtocolV1TurnCancelParamsSchema),
+	request("payload.window", ProtocolV1PayloadWindowParamsSchema),
 ]);
 export type ClientRequest = Static<typeof ClientRequestSchema>;
 
@@ -910,6 +934,12 @@ export const ClientRequestResultSchemas = {
 	"shell/snapshot": ShellSnapshotResultSchema,
 	"thread/snapshot": ThreadSnapshotResultSchema,
 	"event/replay": EventReplayResultSchema,
+	"thread.get": ProtocolV1ThreadGetResultSchema,
+	"thread.resume": ProtocolV1ThreadResumeResultSchema,
+	"thread.replay": ProtocolV1TimelineWindowResultSchema,
+	"turn.start": ProtocolV1TurnStartResultSchema,
+	"turn.cancel": ProtocolV1TurnCancelResultSchema,
+	"payload.window": ProtocolV1PayloadWindowResultSchema,
 } as const;
 
 export type ClientRequestResultMap = {
@@ -923,8 +953,19 @@ export function resultSchemaForMethod(method: ClientRequest["method"]): TSchema 
 	return ClientRequestResultSchemas[method as keyof typeof ClientRequestResultSchemas];
 }
 
+export type AppServerErrorCode =
+	| "parse_error"
+	| "invalid_request"
+	| "not_initialized"
+	| "method_not_found"
+	| "invalid_params"
+	| "conflict"
+	| "cancelled"
+	| "unsupported_capability"
+	| "internal_error";
+
 export const ResponseErrorSchema = StrictObject({
-	code: Type.String({ minLength: 1 }),
+	code: ProtocolV1AppServerErrorCodeSchema,
 	message: Type.String(),
 	data: Type.Optional(Type.Unknown()),
 });
@@ -986,6 +1027,8 @@ export const ServerNotificationSchema = Type.Union([
 	),
 	notification("shell/event", ShellEventSchema),
 	notification("thread/event", ThreadDetailEventSchema),
+	notification("thread.timeline", ProtocolV1TimelineEntryNotificationSchema),
+	notification("thread.timeline.delta", ProtocolV1TimelineDeltaNotificationSchema),
 ]);
 export type ServerNotification = Static<typeof ServerNotificationSchema>;
 

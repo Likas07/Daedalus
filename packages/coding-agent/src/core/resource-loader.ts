@@ -276,7 +276,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 	}
 
 	extendResources(paths: ResourceExtensionPaths): void {
-		const skillPaths = this.normalizeExtensionPaths(paths.skillPaths ?? []);
+		const skillPaths = this.orderExtensionSkillPaths(this.normalizeExtensionPaths(paths.skillPaths ?? []));
 		const promptPaths = this.normalizeExtensionPaths(paths.promptPaths ?? []);
 		const themePaths = this.normalizeExtensionPaths(paths.themePaths ?? []);
 
@@ -473,6 +473,16 @@ export class DefaultResourceLoader implements ResourceLoader {
 			path: this.resolveResourcePath(entry.path),
 			metadata: entry.metadata,
 		}));
+	}
+
+	private orderExtensionSkillPaths(
+		entries: Array<{ path: string; metadata: PathMetadata }>,
+	): Array<{ path: string; metadata: PathMetadata }> {
+		return [...entries].sort((a, b) => {
+			const aIsBuiltin = a.metadata.source === "extension:daedalus";
+			const bIsBuiltin = b.metadata.source === "extension:daedalus";
+			return Number(aIsBuiltin) - Number(bIsBuiltin);
+		});
 	}
 
 	private updateSkillsFromPaths(skillPaths: string[], metadataByPath?: Map<string, PathMetadata>): void {

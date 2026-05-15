@@ -26,6 +26,7 @@ import { listProjectSessions } from "../persistence/read-model";
 import { projectAppEventToProjectionEvents } from "../projections/projection-events";
 import { buildShellSnapshot } from "../projections/shell-projection";
 import { buildThreadDetailSnapshot } from "../projections/thread-detail-projection";
+import { buildThreadV1Snapshot } from "../projections/thread-v1-projection";
 import { AccessPolicyService } from "../runtime/access-policy-service";
 import { ApprovalService } from "../runtime/approval-service";
 import { projectAuditTrail } from "../runtime/audit-projection";
@@ -51,10 +52,11 @@ import { GitMutationService } from "../workspaces/git-mutation-service";
 import { ProjectService } from "../workspaces/project-service";
 import { assertPathWithinRoot, resolveRootScopedTarget } from "../workspaces/root-boundary";
 import { validateWorktreeTarget } from "../workspaces/worktree-safety";
-import { WorktreeService } from "../workspaces/worktree-service";
+import { WorktreeService, type WorktreeLifecycleMetadata } from "../workspaces/worktree-service";
 
 import { ExportService } from "./export-service";
-import { handleThreadV1Request, notificationForThreadV1StoredEvent } from "./thread-v1-routes";
+import { notificationForThreadV1StoredEvent } from "./thread-v1-routes";
+import { createDefaultV1Router, handleV1Request } from "./v1/router";
 
 export type OutboundMessage = AppEvent | ServerNotification | ServerRequest;
 export type Publish = (message: OutboundMessage) => void;
@@ -113,6 +115,7 @@ export class AppRouter {
 	private readonly daedalusWorkflowService: DaedalusWorkflowService;
 	private readonly workspaceSelectionService: WorkspaceSelectionService;
 	private readonly operationIdempotencyService: OperationIdempotencyService;
+	private readonly v1Router = createDefaultV1Router();
 	constructor(private readonly options: AppRouterOptions) {
 		this.projectService = new ProjectService({ database: options.database });
 		this.sessionStore = new SqliteSessionStore({ database: options.database });
@@ -146,7 +149,9 @@ export class AppRouter {
 		this.accessPolicyService = options.accessPolicyService ?? new AccessPolicyService(options.database);
 		this.approvalService =
 			options.approvalService ??
-			new ApprovalService(options.database, this.accessPolicyService, (event) => this.options.publish(event));
+			new ApprovalService(options.database, this.accessPolicyService, (event) =>
+				this.options.publish(event as OutboundMessage),
+			);
 		this.gitMutationService = new GitMutationService({
 			approvalService: this.approvalService,
 			diffService: this.diffService,
@@ -168,13 +173,14 @@ export class AppRouter {
 		}
 	}
 	async handle(request: ClientRequest): Promise<unknown> {
-		const threadV1Route = await handleThreadV1Request(
+		const v1Route = await handleV1Request(
 			{
 				database: this.options.database,
 				authority: {
 					startTurn: async (params) =>
 						this.options.controller.startTurn({
 							sessionId: params.threadId,
+							turnId: params.turnId,
 							prompt: params.prompt,
 							context: {
 								attachmentIds: params.attachmentIds,
@@ -187,17 +193,36 @@ export class AppRouter {
 					cancelTurn: async (params) =>
 						this.options.controller.interruptTurn({ sessionId: params.threadId, turnId: params.turnId }),
 				},
-				beforeStartTurn: async (threadId) => {
-					await this.validateStoredTurnTarget(threadId);
+				workspaceTargets: {
+					list: (params) => this.listWorkspaceTargetsV1(params),
+					validate: (params) => this.validateWorkspaceTargetV1(params),
+				},
+				threads: {
+					create: (params) => this.createThreadV1(params),
+					list: (params) => this.listThreadsV1(params),
+					resume: (params) => this.resumeThreadV1(params),
+				},
+				beforeStartTurn: async (threadId, turnId) => {
+					const runsIn = await this.validateStoredTurnTarget(threadId);
+					await this.checkpointService.create({
+						cwd: runsIn.canonicalPath,
+						sessionId: threadId,
+						turnId,
+						label: `Before ${turnId}`,
+					});
 				},
 				afterStartTurn: async (threadId) => {
 					const runsIn = await this.validateStoredTurnTarget(threadId);
 					this.workspaceSelectionService.setValidated({ projectId: runsIn.projectId, sessionId: threadId });
 				},
+				saveInlineAttachment: (attachment) => this.saveInlineV1Attachment(attachment),
+				providerSnapshot: () => this.providerSnapshotV1(),
+				rollbackThread: (params) => this.rollbackThreadV1(params),
 			},
 			request,
+			this.v1Router,
 		);
-		if (threadV1Route.handled) return threadV1Route.result;
+		if (v1Route.handled) return v1Route.result;
 		const phase3V1Route = await this.handlePhase3V1Request(request);
 		if (phase3V1Route.handled) return phase3V1Route.result;
 		switch (request.method) {
@@ -205,7 +230,23 @@ export class AppRouter {
 				return {
 					protocolVersion: request.params.protocolVersion,
 					server: { name: "daedalus-app-server", version: "0.1.0" },
-					capabilities: { events: true, sessions: true, extensions: true, gitMutations: true },
+					capabilities: {
+						events: true,
+						sessions: true,
+						extensions: true,
+						gitMutations: true,
+						strictRequestValidation: true,
+						initializedGate: true,
+						requestSerialization: true,
+						threadWorkspaceContract: true,
+						threadTimeline: true,
+						timelineDeltas: true,
+						payloadWindows: true,
+						approvalRequests: true,
+						userInputRequests: true,
+						reconnectReplay: true,
+						typedClientTransport: true,
+					},
 				};
 			case "shell/snapshot":
 				return {
@@ -220,7 +261,7 @@ export class AppRouter {
 					}),
 				};
 			case "project/open": {
-				const result = this.projectService.open({ path: request.params.path });
+				const result = this.projectService.open({ path: request.params.path, projectId: request.params.projectId });
 				this.projects.set(result.projectId, request.params.path);
 				return result;
 			}
@@ -687,7 +728,9 @@ export class AppRouter {
 				return { events, next: events.length ? { after: String(stored.at(-1)?.seq ?? after) } : undefined };
 			}
 			default:
-				return {};
+				throw Object.assign(new Error(`Unsupported app-server method: ${request.method}`), {
+					code: "method_not_found",
+				});
 		}
 	}
 
@@ -968,6 +1011,169 @@ export class AppRouter {
 		}
 	}
 
+	private async listWorkspaceTargetsV1(
+		params: protocolV1.WorkspaceTargetListParams,
+	): Promise<protocolV1.WorkspaceTargetListResult> {
+		const project = this.projectService.get(params.projectId);
+		if (!project) throw new Error(`Unknown project: ${params.projectId}`);
+		const [base, worktrees] = await Promise.all([
+			this.baseWorkspaceTargetV1(project),
+			this.worktreeService.listMetadata(params.projectId),
+		]);
+		return { targets: [base, ...worktrees.map((worktree) => worktreeWorkspaceTargetV1(worktree))] };
+	}
+
+	private async validateWorkspaceTargetV1(
+		params: protocolV1.WorkspaceTargetValidateParams,
+	): Promise<protocolV1.WorkspaceTargetValidateResult> {
+		if (params.workspaceTargetId.startsWith("base:")) {
+			const projectId = params.workspaceTargetId.slice("base:".length);
+			const project = this.projectService.get(projectId);
+			if (!project) throw new Error(`Unknown workspace target: ${params.workspaceTargetId}`);
+			return { workspaceTarget: await this.baseWorkspaceTargetV1(project) };
+		}
+		const worktree = (await this.worktreeService.listMetadata()).find(
+			(candidate) => candidate.id === params.workspaceTargetId,
+		);
+		if (!worktree) throw new Error(`Unknown workspace target: ${params.workspaceTargetId}`);
+		return { workspaceTarget: worktreeWorkspaceTargetV1(worktree) };
+	}
+
+	private async createThreadV1(params: protocolV1.ThreadCreateParams): Promise<protocolV1.ThreadCreateResult> {
+		const target = await this.resolveThreadCreateTargetV1(params.projectId, params.workspaceTargetId);
+		const result = await this.options.controller.startSession({
+			cwd: target.cwd,
+			prompt: params.prompt,
+			projectId: target.runsIn.projectId,
+			worktreeId: target.runsIn.worktreeId,
+			runsIn: target.runsIn,
+			context: {
+				projectId: target.runsIn.projectId,
+				worktreeId: target.runsIn.worktreeId,
+				model: params.model,
+				effort: params.effort,
+				draftState: params.draftState,
+			},
+		});
+		projectRuntimeEvents(this.options.database);
+		this.persistActiveSelectionAfterDurableSession(target.runsIn.projectId, result.sessionId);
+		const snapshot = buildThreadV1Snapshot({ database: this.options.database, threadId: result.sessionId });
+		return { thread: snapshot.thread, turn: snapshot.turns.at(-1) };
+	}
+
+	private async listThreadsV1(params: protocolV1.ThreadListParams): Promise<protocolV1.ThreadListResult> {
+		projectRuntimeEvents(this.options.database);
+		const threads = listProjectSessions(this.options.database, params.projectId)
+			.map((session) => buildThreadV1Snapshot({ database: this.options.database, threadId: session.id }).thread)
+			.filter((thread) => !params.workspaceTargetId || thread.workspaceTargetId === params.workspaceTargetId);
+		return { threads };
+	}
+
+	private async resumeThreadV1(params: protocolV1.ThreadResumeParams): Promise<protocolV1.ThreadResumeResult> {
+		const runsIn = await this.validateStoredTurnTarget(params.threadId);
+		const active = this.options.controller
+			.readState()
+			.sessions.some((session) => session.sessionId === params.threadId);
+		if (!active) {
+			await this.options.controller.resumeSession({
+				cwd: runsIn.canonicalPath,
+				sessionPath: params.threadId,
+				sessionId: params.threadId,
+			});
+		}
+		let turnId: string | undefined;
+		if (params.prompt) {
+			const result = await this.options.controller.startTurn({
+				sessionId: params.threadId,
+				prompt: params.prompt,
+				context: {
+					model: params.model,
+					effort: params.effort,
+					draftState: params.draftState,
+				},
+			});
+			turnId = result.turnId;
+		}
+		projectRuntimeEvents(this.options.database);
+		const snapshot = buildThreadV1Snapshot({ database: this.options.database, threadId: params.threadId });
+		return {
+			thread: snapshot.thread,
+			turn: turnId ? snapshot.turns.find((turn) => turn.turnId === turnId) : undefined,
+		};
+	}
+
+	private async resolveThreadCreateTargetV1(
+		projectId: string,
+		workspaceTargetId: string,
+	): Promise<{ cwd: string; runsIn: WorkflowRunsInTarget }> {
+		if (workspaceTargetId === `base:${projectId}`) {
+			return this.resolveSessionStartTarget({
+				projectId,
+				startTarget: {
+					mode: "base-checkout",
+					projectId,
+					confirmation: { confirmed: true, evidence: "v1 thread.create selected base checkout workspace target" },
+				},
+			});
+		}
+		return this.resolveSessionStartTarget({
+			projectId,
+			startTarget: { mode: "isolated-worktree", projectId, worktreeId: workspaceTargetId },
+		});
+	}
+
+	private async baseWorkspaceTargetV1(project: {
+		readonly id: string;
+		readonly path: string;
+		readonly updatedAt: string;
+	}): Promise<protocolV1.WorkspaceTarget> {
+		try {
+			const canonicalPath = await realpath(project.path);
+			const status = await gitStatus(canonicalPath);
+			const dirtyCount = status.stagedCount + status.unstagedCount;
+			return {
+				id: `base:${project.id}`,
+				kind: "base-checkout",
+				projectId: project.id,
+				path: canonicalPath,
+				branch: status.branch,
+				validationStatus: dirtyCount > 0 ? "needs-confirmation" : "valid",
+				dirtyState: dirtyCount > 0 ? "dirty" : "clean",
+				activeThreadCount: activeThreadCountForTarget(this.options.database, project.id),
+				safetySignals:
+					dirtyCount > 0
+						? [
+								{
+									level: "warning",
+									message: "Base checkout has uncommitted changes.",
+									code: "base-checkout-dirty",
+								},
+							]
+						: [],
+				updatedAt: project.updatedAt,
+			};
+		} catch (error) {
+			return {
+				id: `base:${project.id}`,
+				kind: "base-checkout",
+				projectId: project.id,
+				path: project.path,
+				branch: null,
+				validationStatus: "blocked",
+				dirtyState: "unknown",
+				activeThreadCount: activeThreadCountForTarget(this.options.database, project.id),
+				safetySignals: [
+					{
+						level: "blocked",
+						message: error instanceof Error ? error.message : String(error),
+						code: "base-checkout-unavailable",
+					},
+				],
+				updatedAt: project.updatedAt,
+			};
+		}
+	}
+
 	private async resolveSessionStartTarget(params: {
 		projectId?: string;
 		startTarget?:
@@ -1021,7 +1227,7 @@ export class AppRouter {
 			case "v1.approval.answer":
 				return {
 					handled: true,
-					result: this.approvalService.answerInputV1(params as protocolV1.ApprovalAnswerInputParams),
+					result: this.approvalService.answerInputV1(normalizeApprovalAnswerParams(params)),
 				};
 			case "v1.diff.summary":
 				return { handled: true, result: await this.handleDiffSummaryV1(params as protocolV1.DiffSummaryParams) };
@@ -1162,6 +1368,189 @@ export class AppRouter {
 		} catch (error) {
 			return terminalFailure(params, "not-found", error instanceof Error ? error.message : String(error));
 		}
+	}
+
+	private async providerSnapshotV1(): Promise<protocolV1.ProviderSnapshotResult> {
+		let degradedMessage: string | undefined;
+		const authStatuses = this.providerAuthService.status().providers;
+		const authenticatedProviders = authStatuses.filter((status) => status.authenticated);
+		let models: protocolV1.ProviderSnapshotResult["models"] = [];
+		try {
+			models = (await this.listModels()).map((model) => {
+				const record = model as Record<string, unknown>;
+				const id = stringOr(record.id, "unknown");
+				const provider = stringOr(record.provider, "unknown");
+				return {
+					slug: slugify(`${provider}-${id}`) || id,
+					provider,
+					id,
+					name: stringOr(record.label, id),
+					available: record.available !== false,
+					reasoning: record.reasoning === true,
+					fastMode: record.supportsFastMode === true || record.fastMode === true,
+					reasoningLevels: Array.isArray(record.reasoningLevels)
+						? record.reasoningLevels.filter((item): item is string => typeof item === "string")
+						: undefined,
+				};
+			});
+		} catch (error) {
+			degradedMessage = error instanceof Error ? error.message : String(error);
+		}
+		return {
+			status: degradedMessage ? "degraded" : authenticatedProviders.length > 0 ? "ready" : "auth-needed",
+			server: { name: "daedalus-app-server", version: "0.1.0", protocolVersion: "1" },
+			capabilities: {
+				streamingChat: true,
+				cancellation: true,
+				approvals: true,
+				structuredUserInput: true,
+				toolTimeline: true,
+				payloadWindows: true,
+				diffs: true,
+				checkpoints: true,
+				rollback: true,
+				resume: true,
+				modelSwitching: true,
+				textGeneration: true,
+				imageAttachments: true,
+				terminals: true,
+			},
+			models,
+			auth: authStatuses.map((status) => ({
+				provider: status.provider,
+				status: status.authenticated ? "authenticated" : "unauthenticated",
+				message: status.message ?? status.instruction,
+			})),
+			commands: this.commandService.list().map((command) => ({
+				name: command.name,
+				description: command.description,
+				source: command.source,
+			})),
+			message: degradedMessage,
+		};
+	}
+
+	private async rollbackThreadV1(params: protocolV1.ThreadRollbackParams): Promise<protocolV1.ThreadRollbackResult> {
+		return this.operationIdempotencyService.run(
+			{
+				operationId: params.idempotencyKey
+					? `v1:thread.rollback:${params.threadId}:${params.idempotencyKey}`
+					: undefined,
+				method: "thread.rollback",
+				payload: params,
+			},
+			() => this.performRollbackThreadV1(params),
+		);
+	}
+
+	private async performRollbackThreadV1(
+		params: protocolV1.ThreadRollbackParams,
+	): Promise<protocolV1.ThreadRollbackResult> {
+		const target = await this.resolveV1WorkspaceTarget(params.threadId, params.workspaceTargetId);
+		if (!target.ok) throw new Error(target.message);
+		const checkpoints = this.listCheckpoints(params.threadId);
+		const checkpoint = checkpoints[Math.min(params.numTurns - 1, checkpoints.length - 1)];
+		if (!checkpoint) throw new Error(`No checkpoint available for thread ${params.threadId}`);
+		const checkpointRef = checkpoint.ref ?? checkpoint.checkpointId;
+		const rollbackScope = this.rollbackScopeForCheckpoint(params.threadId, checkpoint.checkpointId);
+		const mutation = await this.gitMutationService.restoreCheckpoint({
+			cwd: target.cwd,
+			checkpointRef,
+			sessionId: params.threadId,
+		});
+		const stored = appendEvent(this.options.database, {
+			streamId: `session:${params.threadId}`,
+			type: "thread/rollback",
+			payload: {
+				threadId: params.threadId,
+				workspaceTargetId: params.workspaceTargetId,
+				numTurns: params.numTurns,
+				restoredCheckpointId: checkpoint.checkpointId,
+				restoredToTurnId: checkpoint.checkpointId.split(":").at(-1) ?? null,
+				removedTurnIds: [...rollbackScope.removedTurnIds],
+				hiddenEventRange: rollbackScope.hiddenEventRange,
+				idempotencyKey: params.idempotencyKey ?? null,
+			},
+		});
+		projectRuntimeEvents(this.options.database);
+		this.options.publish({
+			kind: "notification",
+			method: "thread.timeline.delta",
+			params: { threadId: params.threadId, after: { seq: stored.seq - 1 } },
+		} as unknown as OutboundMessage);
+		const approvalId =
+			mutation && typeof mutation === "object" && "approvalId" in mutation
+				? stringOr((mutation as unknown as Record<string, unknown>).approvalId, "")
+				: "";
+		return {
+			threadId: params.threadId,
+			restoredCheckpointId: checkpoint.checkpointId,
+			restoredToTurnId: checkpoint.checkpointId.split(":").at(-1),
+			status: approvalId ? "approval-required" : "completed",
+			approvalId: approvalId || undefined,
+		};
+	}
+
+	private rollbackScopeForCheckpoint(
+		threadId: string,
+		checkpointId: string,
+	): {
+		readonly removedTurnIds: readonly string[];
+		readonly hiddenEventRange: { readonly startSeq: number; readonly endSeq: number } | null;
+	} {
+		const events = readEventsAfter(this.options.database, 0, { limit: 10_000 });
+		const checkpoint = events.find((event) => {
+			if (event.type !== "checkpoint/created") return false;
+			const payload = event.payload as Record<string, unknown>;
+			return payload.checkpointId === checkpointId;
+		});
+		if (!checkpoint) return { removedTurnIds: [], hiddenEventRange: null };
+		const scopedEvents = events.filter(
+			(event) =>
+				event.seq > checkpoint.seq &&
+				(this.threadIdForRollbackScopeEvent(event) === threadId || event.streamId === threadId),
+		);
+		const endSeq = scopedEvents.reduce((max, event) => Math.max(max, event.seq), checkpoint.seq);
+		const removedTurnIds = [
+			...new Set(
+				scopedEvents
+					.map((event) => this.turnIdForRollbackScopeEvent(event))
+					.filter((turnId): turnId is string => typeof turnId === "string" && turnId.length > 0),
+			),
+		];
+		return {
+			removedTurnIds,
+			hiddenEventRange: endSeq > checkpoint.seq ? { startSeq: checkpoint.seq + 1, endSeq } : null,
+		};
+	}
+
+	private threadIdForRollbackScopeEvent(event: {
+		readonly streamId: string;
+		readonly payload: unknown;
+	}): string | undefined {
+		const payload =
+			event.payload && typeof event.payload === "object" ? (event.payload as Record<string, unknown>) : {};
+		return (
+			stringOr(payload.threadId, "") || stringOr(payload.sessionId, "") || event.streamId.replace(/^session:/, "")
+		);
+	}
+
+	private turnIdForRollbackScopeEvent(event: { readonly payload: unknown }): string | undefined {
+		const payload =
+			event.payload && typeof event.payload === "object" ? (event.payload as Record<string, unknown>) : {};
+		return stringOr(payload.turnId, "") || stringOr(payload.turn_id, "") || undefined;
+	}
+
+	private async saveInlineV1Attachment(attachment: { type: "image"; url: string }): Promise<string> {
+		const match = /^data:([^;,]+);base64,(.+)$/s.exec(attachment.url);
+		if (!match) throw new Error("Inline image attachments must be data URLs");
+		const [, mimeType, dataBase64] = match;
+		const saved = await this.attachmentService.save({
+			filename: `inline-${crypto.randomUUID()}.${extensionForMime(mimeType)}`,
+			mimeType,
+			dataBase64,
+		});
+		return saved.id;
 	}
 
 	private async resolveV1WorkspaceTarget(
@@ -1387,6 +1776,68 @@ function workspaceTargetIdForRunsIn(runsIn: WorkflowRunsInTarget): string {
 	return runsIn.isolationMode === "isolated-worktree"
 		? (runsIn.worktreeId ?? runsIn.projectId)
 		: `base:${runsIn.projectId}`;
+}
+
+function worktreeWorkspaceTargetV1(worktree: WorktreeLifecycleMetadata): protocolV1.WorkspaceTarget {
+	return {
+		id: worktree.id,
+		kind: "worktree",
+		projectId: worktree.projectId,
+		path: worktree.path,
+		branch: worktree.branch,
+		validationStatus: worktree.status === "active" ? "valid" : "needs-attention",
+		dirtyState: worktree.dirty ? "dirty" : "clean",
+		activeThreadCount: worktree.activeSessionCount,
+		safetySignals: [
+			...(worktree.dirty
+				? [{ level: "warning" as const, message: "Worktree has uncommitted changes.", code: "worktree-dirty" }]
+				: []),
+			...(worktree.cleanupRequiresConfirmation
+				? [{ level: "warning" as const, message: "Worktree cleanup requires confirmation.", code: "cleanup-risk" }]
+				: []),
+		],
+		updatedAt: worktree.updatedAt,
+		worktreeId: worktree.id,
+		baseBranch: worktree.baseBranch,
+	};
+}
+
+function activeThreadCountForTarget(database: AppServerDatabase, projectId: string, worktreeId?: string): number {
+	return listProjectSessions(database, projectId).filter((session) => {
+		if ((session.status === "archived" || session.status === "deleted") as boolean) return false;
+		return worktreeId ? session.worktreeId === worktreeId : !session.worktreeId;
+	}).length;
+}
+
+function stringOr(value: unknown, fallback: string): string {
+	return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+function slugify(value: string): string {
+	return value
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "");
+}
+
+function extensionForMime(mimeType: string): string {
+	switch (mimeType) {
+		case "image/jpeg":
+			return "jpg";
+		case "image/gif":
+			return "gif";
+		case "image/webp":
+			return "webp";
+		case "image/svg+xml":
+			return "svg";
+		default:
+			return "png";
+	}
+}
+
+function normalizeApprovalAnswerParams(params: unknown): protocolV1.ApprovalAnswerInputParams {
+	const record = params && typeof params === "object" ? (params as Record<string, unknown>) : {};
+	return record as protocolV1.ApprovalAnswerInputParams;
 }
 
 function diffTargetMismatch(

@@ -56,7 +56,11 @@ export function createCodingAgentRuntimeFactory(options: CodingAgentRuntimeFacto
 				workspaceTarget: runtimeWorkspaceTarget,
 			});
 			currentServices = services;
-			const resolved = await resolveRuntimeOptions({ services, sessionManager, context });
+			const resolved = await resolveRuntimeOptions({
+				services,
+				sessionManager,
+				context,
+			});
 			services.diagnostics.push(...resolved.diagnostics);
 			const session = await createAgentSessionFromServices({
 				services,
@@ -68,13 +72,17 @@ export function createCodingAgentRuntimeFactory(options: CodingAgentRuntimeFacto
 				tools: resolved.tools,
 			});
 			if (options.extensionUiRouter && sessionId) {
+				const uiBridge = new ExtensionUIBridge({
+					extensionId: "app-server",
+					sessionId,
+					router: options.extensionUiRouter,
+					emit: () => {},
+					approvalService: options.approvalService,
+					userInputTimeoutMs: options.approvalTimeoutMs,
+				});
+				(session.session as { __extensionUIBridge?: ExtensionUIBridge }).__extensionUIBridge = uiBridge;
 				await session.session.bindExtensions({
-					uiContext: new ExtensionUIBridge({
-						extensionId: "app-server",
-						sessionId,
-						router: options.extensionUiRouter,
-						emit: () => {},
-					}) as never,
+					uiContext: uiBridge as never,
 				});
 			}
 			if (options.approvalService && options.accessPolicy && sessionId)
@@ -116,6 +124,9 @@ export function createCodingAgentRuntimeFactory(options: CodingAgentRuntimeFacto
 			},
 			dispose: async () => {
 				(runtime.session as { __approvalGate?: ToolApprovalGate }).__approvalGate?.dispose();
+				(runtime.session as { __extensionUIBridge?: ExtensionUIBridge }).__extensionUIBridge?.cancelPending(
+					"Session disposed",
+				);
 				if (sessionId) options.extensionUiRouter?.cancelSession(sessionId, "Session disposed");
 				await runtime.dispose();
 			},
@@ -126,7 +137,9 @@ export function createCodingAgentRuntimeFactory(options: CodingAgentRuntimeFacto
 function installApprovalGate(session: unknown, gate: ToolApprovalGate): void {
 	const agentSession = session as {
 		__approvalGate?: ToolApprovalGate;
-		agent?: { beforeToolCall?: (context: any, signal?: AbortSignal) => Promise<unknown> | unknown };
+		agent?: {
+			beforeToolCall?: (context: any, signal?: AbortSignal) => Promise<unknown> | unknown;
+		};
 	};
 	agentSession.__approvalGate?.dispose("Approval gate replaced.");
 	agentSession.__approvalGate = gate;
@@ -139,6 +152,8 @@ function installApprovalGate(session: unknown, gate: ToolApprovalGate): void {
 			toolName: context.toolCall.name,
 			toolCallId: context.toolCall.id,
 			args: context.args,
+			turnId: typeof context.turnId === "string" ? context.turnId : undefined,
+			workspaceTargetId: typeof context.workspaceTargetId === "string" ? context.workspaceTargetId : undefined,
 			signal,
 		});
 	};

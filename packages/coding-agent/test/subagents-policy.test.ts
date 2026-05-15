@@ -84,6 +84,7 @@ describe("bundled starter agent policies", () => {
 
 		expect(policies.get("muse")).toContain("skill");
 		expect(policies.get("worker")).toContain("skill");
+		expect(policies.get("worker")).toContain("plan_task_read");
 		expect(policies.get("sage")).not.toContain("skill");
 		expect(policies.get("sage")).toContain("write");
 		expect(policies.get("sage")).toContain("hashline_edit");

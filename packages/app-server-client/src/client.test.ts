@@ -214,7 +214,15 @@ test("provides typed GUI protocol helpers", async () => {
 							worktreeId: request.params.worktreeId,
 							operationId: request.params.operationId ?? "cleanup-op",
 							risky: true,
-							reasons: ["dirty-files"],
+							reasons: [
+								{
+									kind: "dirty-files",
+									severity: "warning",
+									message: "Dirty files",
+									count: 1,
+									files: ["dirty.txt"],
+								},
+							],
 							dirtyFiles: ["dirty.txt"],
 							unpushedCommitCount: 0,
 							activeSessionIds: [],
@@ -222,6 +230,7 @@ test("provides typed GUI protocol helpers", async () => {
 							riskHash: "risk-hash",
 							confirmationToken: "cleanup-token",
 							confirmationTokenExpiresAt: "2026-04-25T00:05:00.000Z",
+							scannedAt: "2026-04-25T00:00:00.000Z",
 						},
 					},
 				});

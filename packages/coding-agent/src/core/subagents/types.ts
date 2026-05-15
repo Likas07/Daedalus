@@ -14,6 +14,14 @@ export type SubagentEnvelopeStatus = "completed" | "partial" | "blocked";
 export type SubagentWorkspaceIsolation = "inherit" | "shared" | "worktree";
 export type SubagentMergeBackPolicy = "patch" | "branch";
 
+export interface SubagentTaskBinding {
+	type: "plan-task";
+	planPath: string;
+	taskId: string;
+	taskTitle?: string;
+	files?: string[];
+}
+
 export interface SubagentMergeBackResultDetails {
 	policy: SubagentMergeBackPolicy;
 	status: "not_started" | "skipped" | "clean" | "applied" | "blocked" | "failed";
@@ -109,6 +117,7 @@ export interface SubagentSessionContext {
 	spawns: readonly string[] | "*";
 	maxDepth?: number;
 	workspaceTarget?: WorkspaceTarget;
+	taskBinding?: SubagentTaskBinding;
 }
 
 export interface SubagentRunProgress {
@@ -121,6 +130,7 @@ export interface SubagentRunProgress {
 	activity?: string;
 	recentActivity?: string[];
 	workspaceTarget?: WorkspaceTarget;
+	taskBinding?: SubagentTaskBinding;
 }
 
 export interface SubagentRunRequest {
@@ -140,6 +150,7 @@ export interface SubagentRunRequest {
 	mergeBack?: SubagentMergeBackPolicy;
 	baseBranch?: string;
 	workspaceTarget?: WorkspaceTarget;
+	taskBinding?: SubagentTaskBinding;
 	/** Worktree setup defaults to true for worktree isolation; false skips bootstrap. */
 	setupWorktree?: boolean;
 	/** Include ignored files during worktree setup; defaults to true for worktree isolation. */
@@ -177,6 +188,7 @@ export interface SubagentRunResult {
 	baseBranch?: string;
 	mergeBack?: SubagentMergeBackPolicy;
 	mergeBackResult?: SubagentMergeBackResultDetails;
+	taskBinding?: SubagentTaskBinding;
 	data?: unknown;
 	error?: string;
 	usage?: {
@@ -206,4 +218,5 @@ export interface ActiveSubagentRun {
 	workspaceTarget?: WorkspaceTarget;
 	workspaceMetadata?: SubagentWorkspaceMetadata;
 	mergeBackResult?: SubagentMergeBackResultDetails;
+	taskBinding?: SubagentTaskBinding;
 }

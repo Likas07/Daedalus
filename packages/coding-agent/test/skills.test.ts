@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { homedir, tmpdir } from "os";
 import { join, resolve } from "path";
 import { describe, expect, it } from "vitest";
+import { CONFIG_DIR_NAME } from "../src/config.js";
 import type { ResourceDiagnostic } from "../src/core/diagnostics.js";
 import type { PathMetadata } from "../src/core/package-manager.js";
 import {
@@ -425,6 +426,40 @@ describe("skills", () => {
 			expect(skills).toHaveLength(1);
 			expect(skills[0].sourceInfo.scope).toBe("temporary");
 			expect(diagnostics).toHaveLength(0);
+		});
+
+		it("prefers project skills over user skills over explicit paths", () => {
+			const tempDir = mkdtempSync(join(tmpdir(), "daedalus-skill-precedence-"));
+			try {
+				const agentDir = join(tempDir, "agent");
+				const cwd = join(tempDir, "project");
+				const projectSkillDir = join(cwd, CONFIG_DIR_NAME, "skills", "planning");
+				const userSkillDir = join(agentDir, "skills", "planning");
+				const extensionSkillDir = join(tempDir, "extension-skills", "planning");
+				mkdirSync(projectSkillDir, { recursive: true });
+				mkdirSync(userSkillDir, { recursive: true });
+				mkdirSync(extensionSkillDir, { recursive: true });
+
+				writeFileSync(join(projectSkillDir, "SKILL.md"), "---\nname: planning\ndescription: project\n---\nProject");
+				writeFileSync(join(userSkillDir, "SKILL.md"), "---\nname: planning\ndescription: user\n---\nUser");
+				writeFileSync(
+					join(extensionSkillDir, "SKILL.md"),
+					"---\nname: planning\ndescription: extension\n---\nExtension",
+				);
+
+				const { skills, diagnostics } = loadSkills({
+					agentDir,
+					cwd,
+					skillPaths: [extensionSkillDir],
+				});
+
+				const skill = skills.find((s) => s.name === "planning");
+				expect(skill?.description).toBe("project");
+				expect(skill?.sourceInfo.scope).toBe("project");
+				expect(diagnostics.filter((d) => d.type === "collision")).toHaveLength(2);
+			} finally {
+				rmSync(tempDir, { recursive: true, force: true });
+			}
 		});
 
 		it("allows package-managed skills to use namespaced parent directories", () => {

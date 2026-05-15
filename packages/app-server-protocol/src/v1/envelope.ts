@@ -1,5 +1,6 @@
 import { type Static, type TSchema, Type } from "@sinclair/typebox";
 import { RequestIdSchema, ThreadIdSchema, TurnIdSchema, WorkspaceTargetIdSchema } from "../ids";
+import { PayloadWindowParamsSchema, PayloadWindowResultSchema } from "./payload-windows";
 import { ProviderSnapshotParamsSchema, ProviderSnapshotResultSchema } from "./provider";
 import { ThreadReplayParamsSchema } from "./replay";
 import { ThreadRollbackParamsSchema, ThreadRollbackResultSchema } from "./rollback";
@@ -20,6 +21,8 @@ import {
 	ThreadGetResultSchema,
 	ThreadListParamsSchema,
 	ThreadListResultSchema,
+	ThreadResumeParamsSchema,
+	ThreadResumeResultSchema,
 	ThreadStatusSchema,
 	TurnCancelParamsSchema,
 	TurnCancelResultSchema,
@@ -27,7 +30,7 @@ import {
 	TurnStartResultSchema,
 	TurnStatusSchema,
 } from "./thread";
-import { TimelineWindowResultSchema } from "./timeline";
+import { TimelineDeltaNotificationSchema, TimelineEntryNotificationSchema, TimelineWindowResultSchema } from "./timeline";
 import {
 	WorkspaceTargetListParamsSchema,
 	WorkspaceTargetListResultSchema,
@@ -83,11 +86,13 @@ export const ProtocolV1ClientRequestSchema = Type.Union([
 	request("workspaceTarget.validate", WorkspaceTargetValidateParamsSchema),
 	request("thread.create", ThreadCreateParamsSchema),
 	request("thread.list", ThreadListParamsSchema),
+	request("thread.resume", ThreadResumeParamsSchema),
 	request("thread.get", ThreadGetParamsSchema),
 	request("thread.replay", ThreadReplayParamsSchema),
 	request("thread.rollback", ThreadRollbackParamsSchema),
 	request("turn.start", TurnStartParamsSchema),
 	request("turn.cancel", TurnCancelParamsSchema),
+	request("payload.window", PayloadWindowParamsSchema),
 	request("text.threadTitle", TextGenerateThreadTitleParamsSchema),
 	request("text.branchName", TextGenerateBranchNameParamsSchema),
 	request("text.commitMessage", TextGenerateCommitMessageParamsSchema),
@@ -102,11 +107,13 @@ export const ProtocolV1ClientRequestResultSchemas = {
 	"workspaceTarget.validate": WorkspaceTargetValidateResultSchema,
 	"thread.create": ThreadCreateResultSchema,
 	"thread.list": ThreadListResultSchema,
+	"thread.resume": ThreadResumeResultSchema,
 	"thread.get": ThreadGetResultSchema,
 	"thread.replay": TimelineWindowResultSchema,
 	"thread.rollback": ThreadRollbackResultSchema,
 	"turn.start": TurnStartResultSchema,
 	"turn.cancel": TurnCancelResultSchema,
+	"payload.window": PayloadWindowResultSchema,
 	"text.threadTitle": TextGenerateThreadTitleResultSchema,
 	"text.branchName": TextGenerateBranchNameResultSchema,
 	"text.commitMessage": TextGenerateCommitMessageResultSchema,
@@ -125,8 +132,21 @@ export function protocolV1ResultSchemaForMethod(method: ProtocolV1ClientRequest[
 	return ProtocolV1ClientRequestResultSchemas[method as keyof typeof ProtocolV1ClientRequestResultSchemas];
 }
 
+export const ProtocolV1AppServerErrorCodeSchema = Type.Union([
+	Type.Literal("parse_error"),
+	Type.Literal("invalid_request"),
+	Type.Literal("not_initialized"),
+	Type.Literal("method_not_found"),
+	Type.Literal("invalid_params"),
+	Type.Literal("conflict"),
+	Type.Literal("cancelled"),
+	Type.Literal("unsupported_capability"),
+	Type.Literal("internal_error"),
+]);
+export type ProtocolV1AppServerErrorCode = Static<typeof ProtocolV1AppServerErrorCodeSchema>;
+
 export const ProtocolV1ResponseErrorSchema = StrictObject({
-	code: Type.String({ minLength: 1 }),
+	code: ProtocolV1AppServerErrorCodeSchema,
 	message: Type.String(),
 	data: Type.Optional(Type.Unknown()),
 });
@@ -158,6 +178,8 @@ export const ProtocolV1ServerNotificationSchema = Type.Union([
 		"turn.changed",
 		StrictObject({ threadId: ThreadIdSchema, turnId: TurnIdSchema, status: Type.Optional(TurnStatusSchema) }),
 	),
+	notification("thread.timeline", TimelineEntryNotificationSchema),
+	notification("thread.timeline.delta", TimelineDeltaNotificationSchema),
 ]);
 export type ProtocolV1ServerNotification = Static<typeof ProtocolV1ServerNotificationSchema>;
 

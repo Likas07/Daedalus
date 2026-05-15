@@ -80,7 +80,8 @@ export const ApprovalAnswerInputParamsSchema = StrictObject({
 	threadId: ThreadIdSchema,
 	turnId: TurnIdSchema,
 	workspaceTargetId: WorkspaceTargetIdSchema,
-	answer: Type.String({ minLength: 1 }),
+	answer: Type.Optional(Type.String({ minLength: 1 })),
+	answers: Type.Optional(Type.Record(Type.String({ minLength: 1 }), StrictObject({ answers: Type.Array(Type.String()) }))),
 	idempotencyKey: Type.Optional(Type.String({ minLength: 1 })),
 });
 export type ApprovalAnswerInputParams = Static<typeof ApprovalAnswerInputParamsSchema>;
@@ -102,6 +103,9 @@ export const ApprovalAnswerRecordSchema = StrictObject({
 	turnId: TurnIdSchema,
 	workspaceTargetId: WorkspaceTargetIdSchema,
 	answer: Type.String({ minLength: 1 }),
+	answers: Type.Optional(
+		Type.Record(Type.String({ minLength: 1 }), StrictObject({ answers: Type.Array(Type.String()) })),
+	),
 	answeredAt: Type.String({ minLength: 1 }),
 });
 export type ApprovalAnswerRecord = Static<typeof ApprovalAnswerRecordSchema>;
@@ -111,6 +115,8 @@ export const ApprovalFailureCodeSchema = Type.Union([
 	Type.Literal("expired"),
 	Type.Literal("duplicate"),
 	Type.Literal("wrong-thread"),
+	Type.Literal("wrong-turn"),
+	Type.Literal("wrong-workspace-target"),
 	Type.Literal("not-found"),
 ]);
 export type ApprovalFailureCode = Static<typeof ApprovalFailureCodeSchema>;

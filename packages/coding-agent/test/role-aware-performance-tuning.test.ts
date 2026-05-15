@@ -46,7 +46,7 @@ describe("role-aware performance tuning", () => {
 		expect(muse?.systemPrompt).toContain("Create durable plan artifacts under `plans/`");
 		expect(muse?.systemPrompt).toContain("At the start of every Muse task, load and use the `writing-plans` skill");
 		expect(muse?.systemPrompt).toContain("executable-plan gate");
-		expect(muse?.systemPrompt).toContain("`plan_create`, then run `plan_validate`");
+		expect(muse?.systemPrompt).toContain("`writing-plans` -> `plan_create` -> Muse `plan_validate`");
 		expect(muse?.systemPrompt).toContain("`plan_path`");
 		expect(muse?.systemPrompt).toContain("`recommended_parent_action`");
 		expect(muse?.systemPrompt).toContain("Do not force plan artifacts for advisory architecture discussion");

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
 
 const baseDir = dirname(fileURLToPath(import.meta.url));
-const packageRoot = join(baseDir, "..", "..");
+const packageRoot = join(baseDir, "..");
 
 export default function (pi: ExtensionAPI) {
 	pi.on("resources_discover", () => {

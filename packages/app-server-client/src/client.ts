@@ -1,38 +1,42 @@
-import type {
-	AccessMode,
-	ClientNotification,
-	ClientRequest,
-	EventReplayParams,
-	EventReplayResult,
-	ExtensionUiRequest,
-	ExtensionUiResponse,
-	InitializeParams,
-	InitializeResult,
-	ClientRequestResultMap as ProtocolClientRequestResultMap,
-	ServerNotification,
-	ServerRequest,
-	ServerResponse,
-	SessionStartParams,
-	SessionStartResult,
-	ShellSnapshotParams,
-	ShellSnapshotResult,
-	ThreadSnapshotParams,
-	ThreadSnapshotResult,
-	WorktreeCleanupParams,
-	WorktreeCleanupResult,
-	WorktreeCleanupScanParams,
-	WorktreeCleanupScanResult,
-	WorktreeCreateParams,
-	WorktreeCreateResult,
-	WorktreeListParams,
-	WorktreeListResult,
+import {
+	resultSchemaForMethod,
+	type AccessMode,
+	type ClientNotification,
+	type ClientRequest,
+	type EventReplayParams,
+	type EventReplayResult,
+	type ExtensionUiRequest,
+	type ExtensionUiResponse,
+	type InitializeParams,
+	type InitializeResult,
+	type ClientRequestResultMap as ProtocolClientRequestResultMap,
+	type ServerNotification,
+	type ServerRequest,
+	type ServerResponse,
+	type SessionStartParams,
+	type SessionStartResult,
+	type ShellSnapshotParams,
+	type ShellSnapshotResult,
+	type ThreadSnapshotParams,
+	type ThreadSnapshotResult,
+	type WorktreeCleanupParams,
+	type WorktreeCleanupResult,
+	type WorktreeCleanupScanParams,
+	type WorktreeCleanupScanResult,
+	type WorktreeCreateParams,
+	type WorktreeCreateResult,
+	type WorktreeListParams,
+	type WorktreeListResult,
 } from "@daedalus-pi/app-server-protocol";
+import { Value } from "@sinclair/typebox/value";
 import { RuntimeControlClient } from "./runtime-control";
 import { SessionClient } from "./sessions";
 
 export interface AppServerTransport {
+	readonly requiresInitialize?: boolean;
 	send(message: unknown): void | Promise<void>;
 	onMessage(listener: (message: unknown) => void): () => void;
+	onClose?(listener: (error?: unknown) => void): () => void;
 	close(): void | Promise<void>;
 }
 
@@ -58,6 +62,13 @@ type RequestResult<Method extends ClientRequest["method"]> = Method extends keyo
 export interface AppServerClientOptions {
 	readonly transport: AppServerTransport;
 	readonly requestIdPrefix?: string;
+	readonly requestTimeoutMs?: number;
+}
+
+export type AppServerClientState = "connecting" | "initialized" | "ready" | "closed";
+
+export interface AppServerRequestOptions {
+	readonly timeoutMs?: number;
 }
 
 export class AppServerResponseError extends Error {
@@ -72,12 +83,36 @@ export class AppServerResponseError extends Error {
 	}
 }
 
+export class AppServerClientTimeoutError extends Error {
+	constructor(readonly requestId: string, readonly method: string, readonly timeoutMs: number) {
+		super(`App-server request ${method} timed out after ${timeoutMs}ms`);
+		this.name = "AppServerClientTimeoutError";
+	}
+}
+
+export class AppServerClientDecodeError extends Error {
+	constructor(readonly method: string, readonly value: unknown) {
+		super(`Invalid app-server response for ${method}`);
+		this.name = "AppServerClientDecodeError";
+	}
+}
+
 export class AppServerClient {
 	private transport: AppServerTransport;
 	private readonly requestIdPrefix: string;
+	private readonly defaultRequestTimeoutMs: number | undefined;
 	private nextRequestId = 1;
 	private unsubscribeTransport: (() => void) | undefined;
-	private readonly pending = new Map<string, { resolve(value: unknown): void; reject(error: unknown): void }>();
+	private unsubscribeClose: (() => void) | undefined;
+	private readonly pending = new Map<
+		string,
+		{
+			readonly method: string;
+			readonly timer?: ReturnType<typeof setTimeout>;
+			resolve(value: unknown): void;
+			reject(error: unknown): void;
+		}
+	>();
 	private readonly notificationListeners = new Map<
 		string,
 		Set<(params: unknown, message: ServerNotification) => void>
@@ -85,23 +120,39 @@ export class AppServerClient {
 	private readonly serverRequestListeners = new Map<string, Set<(params: unknown, request: ServerRequest) => void>>();
 	private lastEventCursor: string | undefined;
 	private replaying = false;
+	private initializePromise: Promise<InitializeResult> | undefined;
+	state: AppServerClientState = "connecting";
 	readonly sessions = new SessionClient(this);
 	readonly runtime = new RuntimeControlClient(this);
 
 	constructor(options: AppServerClientOptions) {
 		this.transport = options.transport;
 		this.requestIdPrefix = options.requestIdPrefix ?? "client";
+		this.defaultRequestTimeoutMs = options.requestTimeoutMs;
 		this.attachTransport(options.transport);
 	}
 
 	async request<Method extends ClientRequest["method"]>(
 		method: Method,
 		params: ParamsFor<Method>,
+		options: AppServerRequestOptions = {},
 	): Promise<RequestResult<Method>> {
+		if (this.state === "closed") throw new Error("App server client is closed");
+		if (this.transport.requiresInitialize === true && this.state === "connecting" && method !== "initialize") {
+			await this.initialize({ protocolVersion: "0.1.0", client: { name: "app-server-client" } });
+		}
 		const id = `${this.requestIdPrefix}-${this.nextRequestId++}`;
 		const message = { kind: "request", id, method, params } as RequestFor<Method>;
+		const timeoutMs = options.timeoutMs ?? this.defaultRequestTimeoutMs;
 		const promise = new Promise<RequestResult<Method>>((resolve, reject) => {
-			this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
+			const timer =
+				timeoutMs && timeoutMs > 0
+					? setTimeout(() => {
+							this.pending.delete(id);
+							reject(new AppServerClientTimeoutError(id, method, timeoutMs));
+						}, timeoutMs)
+					: undefined;
+			this.pending.set(id, { method, timer, resolve: resolve as (value: unknown) => void, reject });
 		});
 		try {
 			await this.transport.send(message);
@@ -120,7 +171,20 @@ export class AppServerClient {
 	}
 
 	initialize(params: InitializeParams): Promise<InitializeResult> {
-		return this.request("initialize", params);
+		if (this.initializePromise) return this.initializePromise;
+		this.state = "initialized";
+		this.initializePromise = this.request("initialize", params).then(
+			(result) => {
+				this.state = "ready";
+				return result;
+			},
+			(error) => {
+				if (this.state !== "closed") this.state = "connecting";
+				this.initializePromise = undefined;
+				throw error;
+			},
+		);
+		return this.initializePromise;
 	}
 
 	startSession(params: SessionStartParams): Promise<SessionStartResult> {
@@ -286,7 +350,9 @@ export class AppServerClient {
 
 	async reconnect(transport: AppServerTransport): Promise<EventReplayResult | undefined> {
 		this.unsubscribeTransport?.();
+		this.unsubscribeClose?.();
 		this.transport = transport;
+		this.state = this.initializePromise ? "ready" : "connecting";
 		this.attachTransport(transport);
 		return this.replayMissedEvents();
 	}
@@ -294,13 +360,28 @@ export class AppServerClient {
 	async close(): Promise<void> {
 		this.unsubscribeTransport?.();
 		this.unsubscribeTransport = undefined;
-		for (const pending of this.pending.values()) pending.reject(new Error("App server client closed"));
+		this.unsubscribeClose?.();
+		this.unsubscribeClose = undefined;
+		this.state = "closed";
+		for (const pending of this.pending.values()) {
+			if (pending.timer) clearTimeout(pending.timer);
+			pending.reject(new Error("App server client closed"));
+		}
 		this.pending.clear();
 		await this.transport.close();
 	}
 
 	private attachTransport(transport: AppServerTransport): void {
 		this.unsubscribeTransport = transport.onMessage((message) => this.handleMessage(message));
+		this.unsubscribeClose = transport.onClose?.((error) => {
+			if (this.state === "closed") return;
+			this.state = "closed";
+			for (const pending of this.pending.values()) {
+				if (pending.timer) clearTimeout(pending.timer);
+				pending.reject(error instanceof Error ? error : new Error("App server transport closed"));
+			}
+			this.pending.clear();
+		});
 	}
 
 	private handleMessage(message: unknown): void {
@@ -323,7 +404,15 @@ export class AppServerClient {
 		const pending = this.pending.get(id);
 		if (!pending) return;
 		this.pending.delete(id);
-		if (response.ok) pending.resolve(response.result);
+		if (pending.timer) clearTimeout(pending.timer);
+		if (response.ok) {
+			const schema = resultSchemaForMethod(pending.method as ClientRequest["method"]);
+			if (schema && !Value.Check(schema, response.result)) {
+				pending.reject(new AppServerClientDecodeError(pending.method, response.result));
+				return;
+			}
+			pending.resolve(response.result);
+		}
 		else pending.reject(new AppServerResponseError(response.error));
 	}
 

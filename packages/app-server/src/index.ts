@@ -117,7 +117,15 @@ export {
 	WorkspaceSelectionService,
 	type WorkspaceSelectionServiceOptions,
 } from "./runtime/workspace-selection-service";
-export { type AppServerInstance, type CreateAppServerOptions, startAppServer } from "./server/app-server";
+export {
+	type AppServerCore,
+	type AppServerInstance,
+	type CreateAppServerOptions,
+	createAppServerCore,
+	startAppServer,
+} from "./server/app-server";
+export { ProtocolSession, type ProtocolSessionSend } from "./server/protocol-session";
+export { startStdioProtocol } from "./server/stdio";
 export {
 	type AuthOptions,
 	authenticateRequest,

@@ -210,9 +210,10 @@ test("app router returns canonical required read-model route shapes", async () =
 			kind: "request",
 			id: "project-open",
 			method: "project/open",
-			params: { path: dir },
+			params: { path: dir, projectId: "project-from-gui" },
 		});
 		expectResultShape("project/open", project);
+		expect(project).toEqual({ projectId: "project-from-gui" });
 		expectResultShape(
 			"project/list",
 			await router.handle({ kind: "request", id: "project-list", method: "project/list", params: {} }),
@@ -301,6 +302,9 @@ test("app server routes PTY terminal create, input, resize, replay, and kill", a
 	});
 	const request = (id: string, method: string, params: unknown) =>
 		ws.send(JSON.stringify({ kind: "request", id, method, params }));
+	request("init", "initialize", { protocolVersion: appServerProtocolVersion, client: { name: "test" } });
+	const initialized = await waitFor(() => messages.find((message) => isResponse(message, "init")));
+	expectRouteResult("initialize", initialized);
 	request("1", "terminal/create", { cwd: dir, cols: 80, rows: 24 });
 	const created = (await waitFor(() => messages.find((message) => isResponse(message, "1")))) as {
 		result: { terminal: { terminalId: string } };
@@ -334,6 +338,53 @@ test("app server routes PTY terminal create, input, resize, replay, and kill", a
 		method: "terminal/output",
 		params: { terminalId, seq: 1, data: "hello\n" },
 	});
+	ws.close();
+});
+
+test("websocket enforces initialization and known method errors", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "daedalus-app-server-lifecycle-"));
+	await git(dir, ["init"]);
+	const server = await startAppServer({
+		databasePath: join(dir, "app.sqlite"),
+		token: "test-token",
+		runtimeFactory: async (input) => ({
+			cwd: input.cwd,
+			session: { subscribe: () => () => {}, prompt: async () => {}, abort: async () => {} },
+			dispose: async () => {},
+		}),
+	});
+	servers.push(server);
+	const messages: unknown[] = [];
+	const ws = new WebSocket(`${server.wsUrl}?token=test-token`);
+	ws.addEventListener("message", (event) => messages.push(JSON.parse(String(event.data))));
+	await new Promise<void>((resolve, reject) => {
+		ws.addEventListener("open", () => resolve(), { once: true });
+		ws.addEventListener("error", () => reject(new Error("websocket error")), { once: true });
+	});
+	ws.send(JSON.stringify({ kind: "request", id: "before", method: "project/list", params: {} }));
+	const before = (await waitFor(() => messages.find((message) => isResponse(message, "before")))) as unknown as {
+		ok: false;
+		error: { code: string };
+	};
+	expect(before.ok).toBe(false);
+	expect(before.error.code).toBe("not_initialized");
+	ws.send(
+		JSON.stringify({
+			kind: "request",
+			id: "init",
+			method: "initialize",
+			params: { protocolVersion: appServerProtocolVersion, client: { name: "test" } },
+		}),
+	);
+	const initialized = await waitFor(() => messages.find((message) => isResponse(message, "init")));
+	expectRouteResult("initialize", initialized);
+	ws.send(JSON.stringify({ kind: "request", id: "unknown", method: "missing.method", params: {} }));
+	const unknown = (await waitFor(() => messages.find((message) => isResponse(message, "unknown")))) as unknown as {
+		ok: false;
+		error: { code: string };
+	};
+	expect(unknown.ok).toBe(false);
+	expect(unknown.error.code).toBe("method_not_found");
 	ws.close();
 });
 

@@ -1,5 +1,6 @@
-import type { ClientNotification, ClientRequest, ServerResponse } from "@daedalus-pi/app-server-protocol";
+import type { ServerResponse } from "@daedalus-pi/app-server-protocol";
 import type { ServerWebSocket } from "bun";
+import { ProtocolSession } from "./protocol-session";
 import type { AppRouter, OutboundMessage } from "./router";
 
 export type AppServerWebSocket = ServerWebSocket<{ client: WebSocketClient }>;
@@ -8,7 +9,10 @@ const MAX_QUEUE = 128;
 
 export class WebSocketClient {
 	private readonly queue: string[] = [];
-	constructor(readonly ws: AppServerWebSocket) {}
+	private readonly session: ProtocolSession;
+	constructor(readonly ws: AppServerWebSocket, router: AppRouter) {
+		this.session = new ProtocolSession(router, (message) => this.send(message));
+	}
 
 	send(message: OutboundMessage | ServerResponse): void {
 		const encoded = JSON.stringify(message);
@@ -26,43 +30,21 @@ export class WebSocketClient {
 			if (item) this.ws.send(item);
 		}
 	}
+
+	receive(data: string | Buffer): Promise<void> {
+		return this.session.receive(data);
+	}
 }
 
 export function createWebSocketHandlers(router: AppRouter, clients: Set<WebSocketClient>) {
 	return {
 		open(ws: AppServerWebSocket) {
-			const client = new WebSocketClient(ws);
+			const client = new WebSocketClient(ws, router);
 			ws.data.client = client;
 			clients.add(client);
 		},
 		async message(ws: AppServerWebSocket, data: string | Buffer) {
-			const client = ws.data.client;
-			try {
-				const message = JSON.parse(typeof data === "string" ? data : data.toString()) as
-					| ClientRequest
-					| ClientNotification;
-				if (message.kind === "request") {
-					try {
-						const result = await router.handle(message);
-						client.send({ kind: "response", id: message.id, ok: true, result });
-					} catch (error) {
-						client.send({
-							kind: "response",
-							id: message.id,
-							ok: false,
-							error: { code: "internal_error", message: error instanceof Error ? error.message : String(error) },
-						});
-					}
-				}
-				if (message.kind === "notification") router.handleNotification(message as ClientNotification);
-			} catch (error) {
-				client.send({
-					kind: "response",
-					id: "invalid",
-					ok: false,
-					error: { code: "invalid_json", message: error instanceof Error ? error.message : String(error) },
-				});
-			}
+			await ws.data.client.receive(data);
 		},
 		drain(ws: AppServerWebSocket) {
 			ws.data.client.flush();

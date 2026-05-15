@@ -342,6 +342,7 @@ export class SubagentRunner {
 			isolation: workspace.metadata?.isolation,
 			workspaceTarget: workspace.workspaceTarget,
 			workspaceMetadata: workspace.metadata,
+			taskBinding: request.taskBinding,
 			baseBranch: workspace.metadata?.baseBranch,
 			mergeBack: workspace.metadata?.mergeBack,
 		};
@@ -382,6 +383,7 @@ export class SubagentRunner {
 				conversationId: paths.sessionFile,
 				contextArtifactPath,
 				parentSessionFile: request.parentSessionFile,
+				taskBinding: request.taskBinding,
 			});
 			const progress: SubagentRunProgress = {
 				runId,
@@ -393,6 +395,7 @@ export class SubagentRunner {
 				activity,
 				recentActivity,
 				workspaceTarget: workspace.workspaceTarget,
+				taskBinding: request.taskBinding,
 			};
 			request.onProgress?.(progress);
 		};
@@ -408,6 +411,7 @@ export class SubagentRunner {
 			contextArtifactPath,
 			workspaceTarget: workspace.workspaceTarget,
 			workspaceMetadata: workspace.metadata,
+			taskBinding: request.taskBinding,
 			isolation: workspace.metadata?.isolation,
 			startedAt,
 		});
@@ -462,6 +466,7 @@ export class SubagentRunner {
 					recentActivity,
 					childSessionFile: paths.sessionFile,
 					contextArtifactPath,
+					taskBinding: request.taskBinding,
 					error: "Subagent exited without submit_result.",
 				};
 			}
@@ -497,6 +502,7 @@ export class SubagentRunner {
 					recentActivity,
 					childSessionFile: paths.sessionFile,
 					contextArtifactPath,
+					taskBinding: request.taskBinding,
 					error: envelopeError ?? "Invalid subagent result envelope.",
 				};
 			}
@@ -542,6 +548,7 @@ export class SubagentRunner {
 					recentActivity,
 					childSessionFile: paths.sessionFile,
 					contextArtifactPath,
+					taskBinding: request.taskBinding,
 					error: schemaError,
 				};
 			}
@@ -629,7 +636,8 @@ export class SubagentRunner {
 				baseBranch: finalWorkspaceMetadata?.baseBranch,
 				mergeBack: finalWorkspaceMetadata?.mergeBack,
 				mergeBackResult,
-				data: { ...sidecar, mergeBackResult },
+				taskBinding: request.taskBinding,
+				data: { ...sidecar, taskBinding: request.taskBinding, mergeBackResult },
 			});
 			return {
 				runId,
@@ -656,7 +664,8 @@ export class SubagentRunner {
 				baseBranch: finalWorkspaceMetadata?.baseBranch,
 				mergeBack: finalWorkspaceMetadata?.mergeBack,
 				mergeBackResult,
-				data: { ...sidecar, mergeBackResult },
+				taskBinding: request.taskBinding,
+				data: { ...sidecar, taskBinding: request.taskBinding, mergeBackResult },
 			};
 		} finally {
 			unsubscribe?.();

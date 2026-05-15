@@ -12,7 +12,8 @@ import type { WorkspaceTarget } from "@daedalus-pi/coding-agent";
 export type RuntimeSessionManager = unknown;
 
 import { createSessionIdentitySnapshot } from "../sessions/session-identity";
-import { mapRuntimeEvent, type RuntimeAgentEvent } from "./event-mapper";
+import { CanonicalAgentEventNormalizer } from "./canonical-agent-events";
+import { mapCanonicalAgentEvent, mapRuntimeEvent, type RuntimeAgentEvent } from "./event-mapper";
 
 export type RuntimeControllerMessage = AppEvent | ServerNotification | ServerRequest;
 export type RuntimeEventSink = (message: RuntimeControllerMessage) => void | Promise<void>;
@@ -178,16 +179,26 @@ export class SessionController {
 				}),
 			},
 		});
-		await this.emit({ kind: "notification", method: "session/changed", params: { sessionId, status: "active" } });
+		await this.emit({
+			kind: "notification",
+			method: "session/changed",
+			params: { sessionId, status: "active" },
+		});
 		if (input.prompt) {
-			await this.startTurn({ sessionId, prompt: input.prompt, context: input.context });
+			await this.startTurn({
+				sessionId,
+				prompt: input.prompt,
+				context: input.context,
+			});
 		}
 		return { sessionId, runsIn: input.runsIn };
 	}
 
-	async resumeSession(
-		input: ResumeSessionInput,
-	): Promise<{ sessionId: SessionId; status: "active" | "needs-attention"; identity?: SessionResumeIdentity }> {
+	async resumeSession(input: ResumeSessionInput): Promise<{
+		sessionId: SessionId;
+		status: "active" | "needs-attention";
+		identity?: SessionResumeIdentity;
+	}> {
 		const sessionId = input.sessionId ?? (input.sessionPath as SessionId);
 		if (input.identity && input.identity.status !== "matched" && input.identity.status !== "unknown") {
 			await this.emit({
@@ -239,7 +250,11 @@ export class SessionController {
 				}),
 			},
 		});
-		await this.emit({ kind: "notification", method: "session/changed", params: { sessionId, status: "active" } });
+		await this.emit({
+			kind: "notification",
+			method: "session/changed",
+			params: { sessionId, status: "active" },
+		});
 		return { sessionId, status: "active", identity: input.identity };
 	}
 
@@ -254,7 +269,13 @@ export class SessionController {
 			type: "turn/started",
 			ts: this.nowIso(),
 			sessionId: input.sessionId,
-			payload: { sessionId: input.sessionId, turnId, role: "user", content: input.prompt, prompt: input.prompt },
+			payload: {
+				sessionId: input.sessionId,
+				turnId,
+				role: "user",
+				content: input.prompt,
+				prompt: input.prompt,
+			},
 		});
 		await this.emit({
 			kind: "notification",
@@ -289,9 +310,12 @@ export class SessionController {
 		try {
 			await record.runtime.applyRuntimeOptions?.(input.context);
 			const context = await this.resolvePromptContext(record.runtime.cwd, input.context);
-			await record.runtime.session.prompt(context.preamble ? `${context.preamble}\n\n${input.prompt}` : input.prompt, {
-				images: context.images,
-			});
+			await record.runtime.session.prompt(
+				context.preamble ? `${context.preamble}\n\n${input.prompt}` : input.prompt,
+				{
+					images: context.images,
+				},
+			);
 		} catch (error) {
 			if (record.activeTurnId === turnId) record.activeTurnId = undefined;
 			await this.emit({
@@ -299,7 +323,11 @@ export class SessionController {
 				type: "turn/failed",
 				ts: this.nowIso(),
 				sessionId: input.sessionId,
-				payload: { sessionId: input.sessionId, turnId, error: error instanceof Error ? error.message : String(error) },
+				payload: {
+					sessionId: input.sessionId,
+					turnId,
+					error: error instanceof Error ? error.message : String(error),
+				},
 			});
 			await this.emit({
 				kind: "notification",
@@ -319,9 +347,17 @@ export class SessionController {
 			type: "runtime/control-changed",
 			ts: this.nowIso(),
 			sessionId,
-			payload: { sessionId, control, ...(payload && typeof payload === "object" ? payload : { value: payload }) },
+			payload: {
+				sessionId,
+				control,
+				...(payload && typeof payload === "object" ? payload : { value: payload }),
+			},
 		});
-		await this.emit({ kind: "notification", method: "runtime/changed", params: { sessionId, control, payload } });
+		await this.emit({
+			kind: "notification",
+			method: "runtime/changed",
+			params: { sessionId, control, payload },
+		});
 	}
 
 	readState(): SessionControllerState {
@@ -346,22 +382,78 @@ export class SessionController {
 			sessionId,
 			payload: { sessionId },
 		});
-		await this.emit({ kind: "notification", method: "session/changed", params: { sessionId, status: "disposed" } });
+		await this.emit({
+			kind: "notification",
+			method: "session/changed",
+			params: { sessionId, status: "disposed" },
+		});
 	}
 
 	private register(sessionId: SessionId, runtime: ControlledSessionRuntime): void {
 		if (this.sessions.has(sessionId)) throw new Error(`Session already exists: ${sessionId}`);
-		const record: SessionRecord = { id: sessionId, runtime, unsubscribe: () => {} };
+		const record: SessionRecord = {
+			id: sessionId,
+			runtime,
+			unsubscribe: () => {},
+		};
+		const approvalGate = runtime.session as {
+			__approvalGate?: {
+				setContext?: (context: { getTurnId?: () => string | undefined; workspaceTargetId?: string }) => void;
+			};
+		};
+		approvalGate.__approvalGate?.setContext?.({
+			getTurnId: () => record.activeTurnId,
+			workspaceTargetId: workspaceTargetId(runtime.workspaceTarget) ?? `base:${sessionId}`,
+		});
+		const extensionUIBridge = runtime.session as {
+			__extensionUIBridge?: {
+				setContext?: (context: { getTurnId?: () => string | undefined; workspaceTargetId?: string }) => void;
+			};
+		};
+		extensionUIBridge.__extensionUIBridge?.setContext?.({
+			getTurnId: () => record.activeTurnId,
+			workspaceTargetId: workspaceTargetId(runtime.workspaceTarget) ?? `base:${sessionId}`,
+		});
+		const normalizer = new CanonicalAgentEventNormalizer();
 		record.unsubscribe = runtime.session.subscribe((event) => {
-			const mapped = mapRuntimeEvent(event as never, {
+			const runtimeEvent = event as RuntimeAgentEvent;
+			const normalized = normalizer.normalize(runtimeEvent, {
 				sessionId,
 				turnId: record.activeTurnId,
-				nextEventId: () => this.nextEventId(),
-				now: this.options.now,
 			});
-			void this.emit(mapped.event);
-			if (mapped.notification) void this.emit(mapped.notification);
-			if ((event as RuntimeAgentEvent).type === "agent_end") record.activeTurnId = undefined;
+			for (const canonicalEvent of normalized.events) {
+				const mapped = mapCanonicalAgentEvent(canonicalEvent, {
+					sessionId,
+					nextEventId: () => this.nextEventId(),
+					now: this.options.now,
+				});
+				void this.emit(mapped.event);
+			}
+			const mapped = normalized.handled
+				? undefined
+				: mapRuntimeEvent(runtimeEvent, {
+						sessionId,
+						turnId: record.activeTurnId,
+						nextEventId: () => this.nextEventId(),
+						now: this.options.now,
+					});
+			if (mapped) {
+				void this.emit(mapped.event);
+				if (mapped.notification) void this.emit(mapped.notification);
+			}
+			if (runtimeEvent.type === "agent_end") {
+				const completedTurnId = record.activeTurnId;
+				if (completedTurnId) {
+					void this.emit({
+						id: this.nextEventId(),
+						type: "turn/completed",
+						ts: this.nowIso(),
+						sessionId,
+						payload: { sessionId, turnId: completedTurnId },
+					});
+				}
+				record.activeTurnId = undefined;
+			}
 		});
 		this.sessions.set(sessionId, record);
 	}
@@ -398,6 +490,18 @@ export class SessionController {
 	private nowIso(): string {
 		return (this.options.now?.() ?? new Date()).toISOString();
 	}
+}
+
+function workspaceTargetId(target: WorkspaceTarget | undefined): string | undefined {
+	const record = target as unknown as {
+		readonly id?: unknown;
+		readonly projectId?: unknown;
+		readonly worktreeId?: unknown;
+	};
+	if (typeof record?.id === "string" && record.id.length > 0) return record.id;
+	if (typeof record?.worktreeId === "string" && record.worktreeId.length > 0) return `worktree:${record.worktreeId}`;
+	if (typeof record?.projectId === "string" && record.projectId.length > 0) return `base:${record.projectId}`;
+	return undefined;
 }
 function runsInFromWorkspaceTarget(target: WorkspaceTarget | undefined): WorkflowRunsInTarget | undefined {
 	if (!target) return undefined;

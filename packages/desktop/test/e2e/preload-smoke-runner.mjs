@@ -1,5 +1,8 @@
 import { existsSync } from "node:fs";
-import { app, BrowserWindow, ipcMain } from "electron";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { app, BrowserWindow, ipcMain } = require("electron");
 
 const preload = process.argv.at(-1);
 
