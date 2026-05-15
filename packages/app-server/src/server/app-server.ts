@@ -17,7 +17,7 @@ import type { PtyAdapter } from "../terminal/pty-adapter";
 import { authenticateRequest, createCapabilityToken } from "./auth";
 import { AppRouter, type OutboundMessage } from "./router";
 import { serveStaticGui } from "./static-gui";
-import { createWebSocketHandlers, type AppServerClientConnection, type WebSocketClient } from "./websocket";
+import { type AppServerClientConnection, createWebSocketHandlers, type WebSocketClient } from "./websocket";
 
 export interface CreateAppServerOptions {
 	readonly databasePath: string;
