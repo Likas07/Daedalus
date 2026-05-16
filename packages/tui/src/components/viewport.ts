@@ -1,3 +1,9 @@
+import {
+	markNoSelectColumns,
+	type RenderedLine,
+	renderComponentWithMetadata,
+	renderedLineText,
+} from "../render-metadata.js";
 import type { Component } from "../tui.js";
 import { truncateToWidth, visibleWidth } from "../utils.js";
 
@@ -124,6 +130,50 @@ export class Viewport implements Component {
 			const scrollbarChar =
 				this.lastContentHeight > this.height ? (index >= thumbStart && index < thumbEnd ? "█" : "│") : " ";
 			return `${paddedContent}\x1b[2m${scrollbarChar}\x1b[22m`;
+		});
+	}
+
+	renderWithMetadata(width: number): RenderedLine[] {
+		const scrollbarWidth = this.showScrollbar ? 1 : 0;
+		const contentWidth = Math.max(0, width - scrollbarWidth);
+		const contentLines = renderComponentWithMetadata(this.child, contentWidth);
+		this.lastContentHeight = contentLines.length;
+
+		if (this.stickyBottom) {
+			this.scrollOffset = this.getMaxScrollOffset(contentLines.length);
+		} else {
+			this.scrollOffset = Math.max(0, Math.min(this.scrollOffset, this.getMaxScrollOffset(contentLines.length)));
+		}
+
+		if (this.height <= 0) {
+			return [];
+		}
+
+		const start = Math.max(0, Math.min(this.scrollOffset, this.getMaxScrollOffset(contentLines.length)));
+		const end = start + this.height;
+		const visibleLines = contentLines.slice(start, end);
+		while (visibleLines.length < this.height) {
+			const generatedLine: RenderedLine = { text: "" };
+			markNoSelectColumns(generatedLine, 0, width);
+			visibleLines.push(generatedLine);
+		}
+
+		if (!this.showScrollbar) {
+			return visibleLines;
+		}
+
+		const { thumbStart, thumbEnd } = this.getScrollbarThumbRange();
+		return visibleLines.map((line, index) => {
+			const content = truncateToWidth(renderedLineText(line), contentWidth, "");
+			const paddedContent = content + " ".repeat(Math.max(0, contentWidth - visibleWidth(content)));
+			const scrollbarChar =
+				this.lastContentHeight > this.height ? (index >= thumbStart && index < thumbEnd ? "█" : "│") : " ";
+			const renderedLine: RenderedLine = {
+				text: `${paddedContent}\x1b[2m${scrollbarChar}\x1b[22m`,
+				...(line.noSelect ? { noSelect: line.noSelect.slice(0, contentWidth) } : {}),
+			};
+			markNoSelectColumns(renderedLine, visibleWidth(content), contentWidth + 1);
+			return renderedLine;
 		});
 	}
 

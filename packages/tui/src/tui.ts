@@ -7,6 +7,14 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { performance } from "node:perf_hooks";
 import { isKeyRelease, matchesKey } from "./keys.js";
+import { type RenderedLine, renderComponentWithMetadata } from "./render-metadata.js";
+import {
+	applySelectionHighlight,
+	extractSelectedText,
+	parseSgrMouse,
+	SelectionState,
+	type SgrMouseEvent,
+} from "./selection.js";
 import type { Terminal } from "./terminal.js";
 import { getCapabilities, isImageLine, setCellDimensions } from "./terminal-image.js";
 import { extractSegments, sliceByColumn, sliceWithWidth, visibleWidth } from "./utils.js";
@@ -21,6 +29,12 @@ export interface Component {
 	 * @returns Array of strings, each representing a line
 	 */
 	render(width: number): string[];
+
+	/**
+	 * Optionally render the component with per-column copy/selection metadata.
+	 * Components that do not need metadata can implement only render().
+	 */
+	renderWithMetadata?(width: number): RenderedLine[];
 
 	/**
 	 * Optional handler for keyboard input when component has focus
@@ -209,6 +223,17 @@ export class Container implements Component {
 		}
 		return lines;
 	}
+
+	renderWithMetadata(width: number): RenderedLine[] {
+		const lines: RenderedLine[] = [];
+		for (const child of this.children) {
+			const childLines = renderComponentWithMetadata(child, width);
+			for (const line of childLines) {
+				lines.push(line);
+			}
+		}
+		return lines;
+	}
 }
 
 /**
@@ -237,6 +262,9 @@ export class TUI extends Container {
 	private previousViewportTop = 0; // Track previous viewport top for resize-aware cursor moves
 	private fullRedrawCount = 0;
 	private stopped = false;
+	private readonly selection = new SelectionState();
+	private lastRenderedMetadata: RenderedLine[] = [];
+	public onSelectionCopy?: (text: string) => void;
 
 	// Overlay stack for modal components rendered on top of base content
 	private focusOrderCounter = 0;
@@ -248,6 +276,13 @@ export class TUI extends Container {
 		focusOrder: number;
 	}[] = [];
 
+	setSelectionCopyHandler(handler: ((text: string) => void) | undefined): void {
+		this.onSelectionCopy = handler;
+	}
+
+	getSelectedText(): string {
+		return extractSelectedText(this.lastRenderedMetadata, this.selection.range);
+	}
 	constructor(terminal: Terminal, showHardwareCursor?: boolean) {
 		super();
 		this.terminal = terminal;
@@ -549,6 +584,11 @@ export class TUI extends Container {
 			data = current;
 		}
 
+		const mouse = parseSgrMouse(data);
+		if (mouse && this.handleSelectionMouse(mouse)) {
+			return;
+		}
+
 		// Consume terminal cell size responses without blocking unrelated input.
 		if (this.consumeCellSizeResponse(data)) {
 			return;
@@ -584,6 +624,31 @@ export class TUI extends Container {
 			this.focusedComponent.handleInput(data);
 			this.requestRender();
 		}
+	}
+
+	private handleSelectionMouse(mouse: SgrMouseEvent): boolean {
+		if (mouse.wheel) return false;
+		const point = { row: this.previousViewportTop + mouse.row, col: mouse.col };
+		const isPrimaryPress = mouse.type === "press" && (mouse.button & 3) === 0 && (mouse.button & 32) === 0;
+		const isDrag = mouse.type === "press" && (mouse.button & 32) !== 0;
+		if (isPrimaryPress) {
+			this.selection.start(point);
+			this.requestRender();
+			return true;
+		}
+		if (isDrag) {
+			this.selection.update(point);
+			this.requestRender();
+			return true;
+		}
+		if (mouse.type === "release") {
+			this.selection.finish(point);
+			const text = this.getSelectedText();
+			if (text) this.onSelectionCopy?.(text);
+			this.requestRender();
+			return true;
+		}
+		return false;
 	}
 
 	private consumeCellSizeResponse(data: string): boolean {
@@ -920,13 +985,18 @@ export class TUI extends Container {
 			return targetScreenRow - currentScreenRow;
 		};
 
-		// Render all components to get new lines
-		let newLines = this.render(width);
+		// Render all components to get new lines and copy/selection metadata.
+		let renderedLines = this.renderWithMetadata(width);
+		let newLines = renderedLines.map((line) => line.text);
 
-		// Composite overlays into the rendered lines (before differential compare)
+		// Composite overlays into the rendered lines (before differential compare).
+		// Overlay metadata is intentionally not selectable until overlay metadata compositing exists.
 		if (this.overlayStack.length > 0) {
 			newLines = this.compositeOverlays(newLines, width, height);
+			renderedLines = newLines.map((text) => ({ text }));
 		}
+		this.lastRenderedMetadata = renderedLines;
+		newLines = applySelectionHighlight(renderedLines, this.selection.range);
 
 		// Extract cursor position before applying line resets (marker must be found first)
 		const cursorPos = this.extractCursorPosition(newLines, height);

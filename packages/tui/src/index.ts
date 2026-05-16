@@ -59,6 +59,24 @@ export {
 	parseKey,
 	setKittyProtocolActive,
 } from "./keys.js";
+export {
+	cloneRenderedLine,
+	ensureNoSelectWidth,
+	markNoSelectColumns,
+	type RenderedLine,
+	renderComponentWithMetadata,
+	renderedLineText,
+	toRenderedLine,
+} from "./render-metadata.js";
+export {
+	applySelectionHighlight,
+	extractSelectedText,
+	parseSgrMouse,
+	type SelectionPoint,
+	type SelectionRange,
+	SelectionState,
+	type SgrMouseEvent,
+} from "./selection.js";
 // Input buffering for batch splitting
 export { StdinBuffer, type StdinBufferEventMap, type StdinBufferOptions } from "./stdin-buffer.js";
 // Terminal interface and implementations

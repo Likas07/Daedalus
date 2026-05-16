@@ -104,10 +104,10 @@ export class ProcessTerminal implements Terminal {
 		// Enable bracketed paste mode - terminal will wrap pastes in \x1b[200~ ... \x1b[201~
 		process.stdout.write("\x1b[?2004h");
 
-		// Enable SGR mouse reporting so the app can own scroll state instead of
-		// relying on terminal scrollback. 1000 enables button/wheel reporting,
+		// Enable SGR mouse reporting so the app can own scroll and selection state instead of
+		// relying on terminal scrollback. 1002 enables button/wheel/drag reporting,
 		// 1006 switches to SGR extended encoding.
-		process.stdout.write("\x1b[?1000h\x1b[?1006h");
+		process.stdout.write("\x1b[?1002h\x1b[?1006h");
 
 		// Set up resize handler immediately
 		process.stdout.on("resize", this.resizeHandler);
@@ -279,7 +279,7 @@ export class ProcessTerminal implements Terminal {
 		process.stdout.write("\x1b[?2004l");
 
 		// Disable mouse reporting
-		process.stdout.write("\x1b[?1000l\x1b[?1006l");
+		process.stdout.write("\x1b[?1002l\x1b[?1006l");
 
 		// Disable Kitty keyboard protocol if not already done by drainInput()
 		if (this._kittyProtocolActive) {
