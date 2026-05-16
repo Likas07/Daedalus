@@ -79,6 +79,7 @@ import { copyToClipboard } from "../../utils/clipboard.js";
 import { extensionForImageMimeType, readClipboardImage } from "../../utils/clipboard-image.js";
 import { parseGitUrl } from "../../utils/git.js";
 import { ensureTool } from "../../utils/tools-manager.js";
+
 import { ArminComponent } from "./components/armin.js";
 import { AssistantMessageComponent } from "./components/assistant-message.js";
 import { BashExecutionComponent } from "./components/bash-execution.js";
@@ -107,6 +108,7 @@ import { TreeSelectorComponent } from "./components/tree-selector.js";
 import { UserMessageComponent } from "./components/user-message.js";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.js";
 import { type RecentSession, WelcomeComponent } from "./components/welcome.js";
+import { wireSelectionCopy } from "./selection-copy.js";
 import {
 	getAvailableThemes,
 	getAvailableThemesWithPaths,
@@ -357,6 +359,10 @@ export class InteractiveMode {
 		this.ui = new TUI(new ProcessTerminal({ alternateScreen: true }), this.settingsManager.getShowHardwareCursor());
 		this.ui.setClearOnShrink(this.settingsManager.getClearOnShrink());
 		this.ui.setFixedFrameMode(true);
+		wireSelectionCopy(this.ui, {
+			showStatus: (message) => this.showStatus(message),
+			showError: (message) => this.showError(message),
+		});
 		this.headerContainer = new Container();
 		this.chatContainer = new Container();
 		this.scrollContentContainer = new Container();
