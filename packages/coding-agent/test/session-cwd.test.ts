@@ -1,10 +1,16 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { type CreateAgentSessionRuntimeFactory, createAgentSessionRuntime } from "../src/core/agent-session-runtime.js";
-import { getMissingSessionCwdIssue, MissingSessionCwdError } from "../src/core/session-cwd.js";
+import {
+	getMissingSessionCwdIssue,
+	getWorkspaceResumeSafetyDiagnostic,
+	MissingSessionCwdError,
+} from "../src/core/session-cwd.js";
 import { SessionManager } from "../src/core/session-manager.js";
+import type { WorkspaceSessionIdentity, WorkspaceTarget } from "../src/core/workspaces/types.js";
+import { WorkspaceService } from "../src/core/workspaces/workspace-service.js";
 
 function createTempDir(name: string): string {
 	const dir = join(tmpdir(), `${name}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -12,7 +18,7 @@ function createTempDir(name: string): string {
 	return dir;
 }
 
-function writeSessionFile(path: string, cwd: string): void {
+function writeSessionFile(path: string, cwd: string, workspaceIdentity?: WorkspaceSessionIdentity): void {
 	writeFileSync(
 		path,
 		`${JSON.stringify({
@@ -21,8 +27,29 @@ function writeSessionFile(path: string, cwd: string): void {
 			id: "session-id",
 			timestamp: new Date().toISOString(),
 			cwd,
+			workspaceIdentity,
 		})}\n`,
 	);
+}
+
+function sh(cwd: string, args: string[]): void {
+	const result = Bun.spawnSync(args, { cwd, stdout: "pipe", stderr: "pipe" });
+	if (result.exitCode !== 0) throw new Error(result.stderr.toString() || `${args.join(" ")} failed`);
+}
+
+function initRepo(): string {
+	const repo = mkdtempSync(join(tmpdir(), "pi-session-cwd-branch-"));
+	sh(repo, ["git", "init", "-b", "main"]);
+	sh(repo, ["git", "config", "user.email", "test@example.com"]);
+	sh(repo, ["git", "config", "user.name", "Test"]);
+	writeFileSync(join(repo, "README.md"), "ok\n");
+	sh(repo, ["git", "add", "README.md"]);
+	sh(repo, ["git", "commit", "-m", "init"]);
+	return repo;
+}
+
+function identity(workspace: WorkspaceTarget): WorkspaceSessionIdentity {
+	return { version: 1, workspace };
 }
 
 describe("session cwd handling", () => {
@@ -87,5 +114,29 @@ describe("session cwd handling", () => {
 			}),
 		).rejects.toBeInstanceOf(MissingSessionCwdError);
 		expect(createRuntimeCalled).toBe(false);
+	});
+
+	it("characterizes branch mismatch diagnostics as switch-branch recovery", () => {
+		const repo = initRepo();
+		const sessionDir = createTempDir("pi-session-cwd-branch-session-dir");
+		const sessionFile = join(sessionDir, "session.jsonl");
+		cleanupPaths.push(repo, sessionDir);
+
+		const workspaceService = new WorkspaceService({ projectRoot: repo });
+		const target = workspaceService.resolveCurrentTarget(repo);
+		writeSessionFile(sessionFile, repo, identity({ ...target, branch: "agent/expected" }));
+
+		const sessionManager = SessionManager.open(sessionFile);
+		const diagnostic = getWorkspaceResumeSafetyDiagnostic(sessionManager, repo, workspaceService);
+
+		expect(diagnostic?.ok).toBe(false);
+		expect(diagnostic?.issues).toContainEqual(
+			expect.objectContaining({
+				code: "branch_mismatch",
+				recovery: "switch_branch",
+				expectedCwd: repo,
+				actualCwd: repo,
+			}),
+		);
 	});
 });

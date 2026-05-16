@@ -16,7 +16,7 @@ New sessions also carry normalized workspace identity when Daedalus can resolve 
 
 Legacy cwd-only sessions are still loadable. On resume, Daedalus derives a `shared_cwd` target from the stored cwd and reports resume diagnostics when the stored target is missing, mismatched, or needs adoption into the current workspace.
 
-Recovery choices are: resume in the stored target when safe, switch/open the stored target, adopt the session into the current target, recreate a missing worktree, or start a new session. See `docs/architecture/core-workspace-targets.md` for the cross-surface model.
+Recovery choices are: resume in the stored target when safe, switch/open the stored target, adopt the session into the current target, recreate a missing worktree, or start a new session. If a resume is blocked because the recorded branch no longer matches the current checkout, recover by switching/opening the recorded worktree or by explicitly adopting the session into the current branch so future resumes use the new workspace identity. See `docs/architecture/core-workspace-targets.md` for the cross-surface model.
 
 ## Deleting Sessions
 

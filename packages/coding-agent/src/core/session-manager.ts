@@ -1419,8 +1419,14 @@ export class SessionManager {
 	 * @param sourcePath Path to the source session file
 	 * @param targetCwd Target working directory (where the new session will be stored)
 	 * @param sessionDir Optional session directory. If omitted, uses default for targetCwd.
+	 * @param workspaceIdentity Optional workspace identity for the fork target. Defaults to the source identity.
 	 */
-	static forkFrom(sourcePath: string, targetCwd: string, sessionDir?: string): SessionManager {
+	static forkFrom(
+		sourcePath: string,
+		targetCwd: string,
+		sessionDir?: string,
+		workspaceIdentity?: WorkspaceSessionIdentity,
+	): SessionManager {
 		const sourceEntries = loadEntriesFromFile(sourcePath);
 		if (sourceEntries.length === 0) {
 			throw new Error(`Cannot fork: source session file is empty or invalid: ${sourcePath}`);
@@ -1442,6 +1448,15 @@ export class SessionManager {
 		const fileTimestamp = timestamp.replace(/[:.]/g, "-");
 		const newSessionFile = join(dir, `${fileTimestamp}_${newSessionId}.jsonl`);
 
+		const lineage = {
+			parentSessionId: sourceHeader.id,
+			parentSessionPath: sourcePath,
+			sourceSessionId: sourceHeader.id,
+			sourceSessionPath: sourcePath,
+			forkedAt: timestamp,
+		};
+		const identitySource = workspaceIdentity ?? sourceHeader.workspaceIdentity;
+
 		// Write new header pointing to source as parent, with updated cwd
 		const newHeader: SessionHeader = {
 			type: "session",
@@ -1450,17 +1465,11 @@ export class SessionManager {
 			timestamp,
 			cwd: targetCwd,
 			parentSession: sourcePath,
-			workspaceIdentity: sourceHeader.workspaceIdentity
-				? normalizeWorkspaceSessionIdentity(sourceHeader.workspaceIdentity, {
+			workspaceIdentity: identitySource
+				? normalizeWorkspaceSessionIdentity(identitySource, {
 						cwd: targetCwd,
 						sessionId: newSessionId,
-						lineage: {
-							parentSessionId: sourceHeader.id,
-							parentSessionPath: sourcePath,
-							sourceSessionId: sourceHeader.id,
-							sourceSessionPath: sourcePath,
-							forkedAt: timestamp,
-						},
+						lineage,
 						now: timestamp,
 					})
 				: undefined,

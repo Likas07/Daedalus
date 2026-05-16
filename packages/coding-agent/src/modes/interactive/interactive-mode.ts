@@ -108,6 +108,7 @@ import { TreeSelectorComponent } from "./components/tree-selector.js";
 import { UserMessageComponent } from "./components/user-message.js";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.js";
 import { type RecentSession, WelcomeComponent } from "./components/welcome.js";
+import { getInteractiveResumeRecoveryAction, type InteractiveResumeRecoveryChoice } from "./resume-recovery.js";
 import { wireSelectionCopy } from "./selection-copy.js";
 import {
 	getAvailableThemes,
@@ -1898,6 +1899,52 @@ export class InteractiveMode {
 			formatMissingSessionCwdPrompt(error.issue),
 		);
 		return confirmed ? error.issue.fallbackCwd : undefined;
+	}
+
+	private async promptForResumeRecovery(
+		error: WorkspaceResumeSafetyError,
+	): Promise<InteractiveResumeRecoveryChoice | undefined> {
+		const action = getInteractiveResumeRecoveryAction(error.diagnostic);
+		if (!action) return undefined;
+
+		const labels: Record<InteractiveResumeRecoveryChoice, string> = {
+			switch_original_workspace: "Try original workspace",
+			fork_current_workspace: "Fork into current workspace",
+			cancel: "Cancel",
+		};
+		const selected = await this.showExtensionSelector(
+			`Workspace branch mismatch\n${action.message}`,
+			action.choices.map((choice) => labels[choice]),
+		);
+		const entry = Object.entries(labels).find(([, label]) => label === selected);
+		return entry?.[0] as InteractiveResumeRecoveryChoice | undefined;
+	}
+
+	private async recoverFromBranchMismatchResume(
+		sessionPath: string,
+		error: WorkspaceResumeSafetyError,
+	): Promise<"handled" | "unhandled"> {
+		if (!getInteractiveResumeRecoveryAction(error.diagnostic)) return "unhandled";
+		const choice = await this.promptForResumeRecovery(error);
+		if (!choice || choice === "cancel") {
+			this.showStatus("Resume cancelled");
+			return "handled";
+		}
+
+		if (choice === "switch_original_workspace") {
+			this.showStatus("Original workspace recovery is unavailable; fork into current workspace instead");
+			return "handled";
+		}
+
+		const result = await this.runtimeHost.forkPersistedSessionIntoCurrentWorkspace(sessionPath);
+		if (result.cancelled) {
+			return "handled";
+		}
+
+		await this.handleRuntimeSessionChange();
+		this.renderCurrentSessionState();
+		this.showStatus("Forked session into current workspace");
+		return "handled";
 	}
 
 	/**
@@ -4194,6 +4241,14 @@ export class InteractiveMode {
 			this.renderCurrentSessionState();
 			this.showStatus("Resumed session");
 		} catch (error: unknown) {
+			if (error instanceof WorkspaceResumeSafetyError) {
+				const recovery = await this.recoverFromBranchMismatchResume(sessionPath, error);
+				if (recovery === "handled") return;
+				if (!error.diagnostic.issues.every((issue) => issue.code === "missing_cwd")) {
+					await this.handleFatalRuntimeError("Failed to resume session", error);
+					return;
+				}
+			}
 			if (error instanceof MissingSessionCwdError) {
 				const selectedCwd = await this.promptForMissingSessionCwd(error);
 				if (!selectedCwd) {

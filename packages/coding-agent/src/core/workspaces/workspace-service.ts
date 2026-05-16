@@ -254,7 +254,14 @@ export class WorkspaceService {
 			};
 		const branch = gitCurrentBranch(actualCwd);
 		if (branch !== target.branch)
-			return { status: "invalid", valid: false, message: "Workspace branch mismatch", target, actualBranch: branch };
+			return {
+				status: "invalid",
+				valid: false,
+				message: "Workspace branch mismatch",
+				target,
+				actualCwd,
+				actualBranch: branch,
+			};
 		return {
 			status: "resumable",
 			valid: true,

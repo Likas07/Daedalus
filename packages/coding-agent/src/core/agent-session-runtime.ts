@@ -266,6 +266,42 @@ export class AgentSessionRuntime {
 		return { cancelled: false, selectedText };
 	}
 
+	async forkPersistedSessionIntoCurrentWorkspace(
+		sessionPath: string,
+	): Promise<{ cancelled: boolean; sessionFile: string }> {
+		const resolvedPath = resolve(sessionPath);
+		if (!existsSync(resolvedPath)) {
+			throw new Error(`File not found: ${resolvedPath}`);
+		}
+
+		const beforeResult = await this.emitBeforeSwitch("resume", resolvedPath);
+		if (beforeResult.cancelled) {
+			return { cancelled: true, sessionFile: resolvedPath };
+		}
+
+		const previousSessionFile = this.session.sessionFile;
+		const sessionDir = this.session.sessionManager.getSessionDir();
+		if (!existsSync(sessionDir)) {
+			mkdirSync(sessionDir, { recursive: true });
+		}
+
+		const workspaceTarget = this.services.workspaceService?.resolveCurrentTarget(this.cwd) ?? this.workspaceTarget;
+		const workspaceIdentity = workspaceTarget ? { version: 1 as const, workspace: workspaceTarget } : undefined;
+		const sessionManager = SessionManager.forkFrom(resolvedPath, this.cwd, sessionDir, workspaceIdentity);
+
+		await this.teardownCurrent();
+		this.apply(
+			await this.createRuntime({
+				cwd: sessionManager.getCwd(),
+				agentDir: this.services.agentDir,
+				sessionManager,
+				workspaceTarget,
+				sessionStartEvent: { type: "session_start", reason: "fork", previousSessionFile },
+			}),
+		);
+		return { cancelled: false, sessionFile: sessionManager.getSessionFile()! };
+	}
+
 	async importFromJsonl(inputPath: string, cwdOverride?: string): Promise<{ cancelled: boolean }> {
 		const resolvedPath = resolve(inputPath);
 		if (!existsSync(resolvedPath)) {

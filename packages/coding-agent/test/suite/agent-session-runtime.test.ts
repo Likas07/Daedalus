@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, realpathSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, registerFauxProvider } from "@daedalus-pi/ai";
@@ -20,6 +21,20 @@ import type {
 } from "../../src/index.js";
 
 type RecordedSessionEvent = SessionBeforeSwitchEvent | SessionBeforeForkEvent | SessionStartEvent;
+
+function git(cwd: string, args: string[]): string {
+	return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+}
+
+function initRepoWithBranch(dir: string, branch: string): void {
+	mkdirSync(dir, { recursive: true });
+	git(dir, ["init", "-b", branch]);
+	git(dir, ["config", "user.email", "test@example.com"]);
+	git(dir, ["config", "user.name", "Test User"]);
+	writeFileSync(join(dir, "README.md"), `# ${branch}\n`);
+	git(dir, ["add", "README.md"]);
+	git(dir, ["commit", "-m", "init"]);
+}
 
 describe("AgentSessionRuntime characterization", () => {
 	const cleanups: Array<() => Promise<void> | void> = [];
@@ -381,5 +396,58 @@ describe("AgentSessionRuntime characterization", () => {
 
 		expect(runtime.session.model?.id).toBe("faux-2");
 		expect(runtime.session.thinkingLevel).toBe("off");
+	});
+
+	it("forks a selected persisted session into the current workspace", async () => {
+		const sourceDir = join(tmpdir(), `pi-runtime-source-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		const currentDir = join(tmpdir(), `pi-runtime-current-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		initRepoWithBranch(sourceDir, "source-branch");
+		initRepoWithBranch(currentDir, "current-branch");
+		cleanups.push(() => {
+			if (existsSync(sourceDir)) rmSync(sourceDir, { recursive: true, force: true });
+			if (existsSync(currentDir)) rmSync(currentDir, { recursive: true, force: true });
+		});
+
+		const sourceSession = SessionManager.create(sourceDir);
+		sourceSession.setWorkspaceIdentity({
+			version: 1,
+			sessionId: sourceSession.getSessionId(),
+			workspace: { cwd: sourceDir, projectRoot: sourceDir, isolationMode: "shared_cwd", branch: "source-branch" },
+		});
+		sourceSession.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "from old branch" }],
+			timestamp: Date.now(),
+		});
+		sourceSession.appendMessage({
+			role: "assistant",
+			content: [{ type: "text", text: "old answer" }],
+			timestamp: Date.now(),
+		});
+		const sourceSessionFile = sourceSession.getSessionFile()!;
+		const sourceHeaderBefore = sourceSession.getHeader();
+
+		const { runtime } = await createRuntimeForTest(() => {}, { cwd: currentDir });
+
+		const result = await runtime.forkPersistedSessionIntoCurrentWorkspace(sourceSessionFile);
+
+		expect(result.cancelled).toBe(false);
+		expect(result.sessionFile).not.toBe(sourceSessionFile);
+		expect(realpathSync(runtime.cwd)).toBe(realpathSync(currentDir));
+		const forkMessages = runtime.session.sessionManager.buildSessionContext().messages;
+		expect(forkMessages.map((message) => message.role)).toEqual(["user", "assistant"]);
+		expect(forkMessages[0]?.content).toEqual([{ type: "text", text: "from old branch" }]);
+		expect(forkMessages[1]?.content).toEqual([{ type: "text", text: "old answer" }]);
+
+		const forkHeader = runtime.session.sessionManager.getHeader();
+		expect(forkHeader?.cwd).toBe(realpathSync(currentDir));
+		expect(forkHeader?.parentSession).toBe(sourceSessionFile);
+		expect(forkHeader?.workspaceIdentity?.workspace.cwd).toBe(realpathSync(currentDir));
+		expect(forkHeader?.workspaceIdentity?.workspace.branch).toBe("current-branch");
+		expect(forkHeader?.workspaceIdentity?.lineage?.sourceSessionPath).toBe(sourceSessionFile);
+		expect(forkHeader?.workspaceIdentity?.sessionId).toBe(forkHeader?.id);
+
+		const sourceHeaderAfter = SessionManager.open(sourceSessionFile).getHeader();
+		expect(sourceHeaderAfter).toEqual(sourceHeaderBefore);
 	});
 });
