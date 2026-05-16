@@ -369,7 +369,8 @@ export class InteractiveMode {
 		this.scrollContentContainer.addChild(this.headerContainer);
 		this.scrollContentContainer.addChild(this.chatContainer);
 		this.historyViewport = new Viewport(this.scrollContentContainer);
-		this.historyViewport.setShowScrollbar(true);
+		// Keep the interactive history scrollbar out-of-band: native terminal selection copies rendered cells.
+		// Enabling the in-band Viewport scrollbar here would paste its glyph/padding with history text.
 		this.historyIndicatorContainer = new Container();
 		this.pendingMessagesContainer = new Container();
 		this.statusContainer = new Container();

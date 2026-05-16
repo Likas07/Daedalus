@@ -22,10 +22,7 @@ export function wireSelectionCopy(tui: SelectionCopyTui, status: SelectionCopySt
 	tui.setSelectionCopyHandler((text) => {
 		void (async () => {
 			try {
-				const copied = await copySelectedText(text);
-				if (copied) {
-					status.showStatus("Copied selected text to clipboard");
-				}
+				await copySelectedText(text);
 			} catch (error) {
 				status.showError(error instanceof Error ? error.message : String(error));
 			}

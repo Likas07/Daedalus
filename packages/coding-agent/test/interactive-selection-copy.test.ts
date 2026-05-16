@@ -25,7 +25,7 @@ describe("selected-text copy", () => {
 		expect(copyToClipboard).not.toHaveBeenCalled();
 	});
 
-	test("wires TUI selection copy handler to status callbacks", async () => {
+	test("wires TUI selection copy handler without writing success status", async () => {
 		const { wireSelectionCopy } = await import("../src/modes/interactive/selection-copy.js");
 		let handler: ((text: string) => void) | undefined;
 		const tui = { setSelectionCopyHandler: vi.fn((next: ((text: string) => void) | undefined) => (handler = next)) };
@@ -39,7 +39,7 @@ describe("selected-text copy", () => {
 		expect(copyToClipboard).toHaveBeenCalledWith("selected");
 
 		expect(tui.setSelectionCopyHandler).toHaveBeenCalledTimes(1);
-		expect(status.showStatus).toHaveBeenCalledWith("Copied selected text to clipboard");
+		expect(status.showStatus).not.toHaveBeenCalled();
 		expect(status.showError).not.toHaveBeenCalled();
 	});
 

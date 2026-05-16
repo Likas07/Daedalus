@@ -13,6 +13,45 @@ function renderAll(container: Container, width = 120): string {
 	return container.children.flatMap((child) => child.render(width)).join("\n");
 }
 
+function createInteractiveModeForHistoryViewportTest(): InteractiveMode {
+	const settingsManager = {
+		getShowHardwareCursor: () => false,
+		getClearOnShrink: () => true,
+		getEditorPaddingX: () => 0,
+		getAutocompleteMaxVisible: () => 5,
+		getHideThinkingBlock: () => false,
+		getTheme: () => "dark",
+	};
+	const session = {
+		agent: {},
+		sessionManager: { getCwd: () => process.cwd() },
+		settingsManager,
+		autoCompactionEnabled: true,
+		resourceLoader: { getThemes: () => ({ themes: [], diagnostics: [] }) },
+	};
+
+	return new InteractiveMode({ session } as any);
+}
+
+describe("InteractiveMode history viewport", () => {
+	test("does not enable the in-band history scrollbar by default", async () => {
+		const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+		try {
+			const mode = createInteractiveModeForHistoryViewportTest() as any;
+			const historyViewport = mode.historyViewport;
+			mode.chatContainer.addChild({ render: () => ["abc"], invalidate: () => {} });
+
+			historyViewport.setHeight(1);
+
+			expect(historyViewport.render(3)).toEqual(["abc"]);
+			expect(historyViewport.showScrollbar).toBe(false);
+			await new Promise((resolve) => setTimeout(resolve, 25));
+		} finally {
+			stdoutWrite.mockRestore();
+		}
+	});
+});
+
 describe("InteractiveMode wheel scrolling", () => {
 	test("scrolls history when a non-overlay custom UI replaces the editor", () => {
 		const customComponent = { render: () => [], invalidate: () => {} };
