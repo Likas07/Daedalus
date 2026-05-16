@@ -15,9 +15,10 @@ import { writePersistedSubagentRun } from "./persisted-runs.js";
 import { resolveSubagentPolicy } from "./policy.js";
 import { SubagentRegistry } from "./registry.js";
 import { isSubagentResultEnvelope, validateSubagentEnvelope, validateSubagentResult } from "./result-validation.js";
-import type { SubmitResultPayload } from "./submit-result-tool.js";
+import type { InvalidSubmitResultEvent, SubmitResultPayload } from "./submit-result-tool.js";
 import { buildTaskPacket } from "./task-packet.js";
 import type {
+	SubagentDegradedResultMetadata,
 	SubagentEnvelopeStatus,
 	SubagentMergeBackPolicy,
 	SubagentMergeBackResultDetails,
@@ -54,6 +55,7 @@ export interface CreateSubagentSessionOptions {
 	contextArtifactPath?: string;
 	request: SubagentRunRequest;
 	onSubmit: (payload: SubmitResultPayload) => void;
+	onInvalidSubmit?: (event: InvalidSubmitResultEvent) => void;
 	workspace: PreparedSubagentWorkspace;
 }
 
@@ -123,12 +125,14 @@ function createSidecarRecord(input: {
 	agentId: string;
 	conversationId: string;
 	envelope: SubagentResultEnvelope;
+	degraded?: SubagentDegradedResultMetadata;
 }): SubagentResultSidecarRecord {
 	return {
 		resultId: input.resultId,
 		agentId: input.agentId,
 		conversationId: input.conversationId,
 		...input.envelope,
+		degraded: input.degraded,
 	};
 }
 
@@ -309,6 +313,7 @@ export class SubagentRunner {
 			workspaceService: this.#workspaceService,
 		});
 		let submitPayload: SubmitResultPayload | undefined;
+		const rejectedSubmitAttempts: InvalidSubmitResultEvent[] = [];
 		const handle = await this.#createSession({
 			runId,
 			childSessionFile: paths.sessionFile,
@@ -318,6 +323,9 @@ export class SubagentRunner {
 			workspace,
 			onSubmit: (payload) => {
 				submitPayload = payload;
+			},
+			onInvalidSubmit: (event) => {
+				rejectedSubmitAttempts.push(event);
 			},
 		});
 
@@ -430,44 +438,99 @@ export class SubagentRunner {
 
 		try {
 			await handle.prompt(packetText);
+
 			for (let attempt = 0; attempt <= MAX_SUBMIT_REMINDERS && !submitPayload; attempt++) {
 				await handle.waitForIdle();
 				if (submitPayload) break;
 				if (attempt < MAX_SUBMIT_REMINDERS) {
 					emitProgress("waiting for submit_result");
+
 					await handle.prompt(SUBMIT_REMINDER);
 				}
 			}
 
 			if (!submitPayload) {
 				const updatedAt = Date.now();
-				this.#registry.finish(runId, { status: "failed", summary: "Subagent exited without submit_result." });
+				const validationErrors = rejectedSubmitAttempts.map((attempt) => attempt.error);
+				const lastRejectedSubmit = rejectedSubmitAttempts.at(-1);
+				const degraded: SubagentDegradedResultMetadata = {
+					reason: "no-valid-submit-result",
+					validationErrors,
+					invalidSubmitAttempts: rejectedSubmitAttempts.length,
+					...(lastRejectedSubmit ? { lastRejectedSubmit } : {}),
+					childSessionFile: paths.sessionFile,
+				};
+				const finalEnvelope: SubagentResultEnvelope = {
+					task: request.goal,
+					status: "blocked",
+					summary: "Degraded subagent result preserved: no valid submit_result envelope was received.",
+					output: JSON.stringify(
+						{
+							degraded: true,
+							reason: degraded.reason,
+							childSessionFile: paths.sessionFile,
+							lastRejectedSubmit: lastRejectedSubmit ?? null,
+							validationErrors,
+							invalidSubmitAttempts: rejectedSubmitAttempts.length,
+							recentActivity,
+						},
+						null,
+						2,
+					),
+				};
+				const sidecar = createSidecarRecord({
+					resultId,
+					agentId: request.agent.name,
+					conversationId: paths.sessionFile,
+					envelope: finalEnvelope,
+					degraded,
+				});
+				await writeResultSidecar(paths.resultFile, sidecar);
+				const reference = createResultReference({
+					resultId,
+					agentId: request.agent.name,
+					conversationId: paths.sessionFile,
+					envelope: finalEnvelope,
+				});
+				this.#registry.finish(runId, { status: "blocked", summary: finalEnvelope.summary });
 				await queuePersist({
-					status: "failed",
-					summary: "Subagent exited without submit_result.",
+					status: "blocked",
+					summary: finalEnvelope.summary,
+					task: finalEnvelope.task,
+					parentSessionFile: request.parentSessionFile,
+					conversationId: paths.sessionFile,
+					output: finalEnvelope.output,
+					reference,
+					degraded,
 					updatedAt,
 					activity: lastActivity,
 					recentActivity,
-					error: "Subagent exited without submit_result.",
+					resultArtifactPath: paths.resultFile,
+					taskBinding: request.taskBinding,
+					data: { ...sidecar, taskBinding: request.taskBinding },
 				});
 				return {
 					runId,
 					resultId,
 					agent: request.agent.name,
 					parentSessionFile: request.parentSessionFile,
-					status: "failed",
-					summary: "Subagent exited without submit_result.",
-					task: request.goal,
+					status: "blocked",
+					summary: finalEnvelope.summary,
+					task: finalEnvelope.task,
 					goal: request.goal,
 					conversationId: paths.sessionFile,
+					output: finalEnvelope.output,
+					reference,
+					degraded,
 					startedAt,
 					updatedAt,
 					activity: lastActivity,
 					recentActivity,
 					childSessionFile: paths.sessionFile,
 					contextArtifactPath,
+					resultArtifactPath: paths.resultFile,
 					taskBinding: request.taskBinding,
-					error: "Subagent exited without submit_result.",
+					data: { ...sidecar, taskBinding: request.taskBinding },
 				};
 			}
 

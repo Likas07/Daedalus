@@ -253,10 +253,12 @@ Their base prompts should still support role-specific result content inside `out
 3. Runtime returns `result_id`, `conversation_id`, `status`, and `output`.
 
 ### On parse failure
-If the child result is malformed:
-- runtime should attempt repair/coercion
-- if repair still fails, runtime should preserve the result in degraded form rather than dropping it
-- degraded fallback should still produce a stored sidecar and a parent-visible reference, likely with `status` set to `partial` or `blocked`
+If the child calls `submit_result` with malformed or incomplete parameters:
+- `submit_result` validates the universal result envelope and applies only safe repairs before accepting it
+- invalid calls return actionable validation errors to the child and do not consume the one successful `submit_result` submission
+- the runtime caps repeated invalid `submit_result` attempts and reminder turns so malformed children cannot loop indefinitely
+- after the invalid-attempt cap and reminder budget are exhausted, the run writes a degraded blocked sidecar and returns a parent-visible reference instead of dropping the result
+- degraded fallback preserves the rejected raw `submit_result` parameters, validation errors, child session file, and recent child activity so the parent can inspect what happened
 
 ## Design Rationale
 

@@ -225,7 +225,7 @@ describe("SubagentRunner", () => {
 		expect(updates.at(-1)?.recentActivity).toContain("grep /Authorization/ in src");
 	});
 
-	it("sends reminder prompts before failing when the child exits without submit_result", async () => {
+	it("sends reminder prompts before returning a degraded blocked fallback when the child exits without submit_result", async () => {
 		const root = fs.mkdtempSync(path.join(os.tmpdir(), "daedalus-subagent-reminders-"));
 		tempRoots.push(root);
 		const parentSessionFile = path.join(root, "parent.jsonl");
@@ -250,9 +250,19 @@ describe("SubagentRunner", () => {
 			assignment: "Edit src/auth.ts",
 		});
 
-		expect(result.status).toBe("failed");
+		expect(result.status).toBe("blocked");
+		expect(result.summary).toBe("Degraded subagent result preserved: no valid submit_result envelope was received.");
+		expect(result.reference).toMatchObject({ status: "blocked", summary: result.summary });
+		expect(result.degraded).toEqual({
+			reason: "no-valid-submit-result",
+			validationErrors: [],
+			invalidSubmitAttempts: 0,
+			childSessionFile: result.childSessionFile,
+		});
 		expect(prompts.length).toBeGreaterThan(1);
 		expect(prompts.at(-1)).toContain("submit_result");
+		const sidecar = await readPersistedSubagentResult(parentSessionFile, result.runId);
+		expect(sidecar).toMatchObject({ status: "blocked", summary: result.summary, degraded: result.degraded });
 	});
 
 	it("fails the run when the result envelope shape is invalid", async () => {

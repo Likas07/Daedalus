@@ -212,3 +212,94 @@ describe("SubagentRunner", () => {
 		expect(git(cwd, ["rev-parse", "--verify", result.mergeBackResult?.branchName ?? ""])).toBeTruthy();
 	});
 });
+
+test("returns blocked degraded sidecar when subagent never submits", async () => {
+	const cwd = mkdtempSync(join(tmpdir(), "daedalus-runner-degraded-"));
+	const prompts: string[] = [];
+	const runner = new SubagentRunner({
+		cwd,
+		createSession: async () => {
+			return {
+				prompt: async (text) => {
+					prompts.push(text);
+				},
+				waitForIdle: async () => {},
+				abort: async () => {},
+				dispose: () => {},
+			};
+		},
+	});
+
+	const result = await runner.run({
+		agent,
+		parentSessionFile: join(cwd, "parent.jsonl"),
+		goal: "goal",
+		assignment: "assignment",
+	});
+
+	expect(result.status).toBe("blocked");
+	expect(result.summary).toBe("Degraded subagent result preserved: no valid submit_result envelope was received.");
+	expect(result.reference).toMatchObject({ status: "blocked", summary: result.summary });
+	expect(result.resultArtifactPath).toBeTruthy();
+	expect(result.degraded).toEqual({
+		reason: "no-valid-submit-result",
+		validationErrors: [],
+		invalidSubmitAttempts: 0,
+		childSessionFile: result.childSessionFile,
+	});
+	expect(prompts).toHaveLength(3);
+	const sidecar = JSON.parse(await readFile(result.resultArtifactPath ?? "", "utf8"));
+	expect(sidecar).toMatchObject({
+		resultId: result.resultId,
+		agentId: "worker",
+		status: "blocked",
+		degraded: result.degraded,
+	});
+	const output = JSON.parse(sidecar.output);
+	expect(output).toMatchObject({
+		degraded: true,
+		reason: "no-valid-submit-result",
+		childSessionFile: result.childSessionFile,
+		validationErrors: [],
+		invalidSubmitAttempts: 0,
+	});
+	expect(output.recentActivity).toEqual(result.recentActivity);
+});
+
+test("records rejected submit attempts in degraded fallback", async () => {
+	const cwd = mkdtempSync(join(tmpdir(), "daedalus-runner-rejected-"));
+	const runner = new SubagentRunner({
+		cwd,
+		createSession: async (options) => {
+			options.onInvalidSubmit?.({
+				rawParams: { task: "task", status: "failed", summary: "bad", output: "output" },
+				error: "Invalid status",
+				repairs: [],
+				attempt: 1,
+				maxAttempts: 3,
+			});
+			return { prompt: async () => {}, waitForIdle: async () => {}, abort: async () => {}, dispose: () => {} };
+		},
+	});
+
+	const result = await runner.run({
+		agent,
+		parentSessionFile: join(cwd, "parent.jsonl"),
+		goal: "goal",
+		assignment: "assignment",
+	});
+
+	expect(result.status).toBe("blocked");
+	expect(result.degraded?.invalidSubmitAttempts).toBe(1);
+	expect(result.degraded?.validationErrors).toEqual(["Invalid status"]);
+	expect(result.degraded?.lastRejectedSubmit).toMatchObject({ error: "Invalid status", attempt: 1 });
+	const output = JSON.parse(result.output ?? "{}");
+	expect(output).toMatchObject({
+		degraded: true,
+		reason: "no-valid-submit-result",
+		invalidSubmitAttempts: 1,
+		validationErrors: ["Invalid status"],
+	});
+	const sidecar = JSON.parse(await readFile(result.resultArtifactPath ?? "", "utf8"));
+	expect(sidecar.degraded.lastRejectedSubmit).toMatchObject({ error: "Invalid status", attempt: 1 });
+});

@@ -53,10 +53,27 @@ export interface SubagentResultEnvelope {
 	output: string;
 }
 
+export interface SubagentRejectedSubmitAttempt {
+	rawParams: unknown;
+	error: string;
+	repairs: string[];
+	attempt: number;
+	maxAttempts: number;
+}
+
+export interface SubagentDegradedResultMetadata {
+	reason: "no-valid-submit-result";
+	validationErrors: string[];
+	invalidSubmitAttempts: number;
+	lastRejectedSubmit?: SubagentRejectedSubmitAttempt;
+	childSessionFile: string;
+}
+
 export interface SubagentResultSidecarRecord extends SubagentResultEnvelope {
 	resultId: string;
 	agentId: string;
 	conversationId: string;
+	degraded?: SubagentDegradedResultMetadata;
 }
 
 export interface SubagentResultReference {
@@ -172,6 +189,7 @@ export interface SubagentRunResult {
 	output?: string;
 	reference?: SubagentResultReference;
 	deliverable?: unknown;
+	degraded?: SubagentDegradedResultMetadata;
 	goal?: string;
 	startedAt?: number;
 	updatedAt?: number;

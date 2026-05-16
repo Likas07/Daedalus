@@ -2547,7 +2547,15 @@ export class AgentSession {
 			maxDepth: subagentSettings.maxDepth,
 			maxConcurrency: subagentSettings.maxConcurrency,
 			cwd: this._cwd,
-			createSession: async ({ runId, childSessionFile, packetText, request, onSubmit, workspace }) => {
+			createSession: async ({
+				runId,
+				childSessionFile,
+				packetText,
+				request,
+				onSubmit,
+				onInvalidSubmit,
+				workspace,
+			}) => {
 				const workspaceCwd = workspace.cwd;
 				const sessionManager = SessionManager.create(workspaceCwd, dirname(childSessionFile));
 				sessionManager.setSessionFile(childSessionFile);
@@ -2571,7 +2579,7 @@ export class AgentSession {
 						Array.from(this._toolRegistry.values()),
 						request.taskBinding,
 					),
-					customTools: [createSubmitResultTool(onSubmit)],
+					customTools: [createSubmitResultTool(onSubmit, { onInvalidSubmit })],
 					model: runtime.model,
 					thinkingLevel: runtime.thinkingLevel,
 					subagentContext: {
