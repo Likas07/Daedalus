@@ -1,3 +1,4 @@
+import { StringEnum } from "@daedalus-pi/ai";
 import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
 import { Text } from "@daedalus-pi/tui";
 import { Type } from "@sinclair/typebox";
@@ -62,6 +63,21 @@ function truncate(text: string, max = 72): string {
 function formatPathTail(value: string): string {
 	const parts = value.split("/").filter(Boolean);
 	return parts.length > 2 ? parts.slice(-2).join("/") : value;
+}
+
+function extractExecutablePlanHandoff(summary?: string, output?: string): Record<string, string | boolean> {
+	const text = [summary, output].filter(Boolean).join("\n");
+	if (!text) return {};
+	const handoff: Record<string, string | boolean> = {};
+	const planPath = text.match(/(?:^|[\n\s`{,])plan_path[`"']?\s*[:=]\s*[`"']?([^`"'\s,}]+)/i)?.[1];
+	if (planPath) handoff.plan_path = planPath;
+	const validated = text.match(/(?:^|[\n\s`{,])validated[`"']?\s*[:=]\s*[`"']?(true|false)/i)?.[1];
+	if (validated) handoff.validated = validated.toLowerCase() === "true";
+	const recommendedParentAction = text.match(
+		/(?:^|\n)\s*recommended_parent_action\s*:\s*(.+?)(?=\n\s*\w[\w-]*\s*:|$)/is,
+	)?.[1];
+	if (recommendedParentAction) handoff.recommended_parent_action = truncate(recommendedParentAction, 240);
+	return handoff;
 }
 
 function formatCallMetadata(args: { isolation?: string; merge_back?: string; base_branch?: string }): string[] {
@@ -196,7 +212,7 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 			"Do not launch subagents for initial codebase exploration or simple lookups. Use sem_search first.",
 			"This exploration limit does not override role routing: use Muse for plans and always use Worker for implementation after minimal grounding.",
 			"When launching multiple independent tasks, call subagent once per independent task in parallel (single assistant message, multiple tool calls).",
-			"During executable-plan execution, prefer one Worker per ready task and pass taskBinding with the plan path, task id, title, and file list.",
+			`During executable-plan execution, prefer one Worker per ready task and pass taskBinding with the plan path, task id, title, and file list. Example: {"type":"plan-task","planPath":"docs/plans/2026_05_16/example.plan.json","taskId":"T-1","taskTitle":"Implement focused change","files":["packages/coding-agent/src/file.ts"]}.`,
 			"Use Reviewer for whole-plan/final review by default; only dispatch a task-bound Reviewer for risky tasks that need focused review.",
 			"Keep Daedalus summary-first result semantics: inspect the returned summary/reference first and read deferred full output only when needed.",
 			`Use isolation:"inherit" for the parent cwd without child workspace metadata; isolation:"shared" for the parent cwd with shared workspace metadata; isolation:"worktree" for a dedicated managed worktree.`,
@@ -227,13 +243,34 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 				}),
 			),
 			taskBinding: Type.Optional(
-				Type.Object({
-					type: Type.Literal("plan-task"),
-					planPath: Type.String(),
-					taskId: Type.String(),
-					taskTitle: Type.Optional(Type.String()),
-					files: Type.Optional(Type.Array(Type.String())),
-				}),
+				Type.Object(
+					{
+						type: StringEnum(["plan-task"] as const, {
+							description: `Discriminator for executable-plan task bindings. Must be exactly "plan-task".`,
+						}),
+						planPath: Type.String({
+							description: "Repository-relative path to the executable .plan.json that owns this task.",
+						}),
+						taskId: Type.String({
+							description: "Stable id of the plan task being delegated, copied exactly from the plan file.",
+						}),
+						taskTitle: Type.Optional(
+							Type.String({
+								description:
+									"Human-readable title of the delegated plan task, copied from the plan when available.",
+							}),
+						),
+						files: Type.Optional(
+							Type.Array(Type.String(), {
+								description: "Repository-relative files expected to be relevant for the delegated plan task.",
+							}),
+						),
+					},
+					{
+						description:
+							"Executable-plan binding for task-scoped subagents. Include when delegating a specific plan task so the child can call plan_task_read for its bound packet.",
+					},
+				),
 			),
 		}),
 		renderCall: (args, theme) => renderSubagentCall(args, theme),
@@ -296,17 +333,21 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 				},
 			});
 
-			const visibleContent = JSON.stringify(
-				result.reference ?? {
-					result_id: result.resultId ?? result.runId,
-					agent_id: result.agent,
-					conversation_id: result.conversationId ?? result.childSessionFile,
-					task: result.task ?? params.goal,
-					status: result.status,
-					summary: result.summary,
-					note: `If you want the full output, use read_agent_result_output(${result.resultId ?? result.runId}).`,
-				},
-			);
+			const extractedHandoff = extractExecutablePlanHandoff(result.summary, result.output);
+			const baseReference =
+				result.reference && typeof result.reference === "object" && !Array.isArray(result.reference)
+					? result.reference
+					: {
+							result_id: result.resultId ?? result.runId,
+							agent_id: result.agent,
+							conversation_id: result.conversationId ?? result.childSessionFile,
+							task: result.task ?? params.goal,
+							status: result.status,
+							summary: result.summary,
+							note: `If you want the full output, use read_agent_result_output(${result.resultId ?? result.runId}).`,
+						};
+			const visibleReference = { ...baseReference, ...extractedHandoff };
+			const visibleContent = JSON.stringify(visibleReference);
 
 			return {
 				content: [{ type: "text", text: visibleContent }],
@@ -317,7 +358,7 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 					status: result.status,
 					summary: result.summary,
 					output: result.output,
-					reference: result.reference,
+					reference: visibleReference,
 					resultId: result.resultId,
 					conversationId: result.conversationId,
 					runId: result.runId,

@@ -90,6 +90,24 @@ describe("bundled starter agent policies", () => {
 		expect(policies.get("sage")).toContain("hashline_edit");
 	});
 
+	it("forces bundled Muse executable artifacts through plan_create/plan_validate", () => {
+		const muse = getBundledStarterAgents().find((agent) => agent.name === "muse");
+
+		expect(muse?.tools).toEqual(expect.arrayContaining(["plan_create", "plan_validate", "skill"]));
+		expect(muse?.tools).not.toEqual(expect.arrayContaining(["write", "hashline_edit"]));
+		expect(muse?.toolPolicy?.allowedTools).toEqual(expect.arrayContaining(["plan_create", "plan_validate", "skill"]));
+		expect(muse?.toolPolicy?.allowedTools).not.toEqual(expect.arrayContaining(["write", "hashline_edit"]));
+		expect(muse?.toolPolicy?.writableGlobs).toEqual([]);
+	});
+
+	it("states Muse executable-plan artifact and validation policy in the bundled prompt", () => {
+		const muse = getBundledStarterAgents().find((agent) => agent.name === "muse");
+
+		expect(muse?.systemPrompt).toContain("`plan_create` is the only allowed artifact writer");
+		expect(muse?.systemPrompt).toContain("`plan_validate` is mandatory before handoff");
+		expect(muse?.systemPrompt).toContain("The `summary` must include `plan_path: <path>` and `validated: true`");
+	});
+
 	it("keeps sage source-read-only with markdown-only writable globs", () => {
 		const sage = getBundledStarterAgents().find((agent) => agent.name === "sage");
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import subagentStarterPack from "../../src/extensions/daedalus/workflow/subagents/index.js";
 
-function getRegisteredTool() {
+function getRegisteredTool(overrides: Record<string, any> = {}) {
 	const tools: any[] = [];
 	subagentStarterPack({
 		registerTool(tool: any) {
@@ -9,6 +9,7 @@ function getRegisteredTool() {
 		},
 		registerCommand() {},
 		on() {},
+		...overrides,
 	} as any);
 	return tools.find((tool) => tool.name === "subagent");
 }
@@ -50,6 +51,58 @@ describe("subagent prompt doctrine", () => {
 		expect(parameterSchema).toContain("patch");
 		expect(parameterSchema).toContain("branch");
 		expect(parameterSchema).toContain('Defaults to \\"patch\\" for worktree isolation');
+	});
+
+	it("documents taskBinding with an explicit enum and example", () => {
+		const tool = getRegisteredTool();
+		const taskBinding = tool.parameters.properties.taskBinding;
+		const taskBindingProperties = taskBinding.properties;
+		const guidance = tool.promptGuidelines.join("\n");
+
+		expect(taskBinding.description).toContain("Executable-plan binding");
+		expect(taskBindingProperties.type).toMatchObject({ type: "string", enum: ["plan-task"] });
+		expect(taskBindingProperties.type.description).toContain('Must be exactly "plan-task"');
+		expect(taskBindingProperties.planPath.description).toContain("Repository-relative path");
+		expect(taskBindingProperties.taskId.description).toContain("Stable id");
+		expect(taskBindingProperties.taskTitle.description).toContain("Human-readable title");
+		expect(taskBindingProperties.files.description).toContain("Repository-relative files");
+		expect(guidance).toContain("taskBinding");
+		expect(guidance).toContain('{"type":"plan-task"');
+		expect(guidance).toContain('"planPath":"docs/plans/2026_05_16/example.plan.json"');
+	});
+
+	it("surfaces executable-plan handoff fields in the lightweight subagent result", async () => {
+		const tool = getRegisteredTool({
+			runSubagent: async () => ({
+				runId: "run-1",
+				resultId: "result-1",
+				agent: "muse",
+				status: "completed",
+				summary: "Plan ready",
+				output: [
+					"plan_path: docs/plans/2026_05_16/muse.plan.json",
+					"validated: true",
+					"recommended_parent_action: run execute_plan(path=docs/plans/2026_05_16/muse.plan.json, resume=true)",
+				].join("\n"),
+			}),
+		});
+		const result = await tool.execute(
+			"tool-call-1",
+			{ agent: "muse", goal: "Plan", assignment: "Create an executable plan" },
+			undefined,
+			undefined,
+			{
+				cwd: process.cwd(),
+				sessionManager: { getSessionFile: () => "/tmp/parent.jsonl" },
+				workspaceTarget: undefined,
+			},
+		);
+
+		const visible = JSON.parse(result.content[0].text);
+		expect(visible.plan_path).toBe("docs/plans/2026_05_16/muse.plan.json");
+		expect(visible.validated).toBe(true);
+		expect(visible.recommended_parent_action).toContain("execute_plan");
+		expect(visible).not.toHaveProperty("output");
 	});
 
 	it("adds Daedalus orchestration guidance to the system prompt instead of a hidden custom message", async () => {
