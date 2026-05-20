@@ -1,6 +1,6 @@
 # Managed worktrees
 
-Daedalus can create and run isolated Git worktrees for CLI sessions, TUI commands, GUI threads, and delegated subagents. Managed worktrees live under the project-local `.daedalus/worktrees/` directory and carry Daedalus metadata in the child checkout.
+Daedalus can create and run isolated Git worktrees for CLI sessions, TUI commands, and GUI threads. Managed worktrees live under the project-local `.daedalus/worktrees/` directory and carry Daedalus metadata in the child checkout. Delegated subagent implementation now uses transient artifact-first delegation isolation instead; see `packages/coding-agent/docs/delegation-isolation.md`.
 
 ## Lifecycle
 
@@ -28,12 +28,12 @@ The branch must not already exist in another worktree, and the target path must 
 
 ### Creation path parity
 
-All Daedalus-managed creation surfaces converge on the same post-create lifecycle after `git worktree add`: metadata, child-local push configuration, optional `.worktreeinclude`, dependency setup, and `WorkspaceTarget` construction.
+All Daedalus-managed durable workspace creation surfaces converge on the same post-create lifecycle after `git worktree add`: metadata, child-local push configuration, optional `.worktreeinclude`, dependency setup, and `WorkspaceTarget` construction. Transient subagent sandboxes are intentionally excluded from this table because they use `IsolationHandle` and clean up by default.
 
 | Surface | Creation owner | Shared post-create boundary | Default setup / includes | Explicit opt-out |
 |---|---|---|---|---|
 | CLI/TUI (`--new-worktree`, `/worktree create`) | `WorkspaceService.createIsolatedTarget()` creates the Git worktree under `.daedalus/worktrees/`. | Calls `finalizeManagedWorktree()`. | `setup: true`, `includeIgnored: true` unless the caller disables setup. | Pass `setup: false` and/or `includeIgnored: false` through the creation options. |
-| Delegated subagents | `prepareSubagentWorkspace()` asks `WorkspaceService.createIsolatedTarget()` for dedicated worktree isolation. | `WorkspaceService` calls `finalizeManagedWorktree()`. | `setupWorktree` and `includeIgnored` default to true for worktree isolation. | Set `setupWorktree: false` and/or `includeIgnored: false` on the subagent request. |
+| Delegated subagents | Not a durable `WorkspaceTarget` creation surface. `isolated: true` uses `.daedalus/isolation/<encoded-repo-root>/<runId>/merged` and artifact-first merge-back. | `IsolationHandle` lifecycle, not `finalizeManagedWorktree()`. | Cleanup by default; merge defaults to `patch`. | Use result `patchPath`/`branchName` artifacts for recovery. |
 | SDK/runtime | The exported workspace service/finalizer APIs are the runtime boundary for programmatic managed worktree creation. | Call `WorkspaceService.createIsolatedTarget()` or `finalizeManagedWorktree()` after external `git worktree add`. | `setup` and `includeIgnored` default to true. | Pass `setup: false` and/or `includeIgnored: false`. |
 | GUI/app-server | App-server owns GUI idempotency, database events, path allocation, and rollback around Git creation. | Calls exported `finalizeManagedWorktree()` after successful Git creation. | `input.setup` and `input.includeIgnored` default to true. | Send `setup: false` and/or `includeIgnored: false` in the app-server create request. |
 
@@ -145,14 +145,9 @@ Run the narrowest checks that cover your change while iterating, then run broade
 
 ### 7. Merge back
 
-Worktree-isolated delegated runs can record merge-back intent. Current merge-back actions are exposed through the Daedalus subagent workflow and `subagent_merge_back` tool:
+Worktree-isolated delegated runs self-merge through the subagent runner when safe and write artifact-first result metadata for review. Operators should inspect the returned summary/reference metadata and artifacts before reading full deferred output or deciding whether to keep a child worktree for follow-up.
 
-- `manual` — leave the child worktree for human review
-- `merge` — merge child changes into the parent/base branch when safe
-- `rebase` — rebase the child branch before integration
-- `squash` — squash child changes into one merge-back commit
-
-Cleanup is intentionally separate from merge-back. Verify the child branch, integrate it into the target branch, then remove the worktree only when the branch state is safe to discard locally.
+Cleanup remains intentionally separate from merge-back. Verify the child branch or artifact, confirm the runner's merge-back status, then remove the worktree only when the branch state is safe to discard locally.
 
 ### 8. Cleanup
 

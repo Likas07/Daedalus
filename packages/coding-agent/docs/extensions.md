@@ -28,6 +28,8 @@ Extensions are TypeScript modules that extend pi's behavior. They can subscribe 
 
 See [examples/extensions/](../examples/extensions/) for working implementations.
 
+Built-in Daedalus subagent delegation now uses artifact-first isolation for implementation work. Extension authors invoking the bundled subagent tool should prefer `isolated: true` over low-level worktree parameters; merge status and recovery artifacts are returned in the tool result. See [Delegation isolation](delegation-isolation.md).
+
 ## Table of Contents
 
 - [Quick Start](#quick-start)

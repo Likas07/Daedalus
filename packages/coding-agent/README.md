@@ -30,6 +30,8 @@ Daedalus is a terminal coding harness. Adapt daedalus to your workflows, not the
 
 Daedalus ships with powerful defaults plus opt-in workflow extensions such as plan mode and subagents. You can still ask daedalus to build what you want or install a third-party daedalus package that matches your workflow.
 
+Subagent implementation work can run with transient artifact-first delegation isolation via `isolated: true`. The isolation backend and merge behavior are configured with `delegation.isolation.mode` and `delegation.isolation.merge`; see [Delegation isolation](docs/delegation-isolation.md).
+
 Pi runs in four modes: interactive, print or JSON, RPC for process integration, and an SDK for embedding in your own apps. See [openclaw/openclaw](https://github.com/openclaw/openclaw) for a real-world SDK integration.
 
 ## Share your OSS coding agent sessions

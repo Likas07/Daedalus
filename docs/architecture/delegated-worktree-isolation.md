@@ -1,43 +1,42 @@
-# Delegated worktree isolation
+# Delegated isolation architecture
 
-Subagents use the same core `WorkspaceTarget` model as top-level sessions. Isolation mode controls the child cwd and the target metadata passed to nested sessions, tools, and merge-back actions.
+Daedalus keeps durable workspace management separate from transient delegated implementation sandboxes.
 
-## Isolation modes
+```text
+WorkspaceTarget = durable human/session workspace model
+IsolationHandle = transient delegated execution sandbox
+```
 
-Subagent requests support current and legacy names:
+## Model-facing contract
 
-- `isolation: "inherit"` — run in the parent cwd without creating a child target. No child `workspaceTarget` is attached.
-- `isolation: "shared"` — run in the parent cwd and resolve a `shared_cwd` target for metadata. Legacy `isolationMode: "shared-branch"` maps here.
-- `isolation: "worktree"` — create a dedicated worktree through `WorkspaceService.createIsolatedTarget()` and run the child in that target cwd. Legacy `isolationMode: "child-branch"` maps here.
+Subagents request delegated sandboxes with `isolated: true`. The previous model-facing `isolation`, `merge_back`, `base_branch`, and `subagent_merge_back` workflow has been replaced by automatic artifact-first merge handling.
 
-For worktree isolation, `WorkspaceService.createIsolatedTarget()` creates a managed Git worktree under `.daedalus/worktrees/<slug>`, then calls `finalizeManagedWorktree()` as the shared post-create lifecycle boundary. The finalizer sets child-local `push.autoSetupRemote=true`, writes `.daedalus/worktree.json`, runs setup unless explicitly disabled, and returns a `WorkspaceTarget` with:
+Settings live under `delegation.isolation`:
 
-- `cwd` and `worktreePath` set to the child worktree path;
-- `projectRoot` set to the parent/base project;
-- `isolationMode: "dedicated_worktree"`;
-- `branch`, `baseBranch`, and `baseCommit` populated from the create request;
-- `mergeBack` populated when a merge target is requested;
-- `setup.status` reflecting `created` when setup is disabled or `setup_complete` after setup succeeds.
+- `mode`: `none`, `auto`, `apfs`, `btrfs`, `zfs`, `reflink`, `overlayfs`, `projfs`, `block-clone`, or `rcopy`.
+- `merge`: `patch` or `branch`; default `patch`.
 
-Setup defaults to true for subagent worktree isolation (`setupWorktree: true`) and ignored-file includes default to true (`includeIgnored: true`). A subagent must opt out explicitly with `setupWorktree: false` to skip dependency/bootstrap setup, and with `includeIgnored: false` to skip `.worktreeinclude` handling while still allowing dependency setup.
+## Lifecycle
 
-Setup first applies `.worktreeinclude` from the base checkout, then runs the dependency command selected from the base lockfile (`bun.lock`/`bun.lockb`, pnpm, Yarn, npm, then Bun for package-only workspaces). `.worktreeinclude` only accepts safe relative paths inside the repository; files are copied, directories are symlinked, and missing entries are skipped. Setup failures update metadata to `setup_failed` before surfacing the error.
+```text
+subagent({ isolated: true })
+  -> capture parent baseline
+  -> create .daedalus/isolation/<encoded-repo-root>/<runId>/merged
+  -> seed parent dirty state into the child tree
+  -> run the child session in mergedDir with an isolated working-tree prompt
+  -> on completed child: capture task-only delta
+  -> patch mode: git apply --check, apply when clean, preserve patchPath when blocked
+  -> branch mode: create daedalus/subagent/<runId>, cherry-pick when clean, preserve branchName when blocked
+  -> cleanup transient isolation dir by default
+```
 
-`SubagentRunner` passes the resulting cwd into the child `SessionManager`, nested agent session creation, and scoped tool factories, so filesystem tools operate from the same target identity shown in progress/result metadata.
+The child result is artifact-first: merge status, changed files, backend/fallback metadata, output references, and recovery artifacts are returned to the parent. Cleaned transient paths are not exposed as durable handles.
 
-## Merge-back behavior
+## Durable worktrees
 
-Worktree-isolated runs can request merge-back handling. Current merge-back policies are `patch` and `branch`:
+Managed worktrees under `.daedalus/worktrees/` still use `WorkspaceTarget` and remain appropriate for human-visible CLI/GUI sessions, thread workspaces, and explicit `/worktree` commands. They are not the normal subagent implementation sandbox anymore.
 
-- `patch` — capture the child diff against the base, dry-run it against the parent, and apply it to the parent checkout when clean. Result details can include the patch artifact path, changed files, conflicts, stdout, and stderr.
-- `branch` — create a task/result branch for review or later landing. Result details can include the branch name and changed files.
-
-Worktree isolation defaults to `patch` unless `merge_back` is explicitly set. `inherit` and `shared` runs do not get merge-back by default. `base_branch` selects the base branch/ref for worktree isolation; when omitted, Daedalus resolves the current/base target from the parent checkout.
-
-Merge-back inputs include parent and child `WorkspaceTarget` values plus base refs/commits where available. Cleanup remains separate from merge-back: apply a clean patch or preserve a branch for review/landing first, then remove the worktree through cleanup. Dirty worktrees and external worktrees require explicit force/confirmation paths.
-
-## Resume diagnostics and recovery
-
+Durable workspace merge helpers may remain for GUI/session workflows. Delegated subagent implementation uses `IsolationHandle` instead.
 When resuming or inspecting delegated work, use core workspace resume diagnostics rather than comparing strings directly. Common states:
 
 - `resumable` — child target still exists and matches expected cwd/branch.
