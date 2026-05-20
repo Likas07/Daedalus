@@ -1,8 +1,13 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { getModel } from "@daedalus-pi/ai";
 import { Type } from "@sinclair/typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { DefaultResourceLoader } from "../src/core/resource-loader.js";
+import { createAgentSession } from "../src/core/sdk.js";
+import { SessionManager } from "../src/core/session-manager.js";
+import { SettingsManager } from "../src/core/settings-manager.js";
 import {
 	buildTaskPacket,
 	readPersistedSubagentResult,
@@ -56,6 +61,69 @@ describe("SubagentRunner", () => {
 		);
 
 		expect(tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(["read", "plan_create", "plan_validate"]));
+	});
+
+	it("keeps policy-allowed plan tools active in nested subagent sessions", async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "daedalus-subagent-tools-"));
+		tempRoots.push(root);
+		const agentDir = path.join(root, "agent");
+		fs.mkdirSync(agentDir, { recursive: true });
+		const planCreate = {
+			name: "plan_create",
+			label: "Create plan",
+			description: "Create a plan artifact",
+			parameters: Type.Object({}),
+			execute: vi.fn(),
+		};
+		const planValidate = {
+			name: "plan_validate",
+			label: "Validate plan",
+			description: "Validate a plan artifact",
+			parameters: Type.Object({}),
+			execute: vi.fn(),
+		};
+		const tools = createSubagentTools(
+			root,
+			{
+				allowedTools: ["read", "plan_create", "plan_validate"],
+				writableGlobs: [],
+				spawns: [],
+				maxDepth: 1,
+			},
+			[planCreate, planValidate],
+		);
+
+		const settingsManager = SettingsManager.create(root, agentDir);
+		const resourceLoader = new DefaultResourceLoader({
+			cwd: root,
+			agentDir,
+			settingsManager,
+			extensionFactories: [],
+		});
+		await resourceLoader.reload();
+
+		const { session } = await createAgentSession({
+			cwd: root,
+			agentDir,
+			model: getModel("anthropic", "claude-sonnet-4-5")!,
+			settingsManager,
+			sessionManager: SessionManager.inMemory(),
+			resourceLoader,
+			tools,
+			subagentContext: {
+				runId: "run-1",
+				agentName: "muse",
+				depth: 1,
+				spawns: [],
+				maxDepth: 1,
+			},
+		});
+
+		expect(session.getActiveToolNames()).toEqual(expect.arrayContaining(["read", "plan_create", "plan_validate"]));
+		expect(session.getAllTools().map((tool) => tool.name)).toEqual(
+			expect.arrayContaining(["read", "plan_create", "plan_validate"]),
+		);
+		session.dispose();
 	});
 
 	it("reuses an existing child session file when conversationId is provided", async () => {

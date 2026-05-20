@@ -462,6 +462,47 @@ describe("skills", () => {
 			}
 		});
 
+		it("suppresses expected user overrides of bundled Daedalus fallback skills", () => {
+			const tempDir = mkdtempSync(join(tmpdir(), "daedalus-skill-fallback-"));
+			try {
+				const agentDir = join(tempDir, "agent");
+				const cwd = join(tempDir, "project");
+				const userSkillDir = join(agentDir, "skills", "verification-before-completion");
+				const bundledSkillDir = join(tempDir, "daedalus-extension", "verification-before-completion");
+				mkdirSync(userSkillDir, { recursive: true });
+				mkdirSync(bundledSkillDir, { recursive: true });
+
+				writeFileSync(
+					join(userSkillDir, "SKILL.md"),
+					"---\nname: verification-before-completion\ndescription: user override\n---\nUser",
+				);
+				writeFileSync(
+					join(bundledSkillDir, "SKILL.md"),
+					"---\nname: verification-before-completion\ndescription: bundled fallback\n---\nBundled",
+				);
+
+				const metadata: PathMetadata = {
+					source: "extension:daedalus",
+					scope: "temporary",
+					origin: "package",
+					baseDir: bundledSkillDir,
+				};
+				const { skills, diagnostics } = loadSkills({
+					agentDir,
+					cwd,
+					skillPaths: [userSkillDir, bundledSkillDir],
+					includeDefaults: false,
+					resourceMetadataByPath: new Map([[bundledSkillDir, metadata]]),
+				});
+
+				const skill = skills.find((s) => s.name === "verification-before-completion");
+				expect(skill?.description).toBe("user override");
+				expect(diagnostics.filter((d) => d.type === "collision")).toHaveLength(0);
+			} finally {
+				rmSync(tempDir, { recursive: true, force: true });
+			}
+		});
+
 		it("allows package-managed skills to use namespaced parent directories", () => {
 			const tempDir = mkdtempSync(join(tmpdir(), "daedalus-skill-test-"));
 			try {
@@ -477,6 +518,89 @@ describe("skills", () => {
 					skillPaths: [skillFile],
 					includeDefaults: false,
 					resourceMetadataByPath: new Map([[skillFile, metadata]]),
+				});
+
+				expect(skills).toHaveLength(1);
+				expect(skills[0].name).toBe("autoplan");
+				expect(
+					diagnostics.some((d: ResourceDiagnostic) => d.message.includes("does not match parent directory")),
+				).toBe(false);
+			} finally {
+				rmSync(tempDir, { recursive: true, force: true });
+			}
+		});
+
+		it("allows resource metadata on a skill directory to validate nested SKILL.md", () => {
+			const tempDir = mkdtempSync(join(tmpdir(), "daedalus-skill-test-"));
+			try {
+				const skillDir = join(tempDir, "gstack-autoplan");
+				mkdirSync(skillDir);
+				const skillFile = join(skillDir, "SKILL.md");
+				writeFileSync(skillFile, "---\nname: autoplan\ndescription: Extension-provided skill.\n---\n# Autoplan\n");
+
+				const metadata: PathMetadata = { source: "gstack", scope: "user", origin: "package", baseDir: tempDir };
+				const { skills, diagnostics } = loadSkills({
+					agentDir: emptyAgentDir,
+					cwd: emptyCwd,
+					skillPaths: [skillDir],
+					includeDefaults: false,
+					resourceMetadataByPath: new Map([[skillDir, metadata]]),
+				});
+
+				expect(skills).toHaveLength(1);
+				expect(skills[0].name).toBe("autoplan");
+				expect(
+					diagnostics.some((d: ResourceDiagnostic) => d.message.includes("does not match parent directory")),
+				).toBe(false);
+			} finally {
+				rmSync(tempDir, { recursive: true, force: true });
+			}
+		});
+
+		it("allows trusted package skill aliases when the directory is not a suffix of the skill name", () => {
+			const tempDir = mkdtempSync(join(tmpdir(), "daedalus-skill-alias-"));
+			try {
+				const skillDir = join(tempDir, "gstack-connect-chrome");
+				mkdirSync(skillDir);
+				const skillFile = join(skillDir, "SKILL.md");
+				writeFileSync(
+					skillFile,
+					"---\nname: open-gstack-browser\ndescription: Trusted package alias.\n---\n# Browser\n",
+				);
+
+				const metadata: PathMetadata = { source: "gstack", scope: "user", origin: "package", baseDir: tempDir };
+				const { skills, diagnostics } = loadSkills({
+					agentDir: emptyAgentDir,
+					cwd: emptyCwd,
+					skillPaths: [skillDir],
+					includeDefaults: false,
+					resourceMetadataByPath: new Map([[skillDir, metadata]]),
+				});
+
+				expect(skills).toHaveLength(1);
+				expect(skills[0].name).toBe("open-gstack-browser");
+				expect(
+					diagnostics.some((d: ResourceDiagnostic) => d.message.includes("does not match parent directory")),
+				).toBe(false);
+			} finally {
+				rmSync(tempDir, { recursive: true, force: true });
+			}
+		});
+
+		it("allows explicit skills under known global skill roots to use namespaced parent directories", () => {
+			const tempDir = mkdtempSync(join(tmpdir(), "daedalus-skill-test-"));
+			try {
+				const agentDir = join(tempDir, "agent");
+				const skillDir = join(agentDir, "skills", "gstack-autoplan");
+				mkdirSync(skillDir, { recursive: true });
+				const skillFile = join(skillDir, "SKILL.md");
+				writeFileSync(skillFile, "---\nname: autoplan\ndescription: Global skill.\n---\n# Autoplan\n");
+
+				const { skills, diagnostics } = loadSkills({
+					agentDir,
+					cwd: emptyCwd,
+					skillPaths: [skillFile],
+					includeDefaults: false,
 				});
 
 				expect(skills).toHaveLength(1);

@@ -16,7 +16,7 @@ import { getDefaultSessionDir, SessionManager } from "./session-manager.js";
 import { SettingsManager } from "./settings-manager.js";
 import type { SubagentSessionContext } from "./subagents/types.js";
 import { time } from "./timings.js";
-import { DEFAULT_ACTIVE_TOOL_NAMES, type ToolName } from "./tools/defaults.js";
+import { DEFAULT_ACTIVE_TOOL_NAMES } from "./tools/defaults.js";
 import {
 	allTools,
 	astEditTool,
@@ -331,10 +331,13 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		fastMode = false;
 	}
 
-	const defaultActiveToolNames: ToolName[] = [...DEFAULT_ACTIVE_TOOL_NAMES];
-	const initialActiveToolNames: ToolName[] = options.tools
-		? options.tools.map((t) => t.name).filter((n): n is ToolName => n in allTools)
+	const defaultActiveToolNames: string[] = [...DEFAULT_ACTIVE_TOOL_NAMES];
+	const initialActiveToolNames: string[] = options.tools
+		? options.tools.map((tool) => tool.name)
 		: defaultActiveToolNames;
+	const baseToolsOverride = options.tools
+		? Object.fromEntries(options.tools.map((tool) => [tool.name, tool] as const))
+		: undefined;
 
 	let agent: Agent;
 
@@ -448,6 +451,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		customTools: options.customTools,
 		modelRegistry,
 		initialActiveToolNames,
+		baseToolsOverride,
 		extensionRunnerRef,
 		subagentContext: options.subagentContext,
 		subagentInteractionBroker: options.subagentInteractionBroker,

@@ -6,7 +6,7 @@ import { CONFIG_DIR_NAME, getAgentDir } from "../config.js";
 import { parseFrontmatter, stripFrontmatter } from "../utils/frontmatter.js";
 import type { ResourceDiagnostic } from "./diagnostics.js";
 import type { PathMetadata } from "./package-manager.js";
-import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.js";
+import { createSourceInfo, createSyntheticSourceInfo, type SourceInfo } from "./source-info.js";
 
 /** Max name length per spec */
 const MAX_NAME_LENGTH = 64;
@@ -108,11 +108,11 @@ function isValidSkillNameToken(name: string): boolean {
 	return /^[a-z0-9-]+$/.test(name) && !name.startsWith("-") && !name.endsWith("-") && !name.includes("--");
 }
 
-function isNamespacedSkillDirectoryName(name: string, parentDirName: string): boolean {
-	return isValidSkillNameToken(name) && isValidSkillNameToken(parentDirName) && parentDirName.endsWith(`-${name}`);
+function isTrustedAliasedSkillDirectoryName(name: string, parentDirName: string): boolean {
+	return isValidSkillNameToken(name) && isValidSkillNameToken(parentDirName);
 }
 
-function allowsNamespacedSkillDirectory(metadata: PathMetadata | undefined): boolean {
+function allowsAliasedSkillDirectory(metadata: PathMetadata | undefined): boolean {
 	return metadata?.source === "auto" || metadata?.origin === "package";
 }
 
@@ -121,7 +121,7 @@ function validateName(name: string, parentDirName: string, metadata?: PathMetada
 
 	if (
 		name !== parentDirName &&
-		!(allowsNamespacedSkillDirectory(metadata) && isNamespacedSkillDirectoryName(name, parentDirName))
+		!(allowsAliasedSkillDirectory(metadata) && isTrustedAliasedSkillDirectoryName(name, parentDirName))
 	) {
 		errors.push(`name "${name}" does not match parent directory "${parentDirName}"`);
 	}
@@ -167,7 +167,10 @@ export interface LoadSkillsFromDirOptions {
 	source: string;
 }
 
-function createSkillSourceInfo(filePath: string, baseDir: string, source: string): SourceInfo {
+function createSkillSourceInfo(filePath: string, baseDir: string, source: string, metadata?: PathMetadata): SourceInfo {
+	if (metadata) {
+		return createSourceInfo(filePath, { ...metadata, baseDir: metadata.baseDir ?? baseDir });
+	}
 	switch (source) {
 		case "user":
 			return createSyntheticSourceInfo(filePath, {
@@ -310,7 +313,24 @@ function loadSkillsFromDirInternal(
 }
 
 function getMetadataForPath(path: string, metadataByPath?: Map<string, PathMetadata>): PathMetadata | undefined {
-	return metadataByPath?.get(path);
+	if (!metadataByPath) return undefined;
+
+	const normalizedPath = resolve(path);
+	const exact = metadataByPath.get(path) ?? metadataByPath.get(normalizedPath);
+	if (exact) return exact;
+
+	for (const [sourcePath, metadata] of metadataByPath.entries()) {
+		const normalizedSourcePath = resolve(sourcePath);
+		if (normalizedPath === normalizedSourcePath || normalizedPath.startsWith(`${normalizedSourcePath}${sep}`)) {
+			return metadata;
+		}
+	}
+
+	return undefined;
+}
+
+function createKnownSkillRootMetadata(source: "user" | "project", root: string): PathMetadata {
+	return { source: "auto", scope: source, origin: "top-level", baseDir: root };
 }
 
 function loadSkillFromFile(
@@ -352,7 +372,7 @@ function loadSkillFromFile(
 				description: frontmatter.description,
 				filePath,
 				baseDir: skillDir,
-				sourceInfo: createSkillSourceInfo(filePath, skillDir, source),
+				sourceInfo: createSkillSourceInfo(filePath, skillDir, source, metadata),
 				disableModelInvocation: frontmatter["disable-model-invocation"] === true,
 			},
 			diagnostics,
@@ -491,6 +511,13 @@ function resolveSkillPath(p: string, cwd: string): string {
  * Load skills from all configured locations.
  * Returns skills and any validation diagnostics.
  */
+function isDaedalusBundledFallbackSkill(skill: Skill): boolean {
+	return skill.sourceInfo.source === "extension:daedalus" && skill.sourceInfo.origin === "package";
+}
+
+function isExpectedBundledFallbackOverride(winner: Skill, loser: Skill): boolean {
+	return isDaedalusBundledFallbackSkill(loser) && !isDaedalusBundledFallbackSkill(winner);
+}
 export function loadSkills(options: LoadSkillsOptions = {}): LoadSkillsResult {
 	const { cwd = process.cwd(), agentDir, skillPaths = [], includeDefaults = true, resourceMetadataByPath } = options;
 
@@ -520,6 +547,9 @@ export function loadSkills(options: LoadSkillsOptions = {}): LoadSkillsResult {
 
 			const existing = skillMap.get(skill.name);
 			if (existing) {
+				if (isExpectedBundledFallbackOverride(existing, skill)) {
+					continue;
+				}
 				collisionDiagnostics.push({
 					type: "collision",
 					message: `name "${skill.name}" collision`,
@@ -538,31 +568,23 @@ export function loadSkills(options: LoadSkillsOptions = {}): LoadSkillsResult {
 		}
 	}
 
-	if (includeDefaults) {
-		addSkills(
-			loadSkillsFromDirInternal(
-				resolve(cwd, CONFIG_DIR_NAME, "skills"),
-				"project",
-				true,
-				undefined,
-				undefined,
-				resourceMetadataByPath,
-			),
-		);
-		addSkills(
-			loadSkillsFromDirInternal(
-				join(resolvedAgentDir, "skills"),
-				"user",
-				true,
-				undefined,
-				undefined,
-				resourceMetadataByPath,
-			),
-		);
-	}
-
 	const userSkillsDir = join(resolvedAgentDir, "skills");
 	const projectSkillsDir = resolve(cwd, CONFIG_DIR_NAME, "skills");
+
+	if (includeDefaults) {
+		const defaultMetadataByPath = new Map(resourceMetadataByPath);
+		if (!getMetadataForPath(projectSkillsDir, resourceMetadataByPath)) {
+			defaultMetadataByPath.set(projectSkillsDir, createKnownSkillRootMetadata("project", projectSkillsDir));
+		}
+		if (!getMetadataForPath(userSkillsDir, resourceMetadataByPath)) {
+			defaultMetadataByPath.set(userSkillsDir, createKnownSkillRootMetadata("user", userSkillsDir));
+		}
+
+		addSkills(
+			loadSkillsFromDirInternal(projectSkillsDir, "project", true, undefined, undefined, defaultMetadataByPath),
+		);
+		addSkills(loadSkillsFromDirInternal(userSkillsDir, "user", true, undefined, undefined, defaultMetadataByPath));
+	}
 
 	const isUnderPath = (target: string, root: string): boolean => {
 		const normalizedRoot = resolve(root);
@@ -581,6 +603,21 @@ export function loadSkills(options: LoadSkillsOptions = {}): LoadSkillsResult {
 		return "path";
 	};
 
+	const getValidationMetadata = (
+		resolvedPath: string,
+		source: "user" | "project" | "path",
+	): PathMetadata | undefined => {
+		const metadata = getMetadataForPath(resolvedPath, resourceMetadataByPath);
+		if (metadata) return metadata;
+		if (source === "user" && isUnderPath(resolvedPath, userSkillsDir)) {
+			return createKnownSkillRootMetadata("user", userSkillsDir);
+		}
+		if (source === "project" && isUnderPath(resolvedPath, projectSkillsDir)) {
+			return createKnownSkillRootMetadata("project", projectSkillsDir);
+		}
+		return undefined;
+	};
+
 	for (const rawPath of skillPaths) {
 		const resolvedPath = resolveSkillPath(rawPath, cwd);
 		if (!existsSync(resolvedPath)) {
@@ -592,15 +629,13 @@ export function loadSkills(options: LoadSkillsOptions = {}): LoadSkillsResult {
 			const stats = statSync(resolvedPath);
 			const source = getSource(resolvedPath);
 			if (stats.isDirectory()) {
-				addSkills(
-					loadSkillsFromDirInternal(resolvedPath, source, true, undefined, undefined, resourceMetadataByPath),
-				);
+				const validationMetadata = getValidationMetadata(resolvedPath, source);
+				const metadataByPath =
+					resourceMetadataByPath ??
+					(validationMetadata ? new Map([[resolvedPath, validationMetadata]]) : undefined);
+				addSkills(loadSkillsFromDirInternal(resolvedPath, source, true, undefined, undefined, metadataByPath));
 			} else if (stats.isFile() && resolvedPath.endsWith(".md")) {
-				const result = loadSkillFromFile(
-					resolvedPath,
-					source,
-					getMetadataForPath(resolvedPath, resourceMetadataByPath),
-				);
+				const result = loadSkillFromFile(resolvedPath, source, getValidationMetadata(resolvedPath, source));
 				if (result.skill) {
 					addSkills({ skills: [result.skill], diagnostics: result.diagnostics });
 				} else {
