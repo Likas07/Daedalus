@@ -79,7 +79,6 @@ import { copyToClipboard } from "../../utils/clipboard.js";
 import { extensionForImageMimeType, readClipboardImage } from "../../utils/clipboard-image.js";
 import { parseGitUrl } from "../../utils/git.js";
 import { ensureTool } from "../../utils/tools-manager.js";
-
 import { ArminComponent } from "./components/armin.js";
 import { AssistantMessageComponent } from "./components/assistant-message.js";
 import { BashExecutionComponent } from "./components/bash-execution.js";
@@ -99,6 +98,7 @@ import { keyText } from "./components/keybinding-hints.js";
 import { LoginDialogComponent } from "./components/login-dialog.js";
 import { ModelSelectorComponent } from "./components/model-selector.js";
 import { OAuthSelectorComponent } from "./components/oauth-selector.js";
+import { ReaderModeComponent } from "./components/reader-mode.js";
 import { ScopedModelsSelectorComponent } from "./components/scoped-models-selector.js";
 import { SessionSelectorComponent } from "./components/session-selector.js";
 import { SettingsSelectorComponent } from "./components/settings-selector.js";
@@ -108,6 +108,20 @@ import { TreeSelectorComponent } from "./components/tree-selector.js";
 import { UserMessageComponent } from "./components/user-message.js";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.js";
 import { type RecentSession, WelcomeComponent } from "./components/welcome.js";
+import {
+	getEditorUnavailableMessage,
+	getExportFormat,
+	getNativeDumpUnavailableMessage,
+	selectAssistantResponseForCopy,
+} from "./escape-hatches.js";
+import {
+	type HistoryAnchorInput,
+	type MeasuredHistoryAnchor,
+	selectLastUserMessage,
+	selectLatestAssistantMessage,
+	selectNextMessage,
+	selectPreviousMessage,
+} from "./history-navigation.js";
 import { getInteractiveResumeRecoveryAction, type InteractiveResumeRecoveryChoice } from "./resume-recovery.js";
 import { wireSelectionCopy } from "./selection-copy.js";
 import {
@@ -156,7 +170,10 @@ class HistoryDetachedIndicatorComponent implements Component {
 		if (this.historyViewport.isAtBottom()) {
 			return [];
 		}
-		return [theme.fg("borderMuted", "─".repeat(width)), theme.fg("dim", truncateToWidth("Viewing history", width))];
+		const maxOffset = Math.max(0, this.historyViewport.getContentHeight() - this.historyViewport.getHeight());
+		const position = maxOffset === 0 ? 100 : Math.round((this.historyViewport.getScrollOffset() / maxOffset) * 100);
+		const hint = `Viewing history ${position}% · ${keyText("app.reader.open")} reader · End to follow latest · PageUp/PageDown scroll`;
+		return [theme.fg("borderMuted", "─".repeat(width)), theme.fg("dim", truncateToWidth(hint, width))];
 	}
 
 	invalidate(): void {}
@@ -272,6 +289,9 @@ export class InteractiveMode {
 	// Streaming message tracking
 	private streamingComponent: AssistantMessageComponent | undefined = undefined;
 	private streamingMessage: AssistantMessage | undefined = undefined;
+
+	// Message anchors used by app.history navigation actions.
+	private historyAnchors: HistoryAnchorInput[] = [];
 
 	// Tool execution tracking: toolCallId -> component
 	private pendingTools = new Map<string, ToolExecutionComponent>();
@@ -1446,6 +1466,39 @@ export class InteractiveMode {
 		this.ui.requestRender();
 	}
 
+	private scrollHistoryToOffset(offset: number): void {
+		this.historyViewport.scrollBy(offset - this.historyViewport.getScrollOffset());
+		this.ui.requestRender();
+	}
+
+	private registerHistoryAnchor(id: string, role: HistoryAnchorInput["role"], component: Component): void {
+		this.historyAnchors.push({ id, role, component });
+	}
+
+	private measureHistoryAnchors(): MeasuredHistoryAnchor[] {
+		const registered = new Map<Component, HistoryAnchorInput>();
+		for (const anchor of this.historyAnchors) registered.set(anchor.component, anchor);
+
+		let startLine = this.headerContainer.render(this.ui.terminal.columns).length;
+		const measured: MeasuredHistoryAnchor[] = [];
+		for (const child of this.chatContainer.children) {
+			const height = child.render(this.ui.terminal.columns).length;
+			const anchor = registered.get(child);
+			if (anchor) {
+				measured.push({ ...anchor, startLine, height, endLine: startLine + height });
+			}
+			startLine += height;
+		}
+		return measured;
+	}
+
+	private handleHistoryMessageJump(
+		select: (anchors: readonly MeasuredHistoryAnchor[], viewportOffset: number) => { scrollOffset: number },
+	): void {
+		const selection = select(this.measureHistoryAnchors(), this.historyViewport.getScrollOffset());
+		this.scrollHistoryToOffset(selection.scrollOffset);
+	}
+
 	private async handleFatalRuntimeError(prefix: string, error: unknown): Promise<never> {
 		const message = error instanceof Error ? error.message : String(error);
 		this.showError(`${prefix}: ${message}`);
@@ -1461,6 +1514,7 @@ export class InteractiveMode {
 		this.streamingComponent = undefined;
 		this.streamingMessage = undefined;
 		this.pendingTools.clear();
+		this.historyAnchors = [];
 		this.renderInitialMessages();
 	}
 
@@ -2092,7 +2146,7 @@ export class InteractiveMode {
 				if (!customEditor.onExtensionShortcut) {
 					customEditor.onExtensionShortcut = (data: string) => this.defaultEditor.onExtensionShortcut?.(data);
 				}
-				// Copy action handlers (clear, suspend, model switching, etc.)
+				// Copy all app action handlers, including app.history.*, so replacement editors inherit navigation.
 				for (const [action, handler] of this.defaultEditor.actionHandlers) {
 					(customEditor.actionHandlers as Map<string, () => void>).set(action, handler);
 				}
@@ -2302,6 +2356,7 @@ export class InteractiveMode {
 		this.ui.onDebug = () => this.handleDebugCommand();
 		this.defaultEditor.onAction("app.model.select", () => this.showModelSelector());
 		this.defaultEditor.onAction("app.tools.expand", () => this.toggleToolOutputExpansion());
+		this.defaultEditor.onAction("app.reader.open", () => this.openReaderMode());
 		this.defaultEditor.onAction("app.tools.focusLatestActionable", () => this.focusLatestActionableTool());
 		this.defaultEditor.onAction("app.thinking.toggle", () => this.toggleThinkingBlockVisibility());
 		this.defaultEditor.onAction("app.editor.external", () => this.openExternalEditor());
@@ -2311,6 +2366,48 @@ export class InteractiveMode {
 		this.defaultEditor.onAction("app.session.tree", () => this.showTreeSelector());
 		this.defaultEditor.onAction("app.session.fork", () => this.showUserMessageSelector());
 		this.defaultEditor.onAction("app.session.resume", () => this.showSessionSelector());
+		this.defaultEditor.onAction("app.history.pageUp", () => {
+			this.historyViewport.pageUp();
+			this.ui.requestRender();
+		});
+		this.defaultEditor.onAction("app.history.pageDown", () => {
+			this.historyViewport.pageDown();
+			this.ui.requestRender();
+		});
+		this.defaultEditor.onAction("app.history.halfPageUp", () => {
+			this.historyViewport.halfPageUp();
+			this.ui.requestRender();
+		});
+		this.defaultEditor.onAction("app.history.halfPageDown", () => {
+			this.historyViewport.halfPageDown();
+			this.ui.requestRender();
+		});
+		this.defaultEditor.onAction("app.history.top", () => {
+			this.historyViewport.scrollToTop();
+			this.ui.requestRender();
+		});
+		this.defaultEditor.onAction("app.history.bottom", () => this.scrollHistoryToBottom());
+		this.defaultEditor.onAction("app.history.previousMessage", () =>
+			this.handleHistoryMessageJump(selectPreviousMessage),
+		);
+		this.defaultEditor.onAction("app.history.nextMessage", () => this.handleHistoryMessageJump(selectNextMessage));
+		this.defaultEditor.onAction("app.history.lastUser", () =>
+			this.handleHistoryMessageJump((anchors) => selectLastUserMessage(anchors)),
+		);
+		this.defaultEditor.onAction("app.history.latestAssistant", () =>
+			this.handleHistoryMessageJump((anchors) => selectLatestAssistantMessage(anchors)),
+		);
+		this.defaultEditor.onAction("app.history.copyLastAssistant", () => this.handleCopyCommand("last"));
+		this.defaultEditor.onAction("app.escape.copyCurrentResponse", () => this.handleCopyCommand("current"));
+		this.defaultEditor.onAction("app.escape.copyLastResponse", () => this.handleCopyCommand("last"));
+		this.defaultEditor.onAction("app.escape.openResponseInEditor", () => this.handleEditorViewCommand("response"));
+		this.defaultEditor.onAction("app.escape.openTranscriptInEditor", () =>
+			this.handleEditorViewCommand("transcript"),
+		);
+		this.defaultEditor.onAction("app.escape.exportMarkdown", () => this.handleExportCommand("/export session.md"));
+		this.defaultEditor.onAction("app.escape.exportHtml", () => this.handleExportCommand("/export"));
+		this.defaultEditor.onAction("app.escape.exportJsonl", () => this.handleExportCommand("/export session.jsonl"));
+		this.defaultEditor.onAction("app.escape.nativeDump", () => this.handleNativeDumpCommand());
 
 		this.defaultEditor.onChange = (text: string) => {
 			const wasBashMode = this.isBashMode;
@@ -2385,8 +2482,18 @@ export class InteractiveMode {
 				this.editor.setText("");
 				return;
 			}
-			if (text === "/copy") {
-				await this.handleCopyCommand();
+			if (text === "/copy" || text === "/copy current" || text === "/copy last") {
+				await this.handleCopyCommand(text.includes("current") ? "current" : "last");
+				this.editor.setText("");
+				return;
+			}
+			if (text === "/editor" || text === "/editor response" || text === "/editor transcript") {
+				this.handleEditorViewCommand(text.includes("transcript") ? "transcript" : "response");
+				this.editor.setText("");
+				return;
+			}
+			if (text === "/dump") {
+				this.handleNativeDumpCommand();
 				this.editor.setText("");
 				return;
 			}
@@ -2603,6 +2710,7 @@ export class InteractiveMode {
 					);
 					this.streamingMessage = event.message;
 					this.chatContainer.addChild(this.streamingComponent);
+					this.registerHistoryAnchor(crypto.randomUUID(), "assistant", this.streamingComponent);
 					this.streamingComponent.updateContent(this.streamingMessage);
 					this.ui.requestRender();
 				}
@@ -2865,7 +2973,10 @@ export class InteractiveMode {
 		this.ui.requestRender();
 	}
 
-	private addMessageToChat(message: AgentMessage, options?: { populateHistory?: boolean }): void {
+	private addMessageToChat(
+		message: AgentMessage,
+		options?: { populateHistory?: boolean; collapseAssistantLongText?: boolean },
+	): void {
 		switch (message.role) {
 			case "bashExecution": {
 				const component = new BashExecutionComponent(message.command, this.ui, message.excludeFromContext);
@@ -2915,7 +3026,7 @@ export class InteractiveMode {
 							skillBlock,
 							this.getMarkdownThemeWithSettings(),
 						);
-						component.setExpanded(this.toolOutputExpanded);
+						component.setExpanded(false);
 						this.chatContainer.addChild(component);
 						// Render user message separately if present
 						if (skillBlock.userMessage) {
@@ -2924,10 +3035,12 @@ export class InteractiveMode {
 								this.getMarkdownThemeWithSettings(),
 							);
 							this.chatContainer.addChild(userComponent);
+							this.registerHistoryAnchor(crypto.randomUUID(), "user", userComponent);
 						}
 					} else {
 						const userComponent = new UserMessageComponent(textContent, this.getMarkdownThemeWithSettings());
 						this.chatContainer.addChild(userComponent);
+						this.registerHistoryAnchor(crypto.randomUUID(), "user", userComponent);
 					}
 					if (options?.populateHistory) {
 						this.editor.addToHistory?.(textContent);
@@ -2941,8 +3054,10 @@ export class InteractiveMode {
 					this.hideThinkingBlock,
 					this.getMarkdownThemeWithSettings(),
 					this.hiddenThinkingLabel,
+					options?.collapseAssistantLongText ? { collapseLongText: true } : {},
 				);
 				this.chatContainer.addChild(assistantComponent);
+				this.registerHistoryAnchor(message.responseId ?? crypto.randomUUID(), "assistant", assistantComponent);
 				break;
 			}
 			case "toolResult": {
@@ -2972,10 +3087,14 @@ export class InteractiveMode {
 			this.updateEditorBorderColor();
 		}
 
-		for (const message of sessionContext.messages) {
+		const latestAssistantIndex = sessionContext.messages.findLastIndex((message) => message.role === "assistant");
+
+		for (const [messageIndex, message] of sessionContext.messages.entries()) {
 			// Assistant messages need special handling for tool calls
 			if (message.role === "assistant") {
-				this.addMessageToChat(message);
+				this.addMessageToChat(message, {
+					collapseAssistantLongText: messageIndex !== latestAssistantIndex,
+				});
 				// Render tool call components
 				for (const content of message.content) {
 					if (content.type === "toolCall") {
@@ -4489,8 +4608,12 @@ export class InteractiveMode {
 		const outputPath = parts.length > 1 ? parts[1] : undefined;
 
 		try {
-			if (outputPath?.endsWith(".jsonl")) {
+			const format = getExportFormat(outputPath);
+			if (format === "jsonl") {
 				const filePath = this.session.exportToJsonl(outputPath);
+				this.showStatus(`Session exported to: ${filePath}`);
+			} else if (format === "markdown") {
+				const filePath = this.session.exportToMarkdown(outputPath);
 				this.showStatus(`Session exported to: ${filePath}`);
 			} else {
 				const filePath = await this.session.exportToHtml(outputPath);
@@ -4644,19 +4767,108 @@ export class InteractiveMode {
 		}
 	}
 
-	private async handleCopyCommand(): Promise<void> {
-		const text = this.session.getLastAssistantText();
-		if (!text) {
+	private async handleCopyCommand(target: "current" | "last" = "last"): Promise<void> {
+		const response = selectAssistantResponseForCopy({
+			last: this.session.getLastAssistantResponse(),
+			preferCurrent: target === "current",
+		});
+		if (!response?.text) {
 			this.showError("No agent messages to copy yet.");
 			return;
 		}
 
 		try {
-			await copyToClipboard(text);
-			this.showStatus("Copied last agent message to clipboard");
+			await copyToClipboard(response.text);
+			this.showStatus(
+				target === "current"
+					? "Copied current agent message to clipboard"
+					: "Copied last agent message to clipboard",
+			);
 		} catch (error) {
 			this.showError(error instanceof Error ? error.message : String(error));
 		}
+	}
+
+	private openReaderMode(): void {
+		const selection = this.measureHistoryAnchors().find(
+			(anchor) =>
+				anchor.role === "assistant" &&
+				this.historyViewport.getScrollOffset() >= anchor.startLine &&
+				this.historyViewport.getScrollOffset() < anchor.endLine,
+		);
+		const selectedResponse = selection?.id ? this.session.getAssistantResponseByResponseId(selection.id) : undefined;
+		const response = selectedResponse ?? undefined;
+		const transcript = response ? undefined : this.session.getCurrentBranchTranscriptMarkdown();
+		const content = response?.text ?? transcript;
+		if (!content) {
+			this.showError("No transcript content to open.");
+			return;
+		}
+
+		void this.showExtensionCustom<void>(
+			(_tui, _theme, _keybindings, done) =>
+				new ReaderModeComponent({
+					title: response ? "Assistant response" : "Transcript reader",
+					response: response?.text,
+					transcript,
+					actions: {
+						close: () => done(),
+						copy: (text) =>
+							void copyToClipboard(text)
+								.then(() => this.showStatus("Copied reader content to clipboard"))
+								.catch((error) => this.showError(error instanceof Error ? error.message : String(error))),
+						open: (text) => this.openReadOnlyEditorView(text, response ? "response" : "transcript"),
+						dump: () => this.handleNativeDumpCommand(),
+						export: () => void this.handleExportCommand("/export session.md"),
+					},
+				}),
+		);
+	}
+
+	private handleEditorViewCommand(target: "response" | "transcript"): void {
+		const content =
+			target === "transcript"
+				? this.session.getCurrentBranchTranscriptMarkdown()
+				: this.session.getLastAssistantResponse()?.text;
+		if (!content) {
+			this.showError(target === "transcript" ? "No transcript content to open." : "No agent messages to open yet.");
+			return;
+		}
+		this.openReadOnlyEditorView(content, target);
+	}
+
+	private openReadOnlyEditorView(content: string, target: "response" | "transcript"): void {
+		const editorCmd = process.env.VISUAL || process.env.EDITOR;
+		if (!editorCmd) {
+			this.showError(getEditorUnavailableMessage());
+			return;
+		}
+		const tmpFile = path.join(os.tmpdir(), `daedalus-${target}-${Date.now()}.md`);
+		try {
+			fs.writeFileSync(tmpFile, `${content}\n`, "utf-8");
+			this.ui.stop();
+			const [editor, ...editorArgs] = editorCmd.split(" ");
+			const result = spawnSync(editor, [...editorArgs, tmpFile], {
+				stdio: "inherit",
+				shell: process.platform === "win32",
+			});
+			if (result.status === 0) {
+				this.showStatus(`Opened read-only ${target} view in ${tmpFile}`);
+			} else {
+				this.showError(
+					`Editor exited with status ${result.status ?? "unknown"}; read-only view remains at ${tmpFile}`,
+				);
+			}
+		} catch (error) {
+			this.showError(`Failed to open editor view: ${error instanceof Error ? error.message : String(error)}`);
+		} finally {
+			this.ui.start();
+			this.ui.requestRender(true);
+		}
+	}
+
+	private handleNativeDumpCommand(): void {
+		this.showError(getNativeDumpUnavailableMessage());
 	}
 
 	private handleNameCommand(text: string): void {
@@ -4802,6 +5014,7 @@ export class InteractiveMode {
 		const cycleThinkingLevel = this.getAppKeyDisplay("app.thinking.cycle");
 		const cycleModelForward = this.getAppKeyDisplay("app.model.cycleForward");
 		const selectModel = this.getAppKeyDisplay("app.model.select");
+		const readerOpen = this.getAppKeyDisplay("app.reader.open");
 		const expandTools = this.getAppKeyDisplay("app.tools.expand");
 		const toggleThinking = this.getAppKeyDisplay("app.thinking.toggle");
 		const externalEditor = this.getAppKeyDisplay("app.editor.external");
@@ -4846,6 +5059,7 @@ export class InteractiveMode {
 | \`${cycleThinkingLevel}\` | Cycle thinking level |
 | \`${cycleModelForward}\` / \`${cycleModelBackward}\` | Cycle models |
 | \`${selectModel}\` | Open model selector |
+| \`${readerOpen}\` | Open reader mode for the current response or transcript |
 | \`${expandTools}\` | Toggle tool output expansion |
 | \`${toggleThinking}\` | Toggle thinking block visibility |
 | \`${externalEditor}\` | Edit message in external editor |
@@ -4855,6 +5069,16 @@ export class InteractiveMode {
 | \`/\` | Slash commands |
 | \`!\` | Run bash command |
 | \`!!\` | Run bash command (excluded from context) |
+
+**Reader mode**
+| Key | Action |
+|-----|--------|
+| PageUp / PageDown / Home / End | Scroll reader content |
+| /, n / N | Search and jump between matches |
+| h / H, m / M | Jump headings or messages |
+| a | Toggle expand-all rendering |
+| c, o, d, e | Copy, open in editor, native dump, export |
+| Esc / q | Close reader |
 `;
 
 		// Add extension-registered shortcuts

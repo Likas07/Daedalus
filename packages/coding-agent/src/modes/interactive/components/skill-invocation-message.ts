@@ -1,6 +1,7 @@
 import { Box, Markdown, type MarkdownTheme, Text } from "@daedalus-pi/tui";
 import type { ParsedSkillBlock } from "../../../core/agent-session.js";
 import { getMarkdownTheme, theme } from "../theme/theme.js";
+import { truncateForDisplayOnly } from "./display-truncate.js";
 import { keyText } from "./keybinding-hints.js";
 
 /**
@@ -8,6 +9,8 @@ import { keyText } from "./keybinding-hints.js";
  * Uses same background color as custom messages for visual consistency.
  * Only renders the skill block itself - user message is rendered separately.
  */
+
+const EXPANDED_SKILL_CONTENT_LINES = 80;
 export class SkillInvocationMessageComponent extends Box {
 	private expanded = false;
 	private skillBlock: ParsedSkillBlock;
@@ -34,12 +37,18 @@ export class SkillInvocationMessageComponent extends Box {
 		this.clear();
 
 		if (this.expanded) {
-			// Expanded: label + skill name header + full content
+			// Expanded: label + skill name header + display-only bounded content preview
 			const label = theme.fg("customMessageLabel", `\x1b[1m[skill]\x1b[22m`);
 			this.addChild(new Text(label, 0, 0));
 			const header = `**${this.skillBlock.name}**\n\n`;
+			const content = truncateForDisplayOnly(this.skillBlock.content, {
+				collapsedLines: EXPANDED_SKILL_CONTENT_LINES,
+				expandedLines: EXPANDED_SKILL_CONTENT_LINES,
+				expanded: true,
+				label: "skill content",
+			});
 			this.addChild(
-				new Markdown(header + this.skillBlock.content, 0, 0, this.markdownTheme, {
+				new Markdown(header + content.text, 0, 0, this.markdownTheme, {
 					color: (text: string) => theme.fg("customMessageText", text),
 				}),
 			);

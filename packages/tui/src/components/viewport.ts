@@ -92,6 +92,14 @@ export class Viewport implements Component {
 		this.scrollBy(Math.max(1, this.height));
 	}
 
+	halfPageUp(): void {
+		this.scrollBy(-this.getHalfPageScrollLines());
+	}
+
+	halfPageDown(): void {
+		this.scrollBy(this.getHalfPageScrollLines());
+	}
+
 	invalidate(): void {
 		this.child.invalidate();
 	}
@@ -187,6 +195,10 @@ export class Viewport implements Component {
 		const maxThumbStart = Math.max(0, this.height - thumbHeight);
 		const thumbStart = maxScrollOffset === 0 ? 0 : Math.round((this.scrollOffset / maxScrollOffset) * maxThumbStart);
 		return { thumbStart, thumbEnd: thumbStart + thumbHeight };
+	}
+
+	private getHalfPageScrollLines(): number {
+		return Math.max(1, Math.floor(this.height / 2));
 	}
 
 	private getMaxScrollOffset(contentHeight: number): number {

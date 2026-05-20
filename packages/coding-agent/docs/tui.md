@@ -13,10 +13,31 @@ Daedalus runs as a **full-screen terminal application** using the alternate scre
 ### Display Model
 
 - **Alternate screen buffer**: Daedalus activates the alternate screen (`alternateScreen: true`) on startup and restores the original terminal content on exit. The application owns the entire terminal viewport.
-- **Fixed frame mode**: The TUI operates in fixed-frame mode (`setFixedFrameMode(true)`), meaning the viewport always starts at row 0. Content never scrolls the terminal buffer itself — all scrolling is handled by a virtual viewport.
-- **Virtual viewport with scrollbar**: The main content area (header, chat messages, tool output) is wrapped in a `Viewport` component that provides virtual scrolling with a visible scrollbar indicator. Users can scroll through history with mouse wheel.
-- **Fixed bottom panel**: The editor, widgets, and footer are rendered in a fixed `bottomContainer` that stays pinned to the bottom of the screen regardless of scroll position. This ensures the input area and status footer are always visible.
-- **Mouse wheel scrolling**: Mouse wheel events (SGR extended mouse protocol) scroll the history viewport up/down by 3 lines per tick. When scrolled above the bottom, a "Viewing history" indicator appears.
+- **Fixed frame mode**: The TUI operates in fixed-frame mode (`setFixedFrameMode(true)`), meaning the viewport always starts at row 0. Chat content never scrolls the terminal buffer itself during normal use.
+- **Virtual history viewport**: The main content area (header, chat messages, tool output) is wrapped in a `Viewport` component. It renders a slice of the full history while the input frame remains stable.
+- **Keyboard history navigation**: The editor owns app-level history bindings: `PageUp`/`PageDown` scroll a page, `Alt+PageUp`/`Alt+PageDown` scroll a half page, `Home` jumps to the top, `End` returns to live output, `Ctrl+O` opens reader mode, and `Ctrl+Alt+Up`/`Ctrl+Alt+Down`, `Ctrl+Alt+U`, and `Ctrl+Alt+A` jump between message anchors.
+- **Mouse wheel scrolling**: Mouse wheel events (SGR extended mouse protocol) scroll the history viewport up/down by 3 lines per tick without changing editor focus.
+- **Fixed bottom panel**: The editor, widgets, pending-message area, status lines, and footer are rendered in a fixed `bottomContainer` pinned to the bottom of the screen regardless of history position. When detached from live output, an orientation line shows the approximate history position and the shipped keys for returning/scrolling.
+- **Escape hatches for long content**: The primary UX is the alternate-screen virtual viewport plus `Ctrl+O` reader mode, not native terminal scrollback. Use reader mode, `/copy`, `/copy current`, `/editor`, `/editor transcript`, `/export path.md`, `/export path.html`, or `/export path.jsonl` when you need full response/transcript access outside the fixed frame. `/dump` is an explicit native-scrollback fallback command; when native dumping is unavailable it reports a visible error and points to export/editor paths instead of silently doing nothing.
+
+### Long-content escape hatches
+
+All escape-hatch actions report a status or an error; they should never fail silently.
+
+Reader mode (`Ctrl+O`) opens the current assistant response when detached on an assistant message; otherwise it opens the full current-branch transcript. It uses transcript/response source helpers, not folded rendered text. Inside reader mode:
+- `PageUp`/`PageDown`/`Home`/`End` scroll the full content.
+- `/` starts search, `n`/`N` move between matches, `h`/`H` jump headings, and `m`/`M` jump message anchors.
+- `a` toggles expand-all rendering.
+- `c`, `o`, `d`, and `e` copy, open in editor, request native dump, and export.
+- `Esc` or `q` closes reader mode.
+
+Anti-goals: long assistant answers must not be silently truncated; the latest answer is not collapsed by default; native scrollback is a fallback escape hatch, not the primary long-response UX.
+
+- `/copy` preserves the historical behavior and copies the latest assistant response. `/copy last` is equivalent.
+- `/copy current` copies the current assistant response when one is selected/anchored, falling back to the latest assistant response if there is no current anchor.
+- `/editor` or `/editor response` writes the latest/current response to a temporary Markdown file and opens `$VISUAL` or `$EDITOR`. `/editor transcript` opens the full current-branch transcript. These files are read-only external views from Daedalus' perspective: edits in the editor are not imported back into session state.
+- `/export path.md` and `/export path.markdown` export the current branch transcript as Markdown. Existing `/export` and `/export path.html` HTML behavior is preserved, and `/export path.jsonl` still writes JSONL.
+- `/dump` is explicit. Native scrollback is not the default long-response UX; if the fixed-frame TUI cannot safely dump into native scrollback, Daedalus shows an error directing users to Markdown/HTML/editor escape hatches.
 
 ### Layout Structure
 

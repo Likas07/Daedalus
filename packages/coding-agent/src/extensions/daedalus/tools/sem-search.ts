@@ -9,6 +9,7 @@ import {
 	truncateHead,
 	truncateLine,
 } from "../../../core/tools/truncate.js";
+import { truncateForDisplayOnly } from "../../../modes/interactive/components/display-truncate.js";
 import { formatTruncationNotice, saveToTempFile } from "../shared/truncation.js";
 import { createSemanticStoreRuntime } from "./semantic-store.js";
 import { requireSearchableSemanticWorkspace } from "./semantic-workspace.js";
@@ -268,9 +269,15 @@ export default function semSearchExtension(pi: ExtensionAPI): void {
 				: "semantic query";
 			return new Text(`${theme.fg("toolTitle", theme.bold("sem_search"))} ${theme.fg("accent", label)}`, 0, 0);
 		},
-		renderResult(result, _options, theme) {
+		renderResult(result, options, theme) {
 			const text = result.content.find((block) => block.type === "text")?.text ?? "";
-			return new Text(theme.fg("toolOutput", text), 0, 0);
+			const display = truncateForDisplayOnly(text, {
+				expanded: options?.expanded,
+				collapsedLines: 20,
+				expandedLines: 140,
+				label: "sem_search",
+			});
+			return new Text(theme.fg("toolOutput", display.text), 0, 0);
 		},
 	});
 }

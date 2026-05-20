@@ -18,6 +18,7 @@ import { allToolDefinitions } from "../../../core/tools/index.js";
 import { getTextOutput as getRenderedTextOutput } from "../../../core/tools/render-utils.js";
 import { convertToPng } from "../../../utils/image-convert.js";
 import { theme } from "../theme/theme.js";
+import { foldHeadTailForDisplayOnly } from "./display-truncate.js";
 
 export interface ToolExecutionOptions {
 	showImages?: boolean;
@@ -180,7 +181,7 @@ export class ToolExecutionComponent extends Container implements Focusable {
 	}
 
 	private createResultFallback(): Component | undefined {
-		const output = this.getTextOutput();
+		const output = this.getDisplayTextOutput();
 		if (!output) {
 			return undefined;
 		}
@@ -384,13 +385,25 @@ export class ToolExecutionComponent extends Container implements Focusable {
 		return getRenderedTextOutput(this.result, this.showImages);
 	}
 
+	private getDisplayTextOutput(): string {
+		const output = this.getTextOutput();
+		if (!output || this.expanded) {
+			return output;
+		}
+
+		return foldHeadTailForDisplayOnly(output, {
+			lineBudget: 20,
+			fullContentHint: "expand or open reader/export/editor for full content",
+		}).text;
+	}
+
 	private formatToolExecution(): string {
 		let text = theme.fg("toolTitle", theme.bold(this.toolName));
 		const content = JSON.stringify(this.args, null, 2);
 		if (content) {
 			text += `\n\n${content}`;
 		}
-		const output = this.getTextOutput();
+		const output = this.getDisplayTextOutput();
 		if (output) {
 			text += `\n${output}`;
 		}

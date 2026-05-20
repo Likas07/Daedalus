@@ -20,6 +20,7 @@ export interface AppKeybindings {
 	"app.model.cycleBackward": true;
 	"app.model.select": true;
 	"app.tools.expand": true;
+	"app.reader.open": true;
 	"app.tools.focusLatestActionable": true;
 	"app.thinking.toggle": true;
 	"app.session.toggleNamedFilter": true;
@@ -40,6 +41,25 @@ export interface AppKeybindings {
 	"app.session.rename": true;
 	"app.session.delete": true;
 	"app.session.deleteNoninvasive": true;
+	"app.history.pageUp": true;
+	"app.history.pageDown": true;
+	"app.history.halfPageUp": true;
+	"app.history.halfPageDown": true;
+	"app.history.top": true;
+	"app.history.bottom": true;
+	"app.history.previousMessage": true;
+	"app.history.nextMessage": true;
+	"app.history.lastUser": true;
+	"app.history.latestAssistant": true;
+	"app.history.copyLastAssistant": true;
+	"app.escape.copyCurrentResponse": true;
+	"app.escape.copyLastResponse": true;
+	"app.escape.openResponseInEditor": true;
+	"app.escape.openTranscriptInEditor": true;
+	"app.escape.exportMarkdown": true;
+	"app.escape.exportHtml": true;
+	"app.escape.exportJsonl": true;
+	"app.escape.nativeDump": true;
 }
 
 export type AppKeybinding = keyof AppKeybindings;
@@ -67,7 +87,8 @@ export const KEYBINDINGS = {
 		description: "Cycle to previous model",
 	},
 	"app.model.select": { defaultKeys: "ctrl+l", description: "Open model selector" },
-	"app.tools.expand": { defaultKeys: "ctrl+o", description: "Toggle tool output" },
+	"app.reader.open": { defaultKeys: "ctrl+o", description: "Open reader mode" },
+	"app.tools.expand": { defaultKeys: "ctrl+alt+o", description: "Toggle tool output" },
 	"app.tools.focusLatestActionable": {
 		defaultKeys: "ctrl+alt+i",
 		description: "Cycle actionable tool rows",
@@ -136,6 +157,58 @@ export const KEYBINDINGS = {
 		defaultKeys: "ctrl+backspace",
 		description: "Delete session when query is empty",
 	},
+	"app.history.pageUp": { defaultKeys: "pageUp", description: "Scroll history up one page" },
+	"app.history.pageDown": { defaultKeys: "pageDown", description: "Scroll history down one page" },
+	"app.history.halfPageUp": {
+		defaultKeys: "alt+pageUp",
+		description: "Scroll history up half a page",
+	},
+	"app.history.halfPageDown": {
+		defaultKeys: "alt+pageDown",
+		description: "Scroll history down half a page",
+	},
+	"app.history.top": { defaultKeys: "home", description: "Jump to the first history message" },
+	"app.history.bottom": { defaultKeys: "end", description: "Jump to the latest history message" },
+	"app.history.previousMessage": {
+		defaultKeys: "ctrl+alt+up",
+		description: "Jump to the previous history message",
+	},
+	"app.history.nextMessage": {
+		defaultKeys: "ctrl+alt+down",
+		description: "Jump to the next history message",
+	},
+	"app.history.lastUser": {
+		defaultKeys: "ctrl+alt+u",
+		description: "Jump to the last user message",
+	},
+	"app.history.latestAssistant": {
+		defaultKeys: "ctrl+alt+a",
+		description: "Jump to the latest assistant message",
+	},
+	"app.history.copyLastAssistant": {
+		defaultKeys: "ctrl+alt+c",
+		description: "Copy the latest assistant message",
+	},
+	"app.escape.copyCurrentResponse": {
+		defaultKeys: [],
+		description: "Copy the current assistant response, falling back to latest",
+	},
+	"app.escape.copyLastResponse": {
+		defaultKeys: [],
+		description: "Copy the latest assistant response",
+	},
+	"app.escape.openResponseInEditor": {
+		defaultKeys: [],
+		description: "Open the latest assistant response in an external editor",
+	},
+	"app.escape.openTranscriptInEditor": {
+		defaultKeys: [],
+		description: "Open the transcript in an external editor",
+	},
+	"app.escape.exportMarkdown": { defaultKeys: [], description: "Export transcript to Markdown" },
+	"app.escape.exportHtml": { defaultKeys: [], description: "Export transcript to HTML" },
+	"app.escape.exportJsonl": { defaultKeys: [], description: "Export transcript to JSONL" },
+	"app.escape.nativeDump": { defaultKeys: [], description: "Explicit native scrollback dump fallback" },
 } as const satisfies KeybindingDefinitions;
 
 const KEYBINDING_NAME_MIGRATIONS = {

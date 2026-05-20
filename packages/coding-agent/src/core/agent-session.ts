@@ -113,6 +113,13 @@ import { type FileChange, FileChangeDetector } from "./tools/file-change-detecto
 import { createAllToolDefinitions } from "./tools/index.js";
 import { ReadLedger } from "./tools/read-ledger.js";
 import { createToolDefinitionFromAgentTool, wrapToolDefinition } from "./tools/tool-definition-wrapper.js";
+import {
+	type AssistantResponseSlice,
+	getAssistantResponseByEntryId,
+	getAssistantResponseByResponseId,
+	getLastAssistantResponse,
+	renderTranscriptMarkdown,
+} from "./transcript-export.js";
 
 // ============================================================================
 // Skill Block Parsing
@@ -3538,6 +3545,37 @@ export class AgentSession {
 			themeName,
 			toolRenderer,
 		});
+	}
+
+	/** Return the current branch transcript as markdown without mutating session state. */
+	getCurrentBranchTranscriptMarkdown(): string {
+		return renderTranscriptMarkdown(this.sessionManager.getBranch());
+	}
+
+	/** Export the current session branch to a Markdown file. */
+	exportToMarkdown(outputPath?: string): string {
+		const filePath = resolve(outputPath ?? `session-${new Date().toISOString().replace(/[:.]/g, "-")}.md`);
+		const dir = dirname(filePath);
+		if (!existsSync(dir)) {
+			mkdirSync(dir, { recursive: true });
+		}
+		writeFileSync(filePath, `${this.getCurrentBranchTranscriptMarkdown()}\n`);
+		return filePath;
+	}
+
+	/** Return text for the latest assistant response on the current branch. */
+	getLastAssistantResponse(): AssistantResponseSlice | undefined {
+		return getLastAssistantResponse(this.sessionManager.getBranch());
+	}
+
+	/** Return assistant response text by session entry id on the current branch. */
+	getAssistantResponseByEntryId(entryId: string): AssistantResponseSlice | undefined {
+		return getAssistantResponseByEntryId(this.sessionManager.getBranch(), entryId);
+	}
+
+	/** Return assistant response text by provider response id on the current branch. */
+	getAssistantResponseByResponseId(responseId: string): AssistantResponseSlice | undefined {
+		return getAssistantResponseByResponseId(this.sessionManager.getBranch(), responseId);
 	}
 
 	/**

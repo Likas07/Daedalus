@@ -12,6 +12,7 @@ import {
 } from "../../../core/tools/truncate.js";
 import { formatVisiblePath } from "../../../core/tools/visible-path.js";
 import { theme } from "../theme/theme.js";
+import { foldHeadTailForDisplayOnly } from "./display-truncate.js";
 import { DynamicBorder } from "./dynamic-border.js";
 import { keyHint, keyText } from "./keybinding-hints.js";
 import { truncateToVisualLines } from "./visual-truncate.js";
@@ -128,9 +129,15 @@ export class BashExecutionComponent extends Container {
 		// Get the lines to potentially display (after context truncation)
 		const availableLines = contextTruncation.content ? contextTruncation.content.split("\n") : [];
 
-		// Apply preview truncation based on expanded state
-		const previewLogicalLines = availableLines.slice(-PREVIEW_LINES);
-		const hiddenLineCount = availableLines.length - previewLogicalLines.length;
+		// Apply display-only head/tail folding when collapsed. Raw output and context paths stay full.
+		const displayResult = this.expanded
+			? { text: availableLines.join("\n"), truncated: false, hiddenLineCount: 0 }
+			: foldHeadTailForDisplayOnly(availableLines.join("\n"), {
+					lineBudget: PREVIEW_LINES,
+					fullContentHint: "expand or open reader/export for full content",
+				});
+		const displayLines = displayResult.text ? displayResult.text.split("\n") : [];
+		const hiddenLineCount = displayResult.hiddenLineCount;
 
 		// Rebuild content container
 		this.contentContainer.clear();
@@ -140,14 +147,14 @@ export class BashExecutionComponent extends Container {
 		this.contentContainer.addChild(header);
 
 		// Output
-		if (availableLines.length > 0) {
+		if (displayLines.length > 0) {
 			if (this.expanded) {
-				// Show all lines
-				const displayText = availableLines.map((line) => theme.fg("muted", line)).join("\n");
+				// Show all available display lines
+				const displayText = displayLines.map((line) => theme.fg("muted", line)).join("\n");
 				this.contentContainer.addChild(new Text(`\n${displayText}`, 1, 0));
 			} else {
 				// Use shared visual truncation utility with width-aware caching
-				const styledOutput = previewLogicalLines.map((line) => theme.fg("muted", line)).join("\n");
+				const styledOutput = displayLines.map((line) => theme.fg("muted", line)).join("\n");
 				const styledInput = `\n${styledOutput}`;
 				let cachedWidth: number | undefined;
 				let cachedLines: string[] | undefined;
@@ -180,7 +187,7 @@ export class BashExecutionComponent extends Container {
 					statusParts.push(`(${keyHint("app.tools.expand", "to collapse")})`);
 				} else {
 					statusParts.push(
-						`${theme.fg("muted", `... ${hiddenLineCount} more lines`)} (${keyHint("app.tools.expand", "to expand")})`,
+						`${theme.fg("muted", `+${hiddenLineCount} lines folded`)} (${keyHint("app.tools.expand", "to expand")})`,
 					);
 				}
 			}

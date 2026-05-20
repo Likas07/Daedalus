@@ -13,6 +13,7 @@ import {
 	truncateHead,
 	truncateLine,
 } from "../../../core/tools/truncate.js";
+import { truncateForDisplayOnly } from "../../../modes/interactive/components/display-truncate.js";
 import { ensureTool } from "../../../utils/tools-manager.js";
 import { formatTruncationNotice, saveToTempFile } from "../shared/truncation.js";
 
@@ -235,9 +236,15 @@ export default function fsSearchExtension(pi: ExtensionAPI): void {
 				0,
 			);
 		},
-		renderResult(result, _options, theme) {
+		renderResult(result, options, theme) {
 			const text = result.content.find((block) => block.type === "text")?.text ?? "";
-			return new Text(theme.fg("toolOutput", text), 0, 0);
+			const display = truncateForDisplayOnly(text, {
+				expanded: options?.expanded,
+				collapsedLines: 16,
+				expandedLines: 120,
+				label: "fs_search",
+			});
+			return new Text(theme.fg("toolOutput", display.text), 0, 0);
 		},
 	});
 }
