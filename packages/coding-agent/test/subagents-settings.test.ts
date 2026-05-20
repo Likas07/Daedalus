@@ -100,4 +100,22 @@ describe("SettingsManager subagent settings", () => {
 		manager.clearSubagentRoleOverride("sage");
 		expect(manager.getSubagentSettings().agents.sage).toBeUndefined();
 	});
+
+	it("returns delegation isolation settings from delegation.isolation", () => {
+		const manager = SettingsManager.inMemory({
+			delegation: { isolation: { mode: "reflink", merge: "branch" } },
+			subagents: {
+				// Legacy/wrong location must not influence the delegation isolation contract.
+				isolation: { mode: "worktree", merge: "branch" },
+			} as never,
+		});
+
+		expect(manager.getDelegationIsolationSettings()).toEqual({ mode: "reflink", merge: "branch" });
+	});
+
+	it("defaults delegation isolation to auto mode and patch merge", () => {
+		const manager = SettingsManager.inMemory();
+
+		expect(manager.getDelegationIsolationSettings()).toEqual({ mode: "auto", merge: "patch" });
+	});
 });

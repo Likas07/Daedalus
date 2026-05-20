@@ -2,6 +2,18 @@ export type SubagentExecutionModePreference = "foreground" | "background" | "eit
 export type SubagentIsolationPreference = "shared-branch" | "child-branch" | "either";
 export type SubagentDelegationAggressiveness = "conservative" | "balanced" | "aggressive";
 export type SubagentBranchIsolationThreshold = "never" | "high-risk" | "always";
+export type DelegationIsolationMode =
+	| "none"
+	| "auto"
+	| "apfs"
+	| "btrfs"
+	| "zfs"
+	| "reflink"
+	| "overlayfs"
+	| "projfs"
+	| "block-clone"
+	| "rcopy";
+export type DelegationIsolationMergeMode = "patch" | "branch";
 
 export interface SubagentRoleOverride {
 	model?: string;
@@ -14,6 +26,11 @@ export interface SubagentBranchIsolationSettings {
 	enabled?: boolean;
 	mutationThreshold?: SubagentBranchIsolationThreshold;
 	namingTemplate?: string;
+}
+
+export interface DelegationIsolationSettings {
+	mode?: DelegationIsolationMode;
+	merge?: DelegationIsolationMergeMode;
 }
 
 export interface SubagentSettings {

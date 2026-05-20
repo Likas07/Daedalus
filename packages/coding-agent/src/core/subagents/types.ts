@@ -35,7 +35,11 @@ export interface SubagentMergeBackResultDetails {
 }
 
 export interface SubagentWorkspaceMetadata {
+	/** Effective internal workspace behavior. */
 	isolation: SubagentWorkspaceIsolation;
+	/** Public artifact-first isolation request/effect metadata. */
+	requestedIsolated?: boolean;
+	effectiveIsolated?: boolean;
 	workspaceTarget?: WorkspaceTarget;
 	baseBranch?: string;
 	baseCommit?: string;
@@ -162,7 +166,9 @@ export interface SubagentRunRequest {
 	taskLabel?: string;
 	metadata?: SubagentRunMetadata;
 	onProgress?: (progress: SubagentRunProgress) => void;
-	/** New workspace target policy. Defaults to inherit; legacy child-branch maps to worktree. */
+	/** Public model-facing isolation flag. true requests artifact-first isolated delegation. */
+	isolated?: boolean;
+	/** Internal workspace target policy. Defaults to inherit; legacy child-branch maps to worktree. */
 	isolation?: SubagentWorkspaceIsolation;
 	mergeBack?: SubagentMergeBackPolicy;
 	baseBranch?: string;
@@ -203,6 +209,7 @@ export interface SubagentRunResult {
 	isolation?: SubagentWorkspaceIsolation;
 	workspaceTarget?: WorkspaceTarget;
 	workspaceMetadata?: SubagentWorkspaceMetadata;
+	isolated?: boolean;
 	baseBranch?: string;
 	mergeBack?: SubagentMergeBackPolicy;
 	mergeBackResult?: SubagentMergeBackResultDetails;
@@ -235,6 +242,7 @@ export interface ActiveSubagentRun {
 	isolation?: SubagentWorkspaceIsolation;
 	workspaceTarget?: WorkspaceTarget;
 	workspaceMetadata?: SubagentWorkspaceMetadata;
+	isolated?: boolean;
 	mergeBackResult?: SubagentMergeBackResultDetails;
 	taskBinding?: SubagentTaskBinding;
 }

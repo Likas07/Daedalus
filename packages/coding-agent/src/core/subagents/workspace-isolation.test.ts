@@ -201,6 +201,29 @@ describe("subagent workspace isolation", () => {
 		expect(seen.toolCwd).toContain(child);
 	});
 
+	test("isolated:true maps public API to worktree metadata", async () => {
+		const parent = tempDir("isolated-parent");
+		const child = tempDir("isolated-child");
+		const prepared = await prepareSubagentWorkspace({
+			cwd: parent,
+			runId: "iso123",
+			workspaceService: fakeWorkspaceService(parent, child),
+			request: {
+				agent,
+				parentSessionFile: join(parent, "parent.jsonl"),
+				goal: "g",
+				assignment: "a",
+				isolated: true,
+			},
+		});
+
+		expect(prepared.cwd).toBe(child);
+		expect(prepared.metadata?.isolation).toBe("worktree");
+		expect(prepared.metadata?.requestedIsolated).toBe(true);
+		expect(prepared.metadata?.effectiveIsolated).toBe(true);
+		expect(prepared.metadata?.mergeBack).toBe("patch");
+	});
+
 	test("inherit and shared behavior remain available", async () => {
 		const parent = tempDir("shared");
 		const child = tempDir("unused-child");

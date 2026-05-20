@@ -35,6 +35,7 @@ interface SubagentToolDetails {
 		files?: string[];
 	};
 	isolation?: string;
+	isolated?: boolean;
 	workspaceTarget?: {
 		cwd?: string;
 		branch?: string;
@@ -46,6 +47,8 @@ interface SubagentToolDetails {
 		isolation?: string;
 		baseBranch?: string;
 		baseCommit?: string;
+		requestedIsolated?: boolean;
+		effectiveIsolated?: boolean;
 		mergeBack?: string;
 		mergeBackArtifactPath?: string;
 		mergeBackBranch?: string;
@@ -80,8 +83,14 @@ function extractExecutablePlanHandoff(summary?: string, output?: string): Record
 	return handoff;
 }
 
-function formatCallMetadata(args: { isolation?: string; merge_back?: string; base_branch?: string }): string[] {
+function formatCallMetadata(args: {
+	isolated?: boolean;
+	isolation?: string;
+	merge_back?: string;
+	base_branch?: string;
+}): string[] {
 	const parts: string[] = [];
+	if (args.isolated !== undefined) parts.push(args.isolated ? "isolated" : "not isolated");
 	if (args.isolation) parts.push(`isolation ${args.isolation}`);
 	if (args.merge_back) parts.push(`merge_back ${args.merge_back}`);
 	if (args.base_branch) parts.push(`base ${args.base_branch}`);
@@ -89,15 +98,15 @@ function formatCallMetadata(args: { isolation?: string; merge_back?: string; bas
 }
 
 function formatResultMetadata(details: SubagentToolDetails): { inline: string[]; detail: string[] } {
-	const requestedIsolation = details.isolation;
+	const requestedIsolation = details.workspaceMetadata?.requestedIsolated ?? details.isolated;
 	const effectiveIsolation = details.workspaceMetadata?.isolation ?? details.workspaceTarget?.isolationMode;
 	const mergeBackPolicy = details.mergeBackResult?.policy ?? details.workspaceMetadata?.mergeBack;
 	const mergeBackStatus = details.mergeBackResult?.status;
 	const inline: string[] = [];
 	const detail: string[] = [];
 
-	if (requestedIsolation) inline.push(`isolation ${requestedIsolation}`);
-	if (effectiveIsolation && effectiveIsolation !== requestedIsolation) inline.push(`effective ${effectiveIsolation}`);
+	if (requestedIsolation !== undefined) inline.push(requestedIsolation ? "isolated" : "not isolated");
+	if (effectiveIsolation && effectiveIsolation !== details.isolation) inline.push(`effective ${effectiveIsolation}`);
 	if (mergeBackPolicy) {
 		inline.push(`merge_back ${mergeBackStatus ? `${mergeBackPolicy} · ${mergeBackStatus}` : mergeBackPolicy}`);
 	} else if (mergeBackStatus) {
@@ -116,6 +125,7 @@ function renderSubagentCall(
 		agent?: string;
 		goal?: string;
 		assignment?: string;
+		isolated?: boolean;
 		isolation?: string;
 		merge_back?: string;
 		base_branch?: string;
@@ -215,10 +225,7 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 			`During executable-plan execution, prefer one Worker per ready task and pass taskBinding with the plan path, task id, title, and file list. Example: {"type":"plan-task","planPath":"docs/plans/2026_05_16/example.plan.json","taskId":"T-1","taskTitle":"Implement focused change","files":["packages/coding-agent/src/file.ts"]}.`,
 			"Use Reviewer for whole-plan/final review by default; only dispatch a task-bound Reviewer for risky tasks that need focused review.",
 			"Keep Daedalus summary-first result semantics: inspect the returned summary/reference first and read deferred full output only when needed.",
-			`Use isolation:"inherit" for the parent cwd without child workspace metadata; isolation:"shared" for the parent cwd with shared workspace metadata; isolation:"worktree" for a dedicated managed worktree.`,
-			`Use isolation:"worktree" for implementation, risky edits, or parallel mutations that should not touch the parent checkout.`,
-			`For worktree isolation, merge_back defaults to "patch"; use merge_back:"patch" to apply a clean child diff back to the parent, or merge_back:"branch" to create a task branch for review.`,
-			`Use base_branch with worktree isolation to choose the base branch/ref; omit it to let Daedalus resolve the current/base target.`,
+			`Use isolated:true for implementation, risky edits, or parallel mutations that should not touch the parent checkout. Isolated subagents self-merge through the runner and return artifact-first summary/reference metadata; inspect artifacts/results instead of attempting parent-side WorkspaceTarget merges.`,
 		],
 		parameters: Type.Object({
 			agent: Type.String(),
@@ -226,20 +233,10 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 			assignment: Type.String(),
 			context: Type.Optional(Type.String()),
 			conversation_id: Type.Optional(Type.String()),
-			isolation: Type.Optional(
-				Type.Union([Type.Literal("inherit"), Type.Literal("shared"), Type.Literal("worktree")], {
-					description: `Use "inherit" for the parent cwd without child workspace metadata, "shared" for parent cwd with shared workspace metadata, or "worktree" for a dedicated managed worktree.`,
-				}),
-			),
-			merge_back: Type.Optional(
-				Type.Union([Type.Literal("patch"), Type.Literal("branch")], {
-					description: `Worktree merge-back policy. Defaults to "patch" for worktree isolation; use "patch" for a clean diff apply-back or "branch" to create a task branch for review.`,
-				}),
-			),
-			base_branch: Type.Optional(
-				Type.String({
+			isolated: Type.Optional(
+				Type.Boolean({
 					description:
-						"With worktree isolation, choose the base branch/ref; omit it to let Daedalus resolve the current/base target.",
+						"Set true to run this subagent in a managed isolated workspace for implementation, risky edits, or parallel mutations.",
 				}),
 			),
 			taskBinding: Type.Optional(
@@ -298,9 +295,7 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 				assignment: params.assignment,
 				context: params.context,
 				conversationId: params.conversation_id,
-				isolation: params.isolation,
-				mergeBack: params.merge_back,
-				baseBranch: params.base_branch,
+				isolated: params.isolated,
 				taskBinding: params.taskBinding,
 				workspaceTarget: ctx.workspaceTarget,
 				onProgress: (progress) => {

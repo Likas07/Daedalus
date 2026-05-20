@@ -318,8 +318,8 @@ describe("starter-pack subagent extension", () => {
 					status: "completed",
 					summary: "Reviewed auth flow",
 					childSessionFile: "/tmp/parent/subagents/run-1.jsonl",
-					isolation: "worktree",
-					workspaceMetadata: { isolation: "worktree", mergeBack: "patch" },
+					isolated: true,
+					workspaceMetadata: { requestedIsolated: true, isolation: "worktree", mergeBack: "patch" },
 					mergeBackResult: {
 						policy: "patch",
 						status: "applied",
@@ -336,7 +336,8 @@ describe("starter-pack subagent extension", () => {
 		expect(rendered).toContain("Inspect auth");
 		expect(rendered).toContain("✓ worker");
 		expect(rendered).toContain("Reviewed auth flow");
-		expect(rendered).toContain("isolation worktree");
+		expect(rendered).toContain("isolated");
+		expect(rendered).toContain("effective worktree");
 		expect(rendered).toContain("merge_back patch · applied");
 		expect(rendered).toContain("artifact subagents/run-1.patch");
 		expect(rendered).toContain("Inspect (");
@@ -357,8 +358,8 @@ describe("starter-pack subagent extension", () => {
 				status: "completed",
 				summary: "Reviewed auth flow",
 				childSessionFile: "/tmp/parent/subagents/run-1.jsonl",
-				isolation: "worktree",
-				workspaceMetadata: { isolation: "worktree", mergeBack: "patch" },
+				isolated: true,
+				workspaceMetadata: { requestedIsolated: true, isolation: "worktree", mergeBack: "patch" },
 				mergeBackResult: {
 					policy: "patch",
 					status: "applied",

@@ -22,6 +22,8 @@ export interface PreparedSubagentWorkspace {
 
 function resolveIsolation(request: SubagentRunRequest): SubagentWorkspaceIsolation {
 	if (request.isolation) return request.isolation;
+	if (request.isolated === true) return "worktree";
+	if (request.isolated === false) return "inherit";
 	if (request.isolationMode === "child-branch") return "worktree";
 	if (request.isolationMode === "shared-branch") return "shared";
 	return request.agent.isolationPreference === "child-branch" ? "worktree" : "inherit";
@@ -107,6 +109,8 @@ export async function prepareSubagentWorkspace(
 	const isolation = resolveIsolation(input.request);
 	const service = input.workspaceService ?? new WorkspaceService({ projectRoot: input.cwd });
 	const mergeBack = resolveMergeBack({ request: input.request, isolation });
+	const requestedIsolated = input.request.isolated;
+	const effectiveIsolated = isolation === "worktree";
 
 	if (isolation === "worktree") {
 		const base = service.resolveBaseTarget(input.request.baseBranch);
@@ -143,6 +147,8 @@ export async function prepareSubagentWorkspace(
 			workspaceTarget,
 			metadata: {
 				isolation,
+				requestedIsolated,
+				effectiveIsolated,
 				workspaceTarget,
 				baseBranch: workspaceTarget.baseBranch ?? input.request.baseBranch,
 				baseCommit: workspaceTarget.baseCommit,
@@ -153,8 +159,12 @@ export async function prepareSubagentWorkspace(
 
 	if (isolation === "shared") {
 		const workspaceTarget = service.resolveCurrentTarget(input.cwd);
-		return { cwd: input.cwd, workspaceTarget, metadata: { isolation, workspaceTarget } };
+		return {
+			cwd: input.cwd,
+			workspaceTarget,
+			metadata: { isolation, requestedIsolated, effectiveIsolated, workspaceTarget },
+		};
 	}
 
-	return { cwd: input.cwd, metadata: { isolation } };
+	return { cwd: input.cwd, metadata: { isolation, requestedIsolated, effectiveIsolated } };
 }

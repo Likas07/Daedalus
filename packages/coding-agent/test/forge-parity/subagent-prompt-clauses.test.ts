@@ -31,26 +31,25 @@ describe("subagent prompt doctrine", () => {
 		);
 	});
 
-	it("documents current subagent isolation and merge-back contract", () => {
+	it("documents current subagent isolation and artifact-first self-merge contract", () => {
 		const tool = getRegisteredTool();
 		const guidance = tool.promptGuidelines.join("\n");
 
-		expect(guidance).toContain('isolation:"inherit"');
-		expect(guidance).toContain('isolation:"shared"');
-		expect(guidance).toContain('isolation:"worktree"');
-		expect(guidance).toContain("base_branch");
-		expect(guidance).toContain('merge_back defaults to "patch"');
-		expect(guidance).toContain('merge_back:"patch"');
-		expect(guidance).toContain('merge_back:"branch"');
+		expect(guidance).toContain("Use isolated:true for implementation, risky edits, or parallel mutations");
+		expect(guidance).toContain("Isolated subagents self-merge through the runner");
+		expect(guidance).toContain("artifact-first summary/reference metadata");
+		expect(guidance).toContain("instead of attempting parent-side WorkspaceTarget merges");
 
 		const parameterSchema = JSON.stringify(tool.parameters);
-		expect(parameterSchema).toContain("inherit");
-		expect(parameterSchema).toContain("shared");
-		expect(parameterSchema).toContain("worktree");
-		expect(parameterSchema).toContain("base_branch");
-		expect(parameterSchema).toContain("patch");
-		expect(parameterSchema).toContain("branch");
-		expect(parameterSchema).toContain('Defaults to \\"patch\\" for worktree isolation');
+		expect(parameterSchema).toContain("isolated");
+		expect(tool.parameters.properties.isolated).toMatchObject({ type: "boolean" });
+		expect(tool.parameters.properties.isolated.description).toContain("managed isolated workspace");
+
+		expect(parameterSchema).not.toContain("base_branch");
+		expect(parameterSchema).not.toContain("merge_back");
+		expect(parameterSchema).not.toContain("inherit");
+		expect(parameterSchema).not.toContain("shared");
+		expect(parameterSchema).not.toContain("worktree");
 	});
 
 	it("documents taskBinding with an explicit enum and example", () => {

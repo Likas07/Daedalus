@@ -4,6 +4,7 @@ import { dirname, join } from "path";
 import lockfile from "proper-lockfile";
 import { CONFIG_DIR_NAME, getAgentDir } from "../config.js";
 import type {
+	DelegationIsolationSettings,
 	SubagentBranchIsolationThreshold,
 	SubagentDelegationAggressiveness,
 	SubagentExecutionModePreference,
@@ -112,6 +113,10 @@ export type PackageSource =
 			themes?: string[];
 	  };
 
+export interface DelegationSettings {
+	isolation?: DelegationIsolationSettings;
+}
+
 export interface Settings {
 	lastChangelogVersion?: string;
 	defaultProvider?: string;
@@ -153,6 +158,7 @@ export interface Settings {
 	markdown?: MarkdownSettings;
 	sessionDir?: string; // Custom session storage directory (same format as --session-dir CLI flag)
 	subagents?: SubagentSettings; // Subagent runtime defaults and per-role overrides
+	delegation?: DelegationSettings; // Delegation runtime settings
 	semantic?: SemanticSettings; // Semantic-search embedding backend and profile preferences
 }
 
@@ -623,6 +629,7 @@ export class SettingsManager {
 		Pick<SubagentSettings, "delegationAggressiveness" | "maxDepth" | "maxConcurrency" | "backgroundRoles">
 	> & {
 		branchIsolation: Required<NonNullable<SubagentSettings["branchIsolation"]>>;
+
 		agents: Record<string, SubagentRoleOverride>;
 	} {
 		return {
@@ -636,7 +643,15 @@ export class SettingsManager {
 				namingTemplate:
 					this.settings.subagents?.branchIsolation?.namingTemplate ?? "subagent/{parentBranch}/{agent}/{runId}",
 			},
+
 			agents: { ...(this.settings.subagents?.agents ?? {}) },
+		};
+	}
+
+	getDelegationIsolationSettings(): Required<DelegationIsolationSettings> {
+		return {
+			mode: this.settings.delegation?.isolation?.mode ?? "auto",
+			merge: this.settings.delegation?.isolation?.merge ?? "patch",
 		};
 	}
 
@@ -650,6 +665,7 @@ export class SettingsManager {
 		if (!this.globalSettings.subagents.branchIsolation) {
 			this.globalSettings.subagents.branchIsolation = {};
 		}
+
 		return this.globalSettings.subagents;
 	}
 
