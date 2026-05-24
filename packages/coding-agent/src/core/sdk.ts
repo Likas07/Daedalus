@@ -7,6 +7,7 @@ import { AgentSession } from "./agent-session.js";
 import { AuthStorage } from "./auth-storage.js";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.js";
 import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.js";
+import { type GeneratedImageArtifactInput, saveGeneratedImageArtifact } from "./generated-image-artifacts.js";
 import { convertToLlm } from "./messages.js";
 import { ModelRegistry } from "./model-registry.js";
 import { findInitialModel } from "./model-resolver.js";
@@ -394,10 +395,24 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			if (!auth.ok) {
 				throw new Error(auth.error);
 			}
+			const hostedImageGeneration = settingsManager.getHostedImageGeneration();
 			return streamSimple(model, context, {
 				...options,
 				apiKey: auth.apiKey,
 				headers: auth.headers || options?.headers ? { ...auth.headers, ...options?.headers } : undefined,
+				...(model.api === "openai-codex-responses" && hostedImageGeneration
+					? {
+							hostedImageGeneration: {
+								outputFormat: hostedImageGeneration.outputFormat ?? "png",
+								onGeneratedImage: (image: GeneratedImageArtifactInput) =>
+									saveGeneratedImageArtifact({
+										cwd,
+										sessionId: sessionManager.getSessionId(),
+										image,
+									}),
+							},
+						}
+					: {}),
 			});
 		},
 		onPayload: async (payload, _model) => {

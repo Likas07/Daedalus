@@ -30,12 +30,13 @@ type FakeRuntimeHost = {
 
 function createAssistantMessage(options?: {
 	text?: string;
+	content?: AssistantMessage["content"];
 	stopReason?: AssistantMessage["stopReason"];
 	errorMessage?: string;
 }): AssistantMessage {
 	return {
 		role: "assistant",
-		content: options?.text ? [{ type: "text", text: options.text }] : [],
+		content: options?.content ?? (options?.text ? [{ type: "text", text: options.text }] : []),
 		api: "openai-responses",
 		provider: "openai",
 		model: "gpt-4o-mini",
@@ -135,5 +136,74 @@ describe("runPrintMode", () => {
 		expect(errorSpy).toHaveBeenCalledWith("provider failure");
 		expect(session.extensionRunner.emit).toHaveBeenCalledTimes(1);
 		expect(session.extensionRunner.emit).toHaveBeenCalledWith({ type: "session_shutdown" });
+	});
+
+	it("prints generated image OSC 8 file links in text mode without inline image data", async () => {
+		const fileUri = "file:///tmp/daedalus/print-image.png";
+		const visiblePath = "/tmp/daedalus/print-image.png";
+		const base64Data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB";
+		const runtimeHost = createRuntimeHost(
+			createAssistantMessage({
+				content: [
+					{ type: "text", text: "created" },
+					{
+						type: "generatedImage",
+						id: "img-print",
+						mimeType: "image/png",
+						data: base64Data,
+						path: visiblePath,
+						fileUri,
+						visiblePath,
+						status: "completed",
+					},
+				],
+			}),
+		);
+		const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation((...args: unknown[]) => {
+			const callback = args.find((arg): arg is () => void => typeof arg === "function");
+			callback?.();
+			return true;
+		});
+
+		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+			mode: "text",
+		});
+
+		const stdout = stdoutSpy.mock.calls.map((call) => String(call[0])).join("");
+		expect(exitCode).toBe(0);
+		expect(stdout).toContain("created\n");
+		expect(stdout).toContain(`Generated image: \u001b]8;;${fileUri}\u001b\\${visiblePath}\u001b]8;;\u001b\\\n`);
+		expect(stdout).not.toContain(base64Data);
+		expect(stdout).not.toContain("\u001b_G");
+		expect(stdout).not.toContain("\u001bPq");
+	});
+
+	it("prints generated image errors when no file URI is available", async () => {
+		const runtimeHost = createRuntimeHost(
+			createAssistantMessage({
+				content: [
+					{
+						type: "generatedImage",
+						id: "img-error",
+						mimeType: "image/png",
+						status: "failed",
+						error: "image generation failed",
+					},
+				],
+			}),
+		);
+		const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation((...args: unknown[]) => {
+			const callback = args.find((arg): arg is () => void => typeof arg === "function");
+			callback?.();
+			return true;
+		});
+
+		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+			mode: "text",
+		});
+
+		const stdout = stdoutSpy.mock.calls.map((call) => String(call[0])).join("");
+		expect(exitCode).toBe(0);
+		expect(stdout).toContain("Generated image failed: image generation failed\n");
 	});
 });

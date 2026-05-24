@@ -37,6 +37,7 @@ import {
 	applyServiceTierPricing,
 	convertResponsesMessages,
 	convertResponsesTools,
+	type OpenAIResponsesStreamOptions,
 	processResponsesStream,
 } from "./openai-responses-shared.js";
 import { buildBaseOptions, clampReasoning } from "./simple-options.js";
@@ -66,6 +67,13 @@ export interface OpenAICodexResponsesOptions extends StreamOptions {
 	reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
 	reasoningSummary?: "auto" | "concise" | "detailed" | "off" | "on" | null;
 	textVerbosity?: "low" | "medium" | "high";
+	/**
+	 * Opt in to Codex's hosted image_generation tool. This is Codex-provider-specific
+	 * for now and only PNG output is supported.
+	 */
+	hostedImageGeneration?:
+		| boolean
+		| { outputFormat?: "png"; onGeneratedImage?: OpenAIResponsesStreamOptions["onGeneratedImage"] };
 }
 
 type CodexResponseStatus = "completed" | "incomplete" | "failed" | "cancelled" | "queued" | "in_progress";
@@ -270,7 +278,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 			}
 
 			stream.push({ type: "start", partial: output });
-			await processStream(response, output, stream, model, serviceTier);
+			await processStream(response, output, stream, model, serviceTier, getHostedImageCallback(options));
 
 			if (options?.signal?.aborted) {
 				throw new Error("Request was aborted");
@@ -305,6 +313,7 @@ export const streamSimpleOpenAICodexResponses: StreamFunction<"openai-codex-resp
 	return streamOpenAICodexResponses(model, context, {
 		...base,
 		reasoningEffort,
+		hostedImageGeneration: (options as OpenAICodexResponsesOptions | undefined)?.hostedImageGeneration,
 	} satisfies OpenAICodexResponsesOptions);
 };
 
@@ -343,8 +352,16 @@ function buildRequestBody(
 		body.service_tier = serviceTier;
 	}
 
-	if (context.tools) {
-		body.tools = convertResponsesTools(context.tools, { strict: null });
+	const tools = context.tools ? convertResponsesTools(context.tools, { strict: null }) : [];
+	if (options?.hostedImageGeneration) {
+		const imageOptions = typeof options.hostedImageGeneration === "object" ? options.hostedImageGeneration : {};
+		tools.push({
+			type: "image_generation",
+			output_format: imageOptions.outputFormat ?? "png",
+		} as OpenAITool);
+	}
+	if (tools.length > 0) {
+		body.tools = tools;
 	}
 
 	if (options?.reasoningEffort !== undefined) {
@@ -387,11 +404,20 @@ async function processStream(
 	stream: AssistantMessageEventStream,
 	model: Model<"openai-codex-responses">,
 	serviceTier: ResponseCreateParamsStreaming["service_tier"] | undefined,
+	onGeneratedImage?: OpenAIResponsesStreamOptions["onGeneratedImage"],
 ): Promise<void> {
 	await processResponsesStream(mapCodexEvents(parseSSE(response)), output, stream, model, {
 		serviceTier,
 		applyServiceTierPricing,
+		onGeneratedImage,
 	});
+}
+
+function getHostedImageCallback(
+	options?: OpenAICodexResponsesOptions,
+): OpenAIResponsesStreamOptions["onGeneratedImage"] | undefined {
+	if (!options?.hostedImageGeneration || typeof options.hostedImageGeneration !== "object") return undefined;
+	return options.hostedImageGeneration.onGeneratedImage;
 }
 
 function resolveServiceTier(
@@ -840,7 +866,9 @@ async function processWebSocketStream(
 		socket.send(JSON.stringify({ type: "response.create", ...body }));
 		onStart();
 		stream.push({ type: "start", partial: output });
-		await processResponsesStream(mapCodexEvents(parseWebSocket(socket, options?.signal)), output, stream, model);
+		await processResponsesStream(mapCodexEvents(parseWebSocket(socket, options?.signal)), output, stream, model, {
+			onGeneratedImage: getHostedImageCallback(options),
+		});
 		if (options?.signal?.aborted) {
 			keepConnection = false;
 		}

@@ -483,6 +483,15 @@ function toChatMessages(messages: Message[], supportsImages: boolean): ChatCompl
 					}
 					continue;
 				}
+				if (block.type === "generatedImage") {
+					const reference = block.visiblePath || block.fileUri || block.path || block.providerItemId || block.id;
+					contentParts.push({
+						type: "text",
+						text: reference ? `[generated image: ${reference}]` : "[generated image]",
+					});
+					continue;
+				}
+
 				if (block.type === "thinking") {
 					if (block.thinking.trim().length > 0) {
 						contentParts.push({

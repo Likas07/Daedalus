@@ -1,4 +1,4 @@
-import type { AssistantMessage } from "@daedalus-pi/ai";
+import type { AssistantMessage, GeneratedImageContent } from "@daedalus-pi/ai";
 import { Container, Markdown, type MarkdownTheme, Spacer, Text } from "@daedalus-pi/tui";
 import { getMarkdownTheme, theme } from "../theme/theme.js";
 import { foldHeadTailForDisplayOnly } from "./display-truncate.js";
@@ -10,6 +10,27 @@ export interface AssistantMessageFoldingOptions {
 	expanded?: boolean;
 	/** Maximum source lines to render while collapsed. Defaults to 20. */
 	collapsedLineBudget?: number;
+}
+
+function formatGeneratedImageLine(content: GeneratedImageContent): string | undefined {
+	if (content.fileUri) {
+		const label = content.visiblePath ?? content.path ?? content.fileUri;
+		return `Generated image: \u001b]8;;${content.fileUri}\u001b\\${label}\u001b]8;;\u001b\\`;
+	}
+
+	if (content.error) {
+		return `Generated image failed: ${content.error}`;
+	}
+
+	return undefined;
+}
+
+function isVisibleAssistantContent(content: AssistantMessage["content"][number]): boolean {
+	return (
+		(content.type === "text" && Boolean(content.text.trim())) ||
+		(content.type === "thinking" && Boolean(content.thinking.trim())) ||
+		(content.type === "generatedImage" && Boolean(formatGeneratedImageLine(content)))
+	);
 }
 
 /**
@@ -96,9 +117,7 @@ export class AssistantMessageComponent extends Container {
 		// Clear content container
 		this.contentContainer.clear();
 
-		const hasVisibleContent = message.content.some(
-			(c) => (c.type === "text" && c.text.trim()) || (c.type === "thinking" && c.thinking.trim()),
-		);
+		const hasVisibleContent = message.content.some(isVisibleAssistantContent);
 
 		if (hasVisibleContent) {
 			this.contentContainer.addChild(new Spacer(1));
@@ -114,9 +133,7 @@ export class AssistantMessageComponent extends Container {
 			} else if (content.type === "thinking" && content.thinking.trim()) {
 				// Add spacing only when another visible assistant content block follows.
 				// This avoids a superfluous blank line before separately-rendered tool execution blocks.
-				const hasVisibleContentAfter = message.content
-					.slice(i + 1)
-					.some((c) => (c.type === "text" && c.text.trim()) || (c.type === "thinking" && c.thinking.trim()));
+				const hasVisibleContentAfter = message.content.slice(i + 1).some(isVisibleAssistantContent);
 
 				if (this.hideThinkingBlock) {
 					// Show static thinking label when hidden
@@ -137,6 +154,11 @@ export class AssistantMessageComponent extends Container {
 					if (hasVisibleContentAfter) {
 						this.contentContainer.addChild(new Spacer(1));
 					}
+				}
+			} else if (content.type === "generatedImage") {
+				const line = formatGeneratedImageLine(content);
+				if (line) {
+					this.contentContainer.addChild(new Text(line, 1, 0));
 				}
 			}
 		}

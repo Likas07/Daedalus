@@ -64,6 +64,13 @@ export function transformMessages<TApi extends Api>(
 					};
 				}
 
+				if (block.type === "generatedImage") {
+					const reference = block.visiblePath || block.fileUri || block.path || block.providerItemId || block.id;
+					return {
+						type: "text" as const,
+						text: reference ? `[generated image: ${reference}]` : "[generated image]",
+					};
+				}
 				if (block.type === "toolCall") {
 					const toolCall = block as ToolCall;
 					let normalizedToolCall: ToolCall = toolCall;

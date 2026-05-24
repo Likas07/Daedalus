@@ -6,10 +6,23 @@
  * - `pi --mode json "prompt"` - JSON event stream
  */
 
-import type { AssistantMessage, ImageContent } from "@daedalus-pi/ai";
+import type { AssistantMessage, GeneratedImageContent, ImageContent } from "@daedalus-pi/ai";
 import type { AgentSessionRuntime } from "../core/agent-session-runtime.js";
 import { flushRawStdout, writeRawStdout } from "../core/output-guard.js";
 import { WorkspaceResumeSafetyError } from "../core/session-cwd.js";
+
+function formatGeneratedImageLine(content: GeneratedImageContent): string | undefined {
+	if (content.fileUri) {
+		const label = content.visiblePath ?? content.path ?? content.fileUri;
+		return `Generated image: \u001b]8;;${content.fileUri}\u001b\\${label}\u001b]8;;\u001b\\`;
+	}
+
+	if (content.error) {
+		return `Generated image failed: ${content.error}`;
+	}
+
+	return undefined;
+}
 
 /**
  * Options for print mode.
@@ -124,6 +137,11 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 					for (const content of assistantMsg.content) {
 						if (content.type === "text") {
 							writeRawStdout(`${content.text}\n`);
+						} else if (content.type === "generatedImage") {
+							const line = formatGeneratedImageLine(content);
+							if (line) {
+								writeRawStdout(`${line}\n`);
+							}
 						}
 					}
 				}

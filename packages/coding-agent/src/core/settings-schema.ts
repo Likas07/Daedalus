@@ -41,3 +41,13 @@ export interface SubagentSettings {
 	branchIsolation?: SubagentBranchIsolationSettings;
 	agents?: Record<string, SubagentRoleOverride>;
 }
+
+export interface HostedImageGenerationSettings {
+	outputFormat?: "png";
+}
+
+export interface ImageSettings {
+	autoResize?: boolean;
+	blockImages?: boolean;
+	hostedGeneration?: boolean | HostedImageGenerationSettings;
+}

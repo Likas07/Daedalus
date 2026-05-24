@@ -17,6 +17,7 @@ import type {
 	Api,
 	AssistantMessage,
 	Context,
+	GeneratedImageContent,
 	ImageContent,
 	Model,
 	StopReason,
@@ -63,12 +64,29 @@ function parseTextSignature(
 	return { id: signature };
 }
 
+export interface GeneratedImageArtifactResult {
+	path?: string;
+	fileUri?: string;
+	visiblePath?: string;
+	persisted?: boolean;
+}
+
+export interface GeneratedImageArtifact {
+	id: string;
+	providerItemId?: string;
+	mimeType: string;
+	data?: string;
+}
+
 export interface OpenAIResponsesStreamOptions {
 	serviceTier?: ResponseCreateParamsStreaming["service_tier"];
 	applyServiceTierPricing?: (
 		usage: Usage,
 		serviceTier: ResponseCreateParamsStreaming["service_tier"] | undefined,
 	) => void;
+	onGeneratedImage?: (
+		image: GeneratedImageArtifact,
+	) => GeneratedImageArtifactResult | Promise<GeneratedImageArtifactResult | undefined> | undefined;
 }
 
 export function getServiceTierCostMultiplier(
@@ -313,8 +331,45 @@ export async function processResponsesStream<TApi extends Api>(
 	model: Model<TApi>,
 	options?: OpenAIResponsesStreamOptions,
 ): Promise<void> {
-	let currentItem: ResponseReasoningItem | ResponseOutputMessage | ResponseFunctionToolCall | null = null;
-	let currentBlock: ThinkingContent | TextContent | (ToolCall & { partialJson: string }) | null = null;
+	type ResponseImageGenerationCall = {
+		type: "image_generation_call";
+		id?: string;
+		call_id?: string;
+		result?: string;
+		mime_type?: string;
+		mimeType?: string;
+		status?: string;
+		error?: unknown;
+	};
+	const isImageGenerationCall = (item: unknown): item is ResponseImageGenerationCall =>
+		typeof item === "object" && item !== null && (item as { type?: unknown }).type === "image_generation_call";
+	const imageId = (item: ResponseImageGenerationCall) => item.call_id || item.id || `generated_image_${blocks.length}`;
+	const imageMimeType = (item: ResponseImageGenerationCall) => item.mime_type || item.mimeType || "image/png";
+	const imageError = (error: unknown) => {
+		if (!error) return undefined;
+		if (typeof error === "string") return error;
+		if (
+			typeof error === "object" &&
+			"message" in error &&
+			typeof (error as { message?: unknown }).message === "string"
+		) {
+			return (error as { message: string }).message;
+		}
+		return JSON.stringify(error);
+	};
+
+	let currentItem:
+		| ResponseReasoningItem
+		| ResponseOutputMessage
+		| ResponseFunctionToolCall
+		| ResponseImageGenerationCall
+		| null = null;
+	let currentBlock:
+		| ThinkingContent
+		| TextContent
+		| GeneratedImageContent
+		| (ToolCall & { partialJson: string })
+		| null = null;
 	const blocks = output.content;
 	const blockIndex = () => blocks.length - 1;
 
@@ -344,6 +399,22 @@ export async function processResponsesStream<TApi extends Api>(
 				};
 				output.content.push(currentBlock);
 				stream.push({ type: "toolcall_start", contentIndex: blockIndex(), partial: output });
+			} else if (isImageGenerationCall(item)) {
+				currentItem = item;
+				currentBlock = {
+					type: "generatedImage",
+					id: imageId(item),
+					providerItemId: item.id,
+					mimeType: imageMimeType(item),
+					status: "in_progress",
+				};
+				output.content.push(currentBlock);
+				stream.push({
+					type: "generated_image_start",
+					contentIndex: blockIndex(),
+					image: currentBlock,
+					partial: output,
+				});
 			}
 		} else if (event.type === "response.reasoning_summary_part.added") {
 			if (currentItem && currentItem.type === "reasoning") {
@@ -488,6 +559,43 @@ export async function processResponsesStream<TApi extends Api>(
 
 				currentBlock = null;
 				stream.push({ type: "toolcall_end", contentIndex: blockIndex(), toolCall, partial: output });
+			} else if (isImageGenerationCall(item) && currentBlock?.type === "generatedImage") {
+				currentBlock.id = imageId(item);
+				currentBlock.providerItemId = item.id;
+				currentBlock.mimeType = imageMimeType(item);
+				currentBlock.data = item.result;
+				currentBlock.status = item.status === "failed" ? "failed" : "completed";
+				currentBlock.error = imageError(item.error);
+
+				if (options?.onGeneratedImage) {
+					try {
+						const artifact = await options.onGeneratedImage({
+							id: currentBlock.id,
+							providerItemId: currentBlock.providerItemId,
+							mimeType: currentBlock.mimeType,
+							data: currentBlock.data,
+						});
+						if (artifact) {
+							currentBlock.path = artifact.path;
+							currentBlock.fileUri = artifact.fileUri;
+							currentBlock.visiblePath = artifact.visiblePath;
+							if (artifact.persisted) {
+								delete currentBlock.data;
+							}
+						}
+					} catch (error) {
+						currentBlock.status = "failed";
+						currentBlock.error = error instanceof Error ? error.message : String(error);
+					}
+				}
+
+				stream.push({
+					type: "generated_image_end",
+					contentIndex: blockIndex(),
+					image: currentBlock,
+					partial: output,
+				});
+				currentBlock = null;
 			}
 		} else if (event.type === "response.completed") {
 			const response = event.response;

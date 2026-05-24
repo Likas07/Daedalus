@@ -72,9 +72,14 @@ export interface TerminalSettings {
 	clearOnShrink?: boolean; // default: false (clear empty rows when content shrinks)
 }
 
+export interface HostedImageGenerationSettings {
+	outputFormat?: "png";
+}
+
 export interface ImageSettings {
 	autoResize?: boolean; // default: true (resize images to 2000x2000 max for better model compatibility)
 	blockImages?: boolean; // default: false - when true, prevents all images from being sent to LLM providers
+	hostedGeneration?: boolean | HostedImageGenerationSettings; // default: true - Codex hosted image generation unless explicitly disabled
 }
 
 export interface ThinkingBudgetsSettings {
@@ -1284,6 +1289,14 @@ export class SettingsManager {
 
 	getBlockImages(): boolean {
 		return this.settings.images?.blockImages ?? false;
+	}
+
+	getHostedImageGeneration(): false | HostedImageGenerationSettings {
+		const setting = this.settings.images?.hostedGeneration;
+		if (setting === undefined) return { outputFormat: "png" };
+		if (setting === false) return false;
+		if (setting === true) return { outputFormat: "png" };
+		return { outputFormat: setting.outputFormat ?? "png" };
 	}
 
 	setBlockImages(blocked: boolean): void {

@@ -3,6 +3,7 @@ import type {
 	AssistantMessage,
 	AssistantMessageEventStream,
 	Context,
+	GeneratedImageContent,
 	ImageContent,
 	Message,
 	Model,
@@ -147,7 +148,9 @@ function contentToText(content: string | Array<TextContent | ImageContent>): str
 		.join("\n");
 }
 
-function assistantContentToText(content: Array<TextContent | ThinkingContent | ToolCall>): string {
+function assistantContentToText(
+	content: Array<TextContent | ThinkingContent | ToolCall | GeneratedImageContent>,
+): string {
 	return content
 		.map((block) => {
 			if (block.type === "text") {
@@ -155,6 +158,10 @@ function assistantContentToText(content: Array<TextContent | ThinkingContent | T
 			}
 			if (block.type === "thinking") {
 				return block.thinking;
+			}
+			if (block.type === "generatedImage") {
+				const reference = block.visiblePath || block.fileUri || block.path || block.providerItemId || block.id;
+				return reference ? `[generated image: ${reference}]` : "[generated image]";
 			}
 			return `${block.name}:${JSON.stringify(block.arguments)}`;
 		})
@@ -359,6 +366,13 @@ async function streamWithDeltas(
 				stream.push({ type: "text_delta", contentIndex: index, delta: chunk, partial: { ...partial } });
 			}
 			stream.push({ type: "text_end", contentIndex: index, content: block.text, partial: { ...partial } });
+			continue;
+		}
+
+		if (block.type === "generatedImage") {
+			partial.content = [...partial.content, block];
+			stream.push({ type: "generated_image_start", contentIndex: index, image: block, partial: { ...partial } });
+			stream.push({ type: "generated_image_end", contentIndex: index, image: block, partial: { ...partial } });
 			continue;
 		}
 

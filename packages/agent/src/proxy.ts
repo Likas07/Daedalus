@@ -45,6 +45,27 @@ export type ProxyAssistantMessageEvent =
 	| { type: "toolcall_delta"; contentIndex: number; delta: string }
 	| { type: "toolcall_end"; contentIndex: number }
 	| {
+			type: "generated_image_start";
+			contentIndex: number;
+			id: string;
+			providerItemId?: string;
+			mimeType: string;
+			status?: "in_progress" | "completed" | "failed";
+	  }
+	| {
+			type: "generated_image_end";
+			contentIndex: number;
+			id: string;
+			providerItemId?: string;
+			mimeType: string;
+			data?: string;
+			path?: string;
+			fileUri?: string;
+			visiblePath?: string;
+			status?: "in_progress" | "completed" | "failed";
+			error?: string;
+	  }
+	| {
 			type: "done";
 			reason: Extract<StopReason, "stop" | "length" | "toolUse">;
 			usage: AssistantMessage["usage"];
@@ -324,6 +345,35 @@ function processProxyEvent(
 				};
 			}
 			return undefined;
+		}
+
+		case "generated_image_start": {
+			const image = {
+				type: "generatedImage" as const,
+				id: proxyEvent.id,
+				providerItemId: proxyEvent.providerItemId,
+				mimeType: proxyEvent.mimeType,
+				status: proxyEvent.status ?? "in_progress",
+			};
+			partial.content[proxyEvent.contentIndex] = image;
+			return { type: "generated_image_start", contentIndex: proxyEvent.contentIndex, image, partial };
+		}
+
+		case "generated_image_end": {
+			const image = {
+				type: "generatedImage" as const,
+				id: proxyEvent.id,
+				providerItemId: proxyEvent.providerItemId,
+				mimeType: proxyEvent.mimeType,
+				data: proxyEvent.data,
+				path: proxyEvent.path,
+				fileUri: proxyEvent.fileUri,
+				visiblePath: proxyEvent.visiblePath,
+				status: proxyEvent.status ?? "completed",
+				error: proxyEvent.error,
+			};
+			partial.content[proxyEvent.contentIndex] = image;
+			return { type: "generated_image_end", contentIndex: proxyEvent.contentIndex, image, partial };
 		}
 
 		case "done":
