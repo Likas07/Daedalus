@@ -28,6 +28,8 @@ Extensions are TypeScript modules that extend pi's behavior. They can subscribe 
 
 See [examples/extensions/](../examples/extensions/) for working implementations.
 
+The default Daedalus extension bundle also includes `/remote-control telegram`, an inert-by-default Telegram DM bridge for the current interactive session. It starts only when the user runs `/remote-control telegram on` (or `/rc on`). See [Telegram remote control](telegram-remote-control.md) for setup, numeric Telegram user-ID authorization, and v1 exclusions.
+
 Built-in Daedalus subagent delegation now uses artifact-first isolation for implementation work. Extension authors invoking the bundled subagent tool should prefer `isolated: true` over low-level worktree parameters; merge status and recovery artifacts are returned in the tool result. See [Delegation isolation](delegation-isolation.md).
 
 ## Table of Contents

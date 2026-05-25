@@ -16,7 +16,7 @@ import type {
 	WorkflowRunsInTarget,
 } from "@daedalus-pi/app-server-protocol";
 import { AuthStorage, ModelRegistry } from "@daedalus-pi/coding-agent";
-import { type AppServerDatabase, appendEvent, type EventPayload, readEventsAfter } from "..";
+import { type AppServerDatabase, readEventsAfter } from "..";
 import { AttachmentService } from "../composer/attachment-service";
 import { CommandService } from "../composer/command-service";
 import { FileSearchService } from "../composer/file-search-service";
@@ -25,7 +25,7 @@ import type { CommandRunner } from "../integrations/integration-api";
 import { IntegrationService } from "../integrations/integration-service";
 import { projectRuntimeEvents } from "../persistence/projector";
 import { listProjectSessions } from "../persistence/read-model";
-import { projectAppEventToProjectionEvents } from "../projections/projection-events";
+import { RuntimeEventLog } from "../persistence/runtime-event-log";
 import { buildShellSnapshot } from "../projections/shell-projection";
 import { buildThreadDetailSnapshot } from "../projections/thread-detail-projection";
 import { buildThreadV1Snapshot } from "../projections/thread-v1-projection";
@@ -57,7 +57,6 @@ import { validateWorktreeTarget } from "../workspaces/worktree-safety";
 import { type WorktreeLifecycleMetadata, WorktreeService } from "../workspaces/worktree-service";
 
 import { ExportService } from "./export-service";
-import { notificationForThreadV1StoredEvent } from "./thread-v1-routes";
 import { createDefaultV1Router, handleV1Request } from "./v1/router";
 
 export type OutboundMessage = AppEvent | ServerNotification | ServerRequest;
@@ -82,6 +81,7 @@ function supportsFastModeFor(id: string, provider: string): boolean {
 
 export interface AppRouterOptions {
 	readonly database: AppServerDatabase;
+	readonly eventLog?: RuntimeEventLog;
 	readonly controller: SessionController;
 	readonly publish: Publish;
 	readonly integrationRunner?: CommandRunner;
@@ -102,6 +102,7 @@ export class AppRouter {
 	private readonly configService: GuiConfigService;
 	private readonly accessPolicyService: AccessPolicyService;
 	private readonly approvalService: ApprovalService;
+	private readonly eventLog: RuntimeEventLog;
 	private readonly fileSearchService = new FileSearchService();
 	private readonly commandService = new CommandService();
 	private readonly attachmentService = new AttachmentService();
@@ -120,7 +121,8 @@ export class AppRouter {
 	private readonly operationIdempotencyService: OperationIdempotencyService;
 	private readonly v1Router = createDefaultV1Router();
 	constructor(private readonly options: AppRouterOptions) {
-		this.projectService = new ProjectService({ database: options.database });
+		this.eventLog = options.eventLog ?? new RuntimeEventLog({ database: options.database, publish: options.publish });
+		this.projectService = new ProjectService({ database: options.database, eventLog: this.eventLog });
 		this.sessionStore = new SqliteSessionStore({ database: options.database });
 		this.worktreeService = new WorktreeService({
 			database: options.database,
@@ -146,6 +148,7 @@ export class AppRouter {
 		this.terminalService = new TerminalService({
 			publish: options.publish,
 			database: options.database,
+			eventLog: this.eventLog,
 			pty: options.terminalPty,
 		});
 		this.configService = new GuiConfigService(options.database);
@@ -159,7 +162,7 @@ export class AppRouter {
 			approvalService: this.approvalService,
 			diffService: this.diffService,
 		});
-		this.checkpointService = new CheckpointService({ database: options.database });
+		this.checkpointService = new CheckpointService({ database: options.database, eventLog: this.eventLog });
 		this.integrationService = new IntegrationService({
 			database: options.database,
 			runner: options.integrationRunner,
@@ -221,6 +224,11 @@ export class AppRouter {
 				saveInlineAttachment: (attachment) => this.saveInlineV1Attachment(attachment),
 				providerSnapshot: () => this.providerSnapshotV1(),
 				rollbackThread: (params) => this.rollbackThreadV1(params),
+				approvals: {
+					list: (params) => this.approvalService.listV1(params),
+					decide: (params) => this.approvalService.decideV1(params),
+					answer: (params) => this.approvalService.answerInputV1(params),
+				},
 			},
 			request,
 			this.v1Router,
@@ -1223,18 +1231,6 @@ export class AppRouter {
 		const method = (request as { method?: unknown }).method;
 		const params = (request as { params?: unknown }).params;
 		switch (method) {
-			case "v1.approval.list":
-				return { handled: true, result: this.approvalService.listV1(params as protocolV1.ApprovalListParams) };
-			case "v1.approval.decide":
-				return {
-					handled: true,
-					result: this.approvalService.decideV1(params as protocolV1.ApprovalDecisionParams),
-				};
-			case "v1.approval.answer":
-				return {
-					handled: true,
-					result: this.approvalService.answerInputV1(normalizeApprovalAnswerParams(params)),
-				};
 			case "v1.diff.summary":
 				return { handled: true, result: await this.handleDiffSummaryV1(params as protocolV1.DiffSummaryParams) };
 			case "v1.diff.fileWindow":
@@ -1467,7 +1463,7 @@ export class AppRouter {
 			checkpointRef,
 			sessionId: params.threadId,
 		});
-		const stored = appendEvent(this.options.database, {
+		const stored = this.eventLog.append({
 			streamId: `session:${params.threadId}`,
 			type: "thread/rollback",
 			payload: {
@@ -1480,8 +1476,7 @@ export class AppRouter {
 				hiddenEventRange: rollbackScope.hiddenEventRange,
 				idempotencyKey: params.idempotencyKey ?? null,
 			},
-		});
-		projectRuntimeEvents(this.options.database);
+		}).event;
 		this.options.publish({
 			kind: "notification",
 			method: "thread.timeline.delta",
@@ -1727,32 +1722,7 @@ export class AppRouter {
 	}
 
 	append(event: AppEvent): void {
-		const stored = appendEvent(this.options.database, {
-			streamId: event.sessionId ?? "app",
-			type: event.type,
-			payload: event as unknown as EventPayload,
-		});
-		projectRuntimeEvents(this.options.database);
-		this.options.publish({
-			kind: "notification",
-			method: "event/appended",
-			params: { event: { ...event, seq: stored.seq } },
-		});
-		const threadV1Notification = notificationForThreadV1StoredEvent({
-			seq: stored.seq,
-			streamId: event.sessionId ?? "app",
-			type: event.type,
-			payload: event as unknown as EventPayload,
-			createdAt: event.ts ?? new Date().toISOString(),
-		});
-		if (threadV1Notification) this.options.publish(threadV1Notification as unknown as OutboundMessage);
-		const projectionEvents = projectAppEventToProjectionEvents({ event, seq: stored.seq });
-		for (const shellEvent of projectionEvents.shell) {
-			this.options.publish({ kind: "notification", method: "shell/event", params: shellEvent });
-		}
-		for (const threadEvent of projectionEvents.thread) {
-			this.options.publish({ kind: "notification", method: "thread/event", params: threadEvent });
-		}
+		this.eventLog.appendAndPublishAppEvent(event);
 	}
 }
 
@@ -1842,11 +1812,6 @@ function extensionForMime(mimeType: string): string {
 		default:
 			return "png";
 	}
-}
-
-function normalizeApprovalAnswerParams(params: unknown): protocolV1.ApprovalAnswerInputParams {
-	const record = params && typeof params === "object" ? (params as Record<string, unknown>) : {};
-	return record as protocolV1.ApprovalAnswerInputParams;
 }
 
 function diffTargetMismatch(

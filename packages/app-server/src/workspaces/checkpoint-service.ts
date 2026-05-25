@@ -2,10 +2,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AppServerDatabase, appendEvent, type EventPayload } from "..";
 import { projectRuntimeEvents } from "../persistence/projector";
+import type { RuntimeEventLog } from "../persistence/runtime-event-log";
 import { git, sanitizeRefPart } from "./git";
 
 export interface CheckpointServiceOptions {
 	readonly database: AppServerDatabase;
+	readonly eventLog?: RuntimeEventLog;
 }
 
 export interface CreateCheckpointInput {
@@ -40,7 +42,7 @@ export class CheckpointService {
 			.delete()
 			.catch(() => undefined);
 		const checkpointId = `${input.sessionId}:${input.turnId}`;
-		appendEvent(this.options.database, {
+		this.appendRuntimeEvent({
 			streamId: `session:${input.sessionId}`,
 			type: "checkpoint/created",
 			payload: {
@@ -53,11 +55,19 @@ export class CheckpointService {
 				metadata: {},
 			} satisfies EventPayload,
 		});
-		projectRuntimeEvents(this.options.database);
 		return { checkpointId, ref, commit };
 	}
 
 	async restore(input: { readonly cwd: string; readonly checkpointRef: string }): Promise<void> {
 		await git(input.cwd, ["restore", "--source", input.checkpointRef, "--worktree", "--staged", "--", "."]);
+	}
+
+	private appendRuntimeEvent(input: Parameters<typeof appendEvent>[1]): void {
+		if (this.options.eventLog) {
+			this.options.eventLog.append(input);
+			return;
+		}
+		appendEvent(this.options.database, input);
+		projectRuntimeEvents(this.options.database);
 	}
 }

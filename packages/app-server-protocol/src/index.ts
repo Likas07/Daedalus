@@ -13,6 +13,7 @@ export * from "./projections";
 export * from "./runtime-control";
 export * from "./session-store";
 export * from "./terminal";
+export * from "./thread-identity";
 export type {
 	BaseCheckoutWorkspaceTarget as ProtocolV1BaseCheckoutWorkspaceTarget,
 	ProtocolV1ClientNotification,

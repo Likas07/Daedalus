@@ -53,6 +53,7 @@
 		"extract-zip": "^2.0.1",
 		"file-type": "^21.1.1",
 		"glob": "^13.0.1",
+		"grammy": "1.43.0",
 		"hosted-git-info": "^9.0.2",
 		"ignore": "^7.0.5",
 		"linkedom": "0.18.12",

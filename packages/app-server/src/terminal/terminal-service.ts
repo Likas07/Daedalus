@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ProjectId, ServerNotification, TerminalId, WorktreeId } from "@daedalus-pi/app-server-protocol";
 import type { AppServerDatabase } from "../persistence/database";
 import { appendEvent } from "../persistence/event-store";
+import type { RuntimeEventLog } from "../persistence/runtime-event-log";
 import type { PtyAdapter, PtyProcessHandle } from "./pty-adapter";
 import { createNodePtyAdapter } from "./pty-adapter";
 import type {
@@ -23,6 +24,7 @@ export interface TerminalServiceOptions {
 	readonly maxHistoryLines?: number;
 	readonly pty?: PtyAdapter;
 	readonly database?: AppServerDatabase;
+	readonly eventLog?: RuntimeEventLog;
 	readonly maxInputBytes?: number;
 }
 
@@ -45,6 +47,7 @@ export class TerminalService {
 	private readonly publish?: TerminalServiceOptions["publish"];
 	private readonly pty?: PtyAdapter;
 	private readonly database?: AppServerDatabase;
+	private readonly eventLog?: RuntimeEventLog;
 	private readonly safety: TerminalSafetyService;
 
 	constructor(options: TerminalServiceOptions = {}) {
@@ -54,6 +57,7 @@ export class TerminalService {
 		this.publish = options.publish;
 		this.pty = options.pty;
 		this.database = options.database;
+		this.eventLog = options.eventLog;
 		this.safety = new TerminalSafetyService({ maxInputBytes: options.maxInputBytes });
 		this.loadPersistedSessions();
 	}
@@ -279,12 +283,18 @@ export class TerminalService {
 	}
 
 	private appendLifecycleEvent(type: "terminal/started" | "terminal/closed", state: TerminalSessionState): void {
-		if (!this.database) return;
-		appendEvent(this.database, {
+		const database = this.database;
+		if (!database) return;
+		const input = {
 			streamId: state.record.terminalId,
 			type,
 			payload: this.snapshot(state) as unknown as import("../persistence/event-store").EventPayload,
-		});
+		};
+		if (this.eventLog) {
+			this.eventLog.append(input);
+			return;
+		}
+		appendEvent(database, input);
 	}
 
 	private loadPersistedSessions(): void {

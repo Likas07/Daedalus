@@ -67,12 +67,18 @@ export {
 	type TurnReadModel,
 	type WorktreeReadModel,
 } from "./persistence/read-model";
+export {
+	RuntimeEventLog,
+	type RuntimeEventLogOptions,
+	type RuntimeEventLogPublish,
+} from "./persistence/runtime-event-log";
 export { type BuildShellSnapshotOptions, buildShellSnapshot } from "./projections/shell-projection";
 export {
 	type BuildThreadDetailSnapshotOptions,
 	buildThreadDetailSnapshot,
 } from "./projections/thread-detail-projection";
 export { type AccessPolicy, AccessPolicyService, toPolicy } from "./runtime/access-policy-service";
+export { ApprovalCoordinator } from "./runtime/approval-coordinator";
 export { type ApprovalRequestInput, ApprovalService } from "./runtime/approval-service";
 export { createCodingAgentRuntimeFactory } from "./runtime/coding-agent-runtime";
 export {

@@ -6,8 +6,9 @@ import { openAppServerDatabase, runMigrations } from "..";
 import { PromptContextService } from "../composer/prompt-context-service";
 import { ExtensionUiRouter } from "../extensions/extension-ui-router";
 import type { CommandRunner } from "../integrations/integration-api";
+import { RuntimeEventLog } from "../persistence/runtime-event-log";
 import { AccessPolicyService } from "../runtime/access-policy-service";
-import { ApprovalService } from "../runtime/approval-service";
+import { ApprovalCoordinator } from "../runtime/approval-coordinator";
 import { createCodingAgentRuntimeFactory } from "../runtime/coding-agent-runtime";
 import type { RuntimeFactory } from "../runtime/session-controller";
 import { SessionController } from "../runtime/session-controller";
@@ -61,8 +62,12 @@ export async function createAppServerCore(options: CreateAppServerOptions): Prom
 	let router!: AppRouter;
 	const sessionStore = new SqliteSessionStore({ database });
 	const accessPolicyService = new AccessPolicyService(database);
-	const approvalService = new ApprovalService(database, accessPolicyService, (event) =>
-		publish(event as OutboundMessage),
+	const eventLog = new RuntimeEventLog({ database, publish: (event) => publish(event as OutboundMessage) });
+	const approvalService = new ApprovalCoordinator(
+		database,
+		accessPolicyService,
+		(event) => publish(event as OutboundMessage),
+		eventLog,
 	);
 	const extensionUiRouter = new ExtensionUiRouter((message) => publish(message));
 	const controller = new SessionController({
@@ -80,6 +85,7 @@ export async function createAppServerCore(options: CreateAppServerOptions): Prom
 	});
 	router = new AppRouter({
 		database,
+		eventLog,
 		controller,
 		publish,
 		terminalPty: options.terminalPty,

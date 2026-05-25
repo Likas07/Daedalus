@@ -2,6 +2,7 @@ import type { AppEvent, protocolV1 } from "@daedalus-pi/app-server-protocol";
 import { type AppServerDatabase, appendEvent, type EventPayload } from "..";
 import { projectRuntimeEvents } from "../persistence/projector";
 import { type ApprovalReadModel, listActiveApprovals } from "../persistence/read-model";
+import type { RuntimeEventLog } from "../persistence/runtime-event-log";
 import type { AccessPolicyService } from "./access-policy-service";
 
 export interface ApprovalRequestInput {
@@ -54,6 +55,7 @@ export class ApprovalService {
 		private readonly database: AppServerDatabase,
 		private readonly accessPolicy: AccessPolicyService,
 		private readonly publish?: (message: AppEvent | ApprovalRequestedNotification) => void,
+		private readonly eventLog?: RuntimeEventLog,
 	) {}
 
 	list(sessionId?: string): unknown[] {
@@ -156,12 +158,11 @@ export class ApprovalService {
 			request,
 			hardBlock: input.hardBlock === true,
 		};
-		appendEvent(this.database, {
+		this.appendRuntimeEvent({
 			streamId: input.sessionId ?? "app",
 			type: "approval/requested",
 			payload: payload as EventPayload,
 		});
-		projectRuntimeEvents(this.database);
 		const appEvent = {
 			id: approvalId,
 			type: "approval/requested",
@@ -229,12 +230,11 @@ export class ApprovalService {
 			reason: input.reason ?? input.message,
 			ts: new Date().toISOString(),
 		} as unknown as AppEvent;
-		appendEvent(this.database, {
+		this.appendRuntimeEvent({
 			streamId: "app",
 			type: "approval/resolved",
 			payload: event as unknown as EventPayload,
 		});
-		projectRuntimeEvents(this.database);
 		this.waiters.get(input.approvalId)?.resolve(input);
 		this.publish?.(event);
 	}
@@ -321,6 +321,15 @@ export class ApprovalService {
 			createdAt: row.created_at,
 			updatedAt: row.updated_at,
 		};
+	}
+
+	private appendRuntimeEvent(input: Parameters<typeof appendEvent>[1]): void {
+		if (this.eventLog) {
+			this.eventLog.append(input);
+			return;
+		}
+		appendEvent(this.database, input);
+		projectRuntimeEvents(this.database);
 	}
 
 	private v1IdempotencyKey(

@@ -99,6 +99,8 @@ export class FooterDataProvider {
 	private refreshTimer: ReturnType<typeof setTimeout> | null = null;
 	private refreshInFlight = false;
 	private refreshPending = false;
+	private scheduledRefreshSignature: string | null = null;
+	private lastRefreshedSignature: string | null = null;
 	private disposed = false;
 
 	constructor(cwd: string = process.cwd()) {
@@ -160,6 +162,8 @@ export class FooterDataProvider {
 			clearTimeout(this.refreshTimer);
 			this.refreshTimer = null;
 		}
+		this.scheduledRefreshSignature = null;
+		this.lastRefreshedSignature = null;
 		if (this.headWatcher) {
 			this.headWatcher.close();
 			this.headWatcher = null;
@@ -189,6 +193,7 @@ export class FooterDataProvider {
 			clearTimeout(this.refreshTimer);
 			this.refreshTimer = null;
 		}
+		this.scheduledRefreshSignature = null;
 		if (this.headWatcher) {
 			this.headWatcher.close();
 			this.headWatcher = null;
@@ -213,11 +218,17 @@ export class FooterDataProvider {
 	}
 
 	private scheduleRefresh(): void {
-		if (this.disposed || this.refreshTimer) return;
+		if (this.disposed) return;
+		const signature = this.gitWatchSignature();
+		if (signature && (signature === this.scheduledRefreshSignature || signature === this.lastRefreshedSignature)) {
+			return;
+		}
+		if (this.refreshTimer) return;
 		if (this.refreshInFlight) {
 			this.refreshPending = true;
 			return;
 		}
+		this.scheduledRefreshSignature = signature;
 		this.refreshTimer = setTimeout(() => {
 			this.refreshTimer = null;
 			void this.refreshGitBranchAsync();
@@ -232,9 +243,12 @@ export class FooterDataProvider {
 		}
 
 		this.refreshInFlight = true;
+		const refreshSignature = this.scheduledRefreshSignature ?? this.gitWatchSignature();
 		try {
 			const nextBranch = await this.resolveGitBranchAsync();
 			if (this.disposed) return;
+			this.lastRefreshedSignature = refreshSignature;
+			this.scheduledRefreshSignature = null;
 			if (this.cachedBranch !== undefined && this.cachedBranch !== nextBranch) {
 				this.cachedBranch = nextBranch;
 				this.notifyBranchChange();
@@ -248,6 +262,23 @@ export class FooterDataProvider {
 			if (shouldRefreshAgain) {
 				this.scheduleRefresh();
 			}
+		}
+	}
+
+	private gitWatchSignature(): string | null {
+		if (!this.gitPaths) return null;
+		const paths = [this.gitPaths.headPath, this.reftableTablesListPath].filter(
+			(path): path is string => path !== null,
+		);
+		try {
+			return paths
+				.map((path) => {
+					const stat = statSync(path);
+					return `${path}:${stat.mtimeMs}:${stat.ctimeMs}:${stat.size}`;
+				})
+				.join("|");
+		} catch {
+			return null;
 		}
 	}
 

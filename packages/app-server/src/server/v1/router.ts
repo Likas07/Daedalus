@@ -40,6 +40,11 @@ export interface V1RouteContext {
 	readonly saveInlineAttachment?: (attachment: { type: "image"; url: string }) => Promise<string>;
 	readonly providerSnapshot?: () => Promise<protocolV1.ProviderSnapshotResult>;
 	readonly rollbackThread?: (params: protocolV1.ThreadRollbackParams) => Promise<protocolV1.ThreadRollbackResult>;
+	readonly approvals?: {
+		list(params: protocolV1.ApprovalListParams): protocolV1.ApprovalListResult;
+		decide(params: protocolV1.ApprovalDecisionParams): protocolV1.ApprovalDecisionResult;
+		answer(params: protocolV1.ApprovalAnswerInputParams): protocolV1.ApprovalAnswerInputResult;
+	};
 	readonly textGeneration?: {
 		threadTitle(params: protocolV1.TextGenerateThreadTitleParams): Promise<protocolV1.TextGenerateThreadTitleResult>;
 		branchName(params: protocolV1.TextGenerateBranchNameParams): Promise<protocolV1.TextGenerateBranchNameResult>;
@@ -66,6 +71,9 @@ export type V1Method =
 	| "thread.rollback"
 	| "turn.start"
 	| "turn.cancel"
+	| "v1.approval.list"
+	| "v1.approval.decide"
+	| "v1.approval.answer"
 	| "payload.window"
 	| "provider.snapshot"
 	| "text.threadTitle"

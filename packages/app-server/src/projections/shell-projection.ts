@@ -7,6 +7,7 @@ import {
 	listSessionTurns,
 	listWorktrees,
 } from "../persistence/read-model";
+import { deriveThreadProjectionCore } from "./thread-projection-core";
 
 export interface BuildShellSnapshotOptions {
 	readonly database: AppServerDatabase;
@@ -29,43 +30,28 @@ export function buildShellSnapshot(options: BuildShellSnapshotOptions): ShellSna
 			const turns = listSessionTurns(database, session.id);
 			const last = turns.at(-1);
 			const pendingActionCount = pendingBySession.get(session.id) ?? 0;
-			const safetySignals = [];
-			if (session.needsAttentionReason)
-				safetySignals.push({
-					level: "warning" as const,
-					message: session.needsAttentionReason,
-					code: "needs-attention",
-				});
-			if (session.validationStatus && session.validationStatus !== "valid")
-				safetySignals.push({
-					level: "warning" as const,
-					message: `Target state is ${session.validationStatus}`,
-					code: "target-validation",
-				});
-			if (session.runsIn?.isolationMode === "base-checkout")
-				safetySignals.push({ level: "warning" as const, message: "Runs in Base checkout", code: "base-checkout" });
-			if (pendingActionCount > 0)
-				safetySignals.push({
-					level: "info" as const,
-					message: `${pendingActionCount} pending approval${pendingActionCount === 1 ? "" : "s"}`,
-					code: "pending-approval",
-				});
 			const worktree = session.worktreeId ? worktrees.get(session.worktreeId) : undefined;
+			const core = deriveThreadProjectionCore({
+				status: session.status,
+				title: session.title,
+				needsAttentionReason: session.needsAttentionReason,
+				validationStatus: session.validationStatus,
+				isolationMode: session.runsIn?.isolationMode,
+				pendingActionCount,
+				fallbackTitle:
+					last?.content.slice(0, 80) ?? targetLabel(session.runsIn, worktree?.branch) ?? "Untitled Thread",
+			});
 			threads.push({
 				threadId: session.id,
 				sessionId: session.id,
 				projectId: session.projectId ?? undefined,
 				worktreeId: session.worktreeId ?? undefined,
-				title:
-					session.title ??
-					last?.content.slice(0, 80) ??
-					targetLabel(session.runsIn, worktree?.branch) ??
-					"Untitled Thread",
-				status: mapStatus(session.status, pendingActionCount),
+				title: core.title,
+				status: core.status,
 				lastMessage: last?.content || undefined,
 				updatedAt: session.updatedAt,
-				pendingActionCount,
-				safetySignals,
+				pendingActionCount: core.pendingActionCount,
+				safetySignals: core.safetySignals,
 			});
 		}
 	}
@@ -106,14 +92,6 @@ function targetLabel(
 	return runsIn.isolationMode === "base-checkout"
 		? `Base: ${runsIn.branch ?? "checkout"}`
 		: `Worktree: ${worktreeBranch ?? runsIn.branch ?? "unknown"}`;
-}
-
-function mapStatus(status: string, pending: number): ShellThreadSummary["status"] {
-	if (pending > 0 || status === "waiting_for_approval") return "waiting";
-	if (["active", "running"].includes(status)) return "running";
-	if (["failed", "needs-attention"].includes(status)) return "failed";
-	if (["completed", "done"].includes(status)) return "completed";
-	return "idle";
 }
 
 export function cursor(database: AppServerDatabase): ShellSnapshot["cursor"] {

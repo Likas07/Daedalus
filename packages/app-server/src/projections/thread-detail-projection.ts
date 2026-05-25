@@ -7,6 +7,7 @@ import type {
 import type { AppServerDatabase } from "../persistence/database";
 import { listActiveApprovals, listSessionTurns, listTerminalSessions } from "../persistence/read-model";
 import { cursor } from "./shell-projection";
+import { deriveThreadProjectionCore } from "./thread-projection-core";
 
 export interface BuildThreadDetailSnapshotOptions {
 	readonly database: AppServerDatabase;
@@ -72,44 +73,32 @@ export function buildThreadDetailSnapshot(options: BuildThreadDetailSnapshotOpti
 			completedAt: terminal.status === "running" ? undefined : terminal.updatedAt,
 		})),
 	];
-	const safetySignals = [];
-	if (session.needs_attention_reason)
-		safetySignals.push({
-			level: "warning" as const,
-			message: session.needs_attention_reason,
-			code: "needs-attention",
-		});
-	if (session.validation_status && session.validation_status !== "valid")
-		safetySignals.push({
-			level: "warning" as const,
-			message: `Target state is ${session.validation_status}`,
-			code: "target-validation",
-		});
+	const core = deriveThreadProjectionCore({
+		status: session.status,
+		title: session.title,
+		needsAttentionReason: session.needs_attention_reason,
+		validationStatus: session.validation_status,
+		pendingActionCount: pendingActions.length,
+		fallbackTitle: messages.find((m) => m.role === "user")?.content.slice(0, 80) ?? "Untitled Thread",
+	});
 	return {
 		cursor: cursor(options.database),
 		threadId: options.threadId,
 		sessionId,
 		projectId: session.project_id ?? undefined,
 		worktreeId: session.worktree_id ?? undefined,
-		title: session.title ?? messages.find((m) => m.role === "user")?.content.slice(0, 80) ?? "Untitled Thread",
-		status: mapStatus(session.status, pendingActions.length),
+		title: core.title,
+		status: core.status,
 		messages,
 		activity,
 		pendingActions,
-		safetySignals,
+		safetySignals: core.safetySignals,
 		diffIds: [session.worktree_id ?? session.project_id].filter((id): id is string => !!id),
 	};
 }
 
 function role(value: string): ThreadMessage["role"] {
 	return value === "user" || value === "system" || value === "tool" ? value : "assistant";
-}
-function mapStatus(status: string, pending: number): ThreadDetailSnapshot["status"] {
-	if (pending > 0 || status === "waiting_for_approval") return "waiting";
-	if (["active", "running"].includes(status)) return "running";
-	if (["failed", "needs-attention"].includes(status)) return "failed";
-	if (["completed", "done"].includes(status)) return "completed";
-	return "idle";
 }
 function approvalTitle(raw: string): string {
 	try {

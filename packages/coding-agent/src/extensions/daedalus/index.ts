@@ -1,5 +1,6 @@
 // Safety extensions
 
+export { default as telegramRemote } from "../telegram-remote/index.js";
 // Resource extensions
 export { default as dynamicResources } from "./resources/dynamic-resources.js";
 export { default as confirmDestructive } from "./safety/confirm-destructive.js";

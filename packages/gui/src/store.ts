@@ -27,6 +27,12 @@ import { create } from "zustand";
 import { resolveEnvironmentHttpUrl } from "./environments/runtime";
 import { sanitizeThreadErrorMessage } from "./rpc/transportError";
 import { getThreadFromEnvironmentState } from "./threadDerivation";
+import {
+	removeThreadStateAggregate,
+	retainThreadScopedRecordAggregate,
+	writeThreadShellStateAggregate,
+	writeThreadStateAggregate,
+} from "./thread-aggregate";
 import type {
 	ChatMessage,
 	Project,
@@ -975,7 +981,7 @@ function updateThreadState(
 	if (nextThread === currentThread) {
 		return state;
 	}
-	return writeThreadState(state, nextThread, currentThread);
+	return writeThreadStateAggregate(state, nextThread, currentThread);
 }
 
 function buildProjectState(projects: ReadonlyArray<Project>): Pick<EnvironmentState, "projectIds" | "projectById"> {
@@ -1032,19 +1038,19 @@ function syncEnvironmentShellSnapshot(
 		threadSessionById: {},
 		threadTurnStateById: {},
 		sidebarThreadSummaryById: {},
-		messageIdsByThreadId: retainThreadScopedRecord(state.messageIdsByThreadId, nextThreadIds),
-		messageByThreadId: retainThreadScopedRecord(state.messageByThreadId, nextThreadIds),
-		activityIdsByThreadId: retainThreadScopedRecord(state.activityIdsByThreadId, nextThreadIds),
-		activityByThreadId: retainThreadScopedRecord(state.activityByThreadId, nextThreadIds),
-		proposedPlanIdsByThreadId: retainThreadScopedRecord(state.proposedPlanIdsByThreadId, nextThreadIds),
-		proposedPlanByThreadId: retainThreadScopedRecord(state.proposedPlanByThreadId, nextThreadIds),
-		turnDiffIdsByThreadId: retainThreadScopedRecord(state.turnDiffIdsByThreadId, nextThreadIds),
-		turnDiffSummaryByThreadId: retainThreadScopedRecord(state.turnDiffSummaryByThreadId, nextThreadIds),
+		messageIdsByThreadId: retainThreadScopedRecordAggregate(state.messageIdsByThreadId, nextThreadIds),
+		messageByThreadId: retainThreadScopedRecordAggregate(state.messageByThreadId, nextThreadIds),
+		activityIdsByThreadId: retainThreadScopedRecordAggregate(state.activityIdsByThreadId, nextThreadIds),
+		activityByThreadId: retainThreadScopedRecordAggregate(state.activityByThreadId, nextThreadIds),
+		proposedPlanIdsByThreadId: retainThreadScopedRecordAggregate(state.proposedPlanIdsByThreadId, nextThreadIds),
+		proposedPlanByThreadId: retainThreadScopedRecordAggregate(state.proposedPlanByThreadId, nextThreadIds),
+		turnDiffIdsByThreadId: retainThreadScopedRecordAggregate(state.turnDiffIdsByThreadId, nextThreadIds),
+		turnDiffSummaryByThreadId: retainThreadScopedRecordAggregate(state.turnDiffSummaryByThreadId, nextThreadIds),
 		bootstrapComplete: true,
 	};
 
 	for (const thread of snapshot.threads) {
-		nextState = writeThreadShellState(nextState, mapThreadShell(thread, environmentId));
+		nextState = writeThreadShellStateAggregate(nextState, mapThreadShell(thread, environmentId));
 	}
 
 	return nextState;
@@ -1072,7 +1078,7 @@ export function syncServerThreadDetail(
 	return commitEnvironmentState(
 		state,
 		environmentId,
-		writeThreadState(environmentState, mapThread(thread, environmentId), previousThread),
+		writeThreadStateAggregate(environmentState, mapThread(thread, environmentId), previousThread),
 	);
 }
 
@@ -1201,11 +1207,11 @@ function applyEnvironmentOrchestrationEvent(
 				},
 				environmentId,
 			);
-			return writeThreadState(state, nextThread, previousThread);
+			return writeThreadStateAggregate(state, nextThread, previousThread);
 		}
 
 		case "thread.deleted":
-			return removeThreadState(state, event.payload.threadId);
+			return removeThreadStateAggregate(state, event.payload.threadId);
 
 		case "thread.archived":
 			return updateThreadState(state, event.payload.threadId, (thread) => ({
@@ -1607,9 +1613,9 @@ function applyEnvironmentShellEvent(
 			};
 		}
 		case "thread-upserted":
-			return writeThreadShellState(state, mapThreadShell(event.thread, environmentId));
+			return writeThreadShellStateAggregate(state, mapThreadShell(event.thread, environmentId));
 		case "thread-removed":
-			return removeThreadState(state, event.threadId);
+			return removeThreadStateAggregate(state, event.threadId);
 	}
 }
 

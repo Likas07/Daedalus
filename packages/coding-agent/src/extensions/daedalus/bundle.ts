@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
+import telegramRemote from "../telegram-remote/index.js";
 import dynamicResources from "./resources/dynamic-resources.js";
 import confirmDestructive from "./safety/confirm-destructive.js";
 import dirtyRepoGuard from "./safety/dirty-repo-guard.js";
@@ -41,6 +42,7 @@ export default function daedalusBundle(pi: ExtensionAPI) {
 	semanticWorkspaceTools(pi);
 	tools(pi);
 	contextProfile(pi);
+	telegramRemote(pi);
 
 	skill(pi);
 	statusDashboard(pi);
