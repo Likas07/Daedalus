@@ -121,6 +121,72 @@ import {
 	renderTranscriptMarkdown,
 } from "./transcript-export.js";
 
+const USER_INPUT_TOOL_NAMES = new Set([
+	"question",
+	"questionnaire",
+	"ask_user_question",
+	"askuserquestion",
+	"AskUserQuestion",
+	"request_user_input",
+]);
+
+const USER_REQUESTED_STOP_PATTERNS = [
+	/\b(?:and|then) stop\b/i,
+	/\bstop after\b/i,
+	/\bdo not continue\b/i,
+	/\bdon't continue\b/i,
+	/\bdo not keep going\b/i,
+	/\bdon't keep going\b/i,
+	/\bwait for me\b/i,
+	/\bwait for (?:my|user) (?:input|permission|approval|confirmation)\b/i,
+	/\bpause after\b/i,
+	/\byield after\b/i,
+];
+
+const USER_INPUT_PERMISSION_PATTERNS = [
+	/\bshould i\b[^\n?]*\?/i,
+	/\bdo you want me to\b/i,
+	/\bwould you like me to\b/i,
+	/\bmay i\b[^\n?]*\?/i,
+	/\bcan i\b[^\n?]*\?/i,
+	/\bplease confirm\b/i,
+	/\bconfirm before\b/i,
+	/\bneed (?:your )?(?:approval|permission|confirmation)\b/i,
+	/\bwaiting for (?:your )?(?:approval|permission|confirmation|input)\b/i,
+];
+
+function isPendingWorkReminderText(text: string): boolean {
+	return (
+		text.startsWith("You have pending todo items that must be completed before finishing the task:") &&
+		text.includes("Complete these before yielding.")
+	);
+}
+
+function messageContentText(content: Message["content"]): string {
+	if (typeof content === "string") return content;
+	return content
+		.filter((block): block is TextContent => block.type === "text")
+		.map((block) => block.text)
+		.join("\n");
+}
+
+function assistantMessageText(message: AssistantMessage): string {
+	return messageContentText(message.content);
+}
+
+export function isAssistantAwaitingUserInput(message: AssistantMessage): boolean {
+	if (message.content.some((block) => block.type === "toolCall" && USER_INPUT_TOOL_NAMES.has(block.name))) {
+		return true;
+	}
+
+	const text = assistantMessageText(message).trim();
+	if (!text) {
+		return false;
+	}
+
+	return USER_INPUT_PERMISSION_PATTERNS.some((pattern) => pattern.test(text));
+}
+
 // ============================================================================
 // Skill Block Parsing
 // ============================================================================
@@ -730,11 +796,7 @@ export class AgentSession {
 		if (message.content.some((block) => block.type === "toolCall")) {
 			return false;
 		}
-		const text = message.content
-			.filter((block): block is TextContent => block.type === "text")
-			.map((block) => block.text)
-			.join("\n")
-			.toLowerCase();
+		const text = assistantMessageText(message).toLowerCase();
 		if (!text.trim()) {
 			return false;
 		}
@@ -747,6 +809,35 @@ export class AgentSession {
 			/\bno further\b/,
 			/\bwrapped up\b/,
 		].some((pattern) => pattern.test(text));
+	}
+
+	private _getLatestRealUserMessageText(): string | undefined {
+		const branch = this.sessionManager.getBranch();
+		for (let i = branch.length - 1; i >= 0; i--) {
+			const entry = branch[i];
+			if (entry.type !== "message" || entry.message.role !== "user") {
+				continue;
+			}
+
+			const text = messageContentText(entry.message.content).trim();
+			if (!text || isPendingWorkReminderText(text)) {
+				continue;
+			}
+			return text;
+		}
+		return undefined;
+	}
+
+	private _latestUserRequestedPendingWorkStop(): boolean {
+		const text = this._getLatestRealUserMessageText();
+		return text ? USER_REQUESTED_STOP_PATTERNS.some((pattern) => pattern.test(text)) : false;
+	}
+
+	private _shouldSuppressPendingWorkContinuation(lastAssistantMessage?: AssistantMessage): boolean {
+		return (
+			(lastAssistantMessage ? isAssistantAwaitingUserInput(lastAssistantMessage) : false) ||
+			this._latestUserRequestedPendingWorkStop()
+		);
 	}
 
 	private _schedulePostRunContinuation(text: string): void {
@@ -814,6 +905,7 @@ export class AgentSession {
 
 		const triggeredLoopWarning = completionAttempt ? this._loopDetector.recordCompletionAttempt(signature) : false;
 		if (triggeredLoopWarning && signature !== this._getLatestCustomSignature("doom-loop-reminder-state")) {
+			const suppressContinuation = this._shouldSuppressPendingWorkContinuation(lastAssistantMessage);
 			const loopReminder =
 				"You are repeating completion attempts while active todo items remain. Change strategy: inspect the current todo state, update the plan, or use different discovery/debugging tools before concluding again.";
 			this.sessionManager.appendCustomEntry("doom-loop-reminder-state", { signature });
@@ -826,7 +918,9 @@ export class AgentSession {
 				},
 				{ triggerTurn: false },
 			);
-			this._schedulePostRunContinuation(loopReminder);
+			if (!suppressContinuation) {
+				this._schedulePostRunContinuation(loopReminder);
+			}
 		}
 
 		const reminderDecision = decidePendingTodosReminder(
@@ -837,6 +931,7 @@ export class AgentSession {
 			return;
 		}
 
+		const suppressContinuation = this._shouldSuppressPendingWorkContinuation(lastAssistantMessage);
 		const reminder = reminderDecision.reminder;
 		this.sessionManager.appendCustomEntry("pending-work-reminder-state", { signature: reminderDecision.signature });
 		await this.sendCustomMessage(
@@ -848,7 +943,9 @@ export class AgentSession {
 			},
 			{ triggerTurn: false },
 		);
-		this._schedulePostRunContinuation(reminder);
+		if (!suppressContinuation) {
+			this._schedulePostRunContinuation(reminder);
+		}
 	}
 
 	/** Extract text content from a message */
