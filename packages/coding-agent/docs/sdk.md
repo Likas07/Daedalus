@@ -2,7 +2,7 @@
 
 # SDK
 
-The SDK provides programmatic access to pi's agent capabilities. Use it to embed daedalus in other applications, build custom interfaces, or integrate with automated workflows.
+The SDK provides programmatic access to Daedalus agent capabilities. Use it to embed Daedalus in other applications, build custom interfaces, or integrate with automated workflows.
 
 **Example use cases:**
 - Build a custom UI (web, desktop, mobile)

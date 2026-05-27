@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { discoverViaWalker, FD_WALKER_DEFAULTS } from "../../src/extensions/daedalus/tools/fd-walker.js";
+import { discoverViaWalker, FD_WALKER_DEFAULTS } from "../../src/extensions/semantic-search/fd-walker.js";
 
 async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
 	const dir = join(tmpdir(), `daedalus-fd-walker-${Date.now()}-${Math.random().toString(36).slice(2)}`);

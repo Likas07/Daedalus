@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	createOllamaSemanticEmbedder,
 	registerOllamaEmbeddingFunction,
-} from "../src/extensions/daedalus/tools/semantic-embedder.js";
-import { openSemanticLanceStore } from "../src/extensions/daedalus/tools/semantic-lancedb.js";
+} from "../src/extensions/semantic-search/semantic-embedder.js";
+import { openSemanticLanceStore } from "../src/extensions/semantic-search/semantic-lancedb.js";
 import {
 	getSemanticWorkspaceIndexingUnavailableReason,
 	isSemanticWorkspaceIndexingAvailable,

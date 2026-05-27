@@ -2,15 +2,15 @@ import path from "node:path";
 import { type ExtensionAPI, formatVisiblePath } from "@daedalus-pi/coding-agent";
 import { Text } from "@daedalus-pi/tui";
 import { Type } from "@sinclair/typebox";
-import { resolveToCwd } from "../../../core/tools/path-utils.js";
+import { resolveToCwd } from "../../core/tools/path-utils.js";
 import {
 	GREP_MAX_LINE_LENGTH,
 	type TruncationResult,
 	truncateHead,
 	truncateLine,
-} from "../../../core/tools/truncate.js";
-import { truncateForDisplayOnly } from "../../../modes/interactive/components/display-truncate.js";
-import { formatTruncationNotice, saveToTempFile } from "../shared/truncation.js";
+} from "../../core/tools/truncate.js";
+import { truncateForDisplayOnly } from "../../modes/interactive/components/display-truncate.js";
+import { formatTruncationNotice, saveToTempFile } from "../daedalus/shared/truncation.js";
 import { createSemanticStoreRuntime } from "./semantic-store.js";
 import { requireSearchableSemanticWorkspace } from "./semantic-workspace.js";
 

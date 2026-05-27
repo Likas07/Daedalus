@@ -10,7 +10,7 @@ Daedalus loads prompt templates from:
 
 - Global: `~/.daedalus/agent/prompts/*.md`
 - Project: `.daedalus/prompts/*.md`
-- Packages: `prompts/` directories or `pi.prompts` entries in `package.json`
+- Packages: `prompts/` directories or `daedalus.prompts` entries in `package.json`
 - Settings: `prompts` array with files or directories
 - CLI: `--prompt-template <path>` (repeatable)
 

@@ -2,7 +2,7 @@
 name: muse
 displayName: Muse
 description: Planning specialist; use whenever plans, decomposition, sequencing, or architecture trade-offs are needed
-tools: read,grep,find,ls,fs_search,sem_search,todo_read,todo_write,plan_create,plan_validate,skill
+tools: read,grep,find,ls,fs_search,todo_read,todo_write,plan_create,plan_validate,skill
 purpose: planning
 ---
 

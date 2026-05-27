@@ -156,6 +156,33 @@ describe("SettingsManager", () => {
 		});
 	});
 
+	describe("built-in extension settings", () => {
+		it("persists built-in extension enablement by id", async () => {
+			const sandbox = createSandbox();
+			const settings = SettingsManager.create(sandbox.projectDir, sandbox.agentDir);
+
+			expect(settings.isBuiltinExtensionEnabled("daedalus-semantic-search")).toBe(false);
+
+			settings.setBuiltinExtensionEnabled("daedalus-semantic-search", true);
+			await settings.flush();
+			expect(settings.isBuiltinExtensionEnabled("daedalus-semantic-search")).toBe(true);
+
+			const savedEnabled = JSON.parse(readFileSync(sandbox.projectSettingsPath, "utf-8"));
+			expect(savedEnabled.builtinExtensions).toEqual({
+				enabled: { "daedalus-semantic-search": true },
+			});
+
+			settings.setBuiltinExtensionEnabled("daedalus-semantic-search", false);
+			await settings.flush();
+			expect(settings.isBuiltinExtensionEnabled("daedalus-semantic-search")).toBe(false);
+
+			const savedDisabled = JSON.parse(readFileSync(sandbox.projectSettingsPath, "utf-8"));
+			expect(savedDisabled.builtinExtensions).toEqual({
+				enabled: { "daedalus-semantic-search": false },
+			});
+		});
+	});
+
 	describe("packages migration", () => {
 		it("keeps local-only extensions in the extensions array", () => {
 			const sandbox = createSandbox();

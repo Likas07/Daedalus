@@ -1,12 +1,8 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getModel } from "@daedalus-pi/ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createAgentSession } from "../src/core/sdk.js";
-import { SessionManager } from "../src/core/session-manager.js";
-import { SettingsManager } from "../src/core/settings-manager.js";
-import { isSemanticWorkspaceIndexingAvailable } from "./semantic-test-helpers.js";
+import { createSemanticEnabledSession, isSemanticWorkspaceIndexingAvailable } from "./semantic-test-helpers.js";
 
 const semanticWorkspaceIt = it.skipIf(!(await isSemanticWorkspaceIndexingAvailable()));
 
@@ -37,16 +33,7 @@ describe("semantic search result shape", () => {
 	semanticWorkspaceIt(
 		"returns chunk-level results with file path, line range, scores, and supports path/glob filters",
 		async () => {
-			const settingsManager = SettingsManager.create(tempDir, agentDir);
-			const sessionManager = SessionManager.inMemory();
-			const { session } = await createAgentSession({
-				cwd: tempDir,
-				agentDir,
-				model: getModel("anthropic", "claude-sonnet-4-5")!,
-				settingsManager,
-				sessionManager,
-			});
-			await session.bindExtensions({});
+			const { session } = await createSemanticEnabledSession({ cwd: tempDir, agentDir });
 
 			const semSearch = session.getToolDefinition("sem_search");
 

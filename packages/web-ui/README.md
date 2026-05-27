@@ -2,7 +2,7 @@
 
 Reusable web UI components for building AI chat interfaces powered by [@daedalus-pi/ai](../ai) and [@daedalus-pi/agent-core](../agent).
 
-Built with [mini-lit](https://github.com/badlogic/mini-lit) web components and Tailwind CSS v4.
+Built with mini-lit web components and Tailwind CSS v4.
 
 ## Features
 
@@ -17,7 +17,7 @@ Built with [mini-lit](https://github.com/badlogic/mini-lit) web components and T
 ## Installation
 
 ```bash
-npm install @daedalus-pi/web-ui @daedalus-pi/agent-core @daedalus-pi/ai
+bun add @daedalus-pi/web-ui @daedalus-pi/agent-core @daedalus-pi/ai
 ```
 
 ## Quick Start
@@ -97,7 +97,7 @@ document.body.appendChild(chatPanel);
                           │
                           ▼
 ┌─────────────────────────────────────────────────────┐
-│              Agent (from pi-agent-core)             │
+│            Agent (from @daedalus-pi/agent-core)     │
 │  - State management (messages, model, tools)        │
 │  - Event emission (agent_start, message_update, ...)│
 │  - Tool execution                                   │
@@ -166,7 +166,7 @@ Properties:
 - `enableThinkingSelector`: Show thinking level selector (default: true)
 - `showThemeToggle`: Show theme toggle (default: false)
 
-### Agent (from pi-agent-core)
+### Agent (from @daedalus-pi/agent-core)
 
 ```typescript
 import { Agent } from '@daedalus-pi/agent-core';
@@ -590,7 +590,6 @@ console.log(i18n('Loading...')); // "Laden..."
 ## Examples
 
 - [example/](./example) - Complete web app with sessions, artifacts, custom messages
-- [sitegeist](https://sitegeist.ai) - Browser extension using pi-web-ui
 
 ## Known Issues
 

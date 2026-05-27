@@ -1,7 +1,6 @@
 import path from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@daedalus-pi/coding-agent";
 import { minimatch } from "minimatch";
-import { applySemanticToolExposure, rememberSemanticDesiredTools } from "../../tools/semantic-tool-availability.js";
 import musePrimaryPrompt from "./prompts/muse-primary.md" with { type: "text" };
 import sagePrimaryPrompt from "./prompts/sage-primary.md" with { type: "text" };
 
@@ -19,7 +18,6 @@ const SAGE_TOOLS = [
 	"find",
 	"ls",
 	"fs_search",
-	"sem_search",
 	"read_agent_result_output",
 	"todo_read",
 	"status_overview",
@@ -32,7 +30,6 @@ const MUSE_TOOLS = [
 	"find",
 	"ls",
 	"fs_search",
-	"sem_search",
 	"read_agent_result_output",
 	"todo_read",
 	"todo_write",
@@ -132,8 +129,7 @@ export default function primaryRoleMode(pi: ExtensionAPI): void {
 	function applyRoleMode(ctx?: ExtensionContext | ExtensionCommandContext): void {
 		const toolList = toolsForRole(currentRole);
 		if (toolList) {
-			rememberSemanticDesiredTools(toolList);
-			pi.setActiveTools(ctx ? applySemanticToolExposure(toolList, ctx.cwd) : toolList);
+			pi.setActiveTools(toolList);
 		}
 		if (ctx?.hasUI) {
 			ctx.ui.setStatus(
@@ -146,9 +142,7 @@ export default function primaryRoleMode(pi: ExtensionAPI): void {
 	function ensureImplementationTools(ctx?: ExtensionContext | ExtensionCommandContext): void {
 		const activeTools = new Set(pi.getActiveTools());
 		for (const toolName of IMPLEMENTATION_HANDOFF_TOOLS) activeTools.add(toolName);
-		const toolList = [...activeTools];
-		rememberSemanticDesiredTools(toolList);
-		pi.setActiveTools(ctx ? applySemanticToolExposure(toolList, ctx.cwd) : toolList);
+		pi.setActiveTools([...activeTools]);
 	}
 
 	async function handleMusePlanReady(

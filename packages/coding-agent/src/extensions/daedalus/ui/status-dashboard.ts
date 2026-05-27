@@ -1,7 +1,6 @@
 import type { ExtensionAPI } from "@daedalus-pi/coding-agent";
 import { Text } from "@daedalus-pi/tui";
 import { Type } from "@sinclair/typebox";
-import { getSemanticWorkspaceStatus } from "../tools/semantic-workspace.js";
 import {
 	extractTodoSnapshotFromCustomEntry,
 	extractTodoSnapshotFromDetails,
@@ -35,14 +34,11 @@ function buildStatusText(input: {
 	hasPendingMessages?: boolean;
 	todoSnapshot?: TodoSnapshot;
 }): string {
-	const workspace = getSemanticWorkspaceStatus(input.cwd);
 	const todoSummary = input.todoSnapshot?.summary;
 	const lines = [
 		`cwd: ${input.cwd}`,
 		`model: ${input.modelLabel ?? "unknown"}`,
 		`pending_messages: ${input.hasPendingMessages ? "yes" : "no"}`,
-		`semantic_workspace: ${workspace.state}`,
-		`semantic_chunk_count: ${workspace.chunkCount}`,
 	];
 	if (todoSummary) {
 		lines.push(`todos_total: ${todoSummary.total}`);
@@ -70,7 +66,7 @@ export default function statusDashboard(pi: ExtensionAPI): void {
 			});
 			return {
 				content: [{ type: "text", text }],
-				details: { todoSnapshot, workspace: getSemanticWorkspaceStatus(ctx.cwd) },
+				details: { todoSnapshot },
 			};
 		},
 		renderCall(_args, theme) {

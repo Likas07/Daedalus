@@ -2,11 +2,17 @@ import { join } from "node:path";
 import { Agent, type AgentMessage, type ThinkingLevel } from "@daedalus-pi/agent-core";
 import { type Message, type Model, streamSimple } from "@daedalus-pi/ai";
 import { getAgentDir, getDocsPath } from "../config.js";
-import daedalusBundle from "../extensions/daedalus/bundle.js";
+import { resolveBuiltinExtensionFactories } from "../extensions/builtin-registry.js";
 import { AgentSession } from "./agent-session.js";
 import { AuthStorage } from "./auth-storage.js";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.js";
-import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.js";
+import type {
+	ExtensionFactory,
+	ExtensionRunner,
+	LoadExtensionsResult,
+	SessionStartEvent,
+	ToolDefinition,
+} from "./extensions/index.js";
 import { type GeneratedImageArtifactInput, saveGeneratedImageArtifact } from "./generated-image-artifacts.js";
 import { convertToLlm } from "./messages.js";
 import { ModelRegistry } from "./model-registry.js";
@@ -82,6 +88,8 @@ export interface CreateAgentSessionOptions {
 
 	/** Resource loader. When omitted, DefaultResourceLoader is used. */
 	resourceLoader?: ResourceLoader;
+	/** Extra non-built-in extension factories to load for this session. */
+	extensionFactories?: ExtensionFactory[];
 
 	/** Session manager. Default: SessionManager.create(cwd) */
 	sessionManager?: SessionManager;
@@ -261,7 +269,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			cwd,
 			agentDir,
 			settingsManager,
-			extensionFactories: [daedalusBundle],
+			extensionFactories: [...resolveBuiltinExtensionFactories(), ...(options.extensionFactories ?? [])],
 		});
 		await resourceLoader.reload();
 		time("resourceLoader.reload");

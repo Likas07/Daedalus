@@ -6,7 +6,7 @@ import {
 	classifySemanticPath,
 	collectSemanticCandidateFiles,
 	discoverSemanticFiles,
-} from "../src/extensions/daedalus/tools/semantic-file-discovery.js";
+} from "../src/extensions/semantic-search/semantic-file-discovery.js";
 
 function rels(files: string[], root: string) {
 	return files

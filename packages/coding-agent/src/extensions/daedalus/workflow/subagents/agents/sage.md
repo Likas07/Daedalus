@@ -2,7 +2,7 @@
 name: sage
 displayName: Sage
 description: Research and reconnaissance specialist with compact evidence-backed findings and markdown-only evidence artifacts
-tools: read,grep,find,ls,fs_search,sem_search,todo_read,write,hashline_edit
+tools: read,grep,find,ls,fs_search,todo_read,write,hashline_edit
 purpose: exploration
 ---
 

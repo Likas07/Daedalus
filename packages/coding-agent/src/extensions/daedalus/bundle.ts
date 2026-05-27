@@ -10,8 +10,6 @@ import dynamicTools from "./tools/dynamic-tools.js";
 import fsSearch from "./tools/fs-search.js";
 import questionnaire from "./tools/questionnaire.js";
 import readAgentResultOutput from "./tools/read-agent-result-output.js";
-import semSearch from "./tools/sem-search.js";
-import semanticWorkspaceTools from "./tools/semantic-workspace-tools.js";
 import skill from "./tools/skill.js";
 import todo from "./tools/todo.js";
 import tools from "./tools/tools.js";
@@ -38,8 +36,6 @@ export default function daedalusBundle(pi: ExtensionAPI) {
 	readAgentResultOutput(pi);
 	dynamicTools(pi);
 	fsSearch(pi);
-	semSearch(pi);
-	semanticWorkspaceTools(pi);
 	tools(pi);
 	contextProfile(pi);
 	telegramRemote(pi);

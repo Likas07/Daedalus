@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { CONFIG_DIR_NAME } from "../../../config.js";
-import { type SemanticSettings, SettingsManager } from "../../../core/settings-manager.js";
+import { CONFIG_DIR_NAME } from "../../config.js";
+import { type SemanticSettings, SettingsManager } from "../../core/settings-manager.js";
 import {
 	DEFAULT_OLLAMA_EMBED_MODEL,
 	DEFAULT_OLLAMA_HOST,

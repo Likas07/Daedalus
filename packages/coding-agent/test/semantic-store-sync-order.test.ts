@@ -2,14 +2,14 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SemanticStoreConfig } from "../src/extensions/daedalus/tools/semantic-store.js";
+import type { SemanticStoreConfig } from "../src/extensions/semantic-search/semantic-store.js";
 
 const mockState = {
 	operations: [] as string[],
 	failEmbedding: false,
 };
 
-vi.mock("../src/extensions/daedalus/tools/semantic-embedder.js", () => ({
+vi.mock("../src/extensions/semantic-search/semantic-embedder.js", () => ({
 	createOllamaSemanticEmbedder: async () => ({
 		async getModelInfo() {
 			return { provider: "mock", model: "mock-embed", dimension: 3, host: "mock-host" };
@@ -44,7 +44,7 @@ vi.mock("../src/extensions/daedalus/tools/semantic-embedder.js", () => ({
 	getRegisteredOllamaEmbeddingFunctionName: () => "mock-embedding-function",
 }));
 
-vi.mock("../src/extensions/daedalus/tools/semantic-lancedb.js", () => ({
+vi.mock("../src/extensions/semantic-search/semantic-lancedb.js", () => ({
 	openSemanticLanceStore: async () => ({
 		async replaceChunks() {},
 		async insertChunks() {},
@@ -95,7 +95,7 @@ vi.mock("../src/extensions/daedalus/tools/semantic-lancedb.js", () => ({
 	}),
 }));
 
-const { createSemanticStoreRuntime } = await import("../src/extensions/daedalus/tools/semantic-store.js");
+const { createSemanticStoreRuntime } = await import("../src/extensions/semantic-search/semantic-store.js");
 
 describe("semantic store sync write ordering", () => {
 	let tempDir: string;

@@ -8,6 +8,7 @@ import { SessionManager } from "../src/core/session-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
 import {
 	getSemanticWorkspaceIndexingUnavailableReason,
+	createSemanticEnabledSession,
 	isSemanticWorkspaceIndexingAvailable,
 	skipSemanticTest,
 	syncSemanticWorkspaceOrSkip,
@@ -29,7 +30,7 @@ function getText(result: any): string {
 		.join("\n");
 }
 
-describe("fs_search and sem_search tools", () => {
+describe("fs_search default tool and semantic search extension tools", () => {
 	let tempDir: string;
 	let agentDir: string;
 
@@ -172,18 +173,8 @@ describe("fs_search and sem_search tools", () => {
 		async () => {
 			const hugeLines = Array.from({ length: 250 }, (_, index) => `alpha huge semantic ${index} ${"z".repeat(900)}`);
 			writeFileSync(join(tempDir, "src", "huge-semantic.txt"), `${hugeLines.join("\n")}\n`);
-			const settingsManager = SettingsManager.create(tempDir, agentDir);
-			const sessionManager = SessionManager.inMemory();
-			const { session } = await createAgentSession({
-				cwd: tempDir,
-				agentDir,
-				model: getModel("anthropic", "claude-sonnet-4-5")!,
-				settingsManager,
-				sessionManager,
-			});
+			const { session } = await createSemanticEnabledSession({ cwd: tempDir, agentDir });
 			try {
-				await session.bindExtensions({});
-
 				const semSearch = session.getToolDefinition("sem_search");
 				expect(semSearch).toBeDefined();
 
@@ -225,18 +216,8 @@ describe("fs_search and sem_search tools", () => {
 	semanticWorkspaceIt(
 		"ranks semantically related files ahead of weaker matches",
 		async () => {
-			const settingsManager = SettingsManager.create(tempDir, agentDir);
-			const sessionManager = SessionManager.inMemory();
-			const { session } = await createAgentSession({
-				cwd: tempDir,
-				agentDir,
-				model: getModel("anthropic", "claude-sonnet-4-5")!,
-				settingsManager,
-				sessionManager,
-			});
+			const { session } = await createSemanticEnabledSession({ cwd: tempDir, agentDir });
 			try {
-				await session.bindExtensions({});
-
 				const semSearch = session.getToolDefinition("sem_search");
 				expect(semSearch).toBeDefined();
 

@@ -5,7 +5,7 @@ Stateful agent with tool execution and event streaming. Built on `@daedalus-pi/a
 ## Installation
 
 ```bash
-npm install @daedalus-pi/agent-core
+bun add @daedalus-pi/agent-core
 ```
 
 ## Quick Start

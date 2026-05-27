@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "setup": "bun install",
+    "setup": "bash --noprofile --norc -c 'set -euo pipefail; cd \"$(git rev-parse --show-toplevel)\"; if [ -e package-lock.json ] || [ -e npm-shrinkwrap.json ]; then echo \"Daedalus uses bun.lock; remove stale npm lockfile before setup\" >&2; exit 1; fi; export BUN_INSTALL=\"${BUN_INSTALL:-$HOME/.bun}\"; BUN_BIN=\"$BUN_INSTALL/bin/bun\"; if [ ! -x \"$BUN_BIN\" ]; then BUN_BIN=\"$(command -v bun)\"; fi; export SHELL=/bin/bash; export ZDOTDIR=\"${TMPDIR:-/tmp}/daedalus-empty-zdotdir\"; mkdir -p \"$ZDOTDIR\"; export PATH=\"$BUN_INSTALL/bin:/usr/local/bin:/usr/bin:/bin\"; \"$BUN_BIN\" install --frozen-lockfile'",
     "teardown": null,
     "run": null
   }

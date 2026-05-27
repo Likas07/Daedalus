@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import { discoverSemanticFilesFdDefault } from "../../src/extensions/daedalus/tools/semantic-file-discovery.js";
+import { discoverSemanticFilesFdDefault } from "../../src/extensions/semantic-search/semantic-file-discovery.js";
 
 async function run(cwd: string, args: string[]): Promise<void> {
 	const proc = Bun.spawn(args, { cwd, stdout: "pipe", stderr: "pipe" });

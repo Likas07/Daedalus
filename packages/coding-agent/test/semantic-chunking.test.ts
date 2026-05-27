@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chunkDocument } from "../src/extensions/daedalus/tools/semantic-chunking.js";
+import { chunkDocument } from "../src/extensions/semantic-search/semantic-chunking.js";
 
 describe("semantic chunking", () => {
 	it("uses smaller overlap by default", () => {

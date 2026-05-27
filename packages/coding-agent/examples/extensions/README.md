@@ -1,15 +1,15 @@
 # Extension Examples
 
-Example extensions for pi-coding-agent.
+Example extensions for the Daedalus coding agent.
 
 ## Usage
 
 ```bash
 # Load an extension with --extension flag
-pi --extension examples/extensions/permission-gate.ts
+daedalus --extension examples/extensions/permission-gate.ts
 
 # Or copy to extensions directory for auto-discovery
-cp permission-gate.ts ~/.pi/agent/extensions/
+cp permission-gate.ts ~/.daedalus/agent/extensions/
 ```
 
 ## Examples
@@ -93,7 +93,7 @@ cp permission-gate.ts ~/.pi/agent/extensions/
 
 | Extension | Description |
 |-----------|-------------|
-| `mac-system-theme.ts` | Syncs pi theme with macOS dark/light mode |
+| `mac-system-theme.ts` | Syncs the Daedalus theme with macOS dark/light mode |
 
 ### Resources
 
@@ -120,7 +120,7 @@ cp permission-gate.ts ~/.pi/agent/extensions/
 | Extension | Description |
 |-----------|-------------|
 | `custom-provider-anthropic/` | Custom Anthropic provider with OAuth support and custom streaming implementation |
-| `custom-provider-gitlab-duo/` | GitLab Duo provider using pi-ai's built-in Anthropic/OpenAI streaming via proxy |
+| `custom-provider-gitlab-duo/` | GitLab Duo provider using `@daedalus-pi/ai` Anthropic/OpenAI streaming via proxy |
 | `custom-provider-qwen-cli/` | Qwen CLI provider with OAuth device flow and OpenAI-compatible models |
 
 ### External Dependencies

@@ -1,4 +1,6 @@
-# GUI protocol
+# GUI protocol summary
+
+The canonical protocol documentation lives in [`packages/app-server/docs/protocol.md`](../../app-server/docs/protocol.md). This file is a renderer-facing summary for `packages/gui`.
 
 The GUI talks to the Daedalus app-server using the typed protocol in `packages/app-server-protocol`. The renderer should use `packages/app-server-client` helpers instead of hand-written request strings when helpers exist.
 
@@ -28,9 +30,11 @@ Responses:
 
 Server notifications and server-initiated requests use `kind: "notification"` and `kind: "request"` respectively.
 
-## Session and persistence methods
+## Session, thread, and persistence methods
 
-SQLite-backed GUI sessions are exposed through session methods for start, list, resume, fork, rename, archive/delete, stats/tree, JSONL import, and JSONL export. Runtime turn methods start and cancel turns. App events are persisted and replayed with `event/replay` so reconnect can be authoritative.
+SQLite-backed GUI sessions are exposed through root session methods for start, list, resume, fork, rename, archive/delete, stats/tree, JSONL import, and JSONL export. Runtime turn methods start and cancel turns. App events are persisted and replayed with `event/replay` so reconnect can be authoritative.
+
+The v1 thread protocol exposes the thread/workspace vocabulary used by the newer GUI surfaces: `workspaceTarget.*`, `thread.*`, `turn.*`, `payload.window`, and `v1.approval.*`. Timeline entries are replayable render indexes; large terminal, diff, tool-output, and audit payloads are fetched through windowed payload methods rather than embedded unbounded in replay.
 
 ## Approval and extension flows
 

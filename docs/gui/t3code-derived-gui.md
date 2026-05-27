@@ -6,7 +6,7 @@
 
 - Desktop is the primary production GUI path. `packages/desktop` builds and packages the renderer from `packages/gui`.
 - `daedalus gui` serves the same `packages/gui` build for local browser use and smoke testing.
-- Legacy GUI package splits such as `packages/gui-core` and `packages/gui-components` are not active runtime targets.
+- `packages/gui-core`, `packages/gui-components`, and `packages/react-gui` are support/experimental thread-surface packages. They are active source packages, but they are not the production desktop/browser renderer.
 
 ## Backend contract
 

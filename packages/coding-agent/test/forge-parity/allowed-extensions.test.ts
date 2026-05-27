@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { ALLOWED_EXTENSIONS, hasAllowedExtension } from "../../src/extensions/daedalus/tools/allowed-extensions.js";
+import { ALLOWED_EXTENSIONS, hasAllowedExtension } from "../../src/extensions/semantic-search/allowed-extensions.js";
 
 describe("Forge allowed extensions", () => {
 	it("loads forgecode allowed_extensions.txt", () => {
@@ -19,7 +19,7 @@ describe("Forge allowed extensions", () => {
 
 	it("does not depend on runtime filesystem access to load the extension list", async () => {
 		const source = await Bun.file(
-			new URL("../../src/extensions/daedalus/tools/allowed-extensions.ts", import.meta.url),
+			new URL("../../src/extensions/semantic-search/allowed-extensions.ts", import.meta.url),
 		).text();
 
 		expect(source).not.toContain("node:fs");

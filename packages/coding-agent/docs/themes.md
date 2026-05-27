@@ -21,7 +21,7 @@ Daedalus loads themes from:
 - Built-in: `dark`, `light`
 - Global: `~/.daedalus/agent/themes/*.json`
 - Project: `.daedalus/themes/*.json`
-- Packages: `themes/` directories or `pi.themes` entries in `package.json`
+- Packages: `themes/` directories or `daedalus.themes` entries in `package.json`
 - Settings: `themes` array with files or directories
 - CLI: `--theme <path>` (repeatable)
 

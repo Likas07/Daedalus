@@ -268,7 +268,7 @@ describe("skills", () => {
 				baseDir: join(fixturesDir, "valid-skill"),
 			});
 
-			expect(() => resolveSkillResource(skill, "../shared/outside.md")).toThrow("escapes skill directory");
+			expect(() => resolveSkillResource(skill, "../daedalus/shared/outside.md")).toThrow("escapes skill directory");
 		});
 	});
 

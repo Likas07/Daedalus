@@ -37,7 +37,13 @@ Flags:
 
 ## T3Code-derived scope
 
-The active GUI path is `packages/gui`; legacy splits such as `packages/gui-core` and `packages/gui-components` are not runtime targets. The renderer keeps T3Code's project/thread chat workspace model, but Daedalus owns bootstrap, persistence, auth/model discovery, approvals, terminal/filesystem/Git operations, and agent execution through the app-server.
+The production GUI path is `packages/gui`. The renderer keeps T3Code's project/thread chat workspace model, but Daedalus owns bootstrap, persistence, auth/model discovery, approvals, terminal/filesystem/Git operations, and agent execution through the app-server.
+
+The newer GUI support packages are real package boundaries, but they are not the production desktop/browser renderer:
+
+- `packages/gui-core` contains React-free state and view-model primitives.
+- `packages/gui-components` contains React shell/thread/terminal components.
+- `packages/react-gui` is the experimental React/Vite app shell used for protocol-v1 thread-surface tests.
 
 Unsupported T3Code controls must be disabled with an explicit reason, not fake-enabled. Currently unsupported: remote environments/public server exposure, terminal restart, remote Git mutation and branch mutation, PR mutation, provider CLI installation, and user-configured T3 provider binary paths. See [T3Code-derived GUI](../../docs/gui/t3code-derived-gui.md).
 
@@ -45,7 +51,8 @@ Unsupported T3Code controls must be disabled with an explicit reason, not fake-e
 
 - [SQLite persistence](docs/sqlite-persistence.md)
 - [Security model](docs/security.md)
-- [Protocol](docs/protocol.md)
+- [Canonical app-server protocol](../app-server/docs/protocol.md)
+- [GUI protocol summary](docs/protocol.md)
 - [T3Code-derived GUI](../../docs/gui/t3code-derived-gui.md)
 - [Troubleshooting](docs/troubleshooting.md)
 

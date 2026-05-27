@@ -15,8 +15,6 @@ export { default as dynamicTools } from "./tools/dynamic-tools.js";
 export { default as fsSearch } from "./tools/fs-search.js";
 export { default as questionnaire } from "./tools/questionnaire.js";
 export { default as readAgentResultOutput } from "./tools/read-agent-result-output.js";
-export { default as semSearch } from "./tools/sem-search.js";
-export { default as semanticWorkspaceTools } from "./tools/semantic-workspace-tools.js";
 export { default as ssh } from "./tools/ssh.js";
 // Tool extensions
 export { default as todo } from "./tools/todo.js";

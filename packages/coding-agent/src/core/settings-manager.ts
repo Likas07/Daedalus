@@ -101,6 +101,10 @@ export interface SemanticSettings {
 	indexProfile?: SemanticSettingsIndexProfile;
 }
 
+export interface BuiltinExtensionSettings {
+	enabled?: Record<string, boolean>;
+}
+
 export type TransportSetting = Transport;
 
 /**
@@ -165,6 +169,7 @@ export interface Settings {
 	subagents?: SubagentSettings; // Subagent runtime defaults and per-role overrides
 	delegation?: DelegationSettings; // Delegation runtime settings
 	semantic?: SemanticSettings; // Semantic-search embedding backend and profile preferences
+	builtinExtensions?: BuiltinExtensionSettings; // Built-in extension enablement by extension id
 }
 
 /** Deep merge settings: project/overrides take precedence, nested objects merge recursively */
@@ -612,6 +617,28 @@ export class SettingsManager {
 		} else {
 			this.globalSettings.semantic = next;
 			this.markModified("semantic");
+			this.save();
+		}
+	}
+
+	isBuiltinExtensionEnabled(id: string): boolean {
+		return this.settings.builtinExtensions?.enabled?.[id] === true;
+	}
+
+	setBuiltinExtensionEnabled(id: string, enabled: boolean, scope: SettingsScope = "project"): void {
+		const target = scope === "project" ? this.projectSettings : this.globalSettings;
+		const current = target.builtinExtensions?.enabled ?? {};
+		const next: BuiltinExtensionSettings = {
+			...(target.builtinExtensions ?? {}),
+			enabled: { ...current, [id]: enabled },
+		};
+		if (scope === "project") {
+			this.projectSettings.builtinExtensions = next;
+			this.markProjectModified("builtinExtensions");
+			this.saveProjectSettings(this.projectSettings);
+		} else {
+			this.globalSettings.builtinExtensions = next;
+			this.markModified("builtinExtensions");
 			this.save();
 		}
 	}

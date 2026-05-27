@@ -117,7 +117,6 @@ describe("bundled starter agent policies", () => {
 			"find",
 			"ls",
 			"fs_search",
-			"sem_search",
 			"todo_read",
 			"write",
 			"hashline_edit",

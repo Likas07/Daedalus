@@ -5,7 +5,7 @@
 - Run `daedalus gui --project <path> --no-open` to print readiness without opening a browser.
 - Use `--log-file <path>` to capture app-server logs.
 - Check whether the selected `--port` is already in use; omit it or pass `--port 0` to select a free port.
-- Verify `bun run check:gui` from the repository root for type and Svelte issues.
+- Verify `bun run check:gui` from the repository root for type and React/Vite issues.
 
 ## Browser cannot connect
 

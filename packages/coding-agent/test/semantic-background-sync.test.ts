@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createSemanticBackgroundSyncController } from "../src/extensions/daedalus/tools/semantic-background-sync.js";
+import { createSemanticBackgroundSyncController } from "../src/extensions/semantic-search/semantic-background-sync.js";
 
 describe("semantic background sync", () => {
 	it("does not start a startup sync for a stale-soft workspace", async () => {

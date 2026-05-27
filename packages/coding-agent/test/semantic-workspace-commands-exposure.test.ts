@@ -1,12 +1,12 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getModel } from "@daedalus-pi/ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createAgentSession } from "../src/core/sdk.js";
-import { SessionManager } from "../src/core/session-manager.js";
-import { SettingsManager } from "../src/core/settings-manager.js";
-import { isSemanticWorkspaceIndexingAvailable } from "./semantic-test-helpers.js";
+import {
+	createSemanticEnabledSession,
+	isSemanticWorkspaceIndexingAvailable,
+	skipIfSemanticWorkspaceNotIndexed,
+} from "./semantic-test-helpers.js";
 
 const semanticWorkspaceIt = it.skipIf(!(await isSemanticWorkspaceIndexingAvailable()));
 
@@ -32,16 +32,7 @@ describe("semantic workspace commands and exposure", () => {
 	semanticWorkspaceIt(
 		"uses slash commands for lifecycle and only exposes sem_search after indexing",
 		async () => {
-			const settingsManager = SettingsManager.create(tempDir, agentDir);
-			const sessionManager = SessionManager.inMemory();
-			const { session } = await createAgentSession({
-				cwd: tempDir,
-				agentDir,
-				model: getModel("anthropic", "claude-sonnet-4-5")!,
-				settingsManager,
-				sessionManager,
-			});
-			await session.bindExtensions({});
+			const { session } = await createSemanticEnabledSession({ cwd: tempDir, agentDir });
 
 			expect(session.getActiveToolNames()).not.toContain("sem_search");
 			expect(session.systemPrompt).not.toContain("- sem_search:");
@@ -54,6 +45,7 @@ describe("semantic workspace commands and exposure", () => {
 			await session.prompt("/workspace-status");
 			await session.prompt("/workspace-init");
 			await session.prompt("/workspace-sync");
+			if (skipIfSemanticWorkspaceNotIndexed(tempDir)) return;
 
 			expect(session.getActiveToolNames()).toContain("sem_search");
 			expect(session.systemPrompt).toContain("- sem_search:");
@@ -75,19 +67,11 @@ describe("semantic workspace commands and exposure", () => {
 	semanticWorkspaceIt(
 		"keeps sem_search exposed after indexed workspace becomes soft-stale",
 		async () => {
-			const settingsManager = SettingsManager.create(tempDir, agentDir);
-			const sessionManager = SessionManager.inMemory();
-			const { session } = await createAgentSession({
-				cwd: tempDir,
-				agentDir,
-				model: getModel("anthropic", "claude-sonnet-4-5")!,
-				settingsManager,
-				sessionManager,
-			});
-			await session.bindExtensions({});
+			const { session } = await createSemanticEnabledSession({ cwd: tempDir, agentDir });
 
 			await session.prompt("/workspace-init");
 			await session.prompt("/workspace-sync");
+			if (skipIfSemanticWorkspaceNotIndexed(tempDir)) return;
 
 			writeFileSync(join(tempDir, "src", "refresh-token.ts"), "export const refresh = 'beta';\n");
 

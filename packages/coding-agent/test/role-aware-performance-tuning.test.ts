@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 import { getBundledStarterAgents } from "../src/extensions/daedalus/workflow/subagents/bundled.js";
 
 describe("role-aware performance tuning", () => {
-	it("gives sage and muse semantic/exact discovery tools while keeping task-state writes scoped", () => {
+	it("gives sage and muse exact discovery tools while keeping task-state writes scoped", () => {
 		const agents = getBundledStarterAgents();
 		const sage = agents.find((agent) => agent.name === "sage");
 		const muse = agents.find((agent) => agent.name === "muse");
 		expect(sage?.toolPolicy?.allowedTools).toEqual(
-			expect.arrayContaining(["sem_search", "fs_search", "todo_read", "write", "hashline_edit"]),
+			expect.arrayContaining(["fs_search", "todo_read", "write", "hashline_edit"]),
 		);
+		expect(sage?.toolPolicy?.allowedTools).not.toContain("sem_search");
 		expect(sage?.toolPolicy?.writableGlobs).toEqual(["**/*.md"]);
 		expect(sage?.toolPolicy?.allowedTools).not.toContain("sem_workspace_status");
 		expect(sage?.toolPolicy?.allowedTools).not.toContain("sem_workspace_init");
@@ -19,8 +20,9 @@ describe("role-aware performance tuning", () => {
 		expect(sage?.toolPolicy?.allowedTools).not.toContain("plan_validate");
 		expect(sage?.toolPolicy?.allowedTools).not.toContain("skill");
 		expect(muse?.toolPolicy?.allowedTools).toEqual(
-			expect.arrayContaining(["sem_search", "fs_search", "todo_read", "todo_write", "plan_create", "plan_validate"]),
+			expect.arrayContaining(["fs_search", "todo_read", "todo_write", "plan_create", "plan_validate"]),
 		);
+		expect(muse?.toolPolicy?.allowedTools).not.toContain("sem_search");
 		expect(muse?.toolPolicy?.allowedTools).not.toContain("execute_plan");
 		expect(muse?.toolPolicy?.allowedTools).not.toContain("sem_workspace_status");
 		expect(muse?.toolPolicy?.allowedTools).not.toContain("sem_workspace_init");

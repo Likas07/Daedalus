@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 
-const source = readFileSync(new URL("../../src/extensions/daedalus/tools/semantic-store.ts", import.meta.url), "utf8");
+const source = readFileSync(new URL("../../src/extensions/semantic-search/semantic-store.ts", import.meta.url), "utf8");
 
 describe("semantic sync memory-conscious two pass", () => {
 	it("performs a hash/stat planning pass before re-reading changed file content for chunk upload", () => {

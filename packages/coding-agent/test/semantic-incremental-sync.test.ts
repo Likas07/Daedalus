@@ -7,14 +7,14 @@ import {
 	createSemanticStoreRuntime,
 	type SemanticStoreConfig,
 	type SemanticStoreRuntime,
-} from "../src/extensions/daedalus/tools/semantic-store.js";
-import { buildSemanticSyncPlan } from "../src/extensions/daedalus/tools/semantic-sync-plan.js";
-import type { SemanticIndexedFile, SemanticLocalFileState } from "../src/extensions/daedalus/tools/semantic-types.js";
+} from "../src/extensions/semantic-search/semantic-store.js";
+import { buildSemanticSyncPlan } from "../src/extensions/semantic-search/semantic-sync-plan.js";
+import type { SemanticIndexedFile, SemanticLocalFileState } from "../src/extensions/semantic-search/semantic-types.js";
 import {
 	initSemanticWorkspace,
 	loadSemanticWorkspace,
 	type SemanticWorkspacePersistedState,
-} from "../src/extensions/daedalus/tools/semantic-workspace.js";
+} from "../src/extensions/semantic-search/semantic-workspace.js";
 import {
 	getSemanticWorkspaceIndexingUnavailableReason,
 	isSemanticWorkspaceIndexingAvailable,

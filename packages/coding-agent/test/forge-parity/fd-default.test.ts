@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { discoverFdDefault } from "../../src/extensions/daedalus/tools/fd-default.js";
+import { discoverFdDefault } from "../../src/extensions/semantic-search/fd-default.js";
 
 describe("FdDefault routing", () => {
 	it("returns git discovery when git yields files", async () => {

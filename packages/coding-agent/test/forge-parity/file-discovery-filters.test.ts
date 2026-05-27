@@ -6,7 +6,7 @@ import {
 	filterAndResolve,
 	isIgnoredByName,
 	isSymlink,
-} from "../../src/extensions/daedalus/tools/file-discovery-filters.js";
+} from "../../src/extensions/semantic-search/file-discovery-filters.js";
 
 async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
 	const dir = join(tmpdir(), `daedalus-filters-${Date.now()}-${Math.random().toString(36).slice(2)}`);

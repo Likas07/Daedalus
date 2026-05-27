@@ -219,7 +219,7 @@ export default function subagentStarterPack(pi: ExtensionAPI): void {
 		description: "Run a bundled or discovered subagent with a compact task packet.",
 		promptSnippet: "Delegate a focused sub-task to an available specialist.",
 		promptGuidelines: [
-			"Do not launch subagents for initial codebase exploration or simple lookups. Use sem_search first.",
+			"Do not launch subagents for initial codebase exploration or simple lookups. Use fs_search and read first.",
 			"This exploration limit does not override role routing: use Muse for plans and always use Worker for implementation after minimal grounding.",
 			"When launching multiple independent tasks, call subagent once per independent task in parallel (single assistant message, multiple tool calls).",
 			`During executable-plan execution, prefer one Worker per ready task and pass taskBinding with the plan path, task id, title, and file list. Example: {"type":"plan-task","planPath":"docs/plans/2026_05_16/example.plan.json","taskId":"T-1","taskTitle":"Implement focused change","files":["packages/coding-agent/src/file.ts"]}.`,

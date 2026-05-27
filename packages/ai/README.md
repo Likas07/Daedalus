@@ -72,7 +72,7 @@ Unified LLM API with automatic model discovery, provider configuration, token an
 ## Installation
 
 ```bash
-npm install @daedalus-pi/ai
+bun add @daedalus-pi/ai
 ```
 
 TypeBox exports are re-exported from `@daedalus-pi/ai`: `Type`, `Static`, and `TSchema`.

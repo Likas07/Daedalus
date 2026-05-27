@@ -1,54 +1,12 @@
-<!-- OSS_WEEKEND_START -->
-# 🏖️ OSS Weekend
+# Daedalus coding agent
 
-**Issue tracker reopens Monday, April 13, 2026.**
+Daedalus is a terminal coding harness with a thread-first GUI path. Adapt Daedalus to your workflows without modifying internals: extend it with TypeScript [Extensions](#extensions), [Skills](#skills), [Prompt Templates](#prompt-templates), and [Themes](#themes). Put your extensions, skills, prompt templates, and themes in [Daedalus Packages](#daedalus-packages) and share them through npm, git, or local package paths.
 
-OSS weekend runs Thursday, April 2, 2026 through Monday, April 13, 2026. New issues and PRs from unapproved contributors are auto-closed during this time. Approved contributors can still open issues and PRs if something is genuinely urgent, but please keep that to pressing matters only. For support, join [Discord](https://discord.com/invite/3cU7Bz4UPx).
-
-> _Current focus: at the moment i'm deep in refactoring internals, and need to focus._
-<!-- OSS_WEEKEND_END -->
-
----
-
-<p align="center">
-  <a href="https://shittycodingagent.ai">
-    <img src="https://shittycodingagent.ai/logo.svg" alt="pi logo" width="128">
-  </a>
-</p>
-<p align="center">
-  <a href="https://discord.com/invite/3cU7Bz4UPx"><img alt="Discord" src="https://img.shields.io/badge/discord-community-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
-  <a href="https://www.npmjs.com/package/@daedalus-pi/coding-agent"><img alt="npm" src="https://img.shields.io/npm/v/@daedalus-pi/coding-agent?style=flat-square" /></a>
-  <a href="https://github.com/badlogic/pi-mono/actions/workflows/ci.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/badlogic/pi-mono/ci.yml?style=flat-square&branch=main" /></a>
-</p>
-<p align="center">
-  <a href="https://pi.dev">pi.dev</a> domain graciously donated by
-  <br /><br />
-  <a href="https://exe.dev"><img src="docs/images/exy.png" alt="Exy mascot" width="48" /><br />exe.dev</a>
-</p>
-
-Daedalus is a terminal coding harness. Adapt daedalus to your workflows, not the other way around, without having to modify internals. Extend it with TypeScript [Extensions](#extensions), [Skills](#skills), [Prompt Templates](#prompt-templates), and [Themes](#themes). Put your extensions, skills, prompt templates, and themes in [Daedalus Packages](#daedalus-packages) and share them with others via npm or git.
-
-Daedalus ships with powerful defaults plus opt-in workflow extensions such as plan mode and subagents. You can still ask daedalus to build what you want or install a third-party daedalus package that matches your workflow.
+Daedalus ships with powerful defaults plus bundled workflow extensions for planning, subagents, todo state, semantic search, status summaries, safety gates, and GUI handoff. You can still ask Daedalus to build what you want or install a third-party Daedalus package that matches your workflow.
 
 Subagent implementation work can run with transient artifact-first delegation isolation via `isolated: true`. The isolation backend and merge behavior are configured with `delegation.isolation.mode` and `delegation.isolation.merge`; see [Delegation isolation](docs/delegation-isolation.md).
 
-Pi runs in four modes: interactive, print or JSON, RPC for process integration, and an SDK for embedding in your own apps. See [openclaw/openclaw](https://github.com/openclaw/openclaw) for a real-world SDK integration.
-
-## Share your OSS coding agent sessions
-
-If you use pi for open source work, please share your coding agent sessions.
-
-Public OSS session data helps improve models, prompts, tools, and evaluations using real development workflows.
-
-For the full explanation, see [this post on X](https://x.com/badlogicgames/status/2037811643774652911).
-
-To publish sessions, use [`badlogic/pi-share-hf`](https://github.com/badlogic/pi-share-hf). Read its README.md for setup instructions. All you need is a Hugging Face account, the Hugging Face CLI, and `pi-share-hf`.
-
-You can also watch [this video](https://x.com/badlogicgames/status/2041151967695634619), where I show how I publish my `pi-mono` sessions.
-
-I regularly publish my own `pi-mono` work sessions here:
-
-- [badlogicgames/pi-mono on Hugging Face](https://huggingface.co/datasets/badlogicgames/pi-mono)
+Daedalus runs in five modes: interactive TUI, print or JSON, RPC for process integration, SDK embedding, and the local GUI via `daedalus gui`.
 
 ## Table of Contents
 
@@ -79,25 +37,28 @@ I regularly publish my own `pi-mono` work sessions here:
 
 ## Quick Start
 
+From this repository, use Bun:
+
 ```bash
-npm install -g @daedalus-pi/coding-agent
+bun install
+bun link --cwd packages/coding-agent
 ```
 
 Authenticate with an API key:
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-pi
+daedalus
 ```
 
 Or use your existing subscription:
 
 ```bash
-pi
+daedalus
 /login  # Then select provider
 ```
 
-Then just talk to pi. By default, pi gives the model these built-in tools: `read`, `bash`, `hashline_edit`, `fetch`, `web_search`, `ast_grep`, `ast_edit`, `write`, `grep`, `find`, and `ls`. The model uses these to fulfill your requests. Add capabilities via [skills](#skills), [prompt templates](#prompt-templates), [extensions](#extensions), or [daedalus packages](#daedalus-packages).
+Then just talk to Daedalus. By default, Daedalus gives the model these built-in tools: `read`, `bash`, `hashline_edit`, `fetch`, `web_search`, `ast_grep`, `ast_edit`, `write`, `grep`, `find`, and `ls`. The model uses these to fulfill your requests. Add capabilities via [skills](#skills), [prompt templates](#prompt-templates), [extensions](#extensions), or [daedalus packages](#daedalus-packages).
 
 **Platform notes:** [Windows](docs/windows.md) | [Termux (Android)](docs/termux.md) | [tmux](docs/tmux.md) | [Terminal setup](docs/terminal-setup.md) | [Shell aliases](docs/shell-aliases.md)
 
@@ -128,7 +89,7 @@ Use `fetch` instead when you already know the URL. Treat web results as untruste
 
 ## Providers & Models
 
-For each built-in provider, pi maintains a list of tool-capable models, updated with every release. Authenticate via subscription (`/login`) or API key, then select any model from that provider via `/model` (or Ctrl+L).
+For each built-in provider, Daedalus maintains a list of tool-capable models, updated with every release. Authenticate via subscription (`/login`) or API key, then select any model from that provider via `/model` (or Ctrl+L).
 
 **Subscriptions:**
 - Anthropic Claude Pro/Max
@@ -159,7 +120,7 @@ For each built-in provider, pi maintains a list of tool-capable models, updated 
 
 See [docs/providers.md](docs/providers.md) for detailed setup instructions.
 
-**Custom providers & models:** Add providers via `~/.pi/agent/models.json` if they speak a supported API (OpenAI, Anthropic, Google). For custom APIs or OAuth, use extensions. See [docs/models.md](docs/models.md) and [docs/custom-provider.md](docs/custom-provider.md).
+**Custom providers & models:** Add providers via `~/.daedalus/agent/models.json` if they speak a supported API (OpenAI, Anthropic, Google). For custom APIs or OAuth, use extensions. See [docs/models.md](docs/models.md) and [docs/custom-provider.md](docs/custom-provider.md).
 
 ---
 
@@ -211,11 +172,11 @@ Type `/` in the editor to trigger commands. [Extensions](#extensions) can regist
 | `/reload` | Reload keybindings, extensions, skills, prompts, and context files (themes hot-reload automatically) |
 | `/hotkeys` | Show all keyboard shortcuts |
 | `/changelog` | Display version history |
-| `/quit` | Quit pi |
+| `/quit` | Quit Daedalus |
 
 ### Keyboard Shortcuts
 
-See `/hotkeys` for the full list. Customize via `~/.pi/agent/keybindings.json`. See [docs/keybindings.md](docs/keybindings.md).
+See `/hotkeys` for the full list. Customize via `~/.daedalus/agent/keybindings.json`. See [docs/keybindings.md](docs/keybindings.md).
 
 **Commonly used:**
 
@@ -240,7 +201,7 @@ Submit messages while the agent is working:
 - **Escape** aborts and restores queued messages to editor
 - **Alt+Up** retrieves queued messages back to editor
 
-On Windows Terminal, `Alt+Enter` is fullscreen by default. Remap it in [docs/terminal-setup.md](docs/terminal-setup.md) so pi can receive the follow-up shortcut.
+On Windows Terminal, `Alt+Enter` is fullscreen by default. Remap it in [docs/terminal-setup.md](docs/terminal-setup.md) so Daedalus can receive the follow-up shortcut.
 
 Configure delivery in [settings](docs/settings.md): `steeringMode` and `followUpMode` can be `"one-at-a-time"` (default, waits for response) or `"all"` (delivers all queued at once). `transport` selects provider transport preference (`"sse"`, `"websocket"`, or `"auto"`) for providers that support multiple transports.
 
@@ -252,14 +213,14 @@ Sessions are stored as JSONL files with a tree structure. Each entry has an `id`
 
 ### Management
 
-Sessions auto-save to `~/.pi/agent/sessions/` organized by working directory.
+Sessions auto-save to `~/.daedalus/agent/sessions/` organized by working directory.
 
 ```bash
-pi -c                  # Continue most recent session
-pi -r                  # Browse and select from past sessions
-pi --no-session        # Ephemeral mode (don't save)
-pi --session <path>    # Use specific session file or ID
-pi --fork <path>       # Fork specific session file or ID into a new session
+daedalus -c                  # Continue most recent session
+daedalus -r                  # Browse and select from past sessions
+daedalus --no-session        # Ephemeral mode (don't save)
+daedalus --session <path>    # Use specific session file or ID
+daedalus --fork <path>       # Fork specific session file or ID into a new session
 ```
 
 ### Branching
@@ -293,14 +254,15 @@ Compaction is lossy. The full history remains in the JSONL file; use `/tree` to 
 Use `/settings` to modify common options, or edit JSON files directly:
 
 | Location | Scope |
-| Location | Scope |
 |----------|-------|
 | `~/.daedalus/agent/settings.json` | Global (all projects) |
 | `.daedalus/settings.json` | Project (overrides global) |
+
 `/settings` is organized into tabs: `General`, `Display`, `Behavior`, and `Subagents`.
 Use `Tab` / `Shift+Tab` or `Left` / `Right` to switch tabs.
 
 The `Subagents` tab covers:
+
 - `subagents.delegationAggressiveness`
 - `subagents.maxDepth`
 - `subagents.maxConcurrency`
@@ -309,33 +271,28 @@ The `Subagents` tab covers:
 
 ## Prompt architecture
 
-Daedalus uses four prompt layers:
-
-1. Main constitutional system prompt
-2. Daedalus persona/orchestrator prompt
-3. Shared subagent base contract
-4. Role-specific subagent prompts
-
-Subagents may appear in the UI as `Mythic Name (role)`, while their behavioral prompts remain functional.
-
-## Prompt Architecture V2
-
 Daedalus uses canonical prompt layers plus model-specific overrides.
 
 Main agent:
+
 1. Constitution
 2. Persona
 3. GPT/Claude override
 
+Primary user-facing role modes:
+
+1. Daedalus default mode
+2. Sage research mode
+3. Muse planning mode
+
 Subagents:
+
 1. Shared delegated-task contract
 2. Canonical role prompt
 3. GPT/Claude override
 4. Delegated task packet
 
-Daedalus is the only primary orchestrator.
-There is no orchestrator subagent.
-Bundled roles are Icarus, Prometheus, Hephaestus, and Athena.
+Daedalus is the default primary orchestrator. Sage and Muse can also run as primary role modes with `/sage`, `/muse`, `/daedalus`, or `--role`. Bundled subagent roles are Sage, Muse, and Worker; Worker appears as Hephaestus in its display name.
 
 Advanced policy arrays such as `readableGlobs`, `writableGlobs`, and `spawns` remain JSON-only for now.
 
@@ -346,7 +303,7 @@ See [docs/settings.md](docs/settings.md) for all options.
 ## Context Files
 
 Daedalus loads `AGENTS.md` (or `CLAUDE.md`) at startup from:
-- `~/.pi/agent/AGENTS.md` (global)
+- `~/.daedalus/agent/AGENTS.md` (global)
 - Parent directories (walking up from cwd)
 - Current directory
 
@@ -354,7 +311,7 @@ Use for project instructions, conventions, common commands. All matching files a
 
 ### System Prompt
 
-Replace the default system prompt with `.pi/SYSTEM.md` (project) or `~/.pi/agent/SYSTEM.md` (global). Append without replacing via `APPEND_SYSTEM.md`.
+Replace the default system prompt with `.daedalus/SYSTEM.md` (project) or `~/.daedalus/agent/SYSTEM.md` (global). Append without replacing via `APPEND_SYSTEM.md`.
 
 ---
 
@@ -365,19 +322,19 @@ Replace the default system prompt with `.pi/SYSTEM.md` (project) or `~/.pi/agent
 Reusable prompts as Markdown files. Type `/name` to expand.
 
 ```markdown
-<!-- ~/.pi/agent/prompts/review.md -->
+<!-- ~/.daedalus/agent/prompts/review.md -->
 Review this code for bugs, security issues, and performance problems.
 Focus on: {{focus}}
 ```
 
-Place in `~/.pi/agent/prompts/`, `.pi/prompts/`, or a [daedalus package](#daedalus-packages) to share with others. See [docs/prompt-templates.md](docs/prompt-templates.md).
+Place in `~/.daedalus/agent/prompts/`, `.daedalus/prompts/`, or a [daedalus package](#daedalus-packages) to share with others. See [docs/prompt-templates.md](docs/prompt-templates.md).
 
 ### Skills
 
 On-demand capability packages following the [Agent Skills standard](https://agentskills.io). Invoke via `/skill:name` or let the agent load them automatically.
 
 ```markdown
-<!-- ~/.pi/agent/skills/my-skill/SKILL.md -->
+<!-- ~/.daedalus/agent/skills/my-skill/SKILL.md -->
 # My Skill
 Use this skill when the user asks about X.
 
@@ -386,7 +343,7 @@ Use this skill when the user asks about X.
 2. Then that
 ```
 
-Place in `~/.pi/agent/skills/`, `~/.agents/skills/`, `.pi/skills/`, or `.agents/skills/` (from `cwd` up through parent directories) or a [daedalus package](#daedalus-packages) to share with others. See [docs/skills.md](docs/skills.md).
+Place in `~/.daedalus/agent/skills/`, `~/.agents/skills/`, `.daedalus/skills/`, or `.agents/skills/` (from `cwd` up through parent directories) or a [daedalus package](#daedalus-packages) to share with others. See [docs/skills.md](docs/skills.md).
 
 Executable planning workflows that combine Muse, plan validation, `execute_plan`, task-bound Workers, and final verification are documented in [docs/executable-planning.md](docs/executable-planning.md).
 
@@ -394,7 +351,7 @@ Executable planning workflows that combine Muse, plan validation, `execute_plan`
 
 <p align="center"><img src="docs/images/doom-extension.png" alt="Doom Extension" width="600"></p>
 
-TypeScript modules that extend pi with custom tools, commands, keyboard shortcuts, event handlers, and UI components.
+TypeScript modules that extend Daedalus with custom tools, commands, keyboard shortcuts, event handlers, and UI components.
 
 ```typescript
 export default function (pi: ExtensionAPI) {
@@ -414,11 +371,11 @@ export default function (pi: ExtensionAPI) {
 - Git checkpointing and auto-commit
 - SSH and sandbox execution
 - MCP server integration
-- Make pi look like Claude Code
+- Make Daedalus look like Claude Code
 - Games while waiting (yes, Doom runs)
 - ...anything you can dream up
 
-Place in `~/.pi/agent/extensions/`, `.pi/extensions/`, or a [daedalus package](#daedalus-packages) to share with others. See [docs/extensions.md](docs/extensions.md) and [examples/extensions/](examples/extensions/).
+Place in `~/.daedalus/agent/extensions/`, `.daedalus/extensions/`, or a [daedalus package](#daedalus-packages) to share with others. See [docs/extensions.md](docs/extensions.md) and [examples/extensions/](examples/extensions/).
 
 ### Subagents
 
@@ -433,15 +390,14 @@ Daedalus can run session-backed subagents as in-process child sessions with:
 - a read-only subagent inspector that can open transcript, context packet, result JSON, and metadata views
 - child-session entry from the inspector, with a return path back to the parent session
 
-Built-in starter-pack roles:
-- `orchestrator`
-- `scout`
-- `planner`
-- `worker`
-- `reviewer`
+Built-in subagent roles:
+
+- `sage` - read-only codebase research, with Markdown evidence artifacts when useful.
+- `muse` - planning and executable plan validation through `writing-plans`, `plan_create`, and `plan_validate`.
+- `worker` - focused implementation, tests, refactors, and repository mutations.
 
 Commands:
-- `/orchestrator on|off|status`
+- `/sage`, `/muse`, `/daedalus` - switch primary role mode.
 - `/agents`
 - `/subagents` — inspect runs, artifacts, and child sessions for the current parent session
 
@@ -451,43 +407,43 @@ Agent definitions can live in:
 
 ### Themes
 
-Built-in: `dark`, `light`. Themes hot-reload: modify the active theme file and pi immediately applies changes.
+Built-in: `dark`, `light`. Themes hot-reload: modify the active theme file and Daedalus immediately applies changes.
 
-Place in `~/.pi/agent/themes/`, `.pi/themes/`, or a [daedalus package](#daedalus-packages) to share with others. See [docs/themes.md](docs/themes.md).
+Place in `~/.daedalus/agent/themes/`, `.daedalus/themes/`, or a [daedalus package](#daedalus-packages) to share with others. See [docs/themes.md](docs/themes.md).
 
 ### Daedalus Packages
 
-Bundle and share extensions, skills, prompts, and themes via npm or git. Find packages on [npmjs.com](https://www.npmjs.com/search?q=keywords%3Api-package) or [Discord](https://discord.com/channels/1456806362351669492/1457744485428629628).
+Bundle and share extensions, skills, prompts, and themes via npm or git. Use the `daedalus-package` keyword for package discoverability.
 
 > **Security:** Daedalus packages run with full system access. Extensions execute arbitrary code, and skills can instruct the model to perform any action including running executables. Review source code before installing third-party packages.
 
 ```bash
-pi install npm:@foo/pi-tools
-pi install npm:@foo/pi-tools@1.2.3      # pinned version
-pi install git:github.com/user/repo
-pi install git:github.com/user/repo@v1  # tag or commit
-pi install git:git@github.com:user/repo
-pi install git:git@github.com:user/repo@v1  # tag or commit
-pi install https://github.com/user/repo
-pi install https://github.com/user/repo@v1      # tag or commit
-pi install ssh://git@github.com/user/repo
-pi install ssh://git@github.com/user/repo@v1    # tag or commit
-pi remove npm:@foo/pi-tools
-pi uninstall npm:@foo/pi-tools          # alias for remove
-pi list
-pi update                               # skips pinned packages
-pi config                               # enable/disable extensions, skills, prompts, themes
+daedalus install npm:@foo/daedalus-tools
+daedalus install npm:@foo/daedalus-tools@1.2.3      # pinned version
+daedalus install git:github.com/user/repo
+daedalus install git:github.com/user/repo@v1  # tag or commit
+daedalus install git:git@github.com:user/repo
+daedalus install git:git@github.com:user/repo@v1  # tag or commit
+daedalus install https://github.com/user/repo
+daedalus install https://github.com/user/repo@v1      # tag or commit
+daedalus install ssh://git@github.com/user/repo
+daedalus install ssh://git@github.com/user/repo@v1    # tag or commit
+daedalus remove npm:@foo/daedalus-tools
+daedalus uninstall npm:@foo/daedalus-tools          # alias for remove
+daedalus list
+daedalus update                               # skips pinned packages
+daedalus config                               # enable/disable extensions, skills, prompts, themes
 ```
 
-Packages install to `~/.pi/agent/git/` (git) or global npm. Use `-l` for project-local installs (`.pi/git/`, `.pi/npm/`). If you use a Node version manager and want package installs to reuse a stable npm context, set `npmCommand` in `settings.json`, for example `["mise", "exec", "node@20", "--", "npm"]`.
+Packages install to `~/.daedalus/agent/git/` (git) or global npm. Use `-l` for project-local installs (`.daedalus/git/`, `.daedalus/npm/`). If you use a Node version manager and want package installs to reuse a stable npm context, set `npmCommand` in `settings.json`, for example `["mise", "exec", "node@20", "--", "npm"]`.
 
-Create a package by adding a `pi` key to `package.json`:
+Create a package by adding a `daedalus` key to `package.json`:
 
 ```json
 {
-  "name": "my-pi-package",
-  "keywords": ["pi-package"],
-  "pi": {
+  "name": "my-daedalus-package",
+  "keywords": ["daedalus-package"],
+  "daedalus": {
     "extensions": ["./extensions"],
     "skills": ["./skills"],
     "prompts": ["./prompts"],
@@ -496,7 +452,7 @@ Create a package by adding a `pi` key to `package.json`:
 }
 ```
 
-Without a `pi` manifest, pi auto-discovers from conventional directories (`extensions/`, `skills/`, `prompts/`, `themes/`).
+Without a `daedalus` manifest, Daedalus auto-discovers from conventional directories (`extensions/`, `skills/`, `prompts/`, `themes/`).
 
 See [docs/packages.md](docs/packages.md).
 
@@ -529,7 +485,7 @@ See [docs/sdk.md](docs/sdk.md) and [examples/sdk/](examples/sdk/).
 For non-Node.js integrations, use RPC mode over stdin/stdout:
 
 ```bash
-pi --mode rpc
+daedalus --mode rpc
 ```
 
 RPC mode uses strict LF-delimited JSONL framing. Clients must split records on `\n` only. Do not use generic line readers like Node `readline`, which also split on Unicode separators inside JSON payloads.
@@ -540,21 +496,15 @@ See [docs/rpc.md](docs/rpc.md) for the protocol.
 
 ## Philosophy
 
-Daedalus is aggressively extensible so it doesn't have to dictate your workflow. Features that other tools bake in can be built with [extensions](#extensions), [skills](#skills), or installed from third-party [daedalus packages](#daedalus-packages). This keeps the core minimal while letting you shape daedalus to fit how you work.
+Daedalus is aggressively extensible, but its default distribution now includes the workflow pieces used by the Daedalus product direction: planning, subagents, todo state, semantic search, safety guards, and the local GUI runtime. The core extension system remains the escape hatch for teams that want different behavior.
 
-**No MCP.** Build CLI tools with READMEs (see [Skills](#skills)), or build an extension that adds MCP support. [Why?](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/)
+**Local-first runtime.** CLI/TUI sessions, GUI sessions, worktrees, terminals, approvals, and provider auth stay local unless an explicit integration or extension sends data elsewhere.
 
-**Subagents are opt-in.** Use the built-in orchestrator starter pack, build your own with [extensions](#extensions), or install a package that does it your way.
+**Thread-first work.** The GUI direction is a persistent project/thread chat workspace. The conversation is the center of gravity; diffs, terminals, approvals, and review surfaces support that thread rather than replacing it with a one-shot task runner.
 
-**No permission popups.** Run in a container, or build your own confirmation flow with [extensions](#extensions) inline with your environment and security requirements.
+**Structured delegation.** Muse plans, Sage researches, Worker implements, and Daedalus coordinates and verifies. These roles are defaults, not a closed system; packages and project-local agents can extend or replace them.
 
-**No plan mode.** Write plans to files, or build it with [extensions](#extensions), or install a package.
-
-**No built-in to-dos.** They confuse models. Use a TODO.md file, or build your own with [extensions](#extensions).
-
-**No background bash.** Use tmux. Full observability, direct interaction.
-
-Read the [blog post](https://mariozechner.at/posts/2025-11-30-pi-coding-agent/) for the full rationale.
+**Extensibility remains the boundary.** Build custom tools with READMEs and skills, add MCP through an extension when needed, customize permissions through extension hooks, and package team workflows as Daedalus packages.
 
 ---
 
@@ -567,18 +517,18 @@ The desktop app is the primary GUI entrypoint. The CLI also provides `daedalus g
 ## CLI Reference
 
 ```bash
-pi [options] [@files...] [messages...]
+daedalus [options] [@files...] [messages...]
 ```
 
 ### Package Commands
 
 ```bash
-pi install <source> [-l]     # Install package, -l for project-local
-pi remove <source> [-l]      # Remove package
-pi uninstall <source> [-l]   # Alias for remove
-pi update [source]           # Update packages (skips pinned)
-pi list                      # List installed packages
-pi config                    # Enable/disable package resources
+daedalus install <source> [-l]     # Install package, -l for project-local
+daedalus remove <source> [-l]      # Remove package
+daedalus uninstall <source> [-l]   # Alias for remove
+daedalus update [source]           # Update packages (skips pinned)
+daedalus list                      # List installed packages
+daedalus config                    # Enable/disable package resources
 ```
 
 ### Modes
@@ -592,10 +542,10 @@ pi config                    # Enable/disable package resources
 | `--export <in> [out]` | Export session to HTML |
 | `gui` | Start the local web GUI; supports `--host`, `--port`, `--project`, `--no-open`, `--headless`, `--reuse-server`, `--new-server`, and `--log-file` |
 
-In print mode, pi also reads piped stdin and merges it into the initial prompt:
+In print mode, Daedalus also reads piped stdin and merges it into the initial prompt:
 
 ```bash
-cat README.md | pi -p "Summarize this text"
+cat README.md | daedalus -p "Summarize this text"
 ```
 
 ### Model Options
@@ -663,50 +613,50 @@ Combine `--no-*` with explicit flags to load exactly what you need, ignoring set
 Prefix files with `@` to include in the message:
 
 ```bash
-pi @prompt.md "Answer this"
-pi -p @screenshot.png "What's in this image?"
-pi @code.ts @test.ts "Review these files"
+daedalus @prompt.md "Answer this"
+daedalus -p @screenshot.png "What's in this image?"
+daedalus @code.ts @test.ts "Review these files"
 ```
 
 ### Examples
 
 ```bash
 # Interactive with initial prompt
-pi "List all .ts files in src/"
+daedalus "List all .ts files in src/"
 
 # Non-interactive
-pi -p "Summarize this codebase"
+daedalus -p "Summarize this codebase"
 
 # Non-interactive with piped stdin
-cat README.md | pi -p "Summarize this text"
+cat README.md | daedalus -p "Summarize this text"
 
 # Different model
-pi --provider openai --model gpt-4o "Help me refactor"
+daedalus --provider openai --model gpt-4o "Help me refactor"
 
 # Model with provider prefix (no --provider needed)
-pi --model openai/gpt-4o "Help me refactor"
+daedalus --model openai/gpt-4o "Help me refactor"
 
 # Model with thinking level shorthand
-pi --model sonnet:high "Solve this complex problem"
+daedalus --model sonnet:high "Solve this complex problem"
 
 # Limit model cycling
-pi --models "claude-*,gpt-4o"
+daedalus --models "claude-*,gpt-4o"
 
 # Read-only mode
-pi --tools read,grep,find,ls -p "Review the code"
+daedalus --tools read,grep,find,ls -p "Review the code"
 
 # High thinking level
-pi --thinking high "Solve this complex problem"
+daedalus --thinking high "Solve this complex problem"
 ```
 
 ### Environment Variables
 
 | Variable | Description |
 |----------|-------------|
-| `PI_CODING_AGENT_DIR` | Override config directory (default: `~/.pi/agent`) |
-| `PI_PACKAGE_DIR` | Override package directory (useful for Nix/Guix where store paths tokenize poorly) |
-| `PI_SKIP_VERSION_CHECK` | Skip version check at startup |
-| `PI_CACHE_RETENTION` | Set to `long` for extended prompt cache (Anthropic: 1h, OpenAI: 24h) |
+| `DAEDALUS_CODING_AGENT_DIR` | Override config directory (default: `~/.daedalus/agent`) |
+| `DAEDALUS_PACKAGE_DIR` | Override package directory (useful for Nix/Guix where store paths tokenize poorly) |
+| `DAEDALUS_SKIP_VERSION_CHECK` | Skip version check at startup |
+| `DAEDALUS_CACHE_RETENTION` | Set to `long` for extended prompt cache (Anthropic: 1h, OpenAI: 24h) |
 | `VISUAL`, `EDITOR` | External editor for Ctrl+G |
 
 ---
@@ -724,5 +674,5 @@ MIT
 ## See Also
 
 - [@daedalus-pi/ai](https://www.npmjs.com/package/@daedalus-pi/ai): Core LLM toolkit
-- [@mariozechner/pi-agent](https://www.npmjs.com/package/@mariozechner/pi-agent): Agent framework
+- [@daedalus-pi/agent-core](../../agent/README.md): Agent framework with transport abstraction
 - [@daedalus-pi/tui](https://www.npmjs.com/package/@daedalus-pi/tui): Terminal UI components

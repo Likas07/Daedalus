@@ -5,12 +5,12 @@ import {
 	DEFAULT_OLLAMA_EMBED_MODEL,
 	DEFAULT_OLLAMA_HOST,
 	type SemanticIndexProfile,
-} from "../extensions/daedalus/tools/semantic-config.js";
+} from "../extensions/semantic-search/semantic-config.js";
 import {
 	type SemanticWorkspaceSyncOptions,
 	syncSemanticWorkspace,
-} from "../extensions/daedalus/tools/semantic-workspace.js";
-import { SemanticWorkspaceTerminalProgressRenderer } from "../extensions/daedalus/tools/semantic-workspace-progress.js";
+} from "../extensions/semantic-search/semantic-workspace.js";
+import { SemanticWorkspaceTerminalProgressRenderer } from "../extensions/semantic-search/semantic-workspace-progress.js";
 
 interface WorkspaceSyncCliOptions extends SemanticWorkspaceSyncOptions {
 	cwd: string;

@@ -5,7 +5,7 @@ Daedalus has two GUI entrypoints:
 - the desktop app, which is the primary production entrypoint;
 - `daedalus gui`, which serves the same renderer through a local browser.
 
-The GUI is backed by the app-server, SQLite session persistence, and the same coding-agent runtime used by the TUI. The active renderer is `packages/gui`: a T3Code-derived React/Vite app adapted to Daedalus. Legacy GUI package splits are not active runtime targets.
+The GUI is backed by the app-server, SQLite session persistence, and the same coding-agent runtime used by the TUI. The active production renderer is `packages/gui`: a T3Code-derived React/Vite app adapted to Daedalus. `packages/gui-core`, `packages/gui-components`, and `packages/react-gui` are active support/experimental packages for the newer thread-surface work, not the desktop/browser production renderer.
 
 ## Desktop primary entrypoint
 
@@ -42,11 +42,19 @@ Supported flags:
 
 Non-loopback hosts print a warning and require a bearer token. Tokens are redacted from logs.
 
-## T3Code-derived renderer
+## Renderer and support packages
 
 `packages/gui` keeps the T3Code-style persistent project/thread chat workspace, but the backend contract is Daedalus-owned: local app-server bootstrap, typed protocol, SQLite persistence, provider/model discovery, approvals, terminal/filesystem/Git operations, and coding-agent execution.
 
 Unsupported T3Code controls must remain visibly disabled with reasons rather than reporting fake success. Current unsupported areas are remote environments/public exposure, terminal restart, remote Git mutation and branch mutation, PR mutation, provider CLI installation, and user-configured T3 provider binary paths. See `docs/gui/t3code-derived-gui.md` for the default-path and smoke-test contract.
+
+The protocol-v1/thread-surface packages are split intentionally:
+
+- `packages/gui-core` contains React-free reducers, selectors, presentation helpers, and view models.
+- `packages/gui-components` contains React shell, thread, terminal, and primitive components.
+- `packages/react-gui` is a Vite app shell used to test the thread workspace loop and side-panel surfaces.
+
+Treat those packages as reusable and experimental GUI infrastructure unless a task explicitly targets them.
 
 ## Persistence
 
@@ -78,6 +86,7 @@ GUI recovery should surface the same choices as core resume diagnostics: resume 
 - `docs/gui/t3code-derived-gui.md`
 - `packages/gui/docs/sqlite-persistence.md`
 - `packages/gui/docs/security.md`
+- `packages/app-server/docs/protocol.md`
 - `packages/gui/docs/protocol.md`
 - `packages/gui/docs/troubleshooting.md`
 - `docs/architecture/core-workspace-targets.md`

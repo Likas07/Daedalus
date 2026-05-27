@@ -1,11 +1,16 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { OLLAMA_EMBED_REQUEST_TIMEOUT_ENV } from "../src/extensions/daedalus/tools/semantic-config.js";
+import { getModel } from "@daedalus-pi/ai";
+import { createAgentSession } from "../src/core/sdk.js";
+import { SessionManager } from "../src/core/session-manager.js";
+import { SettingsManager } from "../src/core/settings-manager.js";
+import semanticSearchExtension from "../src/extensions/semantic-search/index.js";
+import { OLLAMA_EMBED_REQUEST_TIMEOUT_ENV } from "../src/extensions/semantic-search/semantic-config.js";
 import {
 	getSemanticWorkspaceStatus,
 	syncSemanticWorkspace,
-} from "../src/extensions/daedalus/tools/semantic-workspace.js";
+} from "../src/extensions/semantic-search/semantic-workspace.js";
 
 export const SEMANTIC_TEST_SETUP_TIMEOUT_MS = positiveIntegerEnv("DAEDALUS_SEMANTIC_TEST_SETUP_TIMEOUT_MS", 20_000);
 setDefaultOllamaRequestTimeout();
@@ -117,6 +122,21 @@ export async function syncSemanticWorkspaceOrSkip(
 	});
 	if (skipped) return true;
 	return skipIfSemanticWorkspaceNotIndexed(cwd);
+}
+
+export async function createSemanticEnabledSession({ cwd, agentDir }: { cwd: string; agentDir: string }) {
+	const settingsManager = SettingsManager.create(cwd, agentDir);
+	const sessionManager = SessionManager.inMemory();
+	const { session } = await createAgentSession({
+		cwd,
+		agentDir,
+		model: getModel("anthropic", "claude-sonnet-4-5")!,
+		settingsManager,
+		sessionManager,
+		extensionFactories: [semanticSearchExtension],
+	});
+	await session.bindExtensions({});
+	return { session, settingsManager, sessionManager };
 }
 
 export async function isSemanticWorkspaceIndexingAvailable(): Promise<boolean> {

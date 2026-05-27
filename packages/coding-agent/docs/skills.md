@@ -30,7 +30,7 @@ Daedalus loads skills from these sources, in precedence order:
 2. **User** skills:
    - `~/.daedalus/agent/skills/`
    - `~/.agents/skills/`
-3. **Extension** skills from enabled Daedalus extensions and packages (`skills/` directories or `pi.skills` entries in `package.json`)
+3. **Extension** skills from enabled Daedalus extensions and packages (`skills/` directories or `daedalus.skills` entries in `package.json`)
 4. **Built-in** Daedalus skills bundled with the coding-agent package
 
 Settings (`skills` array with files or directories) and CLI `--skill <path>` entries are explicit additions. `--skill` is repeatable and still loads when discovery is disabled with `--no-skills`.
@@ -240,4 +240,4 @@ cd /path/to/brave-search && bun install
 ## Skill Repositories
 
 - [Anthropic Skills](https://github.com/anthropics/skills) - Document processing (docx, pdf, pptx, xlsx), web development
-- [Pi Skills](https://github.com/badlogic/pi-skills) - Web search, browser automation, Google APIs, transcription
+- Community skill repositories can provide web search, browser automation, Google APIs, transcription, and other reusable workflows.

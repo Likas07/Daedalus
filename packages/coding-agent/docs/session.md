@@ -124,7 +124,7 @@ interface Usage {
 }
 ```
 
-### Extended Message Types (from pi-coding-agent)
+### Extended Message Types (from @daedalus-pi/coding-agent)
 
 ```typescript
 interface BashExecutionMessage {

@@ -2,7 +2,7 @@
 
 # Extensions
 
-Extensions are TypeScript modules that extend pi's behavior. They can subscribe to lifecycle events, register custom tools callable by the LLM, add commands, and more.
+Extensions are TypeScript modules that extend Daedalus behavior. They can subscribe to lifecycle events, register custom tools callable by the LLM, add commands, and more.
 
 > **Placement for /reload:** Put extensions in `~/.daedalus/agent/extensions/` (global) or `.daedalus/extensions/` (project-local) for auto-discovery. Use `daedalus -e ./path.ts` only for quick tests. Extensions in auto-discovered locations can be hot-reloaded with `/reload`.
 
@@ -58,33 +58,28 @@ Built-in Daedalus subagent delegation now uses artifact-first isolation for impl
 
 ## Prompt Architecture
 
-Daedalus uses four prompt layers:
-
-1. Main constitutional system prompt
-2. Daedalus persona/orchestrator prompt
-3. Shared subagent base contract
-4. Role-specific subagent prompts
-
-Subagents may appear in the UI as `Mythic Name (role)`, while their behavioral prompts remain functional.
-
-## Prompt Architecture V2
-
 Daedalus uses canonical prompt layers plus model-specific overrides.
 
 Main agent:
+
 1. Constitution
 2. Persona
 3. GPT/Claude override
 
+Primary user-facing role modes:
+
+1. Daedalus default mode
+2. Sage research mode
+3. Muse planning mode
+
 Subagents:
+
 1. Shared delegated-task contract
 2. Canonical role prompt
 3. GPT/Claude override
 4. Delegated task packet
 
-Daedalus is the only primary orchestrator.
-There is no orchestrator subagent.
-Bundled roles are Icarus, Prometheus, Hephaestus, and Athena.
+Daedalus is the default primary orchestrator. Sage and Muse can also run as primary role modes with `/sage`, `/muse`, `/daedalus`, or `--role`. Bundled subagent roles are Sage, Muse, and Worker; Worker appears as Hephaestus in its display name.
 
 ## Quick Start
 
@@ -234,7 +229,7 @@ Extensions are loaded via [jiti](https://github.com/unjs/jiti), so TypeScript wo
 ~/.daedalus/agent/extensions/
 └── my-extension/
     ├── package.json    # Declares dependencies and entry points
-    ├── package-lock.json
+    ├── bun.lock
     ├── node_modules/   # After bun install
     └── src/
         └── index.ts
@@ -707,7 +702,7 @@ pi.on("user_bash", (event, ctx) => {
   // Option 1: Provide custom operations (e.g., SSH)
   return { operations: remoteBashOps };
 
-  // Option 2: Wrap pi's built-in local bash backend
+  // Option 2: Wrap Daedalus's built-in local bash backend
   const local = createLocalBashOperations();
   return {
     operations: {
@@ -833,7 +828,7 @@ Control flow helpers.
 
 ### ctx.shutdown()
 
-Request a graceful shutdown of pi.
+Request a graceful shutdown of Daedalus.
 
 - **Interactive mode:** Deferred until the agent becomes idle (after processing all queued steering and follow-up messages).
 - **RPC mode:** Deferred until the next idle state (after completing the current command response, when waiting for the next command).
@@ -1721,7 +1716,7 @@ Use shell argument builders for command arguments, and stream payload bytes over
 
 **Operations interfaces:** `ReadOperations`, `WriteOperations`, `EditOperations`, `HashlineEditOperations`, `BashOperations`, `LsOperations`, `GrepOperations`, `FindOperations`
 
-For `user_bash`, extensions can reuse pi's local shell backend via `createLocalBashOperations()` instead of reimplementing local process spawning, shell resolution, and process-tree termination.
+For `user_bash`, extensions can reuse Daedalus's local shell backend via `createLocalBashOperations()` instead of reimplementing local process spawning, shell resolution, and process-tree termination.
 
 The bash tool also supports a spawn hook to adjust the command, cwd, or env before execution:
 
@@ -2024,7 +2019,7 @@ ctx.ui.setFooter((tui, theme) => ({
 ctx.ui.setFooter(undefined);  // Restore built-in footer
 
 // Terminal title
-ctx.ui.setTitle("pi - my-project");
+ctx.ui.setTitle("daedalus - my-project");
 
 // Editor text
 ctx.ui.setEditorText("Prefill text");

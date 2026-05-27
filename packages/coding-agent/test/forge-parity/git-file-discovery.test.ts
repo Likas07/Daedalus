@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { discoverViaGit } from "../../src/extensions/daedalus/tools/git-file-discovery.js";
+import { discoverViaGit } from "../../src/extensions/semantic-search/git-file-discovery.js";
 
 async function run(cwd: string, args: string[]): Promise<void> {
 	const proc = Bun.spawn(args, { cwd, stdout: "pipe", stderr: "pipe" });

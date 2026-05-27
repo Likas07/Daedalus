@@ -1,17 +1,17 @@
-# Pi Web UI - Example
+# Daedalus Web UI - Example
 
 This is a minimal example showing how to use `@daedalus-pi/web-ui` in a web application.
 
 ## Setup
 
 ```bash
-npm install
+bun install
 ```
 
 ## Development
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
@@ -56,6 +56,5 @@ example/
 
 ## Learn More
 
-- [Pi Web UI Documentation](../README.md)
-- [Pi AI Documentation](../../ai/README.md)
-- [Mini Lit Documentation](https://github.com/badlogic/mini-lit)
+- [Daedalus Web UI Documentation](../README.md)
+- [Daedalus AI Documentation](../../ai/README.md)

@@ -181,7 +181,7 @@ When multiple sources specify a session directory, `--session-dir` CLI flag take
 | `subagents.delegationAggressiveness` | string | `"balanced"` | How aggressively Daedalus delegates focused work |
 | `subagents.maxDepth` | number | `2` | Default maximum nested subagent depth |
 | `subagents.maxConcurrency` | number | `4` | Default maximum concurrent child subagents |
-| `subagents.backgroundRoles` | string[] | `["explore", "reviewer"]` | Roles that default to background execution |
+| `subagents.backgroundRoles` | string[] | `[]` | Roles that default to background execution |
 | `subagents.branchIsolation.mutationThreshold` | string | `"high-risk"` | When risky mutating tasks should move to a child branch |
 | `subagents.agents.<name>.model` | string | - | Optional per-role model override (`provider/modelId`) |
 | `subagents.agents.<name>.thinkingLevel` | string | - | Optional per-role thinking override |
@@ -192,33 +192,28 @@ The `Subagents` tab edits the common runtime defaults above and supports safe pe
 
 ## Prompt architecture
 
-Daedalus uses four prompt layers:
-
-1. Main constitutional system prompt
-2. Daedalus persona/orchestrator prompt
-3. Shared subagent base contract
-4. Role-specific subagent prompts
-
-Subagents may appear in the UI as `Mythic Name (role)`, while their behavioral prompts remain functional.
-
-## Prompt Architecture V2
-
 Daedalus uses canonical prompt layers plus model-specific overrides.
 
 Main agent:
+
 1. Constitution
 2. Persona
 3. GPT/Claude override
 
+Primary user-facing role modes:
+
+1. Daedalus default mode
+2. Sage research mode
+3. Muse planning mode
+
 Subagents:
+
 1. Shared delegated-task contract
 2. Canonical role prompt
 3. GPT/Claude override
 4. Delegated task packet
 
-Daedalus is the only primary orchestrator.
-There is no orchestrator subagent.
-Bundled roles are Icarus, Prometheus, Hephaestus, and Athena.
+Daedalus is the default primary orchestrator. Sage and Muse can also run as primary role modes with `/sage`, `/muse`, `/daedalus`, or `--role`. Bundled subagent roles are Sage, Muse, and Worker; Worker appears as Hephaestus in its display name.
 
 Advanced policy arrays stay JSON-only for now:
 - `readableGlobs`
@@ -231,14 +226,14 @@ Advanced policy arrays stay JSON-only for now:
     "delegationAggressiveness": "aggressive",
     "maxDepth": 3,
     "maxConcurrency": 6,
-    "backgroundRoles": ["explore", "reviewer"],
+    "backgroundRoles": [],
     "branchIsolation": {
       "enabled": true,
       "mutationThreshold": "high-risk",
       "namingTemplate": "subagent/{parentBranch}/{agent}/{runId}"
     },
     "agents": {
-      "scout": {
+      "sage": {
         "model": "anthropic/claude-sonnet-4-5",
         "thinkingLevel": "low"
       }
@@ -252,7 +247,7 @@ Advanced policy arrays stay JSON-only for now:
 
 These settings define where to load extensions, skills, prompts, and themes from.
 
-Paths in `~/.daedalus/agent/settings.json` resolve relative to `~/.daedalus/agent`. Paths in `.daedalus/settings.json` resolve relative to `.pi`. Absolute paths and `~` are supported.
+Paths in `~/.daedalus/agent/settings.json` resolve relative to `~/.daedalus/agent`. Paths in `.daedalus/settings.json` resolve relative to `.daedalus`. Absolute paths and `~` are supported.
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -271,7 +266,7 @@ String form loads all resources from a package:
 
 ```json
 {
-  "packages": ["pi-skills", "@org/my-extension"]
+  "packages": ["@org/daedalus-skills", "@org/my-extension"]
 }
 ```
 
@@ -281,7 +276,7 @@ Object form filters which resources to load:
 {
   "packages": [
     {
-      "source": "pi-skills",
+      "source": "@org/daedalus-skills",
       "skills": ["brave-search", "transcribe"],
       "extensions": []
     }
@@ -311,7 +306,7 @@ See [packages.md](packages.md) for package management details.
     "maxRetries": 3
   },
   "enabledModels": ["claude-*", "gpt-4o"],
-  "packages": ["pi-skills"]
+  "packages": ["@org/daedalus-skills"]
 }
 ```
 

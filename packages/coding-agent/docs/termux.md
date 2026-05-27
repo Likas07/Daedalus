@@ -14,16 +14,16 @@ Daedalus runs on Android via [Termux](https://termux.dev/), a terminal emulator 
 pkg update && pkg upgrade
 
 # Install dependencies
-pkg install nodejs termux-api git
+pkg install bun termux-api git
 
-# Install pi
+# Install Daedalus
 bun install -g @daedalus-pi/coding-agent
 
 # Create config directory
 mkdir -p ~/.daedalus/agent
 
-# Run pi
-pi
+# Run Daedalus
+daedalus
 ```
 
 ## Clipboard Support

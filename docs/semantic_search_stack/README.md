@@ -1,6 +1,6 @@
 # Semantic Search Stack
 
-Status: research-backed design notes
+Status: research-backed design notes plus implementation history
 Scope: full Forge-parity semantic retrieval behavior implemented locally within Daedalus
 Primary reference basis:
 - LanceDB docs checkout at `/home/likas/temp/lancedb-docs`
@@ -11,6 +11,24 @@ Primary reference basis:
 - `lancedb-local-semantic-stack-spec.md` — comprehensive spec for a LanceDB-backed local semantic search stack in Daedalus, written against a full Forge-parity target, including lifecycle behavior, indexing model, hybrid retrieval, reranking requirements, and result-contract expectations
 - `full-parity-implementation-blueprint.md` — concrete implementation blueprint with exact Daedalus subsystems, file seams, required new modules, test plan, and acceptance criteria for achieving full Forge-parity behavior locally
 - `forge-daedalus-semantic-parity-gap-checklist.md` — corrective checklist of the remaining behavior/runtime gaps between Forge and the current Daedalus implementation after the working local stack landed
+
+## Current source paths
+
+Semantic search has been extracted from the Daedalus bundled extension into its own extension package directory:
+
+```text
+packages/coding-agent/src/extensions/semantic-search/
+```
+
+Current implementation files include `sem-search.ts`, `semantic-workspace.ts`, `semantic-workspace-tools.ts`, `semantic-store.ts`, `semantic-lancedb.ts`, `semantic-file-discovery.ts`, `semantic-background-sync.ts`, and their supporting config/type/chunking modules.
+
+Older plans in this directory may still reference the former path:
+
+```text
+packages/coding-agent/src/extensions/daedalus/tools/
+```
+
+Treat those references as historical unless a task explicitly asks to edit the old plan text.
 
 ## Intent
 

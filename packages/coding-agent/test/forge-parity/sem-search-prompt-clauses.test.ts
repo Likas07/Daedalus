@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import semSearchExtension from "../../src/extensions/daedalus/tools/sem-search.js";
+import semSearchExtension from "../../src/extensions/semantic-search/sem-search.js";
 
 function getRegisteredTool() {
 	const tools: any[] = [];

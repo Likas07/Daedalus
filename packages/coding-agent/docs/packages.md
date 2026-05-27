@@ -8,7 +8,7 @@ Daedalus packages bundle extensions, skills, prompt templates, and themes so you
 
 - [Install and Manage](#install-and-manage)
 - [Package Sources](#package-sources)
-- [Creating a Daedalus Package](#creating-a-pi-package)
+- [Creating a Daedalus Package](#creating-a-daedalus-package)
 - [Package Structure](#package-structure)
 - [Dependencies](#dependencies)
 - [Package Filtering](#package-filtering)
@@ -105,7 +105,7 @@ Local paths point to files or directories on disk and are added to settings with
 
 ## Creating a Daedalus Package
 
-Add a `daedalus` manifest to `package.json` or use conventional directories. Include the `pi-package` keyword for discoverability.
+Add a `daedalus` manifest to `package.json` or use conventional directories. Include the `daedalus-package` keyword for discoverability.
 
 ```json
 {
@@ -124,7 +124,7 @@ Paths are relative to the package root. Arrays support glob patterns and `!exclu
 
 ### Gallery Metadata
 
-The [package gallery](https://shittycodingagent.ai/packages) displays packages tagged with `pi-package`. Add `video` or `image` fields to show a preview:
+Package gallery metadata can use `video` or `image` fields to show a preview:
 
 ```json
 {
@@ -167,12 +167,12 @@ Example:
 ```json
 {
   "dependencies": {
-    "shitty-extensions": "^1.0.1"
+    "shared-daedalus-tools": "^1.0.1"
   },
-  "bundledDependencies": ["shitty-extensions"],
+  "bundledDependencies": ["shared-daedalus-tools"],
   "daedalus": {
-    "extensions": ["extensions", "node_modules/shitty-extensions/extensions"],
-    "skills": ["skills", "node_modules/shitty-extensions/skills"]
+    "extensions": ["extensions", "node_modules/shared-daedalus-tools/extensions"],
+    "skills": ["skills", "node_modules/shared-daedalus-tools/skills"]
   }
 }
 ```
